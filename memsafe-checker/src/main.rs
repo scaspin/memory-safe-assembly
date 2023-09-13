@@ -1,3 +1,4 @@
+use log::{error, warn};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -118,11 +119,30 @@ impl RegisterValue {
     }
 }
 
+// all the allowable cases in which registers can be compared or used together
 fn comparable(r1: RegisterValue, r2: RegisterValue) -> bool {
     if r1.kind == r2.kind {
         return true;
     }
+    if r1.kind == RegisterKind::RegisterBase && r2.kind == RegisterKind::Immediate {
+        return true;
+    }
+    if r2.kind == RegisterKind::RegisterBase && r1.kind == RegisterKind::Immediate {
+        return true;
+    }
+    if r1.kind == RegisterKind::Address && r2.kind == RegisterKind::Immediate {
+        return true;
+    }
+    if r2.kind == RegisterKind::Address && r1.kind == RegisterKind::Immediate {
+        return true;
+    }
+
+    error!("uncomparable registers");
     false
+}
+
+fn generate_expression(op: &str, a: String, b: String) -> String {
+    "[".to_owned() + &a + &op.to_string() + &b + "]"
 }
 
 struct ARMCORTEXA {
@@ -192,25 +212,33 @@ impl ARMCORTEXA {
 
     fn execute(&mut self, instruction: &Instruction) -> Result<Option<String>, String> {
         if instruction.op == "add" {
-            self.add(
+            self.arithmetic(
+                &instruction.op,
+                (&|x, y| x + y),
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
             );
         } else if instruction.op == "and" {
-            self.and(
+            self.arithmetic(
+                &instruction.op,
+                (&|x, y| x & y),
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
             );
         } else if instruction.op == "orr" {
-            self.orr(
+            self.arithmetic(
+                &instruction.op,
+                (&|x, y| x | y),
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
             );
         } else if instruction.op == "eor" {
-            self.eor(
+            self.arithmetic(
+                &instruction.op,
+                (&|x, y| x ^ y),
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
@@ -226,7 +254,10 @@ impl ARMCORTEXA {
                         return Ok(None);
                     }
                 }
-                None => return Err("flag not updated within program yet".to_string()),
+                None => return Err(
+                    "Flag cannot be branched on since it has not been set within the program yet"
+                        .to_string(),
+                ),
             }
         } else if instruction.op == "bic" {
             self.bic(instruction.r1.clone(), instruction.r2.clone());
@@ -262,183 +293,89 @@ impl ARMCORTEXA {
         Ok(None)
     }
 
-    fn check(&self) {
-        assert!(self.stack.is_empty());
+    fn restored(&self) -> bool {
+        self.stack.is_empty()
     }
 
-    fn add(&mut self, reg0: Option<String>, reg1: Option<String>, reg2: Option<String>) {
+    fn arithmetic(
+        &mut self,
+        op_string: &str,
+        op: &dyn Fn(u128, u128) -> u128,
+        reg0: Option<String>,
+        reg1: Option<String>,
+        reg2: Option<String>,
+    ) {
         let r1 = self.registers[get_register_index(reg1)].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
 
-        if comparable(r1.clone(), r2.clone()) {
+        if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
                     let mut base: Option<String> = None;
                     match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
                             Some(reg2base) => {
-                                let concat = r1.to_string() + &r2.to_string();
+                                let concat = generate_expression(op_string, reg1base, reg2base);
                                 base = Some(concat)
                             }
                             None => {
                                 base = Some(reg1base);
                             }
                         },
-                        None => {
-                            base = None;
-                        }
-                    }
-                    let new_value = RegisterValue {
-                        kind: RegisterKind::Number,
-                        base,
-                        offset: r1.offset ^ r2.offset,
-                    };
-                    self.registers[get_register_index(reg0)].set(new_value)
-                }
-                RegisterKind::Number => {
-                    unimplemented!()
-                }
-                RegisterKind::Immediate => {
-                    unimplemented!()
-                }
-                RegisterKind::Address => {
-                    unimplemented!()
-                }
-            }
-        }
-    }
-
-    fn and(&mut self, reg0: Option<String>, reg1: Option<String>, reg2: Option<String>) {
-        let r1 = self.registers[get_register_index(reg1)].clone();
-        let r2 = self.registers[get_register_index(reg2)].clone();
-
-        if comparable(r1.clone(), r2.clone()) {
-            match r1.kind {
-                RegisterKind::RegisterBase => {
-                    let mut base: Option<String> = None;
-                    match r1.clone().base {
-                        Some(reg1base) => match r2.clone().base {
-                            Some(reg2base) => {
-                                let concat = "and(".to_owned() + &r1.to_string() + &r2.to_string();
-                                base = Some(concat)
-                            }
+                        None => match r2.clone().base {
+                            Some(reg2base) => base = Some(reg2base),
                             None => {
-                                base = Some(reg1base);
+                                base = None;
                             }
                         },
-                        None => {
-                            base = None;
-                        }
                     }
-
                     let new_value = RegisterValue {
                         kind: RegisterKind::RegisterBase,
                         base,
-                        offset: r1.offset & r2.offset,
+                        offset: op(r1.offset, r2.offset),
                     };
                     self.registers[get_register_index(reg0)].set(new_value)
                 }
                 RegisterKind::Number => {
-                    unimplemented!()
+                    // abstract numbers, value doesn't matter
+                    self.registers[get_register_index(reg0)].set(r1);
                 }
                 RegisterKind::Immediate => {
-                    unimplemented!()
-                }
-                RegisterKind::Address => {
-                    unimplemented!()
-                }
-            }
-        }
-    }
-
-    fn eor(&mut self, reg0: Option<String>, reg1: Option<String>, reg2: Option<String>) {
-        let r1 = self.registers[get_register_index(reg1)].clone();
-        let r2 = self.registers[get_register_index(reg2)].clone();
-
-        if comparable(r1.clone(), r2.clone()) {
-            match r1.kind {
-                RegisterKind::RegisterBase => {
-                    let mut base: Option<String> = None;
-                    match r1.clone().base {
-                        Some(reg1base) => match r2.clone().base {
-                            Some(reg2base) => {
-                                let concat = "eor(".to_owned() + &r1.to_string() + &r2.to_string();
-                                base = Some(concat)
-                            }
-                            None => {
-                                base = Some(reg1base);
-                            }
-                        },
-                        None => {
-                            base = None;
-                        }
-                    }
-
                     let new_value = RegisterValue {
-                        kind: RegisterKind::RegisterBase,
-                        base,
-                        offset: r1.offset ^ r2.offset,
+                        kind: RegisterKind::Immediate,
+                        base: None,
+                        offset: op(r1.offset, r2.offset),
                     };
-                    self.registers[get_register_index(reg0)].set(new_value)
-                }
-                RegisterKind::Number => {
-                    unimplemented!()
-                }
-                RegisterKind::Immediate => {
-                    unimplemented!()
+                    self.registers[get_register_index(reg0)].set(new_value);
                 }
                 RegisterKind::Address => {
-                    unimplemented!()
-                }
-            }
-        }
-    }
-
-    fn orr(&mut self, reg0: Option<String>, reg1: Option<String>, reg2: Option<String>) {
-        let r1 = self.registers[get_register_index(reg1)].clone();
-        let r2 = self.registers[get_register_index(reg2)].clone();
-
-        if comparable(r1.clone(), r2.clone()) {
-            match r1.kind {
-                RegisterKind::RegisterBase => {
-                    let mut base: Option<String> = None;
-                    match r1.clone().base {
-                        Some(reg1base) => match r2.clone().base {
-                            Some(reg2base) => {
-                                let concat = "orr(".to_owned()
-                                    + &reg1base
-                                    + &reg2base
-                                    + &r1.offset.to_string()
-                                    + &r2.offset.to_string()
-                                    + &")".to_owned();
-                                base = Some(concat)
-                            }
-                            None => {
-                                base = Some(reg1base);
-                            }
-                        },
-                        None => {
-                            base = None;
-                        }
-                    }
-
+                    // why would someone add two addresses? bad
+                    // I guess ok as long as we don't use as address
+                    warn!("Not advisable to add two addresses");
                     let new_value = RegisterValue {
-                        kind: RegisterKind::RegisterBase,
-                        base,
-                        offset: r1.offset | r2.offset,
+                        kind: RegisterKind::Address,
+                        base: None,
+                        offset: op(r1.offset, r2.offset),
                     };
-                    self.registers[get_register_index(reg0)].set(new_value)
-                }
-                RegisterKind::Number => {
-                    unimplemented!()
-                }
-                RegisterKind::Immediate => {
-                    unimplemented!()
-                }
-                RegisterKind::Address => {
-                    unimplemented!()
+                    self.registers[get_register_index(reg0)].set(new_value);
                 }
             }
+        } else if r1.kind == RegisterKind::Immediate {
+            let new_value = RegisterValue {
+                kind: r2.kind,
+                base: r2.base,
+                offset: op(r1.offset, r2.offset),
+            };
+            self.registers[get_register_index(reg0)].set(new_value);
+        } else if r2.kind == RegisterKind::Immediate {
+            let new_value = RegisterValue {
+                kind: r1.kind,
+                base: r1.base,
+                offset: op(r1.offset, r2.offset),
+            };
+            self.registers[get_register_index(reg0)].set(new_value);
+        } else {
+            error!("Cannot perform arithmetic on these two registers")
         }
     }
 
@@ -575,7 +512,9 @@ fn main() -> std::io::Result<()> {
             alignment = v[1].parse::<usize>().unwrap();
         } else if v[0] == ".byte" || v[0] == ".long" {
             for i in v.iter().skip(1) {
-                computer.memory.insert(address, i.parse::<u64>().unwrap());
+                computer
+                    .memory
+                    .insert(address * 4, i.parse::<u64>().unwrap());
                 address = address + alignment;
             }
         }
@@ -610,8 +549,8 @@ fn main() -> std::io::Result<()> {
         }
     }
 
-    // check stack and required registers are restored 
-    computer.check();
+    // check stack and required registers are restored
+    computer.restored();
 
     allops.sort_unstable();
     allops.dedup();
