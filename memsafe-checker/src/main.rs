@@ -210,7 +210,10 @@ impl ARMCORTEXA {
         }
     }
 
-    fn execute(&mut self, instruction: &Instruction) -> Result<Option<String>, String> {
+    fn execute(
+        &mut self,
+        instruction: &Instruction,
+    ) -> Result<Option<(Option<String>, Option<u128>)>, String> {
         if instruction.op == "add" {
             self.arithmetic(
                 &instruction.op,
@@ -249,7 +252,7 @@ impl ARMCORTEXA {
             match self.zero {
                 Some(b) => {
                     if b {
-                        return Ok(instruction.r1.clone());
+                        return Ok(Some((instruction.r1.clone(), None)));
                     } else {
                         return Ok(None);
                     }
@@ -272,6 +275,12 @@ impl ARMCORTEXA {
         } else if instruction.op == "ret" {
             if instruction.r1.is_none() {
                 // return w30
+                let w30 = self.registers[30].clone();
+                if w30.kind == RegisterKind::Address {
+                    return Ok(Some((None, Some(w30.offset))));
+                } else {
+                    error!("cannot jump on non-address");
+                }
             } else {
                 let r1 = self.registers[get_register_index(instruction.r1.clone())].clone();
                 if r1.kind == RegisterKind::Address {
@@ -533,13 +542,21 @@ fn main() -> std::io::Result<()> {
         let execute_result = computer.execute(&parsed_code[pc]);
         match execute_result {
             Ok(some) => match some {
-                Some(label) => {
-                    for l in labels.iter() {
-                        if l.0 == label {
-                            pc = l.1;
+                Some(jump) => match jump {
+                    (Some(label), None) => {
+                        for l in labels.iter() {
+                            if l.0 == label {
+                                pc = l.1;
+                            }
                         }
                     }
-                }
+                    (None, Some(address)) => {
+                        pc = address as usize;
+                    }
+                    (None, None) | (Some(_), Some(_)) => {
+                        error!("Execute did not return valid response for jump or continue")
+                    }
+                },
                 None => pc = pc + 1,
             },
             Err(e) => println!(
