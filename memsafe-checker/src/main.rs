@@ -85,7 +85,7 @@ enum RegisterKind {
 struct RegisterValue {
     kind: RegisterKind,
     base: Option<String>,
-    offset: u128,
+    offset: i64,
 }
 
 impl RegisterValue {
@@ -151,7 +151,7 @@ struct ARMCORTEXA {
     neg: Option<bool>,
     carry: Option<bool>,
     overflow: Option<bool>,
-    memory: HashMap<usize, u64>,
+    memory: HashMap<usize, String>,
     stack: Vec<RegisterValue>,
 }
 
@@ -217,7 +217,7 @@ impl ARMCORTEXA {
         if instruction.op == "add" {
             self.arithmetic(
                 &instruction.op,
-                (&|x, y| x + y),
+                &|x, y| x + y,
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
@@ -225,7 +225,7 @@ impl ARMCORTEXA {
         } else if instruction.op == "and" {
             self.arithmetic(
                 &instruction.op,
-                (&|x, y| x & y),
+                &|x, y| x & y,
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
@@ -233,7 +233,7 @@ impl ARMCORTEXA {
         } else if instruction.op == "orr" {
             self.arithmetic(
                 &instruction.op,
-                (&|x, y| x | y),
+                &|x, y| x | y,
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
@@ -241,7 +241,7 @@ impl ARMCORTEXA {
         } else if instruction.op == "eor" {
             self.arithmetic(
                 &instruction.op,
-                (&|x, y| x ^ y),
+                &|x, y| x ^ y,
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
@@ -263,7 +263,13 @@ impl ARMCORTEXA {
                 ),
             }
         } else if instruction.op == "bic" {
-            self.bic(instruction.r1.clone(), instruction.r2.clone());
+            self.arithmetic(
+                &instruction.op,
+                &|x, y| x & y,
+                instruction.r1.clone(),
+                instruction.r2.clone(),
+                instruction.r3.clone(),
+            );
         } else if instruction.op == "ld1" {
         } else if instruction.op == "ldp" {
             //post index
@@ -277,7 +283,7 @@ impl ARMCORTEXA {
                 // return w30
                 let w30 = self.registers[30].clone();
                 if w30.kind == RegisterKind::Address {
-                    return Ok(Some((None, Some(w30.offset))));
+                    return Ok(Some((None, Some(w30.offset.try_into().unwrap()))));
                 } else {
                     error!("cannot jump on non-address");
                 }
@@ -309,7 +315,7 @@ impl ARMCORTEXA {
     fn arithmetic(
         &mut self,
         op_string: &str,
-        op: &dyn Fn(u128, u128) -> u128,
+        op: &dyn Fn(i64, i64) -> i64,
         reg0: Option<String>,
         reg1: Option<String>,
         reg2: Option<String>,
@@ -392,17 +398,86 @@ impl ARMCORTEXA {
         let r1 = self.registers[get_register_index(reg1)].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
 
-        // fix
-        if comparable(r1, r2) {
-            self.neg = Some(false);
-            self.zero = Some(false);
-            self.carry = Some(false);
-            self.overflow = Some(false);
+        if r1.kind == r2.kind {
+            match r1.kind {
+                RegisterKind::RegisterBase => {
+                    if r1.base.eq(&r2.base) {
+                        self.neg = if r1.offset < r2.offset {
+                            Some(true)
+                        } else {
+                            Some(false)
+                        };
+                        self.zero = if r1.offset == r2.offset {
+                            Some(true)
+                        } else {
+                            Some(false)
+                        };
+                        // signed vs signed distinction, maybe make offset generic to handle both?
+                        self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                            Some(true)
+                        } else {
+                            Some(false)
+                        };
+                        self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                            Some(true)
+                        } else {
+                            Some(false)
+                        };
+                    }
+                }
+                RegisterKind::Number => {
+                    error!("Cannot compare two undefined numbers")
+                }
+                RegisterKind::Immediate => {
+                    self.neg = if r1.offset < r2.offset {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    self.zero = if r1.offset == r2.offset {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    // signed vs signed distinction, maybe make offset generic to handle both?
+                    self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                }
+                RegisterKind::Address => {
+                    self.neg = if r1.offset < r2.offset {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    self.zero = if r1.offset == r2.offset {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    // signed vs signed distinction, maybe make offset generic to handle both?
+                    self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                }
+            }
+        } else {
+            error!("Cannot compare these two registers")
         }
-    }
-
-    fn bic(&self, reg1: Option<String>, reg2: Option<String>) {
-        unimplemented!();
     }
 
     fn ld1(
@@ -521,9 +596,9 @@ fn main() -> std::io::Result<()> {
             alignment = v[1].parse::<usize>().unwrap();
         } else if v[0] == ".byte" || v[0] == ".long" {
             for i in v.iter().skip(1) {
-                computer
-                    .memory
-                    .insert(address * 4, i.parse::<u64>().unwrap());
+                println!("{:?}", i.clone());
+                println!("{:?}", address.clone());
+                computer.memory.insert(address, i.to_string());
                 address = address + alignment;
             }
         }
