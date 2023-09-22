@@ -63,10 +63,11 @@ impl FromStr for Instruction {
 }
 
 fn get_register_index(reg_name: Option<String>) -> usize {
-    let r: usize = reg_name
-        .clone()
-        .expect("Invalid register value 1")
+    let name = reg_name.clone().expect("Invalid register value");
+    let r: usize = name
         .strip_prefix("x")
+        .unwrap_or(&name)
+        .strip_prefix("w")
         .expect("Invalid register name 2")
         .parse::<usize>()
         .expect("Invalid register value 3");
@@ -85,7 +86,7 @@ enum RegisterKind {
 struct RegisterValue {
     kind: RegisterKind,
     base: Option<String>,
-    offset: (u32, u32),
+    offset: u64,
 }
 
 impl RegisterValue {
@@ -93,7 +94,7 @@ impl RegisterValue {
         RegisterValue {
             kind: RegisterKind::RegisterBase,
             base: Some(name.to_string()),
-            offset: (0,0),
+            offset: 0,
         }
     }
 
@@ -107,17 +108,10 @@ impl RegisterValue {
         format!("base: {:?}, offset: {:?}", base, self.offset)
     }
 
-
-    fn setw(&mut self, kind: RegisterKind, base: Option<String>, offset: u32 {
+    fn set(&mut self, kind: RegisterKind, base: Option<String>, offset: u64) {
         self.kind = kind;
         self.base = base;
-        self.offset.0 = offset;
-    }
-
-    fn setx(&mut self, kind: RegisterKind, base: Option<String>, offset: u64 {
-        self.kind = kind;
-        self.base = base;
-        self.offset = ((offset >> 32) as i32, (offset & 0xFFFFFFFF) as i32);
+        self.offset = offset;
     }
 
     fn simplify(&mut self) {
@@ -322,7 +316,7 @@ impl ARMCORTEXA {
     fn arithmetic(
         &mut self,
         op_string: &str,
-        op: &dyn Fn(i64, i64) -> i64,
+        op: &dyn Fn(u64, u64) -> u64,
         reg0: Option<String>,
         reg1: Option<String>,
         reg2: Option<String>,
@@ -351,51 +345,44 @@ impl ARMCORTEXA {
                             }
                         },
                     }
-                    let new_value = RegisterValue {
-                        kind: RegisterKind::RegisterBase,
+                    self.registers[get_register_index(reg0)].set(
+                        RegisterKind::RegisterBase,
                         base,
-                        offset: op(r1.offset, r2.offset),
-                    };
-                    self.registers[get_register_index(reg0)].set(new_value)
+                        op(r1.offset, r2.offset),
+                    )
                 }
                 RegisterKind::Number => {
                     // abstract numbers, value doesn't matter
-                    self.registers[get_register_index(reg0)].set(r1);
+                    self.registers[get_register_index(reg0)].set(RegisterKind::Number, None, 0);
                 }
-                RegisterKind::Immediate => {
-                    let new_value = RegisterValue {
-                        kind: RegisterKind::Immediate,
-                        base: None,
-                        offset: op(r1.offset, r2.offset),
-                    };
-                    self.registers[get_register_index(reg0)].set(new_value);
-                }
+                RegisterKind::Immediate => self.registers[get_register_index(reg0)].set(
+                    RegisterKind::Immediate,
+                    None,
+                    op(r1.offset, r2.offset),
+                ),
                 RegisterKind::Address => {
                     // why would someone add two addresses? bad
                     // I guess ok as long as we don't use as address
                     warn!("Not advisable to add two addresses");
-                    let new_value = RegisterValue {
-                        kind: RegisterKind::Address,
-                        base: None,
-                        offset: op(r1.offset, r2.offset),
-                    };
-                    self.registers[get_register_index(reg0)].set(new_value);
+                    self.registers[get_register_index(reg0)].set(
+                        RegisterKind::Address,
+                        None,
+                        op(r1.offset, r2.offset),
+                    )
                 }
             }
         } else if r1.kind == RegisterKind::Immediate {
-            let new_value = RegisterValue {
-                kind: r2.kind,
-                base: r2.base,
-                offset: op(r1.offset, r2.offset),
-            };
-            self.registers[get_register_index(reg0)].set(new_value);
+            self.registers[get_register_index(reg0)].set(
+                r2.kind,
+                r2.base,
+                op(r1.offset, r2.offset),
+            );
         } else if r2.kind == RegisterKind::Immediate {
-            let new_value = RegisterValue {
-                kind: r1.kind,
-                base: r1.base,
-                offset: op(r1.offset, r2.offset),
-            };
-            self.registers[get_register_index(reg0)].set(new_value);
+            self.registers[get_register_index(reg0)].set(
+                r1.kind,
+                r1.base,
+                op(r1.offset, r2.offset),
+            );
         } else {
             error!("Cannot perform arithmetic on these two registers")
         }
