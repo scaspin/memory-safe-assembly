@@ -66,7 +66,7 @@ fn get_register_index(reg_name: Option<String>) -> usize {
     let r: usize = reg_name
         .clone()
         .expect("Invalid register value 1")
-        .strip_prefix("w")
+        .strip_prefix("x")
         .expect("Invalid register name 2")
         .parse::<usize>()
         .expect("Invalid register value 3");
@@ -85,7 +85,7 @@ enum RegisterKind {
 struct RegisterValue {
     kind: RegisterKind,
     base: Option<String>,
-    offset: i64,
+    offset: (u32, u32),
 }
 
 impl RegisterValue {
@@ -93,7 +93,7 @@ impl RegisterValue {
         RegisterValue {
             kind: RegisterKind::RegisterBase,
             base: Some(name.to_string()),
-            offset: 0,
+            offset: (0,0),
         }
     }
 
@@ -107,10 +107,17 @@ impl RegisterValue {
         format!("base: {:?}, offset: {:?}", base, self.offset)
     }
 
-    fn set(&mut self, reg: RegisterValue) {
-        self.kind = reg.kind;
-        self.base = reg.base;
-        self.offset = reg.offset;
+
+    fn setw(&mut self, kind: RegisterKind, base: Option<String>, offset: u32 {
+        self.kind = kind;
+        self.base = base;
+        self.offset.0 = offset;
+    }
+
+    fn setx(&mut self, kind: RegisterKind, base: Option<String>, offset: u64 {
+        self.kind = kind;
+        self.base = base;
+        self.offset = ((offset >> 32) as i32, (offset & 0xFFFFFFFF) as i32);
     }
 
     fn simplify(&mut self) {
@@ -164,37 +171,37 @@ impl fmt::Debug for ARMCORTEXA {
 impl ARMCORTEXA {
     fn new() -> ARMCORTEXA {
         let registers = [
-            RegisterValue::new("w0"),
-            RegisterValue::new("w1"),
-            RegisterValue::new("w2"),
-            RegisterValue::new("w3"),
-            RegisterValue::new("w4"),
-            RegisterValue::new("w5"),
-            RegisterValue::new("w6"),
-            RegisterValue::new("w7"),
-            RegisterValue::new("w8"),
-            RegisterValue::new("w9"),
-            RegisterValue::new("w10"),
-            RegisterValue::new("w11"),
-            RegisterValue::new("w12"),
-            RegisterValue::new("w13"),
-            RegisterValue::new("w14"),
-            RegisterValue::new("w15"),
-            RegisterValue::new("w16"),
-            RegisterValue::new("w17"),
-            RegisterValue::new("w18"),
-            RegisterValue::new("w19"),
-            RegisterValue::new("w20"),
-            RegisterValue::new("w21"),
-            RegisterValue::new("w22"),
-            RegisterValue::new("w23"),
-            RegisterValue::new("w24"),
-            RegisterValue::new("w25"),
-            RegisterValue::new("w26"),
-            RegisterValue::new("w27"),
-            RegisterValue::new("w28"),
-            RegisterValue::new("w29"), // frame pointer
-            RegisterValue::new("w30"), // link
+            RegisterValue::new("x0"),
+            RegisterValue::new("x1"),
+            RegisterValue::new("x2"),
+            RegisterValue::new("x3"),
+            RegisterValue::new("x4"),
+            RegisterValue::new("x5"),
+            RegisterValue::new("x6"),
+            RegisterValue::new("x7"),
+            RegisterValue::new("x8"),
+            RegisterValue::new("x9"),
+            RegisterValue::new("x10"),
+            RegisterValue::new("x11"),
+            RegisterValue::new("x12"),
+            RegisterValue::new("x13"),
+            RegisterValue::new("x14"),
+            RegisterValue::new("x15"),
+            RegisterValue::new("x16"),
+            RegisterValue::new("x17"),
+            RegisterValue::new("x18"),
+            RegisterValue::new("x19"),
+            RegisterValue::new("x20"),
+            RegisterValue::new("x21"),
+            RegisterValue::new("x22"),
+            RegisterValue::new("x23"),
+            RegisterValue::new("x24"),
+            RegisterValue::new("x25"),
+            RegisterValue::new("x26"),
+            RegisterValue::new("x27"),
+            RegisterValue::new("x28"),
+            RegisterValue::new("x29"), // frame pointer
+            RegisterValue::new("x30"), // link
             RegisterValue::new("sp"),  // stack pointer
             RegisterValue::new("xzr"), // 64-bit zero
         ];
@@ -265,7 +272,7 @@ impl ARMCORTEXA {
         } else if instruction.op == "bic" {
             self.arithmetic(
                 &instruction.op,
-                &|x, y| x & y,
+                &|x, y| x & !y,
                 instruction.r1.clone(),
                 instruction.r2.clone(),
                 instruction.r3.clone(),
