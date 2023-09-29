@@ -1,8 +1,10 @@
+use clap::Parser;
 use log::{error, warn};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::result::Result;
 use std::str::FromStr;
 
@@ -173,48 +175,12 @@ impl RegisterValue {
         }
     }
 
-    // FIX trailing backslashes issue
-    pub fn to_string(&self) -> String {
-        let mut base = "".to_string();
-        match &self.base {
-            Some(inner) => base = inner.to_string(),
-            None => (),
-        }
-        format!("base: {:?}, offset: {:?}", base, self.offset)
-    }
-
     fn set(&mut self, kind: RegisterKind, base: Option<String>, offset: i64) {
         self.kind = kind;
         self.base = base;
         self.offset = offset;
     }
 
-    fn simplify(&mut self) {
-        unimplemented!();
-        // TODO: simplify expression when possible
-    }
-}
-
-// all the allowable cases in which registers can be compared or used together
-fn comparable(r1: RegisterValue, r2: RegisterValue) -> bool {
-    if r1.kind == r2.kind {
-        return true;
-    }
-    if r1.kind == RegisterKind::RegisterBase && r2.kind == RegisterKind::Immediate {
-        return true;
-    }
-    if r2.kind == RegisterKind::RegisterBase && r1.kind == RegisterKind::Immediate {
-        return true;
-    }
-    if r1.kind == RegisterKind::Address && r2.kind == RegisterKind::Immediate {
-        return true;
-    }
-    if r2.kind == RegisterKind::Address && r1.kind == RegisterKind::Immediate {
-        return true;
-    }
-
-    error!("uncomparable registers");
-    false
 }
 
 fn generate_expression(op: &str, a: String, b: String) -> String {
@@ -453,7 +419,7 @@ impl ARMCORTEXA {
                     error!("cannot jump on non-address");
                 }
             } else {
-                let r1 = &self.registers[get_register_index(
+                let _r1 = &self.registers[get_register_index(
                     instruction
                         .r1
                         .clone()
@@ -658,24 +624,23 @@ impl ARMCORTEXA {
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
-                    let mut base: Option<String> = None;
-                    match r1.clone().base {
+                    let base = match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
                             Some(reg2base) => {
                                 let concat = generate_expression(op_string, reg1base, reg2base);
-                                base = Some(concat)
+                                Some(concat)
                             }
                             None => {
-                                base = Some(reg1base);
+                                Some(reg1base)
                             }
                         },
                         None => match r2.clone().base {
-                            Some(reg2base) => base = Some(reg2base),
+                            Some(reg2base) => Some(reg2base),
                             None => {
-                                base = None;
+                                None
                             }
                         },
-                    }
+                    };
                     self.set_register(
                         reg0,
                         RegisterKind::RegisterBase,
@@ -853,8 +818,14 @@ impl ARMCORTEXA {
     }
 }
 
+#[derive(Parser)]
+struct Args {
+    file: PathBuf
+}
+
 fn main() -> std::io::Result<()> {
-    let file = File::open("./assets/processed-sha256-armv8-ios64.S")?;
+    let args = Args::parse();
+    let file = File::open(args.file)?;
     let reader = BufReader::new(file);
 
     // represent code this way, highly stupid and unoptimized
@@ -977,7 +948,7 @@ fn main() -> std::io::Result<()> {
                 },
                 None => pc = pc + 1,
             },
-            Err(e) => println!(
+            Err(_) => println!(
                 "Instruction could not execute at line {:?} : {:?}",
                 pc, instruction
             ),
