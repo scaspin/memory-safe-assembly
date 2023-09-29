@@ -1,8 +1,9 @@
-use log::{error, warn};
+use clap::Parser;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::result::Result;
 use std::str::FromStr;
 
@@ -173,48 +174,12 @@ impl RegisterValue {
         }
     }
 
-    // FIX trailing backslashes issue
-    pub fn to_string(&self) -> String {
-        let mut base = "".to_string();
-        match &self.base {
-            Some(inner) => base = inner.to_string(),
-            None => (),
-        }
-        format!("base: {:?}, offset: {:?}", base, self.offset)
-    }
-
     fn set(&mut self, kind: RegisterKind, base: Option<String>, offset: i64) {
         self.kind = kind;
         self.base = base;
         self.offset = offset;
     }
 
-    fn simplify(&mut self) {
-        unimplemented!();
-        // TODO: simplify expression when possible
-    }
-}
-
-// all the allowable cases in which registers can be compared or used together
-fn comparable(r1: RegisterValue, r2: RegisterValue) -> bool {
-    if r1.kind == r2.kind {
-        return true;
-    }
-    if r1.kind == RegisterKind::RegisterBase && r2.kind == RegisterKind::Immediate {
-        return true;
-    }
-    if r2.kind == RegisterKind::RegisterBase && r1.kind == RegisterKind::Immediate {
-        return true;
-    }
-    if r1.kind == RegisterKind::Address && r2.kind == RegisterKind::Immediate {
-        return true;
-    }
-    if r2.kind == RegisterKind::Address && r1.kind == RegisterKind::Immediate {
-        return true;
-    }
-
-    error!("uncomparable registers");
-    false
 }
 
 fn generate_expression(op: &str, a: String, b: String) -> String {
@@ -450,10 +415,10 @@ impl ARMCORTEXA {
                 if w30.kind == RegisterKind::Address {
                     return Ok(Some((None, Some(w30.offset.try_into().unwrap()))));
                 } else {
-                    error!("cannot jump on non-address");
+                    log::error!("cannot jump on non-address");
                 }
             } else {
-                let r1 = &self.registers[get_register_index(
+                let _r1 = &self.registers[get_register_index(
                     instruction
                         .r1
                         .clone()
@@ -577,7 +542,7 @@ impl ARMCORTEXA {
                 );
             }
         } else {
-            println!("Instruction not supported {:?}", instruction);
+            log::warn!("Instruction not supported {:?}", instruction);
         }
 
         Ok(None)
@@ -658,24 +623,23 @@ impl ARMCORTEXA {
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
-                    let mut base: Option<String> = None;
-                    match r1.clone().base {
+                    let base = match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
                             Some(reg2base) => {
                                 let concat = generate_expression(op_string, reg1base, reg2base);
-                                base = Some(concat)
+                                Some(concat)
                             }
                             None => {
-                                base = Some(reg1base);
+                                Some(reg1base)
                             }
                         },
                         None => match r2.clone().base {
-                            Some(reg2base) => base = Some(reg2base),
+                            Some(reg2base) => Some(reg2base),
                             None => {
-                                base = None;
+                                None
                             }
                         },
-                    }
+                    };
                     self.set_register(
                         reg0,
                         RegisterKind::RegisterBase,
@@ -696,7 +660,7 @@ impl ARMCORTEXA {
                 RegisterKind::Address => {
                     // why would someone add two addresses? bad
                     // I guess ok as long as we don't use as address
-                    warn!("Not advisable to add two addresses");
+                    log::warn!("Not advisable to add two addresses");
                     self.set_register(reg0, RegisterKind::Address, None, op(r1.offset, r2.offset))
                 }
             }
@@ -705,7 +669,7 @@ impl ARMCORTEXA {
         } else if r2.kind == RegisterKind::Immediate {
             self.set_register(reg0, r1.kind, r1.base, op(r1.offset, r2.offset));
         } else {
-            error!("Cannot perform arithmetic on these two registers")
+            log::error!("Cannot perform arithmetic on these two registers")
         }
     }
 
@@ -750,7 +714,7 @@ impl ARMCORTEXA {
                     }
                 }
                 RegisterKind::Number => {
-                    error!("Cannot compare two undefined numbers")
+                    log::error!("Cannot compare two undefined numbers")
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
@@ -800,7 +764,7 @@ impl ARMCORTEXA {
                 }
             }
         } else {
-            error!("Cannot compare these two registers")
+            log::error!("Cannot compare these two registers")
         }
     }
 
@@ -824,7 +788,7 @@ impl ARMCORTEXA {
                 }
             }
         } else {
-            error!("{:?}", res)
+            log::error!("{:?}", res)
         }
     }
 
@@ -848,13 +812,20 @@ impl ARMCORTEXA {
                 }
             }
         } else {
-            error!("{:?}", res)
+            log::error!("{:?}", res)
         }
     }
 }
 
+#[derive(Parser)]
+struct Args {
+    file: PathBuf
+}
+
 fn main() -> std::io::Result<()> {
-    let file = File::open("./assets/processed-sha256-armv8-ios64.S")?;
+    env_logger::init();
+    let args = Args::parse();
+    let file = File::open(args.file)?;
     let reader = BufReader::new(file);
 
     // represent code this way, highly stupid and unoptimized
@@ -954,7 +925,7 @@ fn main() -> std::io::Result<()> {
     let mut pc = 0;
     while pc < program_length {
         let instruction = parsed_code[pc].clone();
-        println!("{:?}", instruction);
+        log::info!("{:?}", instruction);
         allops.push(instruction.op.clone());
 
         let execute_result = computer.execute(&parsed_code[pc]);
@@ -972,12 +943,12 @@ fn main() -> std::io::Result<()> {
                         pc = address as usize;
                     }
                     (None, None) | (Some(_), Some(_)) => {
-                        error!("Execute did not return valid response for jump or continue")
+                        log::error!("Execute did not return valid response for jump or continue")
                     }
                 },
                 None => pc = pc + 1,
             },
-            Err(e) => println!(
+            Err(_) => log::error!(
                 "Instruction could not execute at line {:?} : {:?}",
                 pc, instruction
             ),
@@ -988,7 +959,7 @@ fn main() -> std::io::Result<()> {
 
     allops.sort_unstable();
     allops.dedup();
-    println!("all instructions used: {:?}", allops);
+    log::info!("all instructions used: {:?}", allops);
 
     Ok(())
 }
