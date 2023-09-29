@@ -20,7 +20,7 @@ impl MemorySafetyError {
 }
 impl fmt::Display for MemorySafetyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Behavior is not memory safe")
+        write!(f, "{}", self.details)
     }
 }
 
@@ -402,6 +402,20 @@ impl ARMCORTEXA {
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
             );
+            if instruction.r4.is_some() {
+                if let Some(expr) = &instruction.r4 {
+                    let parts = expr.split_once('#').unwrap();
+                    if parts.0 == "ror" {
+                        self.rotate(instruction.r1.clone().expect("Should be here"), instruction.r1.clone().expect("Again"), parts.1.to_string());
+                    }
+                }
+            }
+        } else if instruction.op == "ror" {
+            self.rotate(
+                instruction.r1.clone().expect("Need dst register"),
+                instruction.r2.clone().expect("Need one operand"),
+                instruction.r3.clone().expect("Need two operand"),
+            );
         } else if instruction.op == "cmp" {
             self.cmp(
                 instruction.r1.clone().expect("need register to compare"),
@@ -483,7 +497,6 @@ impl ARMCORTEXA {
             // pre-index
             if reg3.contains(",") {
                 let reg3base = get_register_name_string(reg3.clone());
-                println!("reg3base {}", reg3base);
                 let new_reg = self.operand(reg3.clone());
                 self.set_register(reg3base, new_reg.kind, new_reg.base, new_reg.offset);
             }
@@ -542,7 +555,6 @@ impl ARMCORTEXA {
             // pre-index
             if reg3.contains(",") {
                 let reg3base = get_register_name_string(reg3.clone());
-                println!("reg3base {}", reg3base);
                 let new_reg = self.operand(reg3.clone());
                 self.set_register(reg3base, new_reg.kind, new_reg.base, new_reg.offset);
             }
@@ -695,6 +707,15 @@ impl ARMCORTEXA {
         } else {
             error!("Cannot perform arithmetic on these two registers")
         }
+    }
+
+    fn rotate(&mut self, reg1: String, reg2: String, reg3: String) {
+        let r1 = self.registers[get_register_index(reg1.clone())].clone();
+        let r2 = self.registers[get_register_index(reg2)].clone();
+
+        let shift = self.operand(reg3).offset;
+        let new_offset = r2.offset >> shift;
+        self.set_register(reg1, r2.clone().kind, Some(generate_expression("ror", r1.base.unwrap_or("".to_string()), r2.offset.to_string())), new_offset);
     }
 
     fn cmp(&mut self, reg1: String, reg2: String) {
