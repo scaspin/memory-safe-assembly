@@ -1,5 +1,4 @@
 use clap::Parser;
-use log::{error, warn};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -416,7 +415,7 @@ impl ARMCORTEXA {
                 if w30.kind == RegisterKind::Address {
                     return Ok(Some((None, Some(w30.offset.try_into().unwrap()))));
                 } else {
-                    error!("cannot jump on non-address");
+                    log::error!("cannot jump on non-address");
                 }
             } else {
                 let _r1 = &self.registers[get_register_index(
@@ -543,7 +542,7 @@ impl ARMCORTEXA {
                 );
             }
         } else {
-            println!("Instruction not supported {:?}", instruction);
+            log::warn!("Instruction not supported {:?}", instruction);
         }
 
         Ok(None)
@@ -661,7 +660,7 @@ impl ARMCORTEXA {
                 RegisterKind::Address => {
                     // why would someone add two addresses? bad
                     // I guess ok as long as we don't use as address
-                    warn!("Not advisable to add two addresses");
+                    log::warn!("Not advisable to add two addresses");
                     self.set_register(reg0, RegisterKind::Address, None, op(r1.offset, r2.offset))
                 }
             }
@@ -670,7 +669,7 @@ impl ARMCORTEXA {
         } else if r2.kind == RegisterKind::Immediate {
             self.set_register(reg0, r1.kind, r1.base, op(r1.offset, r2.offset));
         } else {
-            error!("Cannot perform arithmetic on these two registers")
+            log::error!("Cannot perform arithmetic on these two registers")
         }
     }
 
@@ -715,7 +714,7 @@ impl ARMCORTEXA {
                     }
                 }
                 RegisterKind::Number => {
-                    error!("Cannot compare two undefined numbers")
+                    log::error!("Cannot compare two undefined numbers")
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
@@ -765,7 +764,7 @@ impl ARMCORTEXA {
                 }
             }
         } else {
-            error!("Cannot compare these two registers")
+            log::error!("Cannot compare these two registers")
         }
     }
 
@@ -789,7 +788,7 @@ impl ARMCORTEXA {
                 }
             }
         } else {
-            error!("{:?}", res)
+            log::error!("{:?}", res)
         }
     }
 
@@ -813,7 +812,7 @@ impl ARMCORTEXA {
                 }
             }
         } else {
-            error!("{:?}", res)
+            log::error!("{:?}", res)
         }
     }
 }
@@ -824,6 +823,7 @@ struct Args {
 }
 
 fn main() -> std::io::Result<()> {
+    env_logger::init();
     let args = Args::parse();
     let file = File::open(args.file)?;
     let reader = BufReader::new(file);
@@ -925,7 +925,7 @@ fn main() -> std::io::Result<()> {
     let mut pc = 0;
     while pc < program_length {
         let instruction = parsed_code[pc].clone();
-        println!("{:?}", instruction);
+        log::info!("{:?}", instruction);
         allops.push(instruction.op.clone());
 
         let execute_result = computer.execute(&parsed_code[pc]);
@@ -943,12 +943,12 @@ fn main() -> std::io::Result<()> {
                         pc = address as usize;
                     }
                     (None, None) | (Some(_), Some(_)) => {
-                        error!("Execute did not return valid response for jump or continue")
+                        log::error!("Execute did not return valid response for jump or continue")
                     }
                 },
                 None => pc = pc + 1,
             },
-            Err(_) => println!(
+            Err(_) => log::error!(
                 "Instruction could not execute at line {:?} : {:?}",
                 pc, instruction
             ),
@@ -959,7 +959,7 @@ fn main() -> std::io::Result<()> {
 
     allops.sort_unstable();
     allops.dedup();
-    println!("all instructions used: {:?}", allops);
+    log::info!("all instructions used: {:?}", allops);
 
     Ok(())
 }
