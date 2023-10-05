@@ -179,11 +179,10 @@ impl RegisterValue {
         self.base = base;
         self.offset = offset;
     }
-
 }
 
 fn generate_expression(op: &str, a: String, b: String) -> String {
-    "[".to_owned() + &a + &op.to_string() + &b + "]"
+    a + &op.to_string() + &b
 }
 
 fn get_register_name_string(r: String) -> String {
@@ -205,6 +204,7 @@ struct ARMCORTEXA {
     memory: HashMap<usize, i64>,
     stack: Vec<RegisterValue>,
     stack_index: i64,
+    input_length: u64,
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -260,6 +260,7 @@ impl ARMCORTEXA {
             memory: HashMap::new(),
             stack: Vec::new(),
             stack_index: 0,
+            input_length: 0,
         }
     }
 
@@ -271,11 +272,20 @@ impl ARMCORTEXA {
         )
     }
 
-    fn set_output(&mut self, register: String) {
+    fn set_context(&mut self, register: String) {
         self.registers[get_register_index(register)].set(
             RegisterKind::Address,
-            Some("Output".to_string()),
+            Some("Context".to_string()),
             0,
+        )
+    }
+
+    fn set_length(&mut self, register: String, length: u64) {
+        self.input_length = length;
+        self.registers[get_register_index(register)].set(
+            RegisterKind::Immediate,
+            None,
+            length as i64,
         )
     }
 
@@ -371,7 +381,11 @@ impl ARMCORTEXA {
                 if let Some(expr) = &instruction.r4 {
                     let parts = expr.split_once('#').unwrap();
                     if parts.0 == "ror" {
-                        self.rotate(instruction.r1.clone().expect("Should be here"), instruction.r1.clone().expect("Again"), parts.1.to_string());
+                        self.rotate(
+                            instruction.r1.clone().expect("Should be here"),
+                            instruction.r1.clone().expect("Again"),
+                            parts.1.to_string(),
+                        );
                     }
                 }
             }
@@ -550,20 +564,27 @@ impl ARMCORTEXA {
 
     fn mem_safe_read(&self, base: Option<String>, offset: i64) -> Result<(), MemorySafetyError> {
         if let Some(regbase) = base {
-            if regbase == "sp" {
+            if regbase == "sp" || regbase == "x31" {
                 if self.stack_index + offset.abs() < ((self.stack.len() * 8) as i64) {
                     return Ok(());
                 } else {
                     return Err(MemorySafetyError::new("reading past size of stack"));
                 }
             } else if regbase == "Input" {
-                if offset < 505 {
+                if offset < (self.input_length * 4).try_into().unwrap() {
                     //again, keeping input size to 512 for now
                     return Ok(());
                 } else {
                     return Err(MemorySafetyError::new("reading past input size"));
                 }
+            } else if regbase == "Context" {
+                if offset < 8 * 32 {
+                    return Ok(());
+                } else {
+                    return Err(MemorySafetyError::new("reading past context size"));
+                }
             }
+            println!("read base: {:?}, read offset: {:?}", regbase, offset);
             return Err(MemorySafetyError::new(
                 "Cannot read using offsets from not the stack pointer or the input",
             ));
@@ -588,8 +609,8 @@ impl ARMCORTEXA {
                         "writing past allocated size of stack",
                     ));
                 }
-            } else if regbase == "Output" {
-                if offset < 249 {
+            } else if regbase == "Input" {
+                if offset < (self.input_length * 4).try_into().unwrap() {
                     return Ok(());
                 } else {
                     return Err(MemorySafetyError::new("wring past output size"));
@@ -629,15 +650,11 @@ impl ARMCORTEXA {
                                 let concat = generate_expression(op_string, reg1base, reg2base);
                                 Some(concat)
                             }
-                            None => {
-                                Some(reg1base)
-                            }
+                            None => Some(reg1base),
                         },
                         None => match r2.clone().base {
                             Some(reg2base) => Some(reg2base),
-                            None => {
-                                None
-                            }
+                            None => None,
                         },
                     };
                     self.set_register(
@@ -679,7 +696,16 @@ impl ARMCORTEXA {
 
         let shift = self.operand(reg3).offset;
         let new_offset = r2.offset >> shift;
-        self.set_register(reg1, r2.clone().kind, Some(generate_expression("ror", r1.base.unwrap_or("".to_string()), r2.offset.to_string())), new_offset);
+        self.set_register(
+            reg1,
+            r2.clone().kind,
+            Some(generate_expression(
+                "ror",
+                r1.base.unwrap_or("".to_string()),
+                r2.offset.to_string(),
+            )),
+            new_offset,
+        );
     }
 
     fn cmp(&mut self, reg1: String, reg2: String) {
@@ -782,6 +808,8 @@ impl ARMCORTEXA {
                     self.set_register(t, val.kind.clone(), val.base.clone(), val.offset);
                 } else if base == "Input" {
                     self.set_register(t, RegisterKind::Number, None, 0);
+                } else if base == "Context" {
+                    self.set_register(t, RegisterKind::Number, None, 0);
                 } else {
                     let num = self.memory.get(&(address.offset as usize)).unwrap();
                     self.set_register(t, RegisterKind::Immediate, None, *num);
@@ -819,7 +847,7 @@ impl ARMCORTEXA {
 
 #[derive(Parser)]
 struct Args {
-    file: PathBuf
+    file: PathBuf,
 }
 
 fn main() -> std::io::Result<()> {
@@ -891,8 +919,10 @@ fn main() -> std::io::Result<()> {
     // set up simulation structures
     let mut computer = ARMCORTEXA::new();
 
-    computer.set_input("x0".to_string());
-    computer.set_output("x2".to_string());
+    // this is the context, i.e. A,B,C,D,E for the function
+    computer.set_context("x0".to_string());
+    computer.set_input("x1".to_string());
+    computer.set_length("x2".to_string(), 512);
 
     // FIX: put defs into memory in a more elegant way, this is bad
     let mut alignment = 8;
@@ -950,7 +980,8 @@ fn main() -> std::io::Result<()> {
             },
             Err(_) => log::error!(
                 "Instruction could not execute at line {:?} : {:?}",
-                pc, instruction
+                pc,
+                instruction
             ),
         }
     }
