@@ -167,6 +167,13 @@ struct RegisterValue {
 
 impl RegisterValue {
     fn new(name: &str) -> RegisterValue {
+        if name == "sp" || name == "x29" || name == "x30" {
+            return RegisterValue {
+                kind: RegisterKind::Address,
+                base: Some(name.to_string()),
+                offset: 0,
+            };
+        }
         RegisterValue {
             kind: RegisterKind::RegisterBase,
             base: Some(name.to_string()),
@@ -305,6 +312,7 @@ impl ARMCORTEXA {
 
     // handle different addressing modes
     fn operand(&mut self, v: String) -> RegisterValue {
+        // just an immediate
         if !v.contains('[') && v.contains('#') {
             let mut base: Option<String> = None;
             if v.contains("ror") {
@@ -315,18 +323,22 @@ impl ARMCORTEXA {
                 base: base,
                 offset: string_to_int(&v.trim_matches('#')),
             };
+
+        // address within register
         } else if v.contains('[') && !v.contains(',') {
+            let reg = self.registers[get_register_index(v.trim_matches('[').to_string())].clone();
             return RegisterValue {
                 kind: RegisterKind::Address,
-                base: Some(get_register_name_string(v).to_string()),
-                offset: 0,
+                base: reg.base,
+                offset: reg.offset,
             };
         } else if v.contains('[') && v.contains(',') && v.contains('#') {
             let a = v.split_once(',').unwrap();
+            let reg = self.registers[get_register_index(a.0.trim_matches('[').to_string())].clone();
             return RegisterValue {
                 kind: RegisterKind::Address,
-                base: Some(a.0.trim_matches('[').to_string()),
-                offset: string_to_int(a.1.trim_matches(']')),
+                base: reg.base,
+                offset: reg.offset + string_to_int(a.1.trim_matches(']')),
             };
         } else if v.contains("@") {
             // TODO : expand functionality
@@ -411,7 +423,6 @@ impl ARMCORTEXA {
                 instruction.r3.clone().expect("Need two operand"),
             );
         } else if instruction.op == "adrp" {
-            println!("{:?}", self.memory.get(&0));
             let address = self.operand(instruction.r2.clone().expect("Need address label"));
             self.set_register(
                 instruction.r1.clone().expect("need dst register"),
@@ -448,10 +459,15 @@ impl ARMCORTEXA {
             );
         } else if instruction.op == "ret" {
             if instruction.r1.is_none() {
-                // return w30
-                let w30 = self.registers[30].clone();
-                if w30.kind == RegisterKind::Address {
-                    return Ok(Some((None, Some(w30.offset.try_into().unwrap()))));
+                let x30 = self.registers[30].clone();
+                println!("Ret: {:?}", x30);
+                if x30.kind == RegisterKind::Address {
+                    if x30.base.is_some(){
+                        if x30.base.unwrap() == "x30" && x30.offset == 0 {
+                        return Ok(Some((None, Some(0))))
+                        }
+                    }
+                    return Ok(Some((None, Some(x30.offset.try_into().unwrap()))));
                 } else {
                     log::error!("cannot jump on non-address");
                 }
@@ -608,7 +624,6 @@ impl ARMCORTEXA {
                     return Err(MemorySafetyError::new("reading past context size"));
                 }
             }
-            println!("read base: {:?}, read offset: {:?}", regbase, offset);
             return Err(MemorySafetyError::new(
                 "Cannot read using offsets from not the stack pointer or the input",
             ));
@@ -736,6 +751,7 @@ impl ARMCORTEXA {
         let r1 = self.registers[get_register_index(reg1)].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
 
+        println!("Register 1: {:?}, Register 2: {:?}", r1, r2);
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
@@ -763,8 +779,34 @@ impl ARMCORTEXA {
                         };
                     }
                 }
-                RegisterKind::Number => {
-                    log::error!("Cannot compare two undefined numbers")
+                RegisterKind::Number => { 
+
+                    if r1.base.is_some() || r2.base.is_some() {
+                        log::error!("Cannot compare two undefined numbers");
+                    }
+                    self.neg = if r1.offset < r2.offset {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    self.zero = if r1.offset == r2.offset {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    // signed vs signed distinction, maybe make offset generic to handle both?
+                    self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                        Some(true)
+                    } else {
+                        Some(false)
+                    };
+                    
+                   
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
@@ -1000,6 +1042,10 @@ fn main() -> std::io::Result<()> {
                         }
                     }
                     (None, Some(address)) => {
+                        if address == 0 {
+                            // program is done
+                            continue;
+                        }
                         pc = address as usize;
                     }
                     (None, None) | (Some(_), Some(_)) => {
