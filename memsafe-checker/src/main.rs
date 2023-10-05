@@ -328,6 +328,21 @@ impl ARMCORTEXA {
                 base: Some(a.0.trim_matches('[').to_string()),
                 offset: string_to_int(a.1.trim_matches(']')),
             };
+        } else if v.contains("@") {
+            // TODO : expand functionality
+            if v.contains("OFF") {
+                return RegisterValue {
+                    kind: RegisterKind::Immediate,
+                    base: None,
+                    offset: 6, // TODO: alightment, need to make dynamic?
+                };
+            } else {
+                return RegisterValue {
+                    kind: RegisterKind::Address,
+                    base: None,
+                    offset: 0,
+                };
+            }
         } else {
             return self.registers[get_register_index(v)].clone();
         }
@@ -394,6 +409,15 @@ impl ARMCORTEXA {
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
+            );
+        } else if instruction.op == "adrp" {
+            println!("{:?}", self.memory.get(&0));
+            let address = self.operand(instruction.r2.clone().expect("Need address label"));
+            self.set_register(
+                instruction.r1.clone().expect("need dst register"),
+                RegisterKind::Address,
+                None,
+                address.offset,
             );
         } else if instruction.op == "cmp" {
             self.cmp(
@@ -901,24 +925,25 @@ fn main() -> std::io::Result<()> {
 
             code.push(text.clone());
 
-            if text.contains(":") && !text.contains(":_") {
+            if text.contains(":") {
                 labels.push((text.to_string(), line_number));
                 if text == start {
                     pc = line_number;
+                }
+            } else {
+                let parsed = text.parse::<Instruction>();
+                match parsed {
+                    Ok(i) => parsed_code.push(i),
+                    Err(_) => todo!(),
                 }
             }
 
             line_number = line_number + 1;
 
-            if text.contains(':') || text.contains("_") || text.contains("@") {
-                // handle these later
-                continue;
-            }
-            let parsed = text.parse::<Instruction>();
-            match parsed {
-                Ok(i) => parsed_code.push(i),
-                Err(_) => todo!(),
-            }
+            //if text.contains(':') || text.contains("_") || text.contains("@") {
+            // handle these later
+            //    continue;
+            //}
         }
     }
 
