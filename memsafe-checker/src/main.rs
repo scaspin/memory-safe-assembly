@@ -430,6 +430,16 @@ impl ARMCORTEXA {
                 None,
                 address.offset,
             );
+        } else if instruction.op == "cbnz" {
+            let register = self.registers
+                [get_register_index(instruction.r1.clone().expect("Need one register"))]
+            .clone();
+            if (register.base.is_none() || register.base.unwrap() == "zero") && register.offset == 0
+            {
+                return Ok(Some((instruction.r2.clone(), None)));
+            } else {
+                return Ok(None);
+            }
         } else if instruction.op == "cmp" {
             self.cmp(
                 instruction.r1.clone().expect("need register to compare"),
@@ -462,9 +472,9 @@ impl ARMCORTEXA {
                 let x30 = self.registers[30].clone();
                 println!("Ret: {:?}", x30);
                 if x30.kind == RegisterKind::Address {
-                    if x30.base.is_some(){
+                    if x30.base.is_some() {
                         if x30.base.unwrap() == "x30" && x30.offset == 0 {
-                        return Ok(Some((None, Some(0))))
+                            return Ok(Some((None, Some(0))));
                         }
                     }
                     return Ok(Some((None, Some(x30.offset.try_into().unwrap()))));
@@ -779,8 +789,7 @@ impl ARMCORTEXA {
                         };
                     }
                 }
-                RegisterKind::Number => { 
-
+                RegisterKind::Number => {
                     if r1.base.is_some() || r2.base.is_some() {
                         log::error!("Cannot compare two undefined numbers");
                     }
@@ -805,8 +814,6 @@ impl ARMCORTEXA {
                     } else {
                         Some(false)
                     };
-                    
-                   
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
@@ -1036,7 +1043,7 @@ fn main() -> std::io::Result<()> {
                 Some(jump) => match jump {
                     (Some(label), None) => {
                         for l in labels.iter() {
-                            if l.0 == label {
+                            if l.0.contains(&label) {
                                 pc = l.1;
                             }
                         }
