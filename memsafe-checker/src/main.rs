@@ -848,6 +848,7 @@ impl ARMCORTEXA {
 #[derive(Parser)]
 struct Args {
     file: PathBuf,
+    label: String,
 }
 
 fn main() -> std::io::Result<()> {
@@ -855,6 +856,7 @@ fn main() -> std::io::Result<()> {
     let args = Args::parse();
     let file = File::open(args.file)?;
     let reader = BufReader::new(file);
+    let start = args.label;
 
     // represent code this way, highly stupid and unoptimized
     let mut defs: Vec<String> = Vec::new();
@@ -868,6 +870,7 @@ fn main() -> std::io::Result<()> {
     let mut line_number = 0;
     let mut inifdef = false;
     let mut lastifdef: (String, usize) = ("Start".to_string(), 0);
+    let mut pc = 0;
 
     // first pass, move text into array
     for line in reader.lines() {
@@ -899,7 +902,10 @@ fn main() -> std::io::Result<()> {
             code.push(text.clone());
 
             if text.contains(":") && !text.contains(":_") {
-                labels.push((text.to_string(), line_number))
+                labels.push((text.to_string(), line_number));
+                if text == start {
+                    pc = line_number;
+                }
             }
 
             line_number = line_number + 1;
@@ -952,7 +958,6 @@ fn main() -> std::io::Result<()> {
 
     // second pass, begin processing line by line
     let program_length = parsed_code.len();
-    let mut pc = 0;
     while pc < program_length {
         let instruction = parsed_code[pc].clone();
         log::info!("{:?}", instruction);
