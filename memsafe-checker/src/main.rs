@@ -875,7 +875,7 @@ impl ARMCORTEXA {
         let res = self.mem_safe_read(address.base.clone(), address.offset);
         if res.is_ok() {
             if let Some(base) = address.base {
-                if base == "sp" {
+                if base == "sp" { //FIX: stack addressing, make sure can access up and down from pointer
                     let index = self.stack_index + (address.offset / 8);
                     let val = self.stack.get(index as usize).unwrap();
                     self.set_register(t, val.kind.clone(), val.base.clone(), val.offset);
@@ -902,7 +902,7 @@ impl ARMCORTEXA {
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
             if let Some(base) = address.base {
-                if base == "sp" {
+                if base == "sp" { // FIX: stack addressing
                     let index = self.stack_index + (address.offset / 8);
                     if self.stack.get(index as usize).is_some() {
                         self.stack.remove(index as usize);
