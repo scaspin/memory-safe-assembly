@@ -167,10 +167,17 @@ struct RegisterValue {
 
 impl RegisterValue {
     fn new(name: &str) -> RegisterValue {
-        if name == "sp" || name == "x29" || name == "x30" {
+        if name == "sp" || name == "x29" { 
             return RegisterValue {
                 kind: RegisterKind::Address,
-                base: Some(name.to_string()),
+                base: Some("sp".to_string()),
+                offset: 0,
+            };
+        }
+        if name == "x30" { 
+            return RegisterValue {
+                kind: RegisterKind::Address,
+                base: Some("Return".to_string()),
                 offset: 0,
             };
         }
@@ -208,9 +215,8 @@ struct ARMCORTEXA {
     neg: Option<bool>,
     carry: Option<bool>,
     overflow: Option<bool>,
-    memory: HashMap<usize, i64>,
-    stack: Vec<RegisterValue>,
-    stack_index: i64,
+    memory: HashMap<i64, i64>,
+    stack: HashMap<i64, RegisterValue>,
     input_length: u64,
 }
 
@@ -265,8 +271,7 @@ impl ARMCORTEXA {
             carry: None,
             overflow: None,
             memory: HashMap::new(),
-            stack: Vec::new(),
-            stack_index: 0,
+            stack: HashMap::new(),
             input_length: 0,
         }
     }
@@ -427,7 +432,7 @@ impl ARMCORTEXA {
             self.set_register(
                 instruction.r1.clone().expect("need dst register"),
                 RegisterKind::Address,
-                None,
+                Some("Memory".to_string()), // FIX: needs to be more general
                 address.offset,
             );
         } else if instruction.op == "cbnz" {
@@ -615,10 +620,12 @@ impl ARMCORTEXA {
     fn mem_safe_read(&self, base: Option<String>, offset: i64) -> Result<(), MemorySafetyError> {
         if let Some(regbase) = base {
             if regbase == "sp" || regbase == "x31" {
-                if self.stack_index + offset.abs() < ((self.stack.len() * 8) as i64) {
+                if self.stack.contains_key(&offset) {
                     return Ok(());
                 } else {
-                    return Err(MemorySafetyError::new("reading past size of stack"));
+                    return Err(MemorySafetyError::new(
+                        "Element at this address not in stack",
+                    ));
                 }
             } else if regbase == "Input" {
                 if offset < (self.input_length * 4).try_into().unwrap() {
@@ -633,14 +640,15 @@ impl ARMCORTEXA {
                 } else {
                     return Err(MemorySafetyError::new("reading past context size"));
                 }
-            }
-            return Err(MemorySafetyError::new(
-                "Cannot read using offsets from not the stack pointer or the input",
-            ));
-        } else {
-            // read from defs
-            if self.memory.get(&(offset as usize)).is_some() {
-                return Ok(());
+            } else if regbase == "Memory" {
+                // read from defs
+                if self.memory.get(&(offset)).is_some() {
+                    return Ok(());
+                }
+            } else {
+                return Err(MemorySafetyError::new(
+                    "Cannot read using offsets from not the stack pointer or the input",
+                ));
             }
         }
         Err(MemorySafetyError::new(
@@ -651,13 +659,7 @@ impl ARMCORTEXA {
     fn mem_safe_write(&self, base: Option<String>, offset: i64) -> Result<(), MemorySafetyError> {
         if let Some(regbase) = base {
             if regbase == "sp" {
-                if offset < self.stack_index + 1 {
-                    return Ok(());
-                } else {
-                    return Err(MemorySafetyError::new(
-                        "writing past allocated size of stack",
-                    ));
-                }
+                return Ok(());
             } else if regbase == "Input" {
                 if offset < (self.input_length * 4).try_into().unwrap() {
                     return Ok(());
@@ -670,7 +672,7 @@ impl ARMCORTEXA {
             ));
         } else {
             // overwrite def
-            if self.memory.get(&(offset as usize)).is_some() {
+            if self.memory.get(&(offset)).is_some() {
                 return Ok(());
             }
             return Err(MemorySafetyError::new(
@@ -875,16 +877,20 @@ impl ARMCORTEXA {
         let res = self.mem_safe_read(address.base.clone(), address.offset);
         if res.is_ok() {
             if let Some(base) = address.base {
-                if base == "sp" { //FIX: stack addressing, make sure can access up and down from pointer
-                    let index = self.stack_index + (address.offset / 8);
-                    let val = self.stack.get(index as usize).unwrap();
-                    self.set_register(t, val.kind.clone(), val.base.clone(), val.offset);
+                if base == "sp" {
+                    let val = self.stack.get(&address.offset);
+                    match val {
+                        Some(v) => {
+                            self.set_register(t, v.kind.clone(), v.base.clone(), v.offset);
+                        }
+                        None => log::error!("No element at this address in stack"),
+                    }
                 } else if base == "Input" {
                     self.set_register(t, RegisterKind::Number, None, 0);
                 } else if base == "Context" {
                     self.set_register(t, RegisterKind::Number, None, 0);
-                } else {
-                    let num = self.memory.get(&(address.offset as usize)).unwrap();
+                } else if base == "Memory" {
+                    let num = self.memory.get(&(address.offset)).unwrap();
                     self.set_register(t, RegisterKind::Immediate, None, *num);
                 }
             }
@@ -902,13 +908,14 @@ impl ARMCORTEXA {
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
             if let Some(base) = address.base {
-                if base == "sp" { // FIX: stack addressing
-                    let index = self.stack_index + (address.offset / 8);
-                    if self.stack.get(index as usize).is_some() {
-                        self.stack.remove(index as usize);
-                        self.stack.insert(index as usize, reg.clone());
+                if base == "sp" {
+                    // FIX: stack addressing
+                    let index = address.offset;
+                    if self.stack.get(&index).is_some() {
+                        self.stack.remove(&index);
+                        self.stack.insert(index, reg.clone());
                     } else {
-                        self.stack.push(reg.clone())
+                        self.stack.insert(address.offset, reg.clone());
                     }
                 }
             }
@@ -1023,7 +1030,7 @@ fn main() -> std::io::Result<()> {
                     num = i.parse::<i64>().unwrap();
                 }
                 computer.memory.insert(address, num);
-                address = address + alignment;
+                address = address + (alignment as i64);
             }
         }
     }
@@ -1042,6 +1049,9 @@ fn main() -> std::io::Result<()> {
             Ok(some) => match some {
                 Some(jump) => match jump {
                     (Some(label), None) => {
+                        if label == "Return".to_string() {
+                            break;
+                        }
                         for l in labels.iter() {
                             if l.0.contains(&label) {
                                 pc = l.1;
