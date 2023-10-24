@@ -51,7 +51,7 @@ impl FromStr for Instruction {
             }
         }
 
-        let v: Vec<&str> = s.split(|c| c == '\t' || c == ',').collect();
+        let v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c==' ').collect();
 
         let v0 = v[0].to_string();
         let v1: Option<String>;
@@ -217,6 +217,7 @@ struct ARMCORTEXA {
     overflow: Option<bool>,
     memory: HashMap<i64, i64>,
     stack: HashMap<i64, RegisterValue>,
+    stack_size: i64,
     input_length: u64,
 }
 
@@ -272,6 +273,7 @@ impl ARMCORTEXA {
             overflow: None,
             memory: HashMap::new(),
             stack: HashMap::new(),
+            stack_size : 0,
             input_length: 0,
         }
     }
@@ -317,6 +319,7 @@ impl ARMCORTEXA {
 
     // handle different addressing modes
     fn operand(&mut self, v: String) -> RegisterValue {
+        println!("Operand input: {:?}", v);
         // just an immediate
         if !v.contains('[') && v.contains('#') {
             let mut base: Option<String> = None;
@@ -351,7 +354,7 @@ impl ARMCORTEXA {
                 return RegisterValue {
                     kind: RegisterKind::Immediate,
                     base: None,
-                    offset: 6, // TODO: alightment, need to make dynamic?
+                    offset: 4, // TODO: alightment, need to make dynamic?
                 };
             } else {
                 return RegisterValue {
@@ -429,6 +432,7 @@ impl ARMCORTEXA {
             );
         } else if instruction.op == "adrp" {
             let address = self.operand(instruction.r2.clone().expect("Need address label"));
+            println!("address label: {:?}", address.clone());
             self.set_register(
                 instruction.r1.clone().expect("need dst register"),
                 RegisterKind::Address,
@@ -874,6 +878,7 @@ impl ARMCORTEXA {
      * address: register with address as value
      */
     fn load(&mut self, t: String, address: RegisterValue) {
+        println!("Loading {:?} {:?}", t, address);
         let res = self.mem_safe_read(address.base.clone(), address.offset);
         if res.is_ok() {
             if let Some(base) = address.base {
@@ -904,6 +909,7 @@ impl ARMCORTEXA {
      * address: where to store it
      */
     fn store(&mut self, reg: String, address: RegisterValue) {
+        println!("Storing {:?} {:?}", reg, address);
         let res = self.mem_safe_write(address.base.clone(), address.offset);
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
@@ -916,6 +922,11 @@ impl ARMCORTEXA {
                         self.stack.insert(index, reg.clone());
                     } else {
                         self.stack.insert(address.offset, reg.clone());
+                    }
+                   
+                    // check stack sizing
+                    if index > self.stack_size {
+                        self.stack_size = self.stack_size + 4;
                     }
                 }
             }
@@ -1011,13 +1022,13 @@ fn main() -> std::io::Result<()> {
     computer.set_input("x1".to_string());
     computer.set_length("x2".to_string(), 512);
 
-    // FIX: put defs into memory in a more elegant way, this is bad
-    let mut alignment = 8;
+    //let mut alignment = 4;
     let mut address = 0;
     for def in defs.iter() {
         let v: Vec<&str> = def.split(|c| c == '\t' || c == ',').collect();
         if v[0] == ".align" {
-            alignment = v[1].parse::<usize>().unwrap();
+            //alignment = v[1].parse::<usize>().unwrap();
+            // do nothing for now
         } else if v[0] == ".byte" || v[0] == ".long" {
             for i in v.iter().skip(1) {
                 let num: i64;
@@ -1030,12 +1041,15 @@ fn main() -> std::io::Result<()> {
                     num = i.parse::<i64>().unwrap();
                 }
                 computer.memory.insert(address, num);
-                address = address + (alignment as i64);
+                //address = address + (alignment as i64);
+                address = address + 4;
             }
         }
     }
 
     let mut allops = Vec::new();
+    println!("Memory: {:?}", computer.memory.clone());
+    println!("Keys: {:?}", computer.memory.clone().into_keys().collect::<Vec<_>>().sort_unstable());
 
     // second pass, begin processing line by line
     let program_length = parsed_code.len();
@@ -1043,7 +1057,8 @@ fn main() -> std::io::Result<()> {
         let instruction = parsed_code[pc].clone();
         log::info!("{:?}", instruction);
         allops.push(instruction.op.clone());
-
+        
+        println!("Running {:?}", parsed_code[pc].clone());
         let execute_result = computer.execute(&parsed_code[pc]);
         match execute_result {
             Ok(some) => match some {
