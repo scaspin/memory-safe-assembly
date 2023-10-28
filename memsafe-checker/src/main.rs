@@ -46,8 +46,12 @@ impl FromStr for Instruction {
         if s.contains("[") {
             let left = s.find('[');
             let right = s.rfind(']');
+            let exclamation = s.rfind('!');
             if left.is_some() && right.is_some() {
                 brac = s[left.unwrap()..right.unwrap()].to_string();
+            }
+            if exclamation.is_some() {
+                brac = brac + "!";
             }
         }
 
@@ -348,6 +352,7 @@ impl ARMCORTEXA {
                 base: reg.base,
                 offset: reg.offset + string_to_int(a.1.trim_matches(']')),
             };
+            println!("debug here");
         } else if v.contains("@") {
             // TODO : expand functionality
             if v.contains("OFF") {
@@ -502,20 +507,22 @@ impl ARMCORTEXA {
             let reg1 = instruction.r1.clone().unwrap();
             let reg2 = instruction.r2.clone().unwrap();
 
-            // pre-index
+            let reg2base = get_register_name_string(reg2.clone());
+            let mut base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
+            
+            // pre-index increment
             if reg2.contains(",") {
-                let new_reg = self.operand(reg2.clone());
-                self.set_register(
-                    get_register_name_string(reg2.clone()).to_string(),
-                    new_reg.kind,
-                    new_reg.base,
-                    new_reg.offset,
-                );
+                base_add_reg = self.operand(reg2.clone().trim_end_matches("!").to_string());
+                // with writeback
+                if reg2.contains("!") {
+                    let new_reg = base_add_reg.clone();
+                    self.set_register(reg2base.clone(), new_reg.kind, new_reg.base, new_reg.offset);
+                }
             }
 
-            let reg2base = get_register_name_string(reg2.clone());
-            let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
             self.load(reg1, base_add_reg.clone());
+
+            println!("old register value in memory: {:?}", self.registers[get_register_index(get_register_name_string(reg2.clone()).to_string())].clone().offset);
 
             // post-index
             if instruction.r3.is_some() {
@@ -532,19 +539,23 @@ impl ARMCORTEXA {
             let reg2 = instruction.r2.clone().unwrap();
             let reg3 = instruction.r3.clone().unwrap();
 
-            // pre-index
+            let reg3base = get_register_name_string(reg3.clone());
+            let mut base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
+            
+            // pre-index increment
             if reg3.contains(",") {
-                let reg3base = get_register_name_string(reg3.clone());
-                let new_reg = self.operand(reg3.clone());
-                self.set_register(reg3base, new_reg.kind, new_reg.base, new_reg.offset);
+                base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
+                // with writeback
+                if reg3.contains("!") {
+                    let new_reg = base_add_reg.clone();
+                    self.set_register(reg3base.clone(), new_reg.kind, new_reg.base, new_reg.offset);
+                }
             }
 
-            let reg3base = get_register_name_string(reg3.clone());
-            let base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
-            let mut base_add_reg_mutable = base_add_reg.clone();
             self.load(reg1, base_add_reg.clone());
-            base_add_reg_mutable.offset = base_add_reg.offset + 8;
-            self.load(reg2, base_add_reg_mutable);
+            let mut next = base_add_reg.clone();
+            next.offset = next.offset + 4;
+            self.load(reg2, next);
 
             // post-index
             if instruction.r4.is_some() {
@@ -556,21 +567,24 @@ impl ARMCORTEXA {
                     base_add_reg.offset + new_imm.offset,
                 );
             }
+        
         } else if instruction.op == "str" {
             let reg1 = instruction.r1.clone().unwrap();
             let reg2 = instruction.r2.clone().unwrap();
 
-            // pre-index
+            let reg2base = get_register_name_string(reg2.clone());
+            let mut base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
+            
+            // pre-index increment
             if reg2.contains(",") {
-                let new_reg = self.operand(reg2.clone());
-                self.set_register(
-                    get_register_name_string(reg2.clone()).to_string(),
-                    new_reg.kind,
-                    new_reg.base,
-                    new_reg.offset,
-                );
+                base_add_reg = self.operand(reg2.clone().trim_end_matches("!").to_string());
+                // with writeback
+                if reg2.contains("!") {
+                    let new_reg = base_add_reg.clone();
+                    self.set_register(reg2base.clone(), new_reg.kind, new_reg.base, new_reg.offset);
+                }
             }
-
+            
             let reg2base = get_register_name_string(reg2.clone());
             let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
             self.store(reg1, base_add_reg.clone());
@@ -590,19 +604,23 @@ impl ARMCORTEXA {
             let reg2 = instruction.r2.clone().unwrap();
             let reg3 = instruction.r3.clone().unwrap();
 
-            // pre-index
+            let reg3base = get_register_name_string(reg3.clone());
+            let mut base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
+            
+            // pre-index increment
             if reg3.contains(",") {
-                let reg3base = get_register_name_string(reg3.clone());
-                let new_reg = self.operand(reg3.clone());
-                self.set_register(reg3base, new_reg.kind, new_reg.base, new_reg.offset);
+                base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
+                // with writeback
+                if reg3.contains("!") {
+                    let new_reg = base_add_reg.clone();
+                    self.set_register(reg3base.clone(), new_reg.kind, new_reg.base, new_reg.offset);
+                }
             }
 
-            let reg3base = get_register_name_string(reg3.clone());
-            let base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
-            let mut base_add_reg_mutable = base_add_reg.clone();
             self.store(reg1, base_add_reg.clone());
-            base_add_reg_mutable.offset = base_add_reg.offset + 8;
-            self.store(reg2, base_add_reg_mutable);
+            let mut next = base_add_reg.clone();
+            next.offset = next.offset + 4;
+            self.store(reg2, next);
 
             // post-index
             if instruction.r4.is_some() {
@@ -879,6 +897,10 @@ impl ARMCORTEXA {
      */
     fn load(&mut self, t: String, address: RegisterValue) {
         println!("Loading {:?} {:?}", t, address);
+        let mut vec: Vec<i64> = self.stack.clone().keys().copied().collect();
+        vec.sort();
+        println!("Stack {:?}", vec);
+
         let res = self.mem_safe_read(address.base.clone(), address.offset);
         if res.is_ok() {
             if let Some(base) = address.base {
@@ -910,6 +932,10 @@ impl ARMCORTEXA {
      */
     fn store(&mut self, reg: String, address: RegisterValue) {
         println!("Storing {:?} {:?}", reg, address);
+        let mut vec: Vec<i64> = self.stack.clone().keys().copied().collect();
+        vec.sort();
+        println!("Stack {:?}", vec);
+        
         let res = self.mem_safe_write(address.base.clone(), address.offset);
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
@@ -1020,7 +1046,7 @@ fn main() -> std::io::Result<()> {
     // this is the context, i.e. A,B,C,D,E for the function
     computer.set_context("x0".to_string());
     computer.set_input("x1".to_string());
-    computer.set_length("x2".to_string(), 512);
+    computer.set_length("x2".to_string(), 256);
 
     //let mut alignment = 4;
     let mut address = 0;
