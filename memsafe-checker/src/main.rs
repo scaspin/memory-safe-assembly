@@ -323,7 +323,7 @@ impl ARMCORTEXA {
 
     // handle different addressing modes
     fn operand(&mut self, v: String) -> RegisterValue {
-        println!("Operand input: {:?}", v);
+        //println!("Operand input: {:?}", v);
         // just an immediate
         if !v.contains('[') && v.contains('#') {
             let mut base: Option<String> = None;
@@ -352,7 +352,6 @@ impl ARMCORTEXA {
                 base: reg.base,
                 offset: reg.offset + string_to_int(a.1.trim_matches(']')),
             };
-            println!("debug here");
         } else if v.contains("@") {
             // TODO : expand functionality
             if v.contains("OFF") {
@@ -437,7 +436,6 @@ impl ARMCORTEXA {
             );
         } else if instruction.op == "adrp" {
             let address = self.operand(instruction.r2.clone().expect("Need address label"));
-            println!("address label: {:?}", address.clone());
             self.set_register(
                 instruction.r1.clone().expect("need dst register"),
                 RegisterKind::Address,
@@ -484,10 +482,9 @@ impl ARMCORTEXA {
         } else if instruction.op == "ret" {
             if instruction.r1.is_none() {
                 let x30 = self.registers[30].clone();
-                println!("Ret: {:?}", x30);
                 if x30.kind == RegisterKind::Address {
                     if x30.base.is_some() {
-                        if x30.base.unwrap() == "x30" && x30.offset == 0 {
+                        if x30.base.unwrap() == "Return" && x30.offset == 0 {
                             return Ok(Some((None, Some(0))));
                         }
                     }
@@ -522,7 +519,7 @@ impl ARMCORTEXA {
 
             self.load(reg1, base_add_reg.clone());
 
-            println!("old register value in memory: {:?}", self.registers[get_register_index(get_register_name_string(reg2.clone()).to_string())].clone().offset);
+            //println!("old register value in memory: {:?}", self.registers[get_register_index(get_register_name_string(reg2.clone()).to_string())].clone().offset);
 
             // post-index
             if instruction.r3.is_some() {
@@ -586,7 +583,6 @@ impl ARMCORTEXA {
             }
             
             let reg2base = get_register_name_string(reg2.clone());
-            let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
             self.store(reg1, base_add_reg.clone());
 
             // post-index
@@ -645,7 +641,6 @@ impl ARMCORTEXA {
                 if self.stack.contains_key(&offset) {
                     return Ok(());
                 } else {
-
                     return Err(MemorySafetyError::new(
                         "Element at this address not in stack"));
                 }
@@ -688,7 +683,13 @@ impl ARMCORTEXA {
                 } else {
                     return Err(MemorySafetyError::new("wring past output size"));
                 }
-            };
+            } else if regbase == "Context" { //FIX: should be general for multiple inputs 
+                if offset < (48).try_into().unwrap() {
+                    return Ok(());
+                } else {
+                    return Err(MemorySafetyError::new("wring past contect buffer size"));
+                }
+            }
             return Err(MemorySafetyError::new(
                 "Cannot write using offsets from not the stack pointer or the input",
             ));
@@ -785,7 +786,7 @@ impl ARMCORTEXA {
         let r1 = self.registers[get_register_index(reg1)].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
 
-        println!("Register 1: {:?}, Register 2: {:?}", r1, r2);
+        //println!("Register 1: {:?}, Register 2: {:?}", r1, r2);
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
@@ -896,10 +897,7 @@ impl ARMCORTEXA {
      * address: register with address as value
      */
     fn load(&mut self, t: String, address: RegisterValue) {
-        println!("Loading {:?} {:?}", t, address);
-        let mut vec: Vec<i64> = self.stack.clone().keys().copied().collect();
-        vec.sort();
-        println!("Stack {:?}", vec);
+        //println!("Loading {:?} {:?}", t, address);
 
         let res = self.mem_safe_read(address.base.clone(), address.offset);
         if res.is_ok() {
@@ -931,11 +929,6 @@ impl ARMCORTEXA {
      * address: where to store it
      */
     fn store(&mut self, reg: String, address: RegisterValue) {
-        println!("Storing {:?} {:?}", reg, address);
-        let mut vec: Vec<i64> = self.stack.clone().keys().copied().collect();
-        vec.sort();
-        println!("Stack {:?}", vec);
-        
         let res = self.mem_safe_write(address.base.clone(), address.offset);
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
@@ -1046,7 +1039,7 @@ fn main() -> std::io::Result<()> {
     // this is the context, i.e. A,B,C,D,E for the function
     computer.set_context("x0".to_string());
     computer.set_input("x1".to_string());
-    computer.set_length("x2".to_string(), 256);
+    computer.set_length("x2".to_string(), 512);
 
     //let mut alignment = 4;
     let mut address = 0;
@@ -1074,8 +1067,8 @@ fn main() -> std::io::Result<()> {
     }
 
     let mut allops = Vec::new();
-    println!("Memory: {:?}", computer.memory.clone());
-    println!("Keys: {:?}", computer.memory.clone().into_keys().collect::<Vec<_>>().sort_unstable());
+    // println!("Memory: {:?}", computer.memory.clone());
+    //println!("Keys: {:?}", computer.memory.clone().into_keys().collect::<Vec<_>>().sort_unstable());
 
     // second pass, begin processing line by line
     let program_length = parsed_code.len();
@@ -1083,8 +1076,8 @@ fn main() -> std::io::Result<()> {
         let instruction = parsed_code[pc].clone();
         log::info!("{:?}", instruction);
         allops.push(instruction.op.clone());
-        
-        println!("Running {:?}", parsed_code[pc].clone());
+       
+        //println!("Running: {:?}", parsed_code[pc]);
         let execute_result = computer.execute(&parsed_code[pc]);
         match execute_result {
             Ok(some) => match some {
@@ -1102,7 +1095,7 @@ fn main() -> std::io::Result<()> {
                     (None, Some(address)) => {
                         if address == 0 {
                             // program is done
-                            continue;
+                            break;
                         }
                         pc = address as usize;
                     }
@@ -1124,6 +1117,7 @@ fn main() -> std::io::Result<()> {
         }
     }
 
+    println!("Symbolic execution done");
     // TODO: check stack and required registers are restored
 
     allops.sort_unstable();
