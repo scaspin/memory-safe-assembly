@@ -46,12 +46,16 @@ impl FromStr for Instruction {
         if s.contains("[") {
             let left = s.find('[');
             let right = s.rfind(']');
+            let exclamation = s.rfind('!');
             if left.is_some() && right.is_some() {
                 brac = s[left.unwrap()..right.unwrap()].to_string();
             }
+            if exclamation.is_some() {
+                brac = brac + "!";
+            }
         }
 
-        let v: Vec<&str> = s.split(|c| c == '\t' || c == ',').collect();
+        let v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
 
         let v0 = v[0].to_string();
         let v1: Option<String>;
@@ -167,10 +171,17 @@ struct RegisterValue {
 
 impl RegisterValue {
     fn new(name: &str) -> RegisterValue {
-        if name == "sp" || name == "x29" || name == "x30" {
+        if name == "sp" || name == "x29" {
             return RegisterValue {
                 kind: RegisterKind::Address,
-                base: Some(name.to_string()),
+                base: Some("sp".to_string()),
+                offset: 0,
+            };
+        }
+        if name == "x30" {
+            return RegisterValue {
+                kind: RegisterKind::Address,
+                base: Some("Return".to_string()),
                 offset: 0,
             };
         }
@@ -208,9 +219,9 @@ struct ARMCORTEXA {
     neg: Option<bool>,
     carry: Option<bool>,
     overflow: Option<bool>,
-    memory: HashMap<usize, i64>,
-    stack: Vec<RegisterValue>,
-    stack_index: i64,
+    memory: HashMap<i64, i64>,
+    stack: HashMap<i64, RegisterValue>,
+    stack_size: i64,
     input_length: u64,
 }
 
@@ -265,8 +276,8 @@ impl ARMCORTEXA {
             carry: None,
             overflow: None,
             memory: HashMap::new(),
-            stack: Vec::new(),
-            stack_index: 0,
+            stack: HashMap::new(),
+            stack_size: 0,
             input_length: 0,
         }
     }
@@ -312,6 +323,7 @@ impl ARMCORTEXA {
 
     // handle different addressing modes
     fn operand(&mut self, v: String) -> RegisterValue {
+        //println!("Operand input: {:?}", v);
         // just an immediate
         if !v.contains('[') && v.contains('#') {
             let mut base: Option<String> = None;
@@ -346,7 +358,7 @@ impl ARMCORTEXA {
                 return RegisterValue {
                     kind: RegisterKind::Immediate,
                     base: None,
-                    offset: 6, // TODO: alightment, need to make dynamic?
+                    offset: 4, // TODO: alightment, need to make dynamic?
                 };
             } else {
                 return RegisterValue {
@@ -427,7 +439,7 @@ impl ARMCORTEXA {
             self.set_register(
                 instruction.r1.clone().expect("need dst register"),
                 RegisterKind::Address,
-                None,
+                Some("Memory".to_string()), // FIX: needs to be more general
                 address.offset,
             );
         } else if instruction.op == "cbnz" {
@@ -470,10 +482,9 @@ impl ARMCORTEXA {
         } else if instruction.op == "ret" {
             if instruction.r1.is_none() {
                 let x30 = self.registers[30].clone();
-                println!("Ret: {:?}", x30);
                 if x30.kind == RegisterKind::Address {
                     if x30.base.is_some() {
-                        if x30.base.unwrap() == "x30" && x30.offset == 0 {
+                        if x30.base.unwrap() == "Return" && x30.offset == 0 {
                             return Ok(Some((None, Some(0))));
                         }
                     }
@@ -493,20 +504,22 @@ impl ARMCORTEXA {
             let reg1 = instruction.r1.clone().unwrap();
             let reg2 = instruction.r2.clone().unwrap();
 
-            // pre-index
+            let reg2base = get_register_name_string(reg2.clone());
+            let mut base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
+
+            // pre-index increment
             if reg2.contains(",") {
-                let new_reg = self.operand(reg2.clone());
-                self.set_register(
-                    get_register_name_string(reg2.clone()).to_string(),
-                    new_reg.kind,
-                    new_reg.base,
-                    new_reg.offset,
-                );
+                base_add_reg = self.operand(reg2.clone().trim_end_matches("!").to_string());
+                // with writeback
+                if reg2.contains("!") {
+                    let new_reg = base_add_reg.clone();
+                    self.set_register(reg2base.clone(), new_reg.kind, new_reg.base, new_reg.offset);
+                }
             }
 
-            let reg2base = get_register_name_string(reg2.clone());
-            let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
             self.load(reg1, base_add_reg.clone());
+
+            //println!("old register value in memory: {:?}", self.registers[get_register_index(get_register_name_string(reg2.clone()).to_string())].clone().offset);
 
             // post-index
             if instruction.r3.is_some() {
@@ -523,19 +536,23 @@ impl ARMCORTEXA {
             let reg2 = instruction.r2.clone().unwrap();
             let reg3 = instruction.r3.clone().unwrap();
 
-            // pre-index
+            let reg3base = get_register_name_string(reg3.clone());
+            let mut base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
+
+            // pre-index increment
             if reg3.contains(",") {
-                let reg3base = get_register_name_string(reg3.clone());
-                let new_reg = self.operand(reg3.clone());
-                self.set_register(reg3base, new_reg.kind, new_reg.base, new_reg.offset);
+                base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
+                // with writeback
+                if reg3.contains("!") {
+                    let new_reg = base_add_reg.clone();
+                    self.set_register(reg3base.clone(), new_reg.kind, new_reg.base, new_reg.offset);
+                }
             }
 
-            let reg3base = get_register_name_string(reg3.clone());
-            let base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
-            let mut base_add_reg_mutable = base_add_reg.clone();
             self.load(reg1, base_add_reg.clone());
-            base_add_reg_mutable.offset = base_add_reg.offset + 8;
-            self.load(reg2, base_add_reg_mutable);
+            let mut next = base_add_reg.clone();
+            next.offset = next.offset + 8;
+            self.load(reg2, next);
 
             // post-index
             if instruction.r4.is_some() {
@@ -551,19 +568,20 @@ impl ARMCORTEXA {
             let reg1 = instruction.r1.clone().unwrap();
             let reg2 = instruction.r2.clone().unwrap();
 
-            // pre-index
+            let reg2base = get_register_name_string(reg2.clone());
+            let mut base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
+
+            // pre-index increment
             if reg2.contains(",") {
-                let new_reg = self.operand(reg2.clone());
-                self.set_register(
-                    get_register_name_string(reg2.clone()).to_string(),
-                    new_reg.kind,
-                    new_reg.base,
-                    new_reg.offset,
-                );
+                base_add_reg = self.operand(reg2.clone().trim_end_matches("!").to_string());
+                // with writeback
+                if reg2.contains("!") {
+                    let new_reg = base_add_reg.clone();
+                    self.set_register(reg2base.clone(), new_reg.kind, new_reg.base, new_reg.offset);
+                }
             }
 
             let reg2base = get_register_name_string(reg2.clone());
-            let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
             self.store(reg1, base_add_reg.clone());
 
             // post-index
@@ -581,19 +599,23 @@ impl ARMCORTEXA {
             let reg2 = instruction.r2.clone().unwrap();
             let reg3 = instruction.r3.clone().unwrap();
 
-            // pre-index
+            let reg3base = get_register_name_string(reg3.clone());
+            let mut base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
+
+            // pre-index increment
             if reg3.contains(",") {
-                let reg3base = get_register_name_string(reg3.clone());
-                let new_reg = self.operand(reg3.clone());
-                self.set_register(reg3base, new_reg.kind, new_reg.base, new_reg.offset);
+                base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
+                // with writeback
+                if reg3.contains("!") {
+                    let new_reg = base_add_reg.clone();
+                    self.set_register(reg3base.clone(), new_reg.kind, new_reg.base, new_reg.offset);
+                }
             }
 
-            let reg3base = get_register_name_string(reg3.clone());
-            let base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
-            let mut base_add_reg_mutable = base_add_reg.clone();
             self.store(reg1, base_add_reg.clone());
-            base_add_reg_mutable.offset = base_add_reg.offset + 8;
-            self.store(reg2, base_add_reg_mutable);
+            let mut next = base_add_reg.clone();
+            next.offset = next.offset + 8;
+            self.store(reg2, next);
 
             // post-index
             if instruction.r4.is_some() {
@@ -615,10 +637,12 @@ impl ARMCORTEXA {
     fn mem_safe_read(&self, base: Option<String>, offset: i64) -> Result<(), MemorySafetyError> {
         if let Some(regbase) = base {
             if regbase == "sp" || regbase == "x31" {
-                if self.stack_index + offset.abs() < ((self.stack.len() * 8) as i64) {
+                if self.stack.contains_key(&offset) {
                     return Ok(());
                 } else {
-                    return Err(MemorySafetyError::new("reading past size of stack"));
+                    return Err(MemorySafetyError::new(
+                        "Element at this address not in stack",
+                    ));
                 }
             } else if regbase == "Input" {
                 if offset < (self.input_length * 4).try_into().unwrap() {
@@ -633,14 +657,15 @@ impl ARMCORTEXA {
                 } else {
                     return Err(MemorySafetyError::new("reading past context size"));
                 }
-            }
-            return Err(MemorySafetyError::new(
-                "Cannot read using offsets from not the stack pointer or the input",
-            ));
-        } else {
-            // read from defs
-            if self.memory.get(&(offset as usize)).is_some() {
-                return Ok(());
+            } else if regbase == "Memory" {
+                // read from defs
+                if self.memory.get(&(offset)).is_some() {
+                    return Ok(());
+                }
+            } else {
+                return Err(MemorySafetyError::new(
+                    "Cannot read using offsets from not the stack pointer or the input",
+                ));
             }
         }
         Err(MemorySafetyError::new(
@@ -651,26 +676,27 @@ impl ARMCORTEXA {
     fn mem_safe_write(&self, base: Option<String>, offset: i64) -> Result<(), MemorySafetyError> {
         if let Some(regbase) = base {
             if regbase == "sp" {
-                if offset < self.stack_index + 1 {
-                    return Ok(());
-                } else {
-                    return Err(MemorySafetyError::new(
-                        "writing past allocated size of stack",
-                    ));
-                }
+                return Ok(());
             } else if regbase == "Input" {
                 if offset < (self.input_length * 4).try_into().unwrap() {
                     return Ok(());
                 } else {
                     return Err(MemorySafetyError::new("wring past output size"));
                 }
-            };
+            } else if regbase == "Context" {
+                //FIX: should be general for multiple inputs
+                if offset < (48).try_into().unwrap() {
+                    return Ok(());
+                } else {
+                    return Err(MemorySafetyError::new("wring past contect buffer size"));
+                }
+            }
             return Err(MemorySafetyError::new(
                 "Cannot write using offsets from not the stack pointer or the input",
             ));
         } else {
             // overwrite def
-            if self.memory.get(&(offset as usize)).is_some() {
+            if self.memory.get(&(offset)).is_some() {
                 return Ok(());
             }
             return Err(MemorySafetyError::new(
@@ -761,7 +787,7 @@ impl ARMCORTEXA {
         let r1 = self.registers[get_register_index(reg1)].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
 
-        println!("Register 1: {:?}, Register 2: {:?}", r1, r2);
+        //println!("Register 1: {:?}, Register 2: {:?}", r1, r2);
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
@@ -872,19 +898,25 @@ impl ARMCORTEXA {
      * address: register with address as value
      */
     fn load(&mut self, t: String, address: RegisterValue) {
+        //println!("Loading {:?} {:?}", t, address);
+
         let res = self.mem_safe_read(address.base.clone(), address.offset);
         if res.is_ok() {
             if let Some(base) = address.base {
                 if base == "sp" {
-                    let index = self.stack_index + (address.offset / 8);
-                    let val = self.stack.get(index as usize).unwrap();
-                    self.set_register(t, val.kind.clone(), val.base.clone(), val.offset);
+                    let val = self.stack.get(&address.offset);
+                    match val {
+                        Some(v) => {
+                            self.set_register(t, v.kind.clone(), v.base.clone(), v.offset);
+                        }
+                        None => log::error!("No element at this address in stack"),
+                    }
                 } else if base == "Input" {
                     self.set_register(t, RegisterKind::Number, None, 0);
                 } else if base == "Context" {
                     self.set_register(t, RegisterKind::Number, None, 0);
-                } else {
-                    let num = self.memory.get(&(address.offset as usize)).unwrap();
+                } else if base == "Memory" {
+                    let num = self.memory.get(&(address.offset)).unwrap();
                     self.set_register(t, RegisterKind::Immediate, None, *num);
                 }
             }
@@ -903,12 +935,18 @@ impl ARMCORTEXA {
             let reg = self.registers[get_register_index(reg)].clone();
             if let Some(base) = address.base {
                 if base == "sp" {
-                    let index = self.stack_index + (address.offset / 8);
-                    if self.stack.get(index as usize).is_some() {
-                        self.stack.remove(index as usize);
-                        self.stack.insert(index as usize, reg.clone());
+                    // FIX: stack addressing
+                    let index = address.offset;
+                    if self.stack.get(&index).is_some() {
+                        self.stack.remove(&index);
+                        self.stack.insert(index, reg.clone());
                     } else {
-                        self.stack.push(reg.clone())
+                        self.stack.insert(address.offset, reg.clone());
+                    }
+
+                    // check stack sizing
+                    if index > self.stack_size {
+                        self.stack_size = self.stack_size + 4;
                     }
                 }
             }
@@ -1002,15 +1040,15 @@ fn main() -> std::io::Result<()> {
     // this is the context, i.e. A,B,C,D,E for the function
     computer.set_context("x0".to_string());
     computer.set_input("x1".to_string());
-    computer.set_length("x2".to_string(), 512);
+    computer.set_length("x2".to_string(), 1048);
 
-    // FIX: put defs into memory in a more elegant way, this is bad
-    let mut alignment = 8;
+    //let mut alignment = 4;
     let mut address = 0;
     for def in defs.iter() {
         let v: Vec<&str> = def.split(|c| c == '\t' || c == ',').collect();
         if v[0] == ".align" {
-            alignment = v[1].parse::<usize>().unwrap();
+            //alignment = v[1].parse::<usize>().unwrap();
+            // do nothing for now
         } else if v[0] == ".byte" || v[0] == ".long" {
             for i in v.iter().skip(1) {
                 let num: i64;
@@ -1023,12 +1061,15 @@ fn main() -> std::io::Result<()> {
                     num = i.parse::<i64>().unwrap();
                 }
                 computer.memory.insert(address, num);
-                address = address + alignment;
+                //address = address + (alignment as i64);
+                address = address + 4;
             }
         }
     }
 
     let mut allops = Vec::new();
+    // println!("Memory: {:?}", computer.memory.clone());
+    //println!("Keys: {:?}", computer.memory.clone().into_keys().collect::<Vec<_>>().sort_unstable());
 
     // second pass, begin processing line by line
     let program_length = parsed_code.len();
@@ -1037,11 +1078,15 @@ fn main() -> std::io::Result<()> {
         log::info!("{:?}", instruction);
         allops.push(instruction.op.clone());
 
+        //println!("Running: {:?}", parsed_code[pc]);
         let execute_result = computer.execute(&parsed_code[pc]);
         match execute_result {
             Ok(some) => match some {
                 Some(jump) => match jump {
                     (Some(label), None) => {
+                        if label == "Return".to_string() {
+                            break;
+                        }
                         for l in labels.iter() {
                             if l.0.contains(&label) {
                                 pc = l.1;
@@ -1051,7 +1096,7 @@ fn main() -> std::io::Result<()> {
                     (None, Some(address)) => {
                         if address == 0 {
                             // program is done
-                            continue;
+                            break;
                         }
                         pc = address as usize;
                     }
@@ -1061,19 +1106,18 @@ fn main() -> std::io::Result<()> {
                 },
                 None => pc = pc + 1,
             },
-            Err(_) => log::error!(
-                "Instruction could not execute at line {:?} : {:?}",
-                pc,
-                instruction
-            ),
+            Err(_) => {
+                log::error!(
+                    "Instruction could not execute at line {:?} : {:?}",
+                    pc,
+                    instruction
+                );
+                break;
+            }
         }
     }
 
-    // TODO: check stack and required registers are restored
-
-    allops.sort_unstable();
-    allops.dedup();
-    log::info!("all instructions used: {:?}", allops);
+    println!("Symbolic execution done");
 
     Ok(())
 }
