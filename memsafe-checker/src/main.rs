@@ -922,6 +922,10 @@ impl ARMCORTEXA {
 struct Args {
     file: PathBuf,
     label: String,
+    context: String,
+    input: String,
+    length: String,
+    length_value: usize,
 }
 
 fn main() -> std::io::Result<()> {
@@ -1000,9 +1004,9 @@ fn main() -> std::io::Result<()> {
     let mut computer = ARMCORTEXA::new();
 
     // this is the context, i.e. A,B,C,D,E for the function
-    computer.set_context("x0".to_string());
-    computer.set_input("x1".to_string());
-    computer.set_length("x2".to_string(), 512);
+    computer.set_context(args.context);
+    computer.set_input(args.input);
+    computer.set_length(args.length, args.length_value.try_into().unwrap());
 
     // FIX: put defs into memory in a more elegant way, this is bad
     let mut alignment = 8;
