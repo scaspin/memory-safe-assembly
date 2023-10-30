@@ -554,7 +554,7 @@ impl ARMCORTEXA {
 
             self.load(reg1, base_add_reg.clone());
             let mut next = base_add_reg.clone();
-            next.offset = next.offset + 4;
+            next.offset = next.offset + 8;
             self.load(reg2, next);
 
             // post-index
@@ -619,7 +619,7 @@ impl ARMCORTEXA {
 
             self.store(reg1, base_add_reg.clone());
             let mut next = base_add_reg.clone();
-            next.offset = next.offset + 4;
+            next.offset = next.offset + 8;
             self.store(reg2, next);
 
             // post-index
@@ -645,9 +645,9 @@ impl ARMCORTEXA {
                 if self.stack.contains_key(&offset) {
                     return Ok(());
                 } else {
+
                     return Err(MemorySafetyError::new(
-                        "Element at this address not in stack",
-                    ));
+                        "Element at this address not in stack"));
                 }
             } else if regbase == "Input" {
                 if offset < (self.input_length * 4).try_into().unwrap() {
@@ -1112,11 +1112,15 @@ fn main() -> std::io::Result<()> {
                 },
                 None => pc = pc + 1,
             },
-            Err(_) => log::error!(
+            Err(_) => {
+
+            log::error!(
                 "Instruction could not execute at line {:?} : {:?}",
                 pc,
                 instruction
-            ),
+            );
+            break;
+            },
         }
     }
 
