@@ -1,0 +1,229 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+    <title>A64 ISA XML for A-profile Architecture (2023-09)</title>
+    <style type="text/css">
+      body {
+        font-size: small;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="text-align: center;">
+      <h1 style="text-decoration: underline;">
+       A64 ISA XML<br/>
+        for A-profile Architecture<br/>
+        (2023-09)
+      </h1>
+      <h1 style="text-decoration: underline;">29 September 2023</h1>
+    </div>
+    <br/>
+    <h2>Introduction</h2>
+    <p>
+      This is the <span style="font-style: italic;">2023-09</span> release
+      of the A64 ISA XML for A-profile Architecture.
+    <p>
+      The <a href="ISA_A64_xml_A_profile-2023-09/xhtml/notice.html">Proprietary Notice</a>
+      gives details of the terms and conditions under which this package
+      is provided.
+    </p>
+    <p>
+      If you have comments on the content of this package, create a ticket at <a href="https://support.developer.arm.com">https://support.developer.arm.com</a>.
+      As part of the ticket, include:
+      <ul>
+        <li>The title, "A64 ISA XML for A-profile Architecture".</li>
+        <li>The version, "2023-09".</li>
+        <li>The section name to which your comments refer.</li>
+        <li>A concise explanation of your comments.</li>
+      </ul>
+    </p>
+    <h2>Contents</h2>    <table style="width: 80%; background-color: rgb(223, 223, 224);" border="1" cellpadding="0" cellspacing="0">
+      <tbody>
+        <tr>
+          <td rowspan="1">This Version</td>
+          <td>2023-09</td>
+          <td>&nbsp;<a href="ISA_A64_xml_A_profile-2023-09/xhtml/index.html">[HTML]</a></td>
+          <td>&nbsp;<a href="ISA_A64_xml_A_profile-2023-09.pdf">[PDF]</a></td>
+          <td>&nbsp;<a href="ISA_A64_xml_A_profile-2023-09/index.xml">[XML]</a></td>
+        </tr>
+        <tr>
+          <td rowspan="1">Change Markups</td>
+          <td>2023-09 from 2023-06<br></td>
+          <td>&nbsp;<a href="ISA_A64_xml_A_profile-2023-09/diff-from-ISA_A64_xml_A_profile-2023-06/index.html">[HTML]</a></td>
+          <td>&nbsp;<a href="ISA_A64_xml_A_profile-2023-09-diff-from-ISA_A64_xml_A_profile-2023-06.pdf">[PDF]</a></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Previous Version</td>
+          <td>2023-06</td>
+          <td>&nbsp;<a href="ISA_A64_xml_A_profile-2023-06/xhtml/index.html">[HTML]</a></td>
+        </tr>
+      </tbody>
+    </table>
+        <h2>Product Status</h2>
+    <p>The information in this release covers multiple versions of the architecture. The content relating to different versions is given different quality ratings.</p>
+    <p>The information relating to the 2023 Extensions of the A-profile Architecture and FEAT_D128 of the 2022 Extensions is at Alpha quality. Alpha quality means that most major features of the specification are described in this release, but some features and details might be missing.</p>
+    <p>The information relating to the remainder of the 2022 Extensions of the A-profile Architecture and the rest of the Architecture is at Beta quality. Beta quality means that all major features of the specification are described, but some details might be missing.</p>
+
+    <h2>Release notes</h2>
+
+    <h3>Change history</h3>
+    <p>This release introduces the 2023 Extensions of the A-profile Architecture.</p>
+    <p>The following changes are made to instruction descriptions:</p>
+    <ul>
+        <li><!--AM1555--> For the following instructions, the PSTATE.DIT Operational information is removed:
+            <ul>
+                <li>the SVE WHILE&lt;cc&gt; instructions.</li>
+                <li>the SME WHILE&lt;cc&gt; instructions.</li>
+                <li>the SME MOVT instructions that move data between general-purpose register and ZT0 instructions.</li>
+            </ul>
+        </li>
+        <li><!--21610 --> The ST64B, ST64BV, and ST64BV0 instructions are renamed.</li>
+        <li><!--21573 --> The CONSTRAINED UNPREDICTABLE behavior of the following instructions is clarified: 
+        <ul>
+            <li>LDCLRP, LDCLRPA, LDCLRPAL, LDCLRPL.</li>
+            <li>LDSETP, LDSETPA, LDSETPAL, LDSETPL.</li>
+            <li>RCWSCLRP, RCWSCLRPA, RCWSCLRPL, RCWSCLRPAL.</li>
+            <li>RCWCLRP, RCWCLRPA, RCWCLRPL, RCWCLRPAL.</li>
+            <li>RCWSSETP, RCWSSETPA, RCWSSETPL, RCWSSETPAL.</li>
+            <li>RCWSETP, RCWSETPA, RCWSETPL, RCWSETPAL.</li>
+            <li>RCWSSWPP, RCWSSWPPA, RCWSSWPPL, RCWSSWPPAL.</li>
+            <li>RCWSWPP, RCWSWPPA, RCWSWPPL, RCWSWPPAL.</li>
+            <li>SWPP, SWPPA, SWPPAL, SWPPL.</li>
+        </ul></li>
+        <li><!--21491 --> The operation pseudocode for the LDIAPP instruction is corrected to call CreateAccDescLDAcqPC() instead of CreateAccDescAcqRel() to show that it has AcquirePC memory ordering semantics.</li>
+        <li><!--21362 --> WFI and WFE instructions are updated to be CONSTRAINED UNPREDICTABLE in Debug state.</li>
+        <li><!--21161 --> The titles of the GCSB DSYNC, PSB CSYNC, and TSB CSYNC instruction pages are changed.</li>
+        <li><!--21111 --> The DSB instruction descriptions of the behavior of variants with the nXS qualifier are removed.</li>
+        <li><!--18640 --> The DRPS instruction description is expanded.</li>
+        <li><!--21243 --> For the following instructions, the descriptions of the behavior with PSTATE.BTYPE values is made more consistent:
+          <ul>
+            <li>BRK.</li>
+            <li>BTI.</li>
+            <li>HLT.</li>
+            <li>PACIA, PACIA1716, PACIASP, PACIAZ, PACIZA.</li>
+            <li>PACIB, PACIB1716, PACIBSP, PACIBZ, PACIZB.</li>
+          </ul>
+        </li>
+        <li><!--18170 --> To improve clarity in operational pseudocode of Advanced SIMD and floating-point instructions, references to the FPCR[] accessor are replaced by the FPCR register name.</li>
+    </ul>
+    <p>The following changes are made to the Shared pseudocode:</p>
+    <ul>
+        <li><!--1408 --> The FPDot() pseudocode function is clarified to remove a duplicate code snippet.</li>
+        <li><!--21522 --> In the function AArch64.S1Walk(), a check is added to detect if the RegularStartLevel + SKL is greater than 3 and report a translation fault at level 0.</li>
+        <li><!--21502 --> The pseudocode function AArch64.S2CheckPermissions() is corrected to test the SCTLR_ELx.TCF field while checking for Permission fault due to the NoTagAccess attribute when FEAT_MTE_PERM is implemented.</li>
+        <li><!--21386 --> The functions AArch64.ReservedBreakpointType() and AArch32.ReservedBreakpointType() are updated to account for the changes in FEAT_Debugv8p9 to allow for more than 16 breakpoints when calculating whether the given breakpoint is context aware. The pseudocode function IsContextMatchingBreakpoint() is renamed to IsContextAwareBreakpoint(), and calls updated accordingly.</li>
+        <li><!--21125 --> The pseudocode function AddPAC() is updated to ignore bits &lt;63:56&gt; when TBI is set.</li>
+        <li><!--20947 --> The accessibility pseudocode for PMZR_EL0 is clarified by using the new ZeroPMUCounters(X[t,64]) function. A new pseudocode function ZeroPMUCounters() is defined to represent the action of a write to the PMZR_EL0 register. New functions {{GetPMUWriteMask()}} and {{GetPMUReadMask()}} are introduced, to return a mask of the PMU counters that are writable or readable at the current Exception level.</li>
+        <li><!--20777 --> The pseudocode function AArch64.VAIsOutOfRange() is updated to no longer apply the effect of walkparams.mtx to instruction addresses.</li>
+        <li><!--20167 --> IMPLEMENTATION_DEFINED string in the case of registers with op0=3 and CRn=11,15 is added in pseudocode function CheckTransactionalSystemAccess().</li>
+        <li><!--20079 --> The AddPac(), Auth(), and Strip() functions are corrected to account for the impact of FEAT_LVA3 on bit 55. </li>
+        <li><!--18750 --> The pseudocode for the FEAT_MOPS instructions has been substantially refactored.</li>
+    </ul>
+    <p>Many simple clarifications and corrections are also present, but are too small to be listed here. Some minor formatting changes are suppressed and not highlighted in the diff output.</p>
+<h3>Known issues</h3>
+    <p>All issues identified in the below list will be fixed in a future release.</p>
+    <ul>
+        <li><!--21455--> References to PSTATE.SPSel in MSR (immediate), SMSTART, and SMSTOP instructions will be corrected to PSTATE.SP.</li>
+        <li><!--AS565--> In SVE instructions PMOV (to vector) and PMOV (to predicate), the portion index being optional will be shown in the assembler syntax, and the description of <imm> will state that the portion index defaults to zero.</li>
+        <li><!--20155--> For the following SME and SVE2.1 instructions, the feature conditions stated in the pseudocode are correct, but the feature conditions stated above the encoding diagrams are incomplete:
+        <ul>
+            <li>PSEL.</li>
+            <li>REVD.</li>
+            <li>BFMLSLB, BFMLSLT.</li>
+            <li>FDOT, SDOT (two-way), UDOT (two-way).</li>
+            <li>FCLAMP, SCLAMP, UCLAMP.</li>
+            <li>SQCVTN, SQCVTUN, SQRSHRN, SQRSHRUN, UQCVTN, UQRSHRN.</li>
+            <li>WHILEGE, WHILEGT, WHILEHI, WHILEHS, WHILELE, WHILELO, WHILELS, WHILELT (predicate pair).</li>
+        </ul></li>
+        <li><!--20120-->In the following SME2 instructions, the feature conditions stated in the pseudocode are correct, but the feature conditions stated above the encoding diagrams are incomplete:
+          <ul>
+            <li>SMLALL (multiple vectors), SMLALL (multiple and single vector).</li>
+            <li>SMLSLL (multiple vectors), SMLSLL (multiple and single vector).</li>
+            <li>UMLALL (multiple vectors), UMLALL (multiple and single vector).</li>
+            <li>UMLSLL (multiple vectors), UMLSLL (multiple and single vector).</li>
+            <li>SDOT (4-way, multiple and single vector), SDOT (4-way, multiple vectors).</li>
+            <li>UDOT (4-way, multiple and single vector), UDOT (4-way, multiple vectors).</li>
+            <li>FMLA (multiple and single vector), FMLA (multiple vectors).</li>
+            <li>FMLS (multiple and single vector), FMLS (multiple vectors).</li>
+            <li>ADD (array results, multiple and single vector), ADD (array results, multiple vectors), ADD (array accumulators).</li>
+            <li>SUB (array results, multiple and single vector), SUB (array results, multiple vectors), SUB (array accumulators).</li>
+            <li>FADD.</li>
+            <li>FSUB.</li>
+          </ul>
+        </li>
+        <li><!--19752--> The effect on the S2AP[1] bit in the translation table after the generation of a Permission fault under certain circumstances will be clarified.</li>
+        <li><!--17465--> The position of the SynchronizeContext() call in the DRPSInstruction(), AArch64.ExceptionReturn(), and AArch64.TakeException() pseudocode functions will be corrected.</li>
+        <li><!--14613-->The setting of FPEXC.DEX and FPEXC.TFV bits for an invalid FPSCR.Len and FPSCR.Stride, for an allocated CP10 or CP11 instruction is missing from pseudocode.</li>
+        <li><!--13919--> The assembler syntax for MRS, MRRS, MSR, and MSRR instructions with unnamed registers will be clarified.</li>
+
+    </ul>
+<h3>Limitations of Arm pseudocode</h3>
+  <p>The pseudocode statements IMPLEMENTATION_DEFINED, SEE, UNDEFINED, and UNPREDICTABLE indicate behavior that differs from that indicated by the pseudocode being executed. If one of them is encountered:</p>
+   <ul>
+      <li>Earlier behavior indicated by the pseudocode is only specified as occurring to the extent required to determine that the statement is executed.</li>
+      <li>No subsequent behavior indicated by the pseudocode occurs.</li>
+    </ul>
+  <p>For more information, see <span style="font-style: italic;">Special statements</span> in the Arm&reg; Architecture Reference Manual for A-profile architecture (ARM DDI 0487).</p>
+  <p>The pseudocode descriptions have several limitations. These are mainly since, for clarity and brevity, the pseudocode is a sequential and mostly deterministic language.
+  <p>These limitations include:</p>
+  <ul>
+    <li>Pseudocode does not describe the ordering requirements when an instruction generates multiple memory accesses. For a description of the ordering requirements on memory accesses, see <span style="font-style: italic;">External ordering constraints</span> in the Arm&reg; Architecture Reference Manual for A-profile architecture (ARM DDI 0487).</li>
+    <li>Pseudocode does not describe the exact ordering requirements when a single floating-point instruction generates more than one floating-point exception and one or more of those floating-point exceptions is trapped. <span style="font-style: italic;">Combinations of floating-point exceptions</span>  in the Arm&reg; Architecture Reference Manual for A-profile architecture (ARM DDI 0487) describes the exact rules. </br><b>Note:</b> There is no limitation in the case where all the floating-point exceptions are untrapped, because the pseudocode specifies the same behavior as the cross-referenced section.</li>
+    <li>When a vector operation or another operation can perform via a concurrent set of operations that are not architecturally ordered, the pseudocode still presents a sequential deterministic detail.</li>
+    <li>An exception can be taken during execution of the pseudocode for an instruction, either explicitly as a result of the execution of a pseudocode function such as Abort(), or implicitly, for example if an interrupt is taken during execution of an LDM instruction,  pair load-store instructions, SVE vector instructions, Memory copy and memory set instructions etc.. If this happens, the pseudocode does not describe the extent to which the normal behavior of the instruction occurs. To determine that, see the descriptions of the exceptions in <span style="font-style: italic;">Handling exceptions that are taken to an Exception level using AArch32</span> and <span style="font-style: italic;">Definition of a precise exception and imprecise exception</span> in the Arm&reg; Architecture Reference Manual for A-profile architecture (ARM DDI 0487).</li>
+    <li>Pseudocode does not describe the exact rules when an AArch32 instruction that generates any of the following fails its condition code check:
+      <ul>
+        <li>UNDEFINED instruction.</li>
+        <li>Hyp trap.</li>
+        <li>Monitor trap.</li>
+        <li>Trap to AArch64 exception.</li>
+      </ul>
+      In such cases, the UNDEFINED pseudocode statement or call to the applicable trap function lies inside the if ConditionPassed() then ... structure, either directly or in the EncodingSpecificOperations() function call, and so the pseudocode indicates that the instruction executes as a NOP. For the exact rules, see:
+      <ul>
+        <li>Conditional execution of undefined instructions.</li>
+        <li>EL2 configurable controls</li>
+        <li>EL3 configurable controls</li>
+        <li>Configurable instruction controls</li>
+      </ul>
+    </li>
+    <li>Where a significant aspect of the behavior is IMPLEMENTATION DEFINED, pseudocode may present only the declarations of the functions - the details of these functions is implementation defined.</li>
+    <li>Pseudocode does not present the possible observability due to speculative execution.</li>
+    <li>Pseudocode presents various details of the architecture - but does not show how the details can be combined to form a single definition.  There are various aspects of such a detail that are also not presented.  Notably:
+      <ul>
+        <li>Pseudocode does not show the details of fetching, decoding, and linking to instruction execution.</li>
+        <li>Pseudocode for combining the instruction shared decode, decode, and operation is not shown.</li>
+      </ul>
+    </li>
+    <li>Pseudocode presents all the architectural state as global state. The possible implications of multiple PEs or other components is not shown.</li>
+    <li>Below details are either not shown or have noted limitations in the pseudocode:
+      <ul>
+        <li>Self-hosted trace and external trace.</li>
+        <li>Pseudocode for modeling the register state or side effects.  The accessibility details of a direct or external access such as traps etc are shown.</li>
+        <li>Generation of all architectural and micro-architectural Performance Monitoring Events. <b>Note</b>: Some architectural event generation is shown.</li>
+        <li>Construction of Statistical Profiling Extension records.</li>
+        <li>Behavior of instructions in Debug state when the behavior is UNPREDICTABLE is presented as if the instruction is executed identical to how it is when not in Debug state.</li>
+        <li>Activity Monitor Events and Counters.</li>
+        <li>System timer functionality.</li>
+        <li>Generic Interrupt Controller functionality.</li>
+        <li>External memory system.</li>
+        <li>External agents such as debugger.</li>
+        <li>PE behaviors that would lead to unrecoverable or uncontainable errors.</li>
+        <li>Where the behavior is IMPLEMENTATION DEFINED or CONSTRAINED UNPREDICTABLE, not all possibilities may be shown.  Sometimes the pseudocode may present a simplified, but architecturally compatible view.  In some situations, the possible behaviors may be outlined in a comment.</li>
+      </ul>
+  </li>
+  <li>The following architectural features are at Alpha quality and are above the limitations described below due to recency and completion of validation:
+    <ul>
+      <li>Halting Debug</li>
+      <li>Statistical Profiling Extension.</li>
+      <li>Performance Monitoring Events.</li>
+    </ul>
+  </li>
+</ul>
+
+
+<h3>Potential Upcoming Changes</h3>
+    <p>Potential upcoming improvements to the pseudocode are as follows:</p>
+    <ul><li>Clarify when pseudocode integer divide operator (DIV) is exact or if there is a remainder, how the rounding is done.</li></ul>
+<br/>

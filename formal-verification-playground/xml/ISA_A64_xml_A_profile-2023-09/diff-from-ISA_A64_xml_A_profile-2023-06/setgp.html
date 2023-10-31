@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><head><link href="insn.css" rel="stylesheet" type="text/css"/><meta content="iform.xsl" name="generator"/><title>SETGP, SETGM, SETGE -- A64</title></head><body><div align="center" class="htmldiff_header"><table><tbody><tr><td class="old">(old) </td><td class="explain">htmldiff from-</td><td class="new">(new) </td></tr></tbody></table></div><table style="margin: 0 auto;"><tr><td><div class="topbar"><a href="index.html">Base Instructions</a></div></td><td><div class="topbar"><a href="fpsimdindex.html">SIMD&amp;FP Instructions</a></div></td><td><div class="topbar"><a href="sveindex.html">SVE Instructions</a></div></td><td><div class="topbar"><a href="mortlachindex.html">SME Instructions</a></div></td><td><div class="topbar"><a href="encodingindex.html">Index by Encoding</a></div></td><td><div class="topbar"><a href="shared_pseudocode.html">Shared Pseudocode</a></div></td><td><div class="topbar"><a href="notice.html">Proprietary Notice</a></div></td></tr></table><hr/><h2 class="instruction-section">SETGP, SETGM, SETGE</h2>
+      <p class="aml">Memory Set with tag setting. These instructions perform a memory set using the value in the bottom byte of the source register and store an Allocation Tag to memory for each Tag Granule written. The Allocation Tag is calculated from the Logical Address Tag in the register which holds the first address that the set is made to. The prologue, main, and epilogue instructions are expected to be run in succession and to appear consecutively in memory: SETGP, then SETGM, and then SETGE.</p>
+      <p class="aml">SETGP performs some preconditioning of the arguments suitable for using the SETGM instruction, and performs an <span class="arm-defined-word">implementation defined</span> amount of the memory set. SETGM performs an <span class="arm-defined-word">implementation defined</span> amount of the memory set. SETGE performs the last part of the memory set.</p>
+      <div class="note"><hr class="note"/><h4>Note</h4>
+        <p class="aml">The inclusion of <span class="arm-defined-word">implementation defined</span> amounts of memory set allows some optimization of the size that can be performed.</p>
+      <hr class="note"/></div>
+      <p class="aml">The architecture supports two algorithms for the memory set: option A and option B. Which algorithm is used is <span class="arm-defined-word">implementation defined</span>.</p>
+      <div class="note"><hr class="note"/><h4>Note</h4>
+        <p class="aml">Portable software should not assume that the choice of algorithm is constant.</p>
+      <hr class="note"/></div>
+      <p class="aml">After execution of SETGP, option A (which results in encoding PSTATE.C = 0):</p>
+      <ul>
+        <li>If Xn&lt;63> == 1, the set size is saturated to 0x7FFFFFFFFFFFFFF0.</li>
+        <li>Xd holds the original Xd + saturated Xn.</li>
+        <li>Xn holds -1* saturated Xn + an <span class="arm-defined-word">implementation defined</span> number of bytes set.</li>
+        <li>PSTATE.{N,Z,V} are set to {0,0,0}.</li>
+      </ul>
+      <p class="aml">After execution of SETGP, option B (which results in encoding PSTATE.C = 1):</p>
+      <ul>
+        <li>If Xn&lt;63> == 1, the copy size is saturated to 0x7FFFFFFFFFFFFFF0.</li>
+        <li>Xd holds the original Xd + an <span class="arm-defined-word">implementation defined</span> number of bytes set.</li>
+        <li>Xn holds the saturated Xn - an <span class="arm-defined-word">implementation defined</span> number of bytes set.</li>
+        <li>PSTATE.{N,Z,V} are set to {0,0,0}.</li>
+      </ul>
+      <p class="aml">For SETGM, option A (encoded by PSTATE.C = 0), the format of the arguments is:</p>
+      <ul>
+        <li>Xn is treated as a signed 64-bit number.</li>
+        <li>Xn holds -1* number of bytes remaining to be set in the memory set in total.</li>
+        <li>Xd holds the lowest address that the set is made to -Xn.</li>
+        <li>At the end of the instruction, the value of Xn is written back with -1* number of bytes remaining to be set in the memory set in total.</li>
+      </ul>
+      <p class="aml">For SETGM, option B (encoded by PSTATE.C = 1), the format of the arguments is:</p>
+      <ul>
+        <li>Xn holds the number of bytes remaining to be set in the memory set in total.</li>
+        <li>Xd holds the lowest address that the set is made to.</li>
+        <li>At the end of the instruction:<ul><li>the value of Xn is written back with the number of bytes remaining to be set in the memory set in total.</li><li>the value of Xd is written back with the lowest address that has not been set.</li></ul></li>
+      </ul>
+      <p class="aml">For SETGE, option A (encoded by PSTATE.C = 0), the format of the arguments is:</p>
+      <ul>
+        <li>Xn is treated as a signed 64-bit number.</li>
+        <li>Xn holds -1* the number of bytes remaining to be set in the memory set in total.</li>
+        <li>Xd holds the lowest address that the set is made to -Xn.</li>
+        <li>At the end of the instruction, the value of Xn is written back with 0.</li>
+      </ul>
+      <p class="aml">For SETGE, option B (encoded by PSTATE.C = 1), the format of the arguments is:</p>
+      <ul>
+        <li>Xn holds the number of bytes remaining to be set in the memory set in total.</li>
+        <li>Xd holds the lowest address that the set is made to.</li>
+        <li>At the end of the instruction:<ul><li>the value of Xn is written back with 0.</li><li>the value of Xd is written back with the lowest address that has not been set.</li></ul></li>
+      </ul>
+    
+    <h3 class="classheading"><a id="iclass_general"/>Integer<span style="font-size:smaller;"><br/>(FEAT_MOPS)
+          </span></h3><p class="desc"/><div class="regdiagram-32"><table class="regdiagram"><thead><tr><td>31</td><td>30</td><td>29</td><td>28</td><td>27</td><td>26</td><td>25</td><td>24</td><td>23</td><td>22</td><td>21</td><td>20</td><td>19</td><td>18</td><td>17</td><td>16</td><td>15</td><td>14</td><td>13</td><td>12</td><td>11</td><td>10</td><td>9</td><td>8</td><td>7</td><td>6</td><td>5</td><td>4</td><td>3</td><td>2</td><td>1</td><td>0</td></tr></thead><tbody><tr class="firstrow"><td class="lr" colspan="2">sz</td><td class="l">0</td><td>1</td><td class="r">1</td><td class="lr">1</td><td class="l">0</td><td class="r">1</td><td class="l">1</td><td class="r">1</td><td class="lr">0</td><td class="lr" colspan="5">Rs</td><td class="l">x</td><td>x</td><td>0</td><td class="r">0</td><td class="l">0</td><td class="r">1</td><td class="lr" colspan="5">Rn</td><td class="lr" colspan="5">Rd</td></tr><tr class="secondrow"><td colspan="2"/><td colspan="3"/><td/><td colspan="2"/><td colspan="2"/><td/><td colspan="5"/><td class="droppedname" colspan="4">op2</td><td colspan="2"/><td colspan="5"/><td colspan="5"/></tr></tbody></table></div><div class="encoding"><h4 class="encoding">Epilogue<span class="bitdiff"> (op2 == 1000)</span></h4><a id="SETGE_SET_memcms"/><p class="asm-code">SETGE  [<a href="#sa_xd_1" title="64-bit general-purpose register that holds an encoding of destination address (an integer multiple of 16) and for option B is updated by the instruction (field &quot;Rd&quot;)">&lt;Xd></a>]!, <a href="#sa_xn_2" title="64-bit general-purpose register that holds an encoding of number of bytes to be set (an integer multiple of 16) and is set to zero at the end of the instruction (field &quot;Rn&quot;)">&lt;Xn></a>!, <a href="#sa_xs_1" title="64-bit general-purpose register that holds the source data (field &quot;Rs&quot;)">&lt;Xs></a></p></div><div class="encoding"><h4 class="encoding">Main<span class="bitdiff"> (op2 == 0100)</span></h4><a id="SETGM_SET_memcms"/><p class="asm-code">SETGM  [<a href="#sa_xd_1" title="64-bit general-purpose register that holds an encoding of destination address (an integer multiple of 16) and for option B is updated by the instruction (field &quot;Rd&quot;)">&lt;Xd></a>]!, <a href="#sa_xn_1" title="64-bit general-purpose register that holds an encoding of number of bytes to be set (an integer multiple of 16) and is updated by the instruction (field &quot;Rn&quot;)">&lt;Xn></a>!, <a href="#sa_xs" title="64-bit general-purpose register that holds the source data in bits&lt;7:0> (field &quot;Rs&quot;)">&lt;Xs></a></p></div><div class="encoding"><h4 class="encoding">Prologue<span class="bitdiff"> (op2 == 0000)</span></h4><a id="SETGP_SET_memcms"/><p class="asm-code">SETGP  [<a href="#sa_xd" title="64-bit general-purpose register that holds an encoding of destination address (an integer multiple of 16) and is updated by the instruction (field &quot;Rd&quot;)">&lt;Xd></a>]!, <a href="#sa_xn" title="64-bit general-purpose register that holds the number of bytes to be set (an integer multiple of 16) and is updated by the instruction (field &quot;Rn&quot;)">&lt;Xn></a>!, <a href="#sa_xs" title="64-bit general-purpose register that holds the source data in bits&lt;7:0> (field &quot;Rs&quot;)">&lt;Xs></a></p></div><p class="pseudocode"><ins>if !IsFeatureImplemented(FEAT_MOPS) || !IsFeatureImplemented(FEAT_MTE) || sz != '00' then UNDEFINED;</ins><del>if !IsFeatureImplemented(FEAT_MOPS) || !IsFeatureImplemented(FEAT_MTE) || sz != '00' then UNDEFINED;
+
+integer d =</del>
+
+<a href="shared_pseudocode.html#SETParams" title="type SETParams is ( MOPSStage stage, boolean implements_option_a, boolean is_setg, integer setsize, integer stagesetsize, bits(64) toaddress, bits(4) nzcv, integer n, integer d, integer s )"><ins>SETParams</ins></a><a href="shared_pseudocode.html#impl-shared.UInt.1" title="function: integer UInt(bits(N) x)"><del>UInt</del></a> <ins>memset;
+memset.d =</ins><del>(Rd);
+integer s =</del> <a href="shared_pseudocode.html#impl-shared.UInt.1" title="function: integer UInt(bits(N) x)">UInt</a><ins>(Rd);
+memset.s =</ins><del>(Rs);
+integer n =</del> <a href="shared_pseudocode.html#impl-shared.UInt.1" title="function: integer UInt(bits(N) x)">UInt</a><ins>(Rs);
+memset.n =</ins><del>(Rn);
+bits(2) options = op2&lt;1:0>;
+boolean nontemporal = options&lt;1> == '1';</del> <a href="shared_pseudocode.html#impl-shared.UInt.1" title="function: integer UInt(bits(N) x)"><ins>UInt</ins></a><a href="shared_pseudocode.html#MOPSStage" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }"><del>MOPSStage</del></a><ins>(Rn);
+bits(2) options = op2&lt;1:0>;
+boolean nontemporal = options&lt;1> == '1';
+
+</ins><del>stage;
+</del>case op2&lt;3:2> of
+<ins>    when '00' memset.stage =</ins><del>    when '00' stage =</del> <a href="shared_pseudocode.html#MOPSStage_Prologue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }">MOPSStage_Prologue</a>;
+<ins>    when '01' memset.stage =</ins><del>    when '01' stage =</del> <a href="shared_pseudocode.html#MOPSStage_Main" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }">MOPSStage_Main</a>;
+<ins>    when '10' memset.stage =</ins><del>    when '10' stage =</del> <a href="shared_pseudocode.html#MOPSStage_Epilogue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }">MOPSStage_Epilogue</a>;
+    otherwise UNDEFINED;
+
+<a href="shared_pseudocode.html#impl-aarch64.CheckMOPSEnabled.0" title="function: CheckMOPSEnabled()">CheckMOPSEnabled</a>();
+
+<ins>if (memset.s == memset.n || memset.s == memset.d || memset.n == memset.d || memset.d == 31 || memset.n == 31) then</ins><del>if s == n || s == d || n == d || d == 31 || n == 31 then</del>
+    <a href="shared_pseudocode.html#Constraint" title="enumeration Constraint    { Constraint_NONE,   Constraint_UNKNOWN,  Constraint_UNDEF, Constraint_UNDEFEL0, Constraint_NOP, Constraint_TRUE, Constraint_FALSE, Constraint_DISABLED, Constraint_UNCOND, Constraint_COND, Constraint_ADDITIONAL_DECODE,   Constraint_WBSUPPRESS, Constraint_FAULT, Constraint_LIMITED_ATOMICITY,   Constraint_NVNV1_00, Constraint_NVNV1_01, Constraint_NVNV1_11, Constraint_EL1TIMESTAMP, Constraint_EL2TIMESTAMP, Constraint_OSH, Constraint_ISH, Constraint_NSH,  Constraint_NC, Constraint_WT, Constraint_WB,   Constraint_FORCE, Constraint_FORCENOSLCHECK,  Constraint_MAPTOALLOCATED,  Constraint_PMSCR_PCT_VIRT }">Constraint</a> c = <a href="shared_pseudocode.html#impl-shared.ConstrainUnpredictable.1" title="function: Constraint ConstrainUnpredictable(Unpredictable which)">ConstrainUnpredictable</a>(<a href="shared_pseudocode.html#Unpredictable_MOPSOVERLAP31" title="enumeration Unpredictable {  Unpredictable_VMSR,  Unpredictable_WBOVERLAPLD,  Unpredictable_WBOVERLAPST,  Unpredictable_LDPOVERLAP,  Unpredictable_BASEOVERLAP,  Unpredictable_DATAOVERLAP,  Unpredictable_DEVPAGE2,  Unpredictable_INSTRDEVICE,  Unpredictable_RESCPACR,  Unpredictable_RESMAIR,  Unpredictable_S1CTAGGED,  Unpredictable_S2RESMEMATTR,  Unpredictable_RESTEXCB,  Unpredictable_RESPRRR,  Unpredictable_RESDACR,  Unpredictable_RESVTCRS,  Unpredictable_RESTnSZ,  Unpredictable_RESTCF,  Unpredictable_DEVICETAGSTORE,  Unpredictable_OORTnSZ,   Unpredictable_LARGEIPA,  Unpredictable_ESRCONDPASS,  Unpredictable_ILZEROIT,  Unpredictable_ILZEROT,  Unpredictable_BPVECTORCATCHPRI,  Unpredictable_VCMATCHHALF,   Unpredictable_VCMATCHDAPA,  Unpredictable_WPMASKANDBAS,  Unpredictable_WPBASCONTIGUOUS,  Unpredictable_RESWPMASK,  Unpredictable_WPMASKEDBITS,  Unpredictable_RESBPWPCTRL,  Unpredictable_BPNOTIMPL,  Unpredictable_RESBPTYPE,  Unpredictable_RESMDSELR,  Unpredictable_BPNOTCTXCMP,  Unpredictable_BPMATCHHALF,  Unpredictable_BPMISMATCHHALF,   Unpredictable_BPLINKINGDISABLED,  Unpredictable_RESBPMASK,   Unpredictable_BPMASK,  Unpredictable_BPMASKEDBITS,   Unpredictable_BPLINKEDADDRMATCH,  Unpredictable_RESTARTALIGNPC,  Unpredictable_RESTARTZEROUPPERPC,  Unpredictable_ZEROUPPER,   Unpredictable_ERETZEROUPPERPC,   Unpredictable_A32FORCEALIGNPC,  Unpredictable_SMD,  Unpredictable_NONFAULT,  Unpredictable_SVEZEROUPPER,  Unpredictable_SVELDNFDATA,  Unpredictable_SVELDNFZERO,  Unpredictable_CHECKSPNONEACTIVE,  Unpredictable_SMEZEROUPPER,   Unpredictable_16BYTEROUNDEDUPACCESS,   Unpredictable_16BYTEROUNDEDDOWNACCESS,  Unpredictable_NVNV1,  Unpredictable_Shareability,  Unpredictable_AFUPDATE,  Unpredictable_DBUPDATE,  Unpredictable_IESBinDebug,  Unpredictable_BADPMSFCR,  Unpredictable_ZEROBTYPE,  Unpredictable_EL2TIMESTAMP, Unpredictable_EL1TIMESTAMP,  Unpredictable_RESERVEDNSxB,  Unpredictable_WFxTDEBUG,  Unpredictable_LS64UNSUPPORTED,   Unpredictable_MISALIGNEDATOMIC,  Unpredictable_LSE128OVERLAP,  Unpredictable_CLEARERRITEZERO,   Unpredictable_ALUEXCEPTIONRETURN,  Unpredictable_IGNORETRAPINDEBUG,  Unpredictable_DBGxVR_RESS,  Unpredictable_PMUEVENTCOUNTER,  Unpredictable_PMSCR_PCT,   Unpredictable_CounterReservedForEL2,  Unpredictable_BRBFILTRATE,  Unpredictable_PMUSNAPSHOTEVENT,  Unpredictable_RESEPMSSAD,  Unpredictable_RESPMSSE,  Unpredictable_RESPMEE,   Unpredictable_MOPSOVERLAP31,  Unpredictable_STOREONLYTAGCHECKEDCAS,  Unpredictable_RES_ETBAD,  Unpredictable_MRC_APSR_TARGET,  Unpredictable_RES_PMU_VS,  Unpredictable_RESTC }">Unpredictable_MOPSOVERLAP31</a>);
+    assert c IN {<a href="shared_pseudocode.html#Constraint_UNDEF" title="enumeration Constraint    { Constraint_NONE,   Constraint_UNKNOWN,  Constraint_UNDEF, Constraint_UNDEFEL0, Constraint_NOP, Constraint_TRUE, Constraint_FALSE, Constraint_DISABLED, Constraint_UNCOND, Constraint_COND, Constraint_ADDITIONAL_DECODE,   Constraint_WBSUPPRESS, Constraint_FAULT, Constraint_LIMITED_ATOMICITY,   Constraint_NVNV1_00, Constraint_NVNV1_01, Constraint_NVNV1_11, Constraint_EL1TIMESTAMP, Constraint_EL2TIMESTAMP, Constraint_OSH, Constraint_ISH, Constraint_NSH,  Constraint_NC, Constraint_WT, Constraint_WB,   Constraint_FORCE, Constraint_FORCENOSLCHECK,  Constraint_MAPTOALLOCATED,  Constraint_PMSCR_PCT_VIRT }">Constraint_UNDEF</a>, <a href="shared_pseudocode.html#Constraint_NOP" title="enumeration Constraint    { Constraint_NONE,   Constraint_UNKNOWN,  Constraint_UNDEF, Constraint_UNDEFEL0, Constraint_NOP, Constraint_TRUE, Constraint_FALSE, Constraint_DISABLED, Constraint_UNCOND, Constraint_COND, Constraint_ADDITIONAL_DECODE,   Constraint_WBSUPPRESS, Constraint_FAULT, Constraint_LIMITED_ATOMICITY,   Constraint_NVNV1_00, Constraint_NVNV1_01, Constraint_NVNV1_11, Constraint_EL1TIMESTAMP, Constraint_EL2TIMESTAMP, Constraint_OSH, Constraint_ISH, Constraint_NSH,  Constraint_NC, Constraint_WT, Constraint_WB,   Constraint_FORCE, Constraint_FORCENOSLCHECK,  Constraint_MAPTOALLOCATED,  Constraint_PMSCR_PCT_VIRT }">Constraint_NOP</a>};
+    case c of
+        when <a href="shared_pseudocode.html#Constraint_UNDEF" title="enumeration Constraint    { Constraint_NONE,   Constraint_UNKNOWN,  Constraint_UNDEF, Constraint_UNDEFEL0, Constraint_NOP, Constraint_TRUE, Constraint_FALSE, Constraint_DISABLED, Constraint_UNCOND, Constraint_COND, Constraint_ADDITIONAL_DECODE,   Constraint_WBSUPPRESS, Constraint_FAULT, Constraint_LIMITED_ATOMICITY,   Constraint_NVNV1_00, Constraint_NVNV1_01, Constraint_NVNV1_11, Constraint_EL1TIMESTAMP, Constraint_EL2TIMESTAMP, Constraint_OSH, Constraint_ISH, Constraint_NSH,  Constraint_NC, Constraint_WT, Constraint_WB,   Constraint_FORCE, Constraint_FORCENOSLCHECK,  Constraint_MAPTOALLOCATED,  Constraint_PMSCR_PCT_VIRT }">Constraint_UNDEF</a> UNDEFINED;
+        when <a href="shared_pseudocode.html#Constraint_NOP" title="enumeration Constraint    { Constraint_NONE,   Constraint_UNKNOWN,  Constraint_UNDEF, Constraint_UNDEFEL0, Constraint_NOP, Constraint_TRUE, Constraint_FALSE, Constraint_DISABLED, Constraint_UNCOND, Constraint_COND, Constraint_ADDITIONAL_DECODE,   Constraint_WBSUPPRESS, Constraint_FAULT, Constraint_LIMITED_ATOMICITY,   Constraint_NVNV1_00, Constraint_NVNV1_01, Constraint_NVNV1_11, Constraint_EL1TIMESTAMP, Constraint_EL2TIMESTAMP, Constraint_OSH, Constraint_ISH, Constraint_NSH,  Constraint_NC, Constraint_WT, Constraint_WB,   Constraint_FORCE, Constraint_FORCENOSLCHECK,  Constraint_MAPTOALLOCATED,  Constraint_PMSCR_PCT_VIRT }">Constraint_NOP</a>   <a href="shared_pseudocode.html#impl-shared.EndOfInstruction.0" title="function: EndOfInstruction()">EndOfInstruction</a>();</p>
+  <div class="encoding-notes">
+      <p class="aml">For information about the <span class="arm-defined-word">constrained unpredictable</span> behavior of this instruction, see <a class="armarm-xref" title="Reference to Armv8 ARM section">Architectural Constraints on UNPREDICTABLE behaviors</a>, and particularly <a class="armarm-xref" title="Reference to Armv8 ARM section">Memory Copy and Memory Set SET*</a>.</p>
+    </div><h3 class="explanations">Assembler Symbols</h3><div class="explanations"><table><col class="asyn-l"/><col class="asyn-r"/><tr><td>&lt;Xd></td><td><a id="sa_xd_1"/>
+        
+          <p class="aml">For the epilogue and main variant: is the 64-bit name of the general-purpose register that holds an encoding of the destination address (an integer multiple of 16) and for option B is updated by the instruction, encoded in the "Rd" field.</p>
+        
+      </td></tr><tr><td/><td><a id="sa_xd"/>
+        
+          
+          
+        
+        
+          <p class="aml">For the prologue variant: is the 64-bit name of the general-purpose register that holds an encoding of the destination address (an integer multiple of 16) and is updated by the instruction, encoded in the "Rd" field.</p>
+        
+      </td></tr></table><table><col class="asyn-l"/><col class="asyn-r"/><tr><td>&lt;Xn></td><td><a id="sa_xn_2"/>
+        
+          
+          
+        
+        
+          <p class="aml">For the epilogue variant: is the 64-bit name of the general-purpose register that holds an encoding of the number of bytes to be set (an integer multiple of 16) and is set to zero at the end of the instruction, encoded in the "Rn" field.</p>
+        
+      </td></tr><tr><td/><td><a id="sa_xn_1"/>
+        
+          
+          
+        
+        
+          <p class="aml">For the main variant: is the 64-bit name of the general-purpose register that holds an encoding of the number of bytes to be set (an integer multiple of 16) and is updated by the instruction, encoded in the "Rn" field.</p>
+        
+      </td></tr><tr><td/><td><a id="sa_xn"/>
+        
+          
+          
+        
+        
+          <p class="aml">For the prologue variant: is the 64-bit name of the general-purpose register that holds the number of bytes to be set (an integer multiple of 16) and is updated by the instruction, encoded in the "Rn" field.</p>
+        
+      </td></tr></table><table><col class="asyn-l"/><col class="asyn-r"/><tr><td>&lt;Xs></td><td><a id="sa_xs_1"/>
+        
+          
+          
+        
+        
+          <p class="aml">For the epilogue variant: is the 64-bit name of the general-purpose register that holds the source data, encoded in the "Rs" field.</p>
+        
+      </td></tr><tr><td/><td><a id="sa_xs"/>
+        
+          <p class="aml">For the main and prologue variant: is the 64-bit name of the general-purpose register that holds the source data in bits&lt;7:0>, encoded in the "Rs" field.</p>
+        
+      </td></tr></table></div><div class="syntax-notes"/>
+    <div class="ps"><a id="execute"/><h3 class="pseudocode">Operation</h3>
+      <p class="pseudocode"><ins>bits(8) data =</ins><del>bits(64) toaddress =</del> <a href="shared_pseudocode.html#impl-aarch64.X.read.2" title="accessor: bits(width) X[integer n, integer width]">X</a><ins>[memset.s, 8];
+integer B;
+
+memset.is_setg = TRUE;
+memset.nzcv = PSTATE.&lt;N,Z,C,V>;
+memset.toaddress =</ins><del>[d, 64];
+bits(64) setsize =</del> <a href="shared_pseudocode.html#impl-aarch64.X.read.2" title="accessor: bits(width) X[integer n, integer width]">X</a><ins>[memset.d, 64];
+if memset.stage ==</ins><del>[n, 64];
+bits(8) data =</del> <a href="shared_pseudocode.html#MOPSStage_Prologue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }"><ins>MOPSStage_Prologue</ins></a><ins> then
+    memset.setsize = </ins><a href="shared_pseudocode.html#impl-shared.UInt.1" title="function: integer UInt(bits(N) x)"><ins>UInt</ins></a><ins>(</ins><a href="shared_pseudocode.html#impl-aarch64.X.read.2" title="accessor: bits(width) X[integer n, integer width]">X</a><ins>[memset.n, 64]);
+else
+    memset.setsize =</ins><del>[s, 8];
+bits(4) nzcv = PSTATE.&lt;N,Z,C,V>;
+boolean is_setg = TRUE;
+integer B;
+
+boolean implements_option_a =</del> <a href="shared_pseudocode.html#impl-shared.SInt.1" title="function: integer SInt(bits(N) x)"><ins>SInt</ins></a><ins>(</ins><a href="shared_pseudocode.html#impl-aarch64.X.read.2" title="accessor: bits(width) X[integer n, integer width]"><ins>X</ins></a><ins>[memset.n, 64]);
+memset.implements_option_a = </ins><a href="shared_pseudocode.html#impl-aarch64.SETGOptionA.0" title="function: boolean SETGOptionA()">SETGOptionA</a>();
+
+boolean privileged = if options&lt;0> == '1' then <a href="shared_pseudocode.html#AArch64.IsUnprivAccessPriv.0" title="function: boolean AArch64.IsUnprivAccessPriv()">AArch64.IsUnprivAccessPriv</a>() else PSTATE.EL != <a href="shared_pseudocode.html#EL0" title="constant bits(2) EL0 = '00'">EL0</a>;
+
+<a href="shared_pseudocode.html#AccessDescriptor" title="type AccessDescriptor is ( AccessType acctype, bits(2) el, SecurityState ss, boolean acqsc, boolean acqpc, boolean relsc, boolean limitedordered, boolean exclusive, boolean atomicop, MemAtomicOp modop, boolean nontemporal, boolean read, boolean write, CacheOp cacheop, CacheOpScope opscope, CacheType cachetype, boolean pan, boolean transactional, boolean nonfault, boolean firstfault, boolean first, boolean contiguous, boolean streamingsve, boolean ls64, boolean mops, boolean rcw, boolean rcws, boolean toplevel, VARange varange, boolean a32lsmd, boolean tagchecked, boolean tagaccess, boolean ispair, boolean highestaddressfirst, MPAMinfo mpam )">AccessDescriptor</a> accdesc = <a href="shared_pseudocode.html#impl-shared.CreateAccDescSTGMOPS.2" title="function: AccessDescriptor CreateAccDescSTGMOPS(boolean privileged, boolean nontemporal)">CreateAccDescSTGMOPS</a>(privileged, nontemporal);
+
+<ins>if memset.stage ==</ins><del>if stage ==</del> <a href="shared_pseudocode.html#MOPSStage_Prologue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }">MOPSStage_Prologue</a> then
+<ins>    if memset.setsize > 0x7FFFFFFFFFFFFFF0 then
+        memset.setsize = 0x7FFFFFFFFFFFFFF0;
+</ins><del>    if setsize&lt;63> == '1' then setsize = 0x7FFFFFFFFFFFFFF0&lt;63:0>;
+</del>
+<ins>    if ((memset.setsize != 0 &amp;&amp; !</ins><del>    if ((!</del><a href="shared_pseudocode.html#impl-shared.IsZero.1" title="function: boolean IsZero(bits(N) x)"><del>IsZero</del></a><del>(setsize) &amp;&amp; !</del><a href="shared_pseudocode.html#impl-shared.IsAligned.2" title="function: boolean IsAligned(bits(N) x, integer y)">IsAligned</a><ins>(memset.toaddress,</ins><del>(toaddress,</del> <a href="shared_pseudocode.html#TAG_GRANULE" title="constant integer TAG_GRANULE = 1 &lt;&lt; LOG2_TAG_GRANULE">TAG_GRANULE</a>)) || !<a href="shared_pseudocode.html#impl-shared.IsAligned.2" title="function: boolean IsAligned(bits(N) x, integer y)">IsAligned</a><ins>(memset.setsize&lt;63:0>,</ins><del>(setsize,</del> <a href="shared_pseudocode.html#TAG_GRANULE" title="constant integer TAG_GRANULE = 1 &lt;&lt; LOG2_TAG_GRANULE">TAG_GRANULE</a>)) then
+        <a href="shared_pseudocode.html#AArch64.Abort.2" title="function: AArch64.Abort(bits(64) vaddress, FaultRecord fault)">AArch64.Abort</a><ins>(memset.toaddress,</ins><del>(toaddress,</del> <a href="shared_pseudocode.html#impl-shared.AlignmentFault.1" title="function: FaultRecord AlignmentFault(AccessDescriptor accdesc)">AlignmentFault</a>(accdesc));
+
+<ins>    if memset.implements_option_a then
+        memset.nzcv = '0000';
+        memset.toaddress = memset.toaddress + memset.setsize;
+        memset.setsize = 0 - memset.setsize;
+    else
+        memset.nzcv = '0010';
+
+memset.stagesetsize =</ins><del>    if implements_option_a then
+        nzcv = '0000';
+        toaddress = toaddress + setsize;
+        setsize =</del> <a href="shared_pseudocode.html#impl-aarch64.MemSetStageSize.1" title="function: integer MemSetStageSize(SETParams memset)"><ins>MemSetStageSize</ins></a><a href="shared_pseudocode.html#impl-shared.Zeros.1" title="function: bits(N) Zeros(integer N)"><del>Zeros</del></a><ins>(memset);
+
+if memset.stage !=</ins><del>(64) - setsize;
+    else
+        nzcv = '0010';
+else</del> <a href="shared_pseudocode.html#MOPSStage_Prologue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }"><ins>MOPSStage_Prologue</ins></a><ins> then
+    </ins><a href="shared_pseudocode.html#impl-aarch64.CheckMemSetParams.2" title="function: CheckMemSetParams(SETParams memset, bits(2) options)">CheckMemSetParams</a><ins>(memset, options);
+</ins><del>(stage, implements_option_a, nzcv, options, d, s, n, toaddress, setsize, is_setg);
+</del>
+<ins>    if ((memset.setsize != 0 &amp;&amp; !</ins><del>    if ((!</del><a href="shared_pseudocode.html#impl-shared.IsZero.1" title="function: boolean IsZero(bits(N) x)"><del>IsZero</del></a><del>(setsize) &amp;&amp; !</del><a href="shared_pseudocode.html#impl-shared.IsAligned.2" title="function: boolean IsAligned(bits(N) x, integer y)">IsAligned</a><ins>(memset.toaddress,</ins><del>(toaddress,</del> <a href="shared_pseudocode.html#TAG_GRANULE" title="constant integer TAG_GRANULE = 1 &lt;&lt; LOG2_TAG_GRANULE">TAG_GRANULE</a>)) || !<a href="shared_pseudocode.html#impl-shared.IsAligned.2" title="function: boolean IsAligned(bits(N) x, integer y)">IsAligned</a><ins>(memset.setsize&lt;63:0>,</ins><del>(setsize,</del> <a href="shared_pseudocode.html#TAG_GRANULE" title="constant integer TAG_GRANULE = 1 &lt;&lt; LOG2_TAG_GRANULE">TAG_GRANULE</a>)) then
+        <a href="shared_pseudocode.html#AArch64.Abort.2" title="function: AArch64.Abort(bits(64) vaddress, FaultRecord fault)">AArch64.Abort</a><ins>(memset.toaddress,</ins><del>(toaddress,</del> <a href="shared_pseudocode.html#impl-shared.AlignmentFault.1" title="function: FaultRecord AlignmentFault(AccessDescriptor accdesc)">AlignmentFault</a>(accdesc));
+
+<ins>integer tagstep;
+bits(4) tag;
+bits(64) tagaddr;</ins><del>bits(64) stagesetsize =</del>
+<a href="shared_pseudocode.html#AddressDescriptor" title="type AddressDescriptor is ( FaultRecord fault, MemoryAttributes memattrs, FullAddress paddress, boolean s1assured, boolean s2fs1mro, bits(16) mecid, bits(64) vaddress )"><ins>AddressDescriptor</ins></a><a href="shared_pseudocode.html#impl-aarch64.MemSetStageSize.4" title="function: bits(64) MemSetStageSize(MOPSStage stage, bits(64) toaddress, bits(64) setsize, boolean is_setg)"><del>MemSetStageSize</del></a> <ins>memaddrdesc;</ins><del>(stage, toaddress, setsize, is_setg);
+
+integer tagstep;
+bits(4) tag;
+bits(64) tagaddr;
+
+if implements_option_a then
+    while</del>
+<a href="shared_pseudocode.html#PhysMemRetStatus" title="type PhysMemRetStatus is ( Fault statuscode, bit extflag, ErrorState merrorstate, bits(64) store64bstatus )"><ins>PhysMemRetStatus</ins></a><a href="shared_pseudocode.html#impl-shared.SInt.1" title="function: integer SInt(bits(N) x)"><del>SInt</del></a> <ins>memstatus;
+integer memory_set;
+boolean fault = FALSE;
+
+if memset.implements_option_a then
+    while memset.stagesetsize &lt; 0 &amp;&amp; !fault do
+</ins><del>(stagesetsize) &lt; 0 do
+</del>        // IMP DEF selection of the block size that is worked on. While many
+        // implementations might make this constant, that is not assumed.
+        B = <a href="shared_pseudocode.html#impl-aarch64.SETSizeChoice.2" title="function: integer SETSizeChoice(SETParams memset, integer alignsize)">SETSizeChoice</a><ins>(memset, 16);
+        assert B &lt;= -1 * memset.stagesetsize &amp;&amp; B&lt;3:0> == '0000';
+
+        (memory_set, memaddrdesc, memstatus) =</ins><del>(toaddress, setsize, 16);
+        assert B &lt;= -1 *</del> <a href="shared_pseudocode.html#impl-aarch64.MemSetBytes.4" title="function: (integer, AddressDescriptor, PhysMemRetStatus) MemSetBytes(bits(64) toaddress, bits(8) data, integer bytes, AccessDescriptor accdesc)"><ins>MemSetBytes</ins></a><a href="shared_pseudocode.html#impl-shared.SInt.1" title="function: integer SInt(bits(N) x)"><del>SInt</del></a><ins>(memset.toaddress + memset.setsize, data, B, accdesc);
+
+        if memory_set != B then
+            fault = TRUE;
+        else
+            tagstep = B DIV 16;
+            tag =</ins><del>(stagesetsize);
+        assert B&lt;3:0> == '0000';</del> <a href="shared_pseudocode.html#impl-aarch64.Mem.write.3" title="accessor: Mem[bits(64) address, integer size, AccessDescriptor accdesc_in] = bits(size*8) value_in"><del>Mem</del></a><del>[toaddress+setsize, B, accdesc] = </del><a href="shared_pseudocode.html#impl-shared.Replicate.2" title="function: bits(M*N) Replicate(bits(M) x, integer N)"><del>Replicate</del></a><del>(data, B);
+
+        tagstep = B DIV 16;
+        tag = </del><a href="shared_pseudocode.html#AArch64.AllocationTagFromAddress.1" title="function: bits(4) AArch64.AllocationTagFromAddress(bits(64) tagged_address)">AArch64.AllocationTagFromAddress</a><ins>(memset.toaddress + memset.setsize);
+
+            while tagstep > 0 do
+                tagaddr = memset.toaddress + memset.setsize + (tagstep - 1) * 16;</ins><del>(toaddress + setsize);
+        while tagstep > 0 do
+            tagaddr = toaddress + setsize + (tagstep - 1) * 16;</del>
+                <a href="shared_pseudocode.html#AArch64.MemTag.write.2" title="accessor: AArch64.MemTag[bits(64) address, AccessDescriptor accdesc_in] = bits(4) value">AArch64.MemTag</a>[tagaddr, accdesc] = tag;
+<ins>                tagstep = tagstep - 1;
+</ins><del>            tagstep = tagstep - 1;
+</del>
+<ins>            memset.setsize = memset.setsize + B;
+            memset.stagesetsize = memset.stagesetsize + B;
+</ins><del>        setsize = setsize + B;
+        stagesetsize = stagesetsize + B;
+</del>
+<ins>else
+    while memset.stagesetsize > 0 &amp;&amp; !fault do
+        // IMP DEF selection of the block size that is worked on. While many
+        // implementations might make this constant, that is not assumed.
+        B =</ins><del>        if stage !=</del> <a href="shared_pseudocode.html#MOPSStage_Prologue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }"><del>MOPSStage_Prologue</del></a><del> then
+            </del><a href="shared_pseudocode.html#impl-aarch64.X.write.2" title="accessor: X[integer n, integer width] = bits(width) value"><del>X</del></a><del>[n, 64] = setsize;
+else
+    while </del><a href="shared_pseudocode.html#impl-shared.UInt.1" title="function: integer UInt(bits(N) x)"><del>UInt</del></a><del>(stagesetsize) > 0 do
+        // IMP DEF selection of the block size that is worked on. While many
+        // implementations might make this constant, that is not assumed.
+        B = </del><a href="shared_pseudocode.html#impl-aarch64.SETSizeChoice.2" title="function: integer SETSizeChoice(SETParams memset, integer alignsize)">SETSizeChoice</a><ins>(memset, 16);
+        assert B &lt;= memset.stagesetsize &amp;&amp; B&lt;3:0> == '0000';
+
+        (memory_set, memaddrdesc, memstatus) =</ins><del>(toaddress, setsize, 16);
+        assert B &lt;=</del> <a href="shared_pseudocode.html#impl-aarch64.MemSetBytes.4" title="function: (integer, AddressDescriptor, PhysMemRetStatus) MemSetBytes(bits(64) toaddress, bits(8) data, integer bytes, AccessDescriptor accdesc)"><ins>MemSetBytes</ins></a><a href="shared_pseudocode.html#impl-shared.UInt.1" title="function: integer UInt(bits(N) x)"><del>UInt</del></a><ins>(memset.toaddress, data, B, accdesc);
+
+        if memory_set != B then
+            fault = TRUE;
+        else
+            tagstep = B DIV 16;
+            tag =</ins><del>(stagesetsize);
+        assert B&lt;3:0> == '0000';</del> <a href="shared_pseudocode.html#impl-aarch64.Mem.write.3" title="accessor: Mem[bits(64) address, integer size, AccessDescriptor accdesc_in] = bits(size*8) value_in"><del>Mem</del></a><del>[toaddress, B, accdesc] = </del><a href="shared_pseudocode.html#impl-shared.Replicate.2" title="function: bits(M*N) Replicate(bits(M) x, integer N)"><del>Replicate</del></a><del>(data, B);
+
+        tagstep = B DIV 16;
+        tag = </del><a href="shared_pseudocode.html#AArch64.AllocationTagFromAddress.1" title="function: bits(4) AArch64.AllocationTagFromAddress(bits(64) tagged_address)">AArch64.AllocationTagFromAddress</a><ins>(memset.toaddress);
+            while tagstep > 0 do
+                tagaddr = memset.toaddress + (tagstep - 1) * 16;</ins><del>(toaddress);
+        while tagstep > 0 do
+            tagaddr = toaddress + (tagstep - 1) * 16;</del>
+                <a href="shared_pseudocode.html#AArch64.MemTag.write.2" title="accessor: AArch64.MemTag[bits(64) address, AccessDescriptor accdesc_in] = bits(4) value">AArch64.MemTag</a>[tagaddr, accdesc] = tag;
+<ins>                tagstep = tagstep - 1;
+</ins><del>            tagstep = tagstep - 1;
+</del>
+<ins>            memset.toaddress = memset.toaddress + B;
+            memset.setsize = memset.setsize - B;
+            memset.stagesetsize = memset.stagesetsize - B;</ins><del>        toaddress = toaddress + B;
+        setsize = setsize - B;
+        stagesetsize = stagesetsize - B;
+
+        if stage !=</del>
+
+<a href="shared_pseudocode.html#impl-aarch64.UpdateSetRegisters.3" title="function: UpdateSetRegisters(SETParams memset, boolean fault, integer memory_set)"><ins>UpdateSetRegisters</ins></a><a href="shared_pseudocode.html#MOPSStage_Prologue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }"><del>MOPSStage_Prologue</del></a><ins>(memset, fault, memory_set);
+
+if fault then
+    if</ins><del>then</del> <a href="shared_pseudocode.html#impl-shared.IsFault.1" title="function: boolean IsFault(AddressDescriptor addrdesc)"><ins>IsFault</ins></a><a href="shared_pseudocode.html#impl-aarch64.X.write.2" title="accessor: X[integer n, integer width] = bits(width) value"><del>X</del></a><ins>(memaddrdesc) then</ins><del>[n, 64] = setsize;</del>
+        <a href="shared_pseudocode.html#AArch64.Abort.2" title="function: AArch64.Abort(bits(64) vaddress, FaultRecord fault)"><ins>AArch64.Abort</ins></a><a href="shared_pseudocode.html#impl-aarch64.X.write.2" title="accessor: X[integer n, integer width] = bits(width) value"><del>X</del></a><ins>(memaddrdesc.vaddress, memaddrdesc.fault);
+    else
+        boolean iswrite = TRUE;</ins><del>[d, 64] = toaddress;
+
+if stage ==</del>
+        <a href="shared_pseudocode.html#impl-shared.HandleExternalAbort.5" title="function: HandleExternalAbort(PhysMemRetStatus memretstatus, boolean iswrite, AddressDescriptor memaddrdesc, integer size, AccessDescriptor accdesc)"><ins>HandleExternalAbort</ins></a><a href="shared_pseudocode.html#MOPSStage_Prologue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }"><del>MOPSStage_Prologue</del></a><ins>(memstatus, iswrite, memaddrdesc, B, accdesc);
+
+if memset.stage ==</ins><del>then</del> <del>[n, 64] = setsize;
+    </del><a href="shared_pseudocode.html#impl-aarch64.X.write.2" title="accessor: X[integer n, integer width] = bits(width) value"><del>X</del></a><a href="shared_pseudocode.html#MOPSStage_Prologue" title="enumeration MOPSStage { MOPSStage_Prologue, MOPSStage_Main, MOPSStage_Epilogue }"><ins>MOPSStage_Prologue</ins></a><a href="shared_pseudocode.html#impl-aarch64.X.write.2" title="accessor: X[integer n, integer width] = bits(width) value"><del>X</del></a> <ins>then
+    PSTATE.&lt;N,Z,C,V> = memset.nzcv;</ins><del>[d, 64] = toaddress;
+    PSTATE.&lt;N,Z,C,V> = nzcv;</del></p>
+    </div>
+  <hr/><table style="margin: 0 auto;"><tr><td><div class="topbar"><a href="index.html">Base Instructions</a></div></td><td><div class="topbar"><a href="fpsimdindex.html">SIMD&amp;FP Instructions</a></div></td><td><div class="topbar"><a href="sveindex.html">SVE Instructions</a></div></td><td><div class="topbar"><a href="mortlachindex.html">SME Instructions</a></div></td><td><div class="topbar"><a href="encodingindex.html">Index by Encoding</a></div></td><td><div class="topbar"><a href="shared_pseudocode.html">Shared Pseudocode</a></div></td><td><div class="topbar"><a href="notice.html">Proprietary Notice</a></div></td></tr></table><p class="versions">
+      Internal version only: isa <ins>v33.74</ins><del>v33.64</del>, AdvSIMD <ins>v29.23</ins><del>v29.12</del>, pseudocode <ins>v2023-09_rel</ins><del>no_diffs_2023_09_RC2</del>, sve <ins>v2023-09_rc3</ins><del>v2023-06_rel</del>
+      ; Build timestamp: <ins>2023-09-27T17</ins><del>2023-09-18T17</del>:<ins>06</ins><del>56</del>
+    </p><p class="copyconf">
+      Copyright © 2010-2023 Arm Limited or its affiliates. All rights reserved.
+      This document is Non-Confidential.
+    </p><div align="center" class="htmldiff_header"><table><tbody><tr><td class="old">(old) </td><td class="explain">htmldiff from-</td><td class="new">(new) </td></tr></tbody></table></div></body></html>

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" encoding="UTF-8" href="iform.xsl" version="1.0"?>
+<!DOCTYPE instructionsection PUBLIC "-//ARM//DTD instructionsection //EN" "iform-p.dtd">
+<!-- Copyright (c) 2010-2023 Arm Limited or its affiliates. All rights reserved. -->
+<!-- This document is Non-Confidential. This document may only be used and distributed in accordance with the terms of the agreement entered into by Arm and the party that Arm delivered this document to. -->
+
+<instructionsection id="AUTIBSPPC" title="AUTIBSPPC (register) -- A64" type="instruction">
+  <docvars>
+    <docvar key="instr-class" value="general" />
+    <docvar key="isa" value="A64" />
+    <docvar key="mnemonic" value="AUTIBSPPC" />
+  </docvars>
+  <heading>AUTIBSPPC (register)</heading>
+  <desc>
+    <brief>
+      <para>Authenticate return address, using key B (register)</para>
+    </brief>
+    <authored>
+      <para>Authenticate return address, using key B (register). This instruction authenticates an instruction address, using two modifiers and key B.</para>
+      <para>If the authentication passes, the upper bits of the address are restored to enable subsequent use of the address. For information on behavior if the authentication fails, see <xref linkend="MDSec.Faulting_on_pointer_authentication">Faulting on pointer authentication</xref>.</para>
+      <para>The address is in X30.</para>
+      <para>The first modifier is in SP.</para>
+      <para>The second modifier is in the general-purpose register that is specified by <syntax>&lt;Xn&gt;</syntax>.</para>
+    </authored>
+  </desc>
+  <alias_list howmany="0"></alias_list>
+  <classes>
+    <iclass name="Integer" oneof="1" id="iclass_general" no_encodings="1" isa="A64">
+      <docvars>
+        <docvar key="instr-class" value="general" />
+        <docvar key="isa" value="A64" />
+        <docvar key="mnemonic" value="AUTIBSPPC" />
+      </docvars>
+      <iclassintro count="1"></iclassintro>
+      <arch_variants>
+        <arch_variant name="FEAT_PAuth_LR" feature="FEAT_PAuth_LR" />
+      </arch_variants>
+      <regdiagram form="32" psname="aarch64/instrs/integer/pac/aut_sppc/autibsppc_dp_1src/AUTIBSPPC_64LRR_dp_1src">
+        <box hibit="31" name="sf" settings="1">
+          <c>1</c>
+        </box>
+        <box hibit="30" settings="1">
+          <c>1</c>
+        </box>
+        <box hibit="29" name="S" settings="1">
+          <c>0</c>
+        </box>
+        <box hibit="28" width="8" settings="8">
+          <c>1</c>
+          <c>1</c>
+          <c>0</c>
+          <c>1</c>
+          <c>0</c>
+          <c>1</c>
+          <c>1</c>
+          <c>0</c>
+        </box>
+        <box hibit="20" width="5" name="opcode2" settings="5">
+          <c>0</c>
+          <c>0</c>
+          <c>0</c>
+          <c>0</c>
+          <c>1</c>
+        </box>
+        <box hibit="15" width="6" name="opcode" settings="6">
+          <c>1</c>
+          <c>0</c>
+          <c>0</c>
+          <c>1</c>
+          <c>0</c>
+          <c>1</c>
+        </box>
+        <box hibit="9" width="5" name="Rn" usename="1">
+          <c colspan="5"></c>
+        </box>
+        <box hibit="4" width="5" name="Rd" settings="5">
+          <c>1</c>
+          <c>1</c>
+          <c>1</c>
+          <c>1</c>
+          <c>0</c>
+        </box>
+      </regdiagram>
+      <encoding name="AUTIBSPPC_64LRR_dp_1src" oneofinclass="1" oneof="1" label="">
+        <docvars>
+          <docvar key="instr-class" value="general" />
+          <docvar key="isa" value="A64" />
+          <docvar key="mnemonic" value="AUTIBSPPC" />
+        </docvars>
+        <asmtemplate><text>AUTIBSPPC  </text><a link="sa_xn" hover="64-bit general-purpose source register (field &quot;Rn&quot;)">&lt;Xn&gt;</a></asmtemplate>
+      </encoding>
+      <ps_section howmany="1">
+        <ps name="aarch64/instrs/integer/pac/aut_sppc/autibsppc_dp_1src/AUTIBSPPC_64LRR_dp_1src" mylink="aarch64.instrs.integer.pac.aut_sppc.autibsppc_dp_1src.AUTIBSPPC_64LRR_dp_1src" enclabels="" sections="1" secttype="noheading">
+          <pstext mayhavelinks="1" section="Decode" rep_section="decode">if !IsFeatureImplemented(FEAT_PAuth_LR) then
+    UNDEFINED;
+
+integer n = <a link="impl-shared.UInt.1" file="shared_pseudocode.xml" hover="function: integer UInt(bits(N) x)">UInt</a>(Rn);</pstext>
+        </ps>
+      </ps_section>
+    </iclass>
+  </classes>
+  <explanations scope="all">
+    <explanation enclist="AUTIBSPPC_64LRR_dp_1src" symboldefcount="1">
+      <symbol link="sa_xn">&lt;Xn&gt;</symbol>
+      <account encodedin="Rn">
+        <intro>
+          <para>Is the 64-bit name of the general-purpose source register, encoded in the "Rn" field.</para>
+        </intro>
+      </account>
+    </explanation>
+  </explanations>
+  <ps_section howmany="1">
+    <ps name="aarch64/instrs/integer/pac/aut_sppc/autibsppc_dp_1src/AUTIBSPPC_64LRR_dp_1src" mylink="execute" enclabels="" sections="1" secttype="Operation">
+      <pstext mayhavelinks="1" section="Execute" rep_section="execute"><a link="impl-aarch64.X.write.2" file="shared_pseudocode.xml" hover="accessor: X[integer n, integer width] = bits(width) value">X</a>[30, 64] = <a link="impl-aarch64.AuthIB2.4" file="shared_pseudocode.xml" hover="function: bits(64) AuthIB2(bits(64) x, bits(64) y, bits(64) z, boolean is_combined)">AuthIB2</a>(<a link="impl-aarch64.X.read.2" file="shared_pseudocode.xml" hover="accessor: bits(width) X[integer n, integer width]">X</a>[30, 64], <a link="impl-aarch64.SP.read.0" file="shared_pseudocode.xml" hover="accessor: bits(64) SP[]">SP</a>[], <a link="impl-aarch64.X.read.2" file="shared_pseudocode.xml" hover="accessor: bits(width) X[integer n, integer width]">X</a>[n, 64], FALSE);</pstext>
+    </ps>
+  </ps_section>
+</instructionsection>

@@ -1,0 +1,1492 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+  <title>Feature names for A profile</title>
+  <style type="text/css">
+    body {
+      font-size: small;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Feature names in A-profile architecture</h1>
+
+  <h1>2023 Architecture Extensions</h1>
+  <table style="width: 814px; height: 70px;" border="1" cellpadding="0" cellspacing="0">
+    <tbody>
+      <tr>
+        <th>Feature Name</th>
+        <th>Short description</th>
+      </tr>
+      <tr>
+        <td>FEAT_ASID2</td>
+        <td>Support for concurrent use of two ASIDs</td>
+      </tr>
+      <tr>
+        <td>FEAT_BWE2</td>
+        <td>Breakpoint and watchpoint enhancements 2</td>
+      </tr>
+      <tr>
+        <td>FEAT_CPA</td>
+        <td>Instruction-only Checked Pointer Arithmetic</td>
+      </tr>
+      <tr>
+        <td>FEAT_CPA2</td>
+        <td>Checked Pointer Arithmetic</td>
+      </tr>
+      <tr>
+        <td>FEAT_E2H0</td>
+        <td>Programming of HCR_EL2.E2H</td>
+      </tr>
+      <tr>
+        <td>FEAT_E3DSE</td>
+        <td>Delegated SError exception injection</td>
+      </tr>
+      <tr>
+        <td>FEAT_FAMINMAX</td>
+        <td>Floating-point maximum and minimum absolute value instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_FGWTE3</td>
+        <td>Fine-Grained Write Trap EL3</td>
+      </tr>
+      <tr>
+        <td>FEAT_FP8</td>
+        <td>FP8 convert instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_FP8FMA</td>
+        <td>FP8 multiply-accumulate to half-precision and single-precision instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_FP8DOT2</td>
+        <td>FP8 2-way dot product to half-precision instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_FP8DOT4</td>
+        <td>FP8 4-way dot product to single-precision instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_FPMR</td>
+        <td>Floating-point Mode Register</td>
+      </tr>
+      <tr>
+        <td>FEAT_HACDBS</td>
+        <td>Hardware accelerator for cleaning Dirty state</td>
+      </tr>
+      <tr>
+        <td>FEAT_HDBSS</td>
+        <td>Hardware Dirty state tracking Structure</td>
+      </tr>
+      <tr>
+        <td>FEAT_LUT</td>
+        <td>Lookup table instructions with 2-bit and 4-bit indices</td>
+      </tr>
+      <tr>
+        <td>FEAT_PAuth_LR</td>
+        <td>Pointer authentication instructions that allow signing of LR using SP and PC as diversifiers</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_SME</td>
+        <td>Performance Monitors extensions for SME</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_TH2</td>
+        <td>Performance Monitors event counter linking extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_RME_GPC2</td>
+        <td>RME Granule Protection Check 2 Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME_F8F16</td>
+        <td>SME2 ZA-targeting FP8 multiply-accumulate, dot product, and outer product to half-precision instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME_F8F32</td>
+        <td>SME2 ZA-targeting FP8 multiply-accumulate, dot product, and outer product to single-precision instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME_LUTv2</td>
+        <td>Lookup table instructions with 4-bit indices and 8-bit elements</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPE_ALTCLK</td>
+        <td>Statistical Profiling alternate clock domain extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPE_EFT</td>
+        <td>Statistical Profiling extended filtering by type</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPE_FPF</td>
+        <td>Statistical Profiling floating-point flag extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPE_SME</td>
+        <td>Statisical Profiling extensions for SME</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPMU</td>
+        <td>System Performance Monitors Extension version 2</td>
+      </tr>
+      <tr>
+        <td>FEAT_SSVE_FP8DOT4</td>
+        <td>SVE2 FP8 4-way dot product to single-precision instructions in Streaming SVE mode</td>
+      </tr>
+      <tr>
+        <td>FEAT_SSVE_FP8DOT2</td>
+        <td>SVE2 FP8 2-way dot product to half-precision instructions in Streaming SVE mode</td>
+      </tr>
+      <tr>
+        <td>FEAT_SSVE_FP8FMA</td>
+        <td>SVE2 FP8 multiply-accumulate to half-precision and single-precision instructions in Streaming SVE mode</td>
+      </tr>
+      <tr>
+        <td>FEAT_STEP2</td>
+        <td>Enhanced Software Step Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_TLBIW</td>
+        <td>TLBI VMALL for Dirty state</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+
+  </p>
+
+  <h1>2022 Architecture Extensions</h1>
+  <table style="width: 814px; height: 70px;" border="1" cellpadding="0" cellspacing="0">
+    <tbody>
+      <tr>
+        <th>Feature Name</th>
+        <th>Short description</th>
+      </tr>
+      <tr>
+        <td>FEAT_ABLE</td>
+        <td>Address Breakpoint Linking Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_ADERR</td>
+        <td>Asynchronous Device error exceptions</td>
+      </tr>
+      <tr>
+        <td>FEAT_AIE</td>
+        <td>Memory Attribute Index Enhancement</td>
+      </tr>
+      <tr>
+        <td>FEAT_ANERR</td>
+        <td>Asynchronous Normal error exception</td>
+      </tr>
+      <tr>
+        <td>FEAT_BWE</td>
+        <td>Breakpoint Mismatch and Range Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_CLRBHB</td>
+        <td>Support for Clear Branch History instruction</td>
+      </tr>
+      <tr>
+        <td>FEAT_CHK</td>
+        <td>Check Feature Status</td>
+      </tr>
+      <tr>
+        <td>FEAT_CSSC</td>
+        <td>Common Short Sequence Compression instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_CSV2_3</td>
+        <td>Cache Speculation Variant 2 version 3</td>
+      </tr>
+      <tr>
+        <td>FEAT_D128</td>
+        <td>128-bit Translation Tables, 56 bit PA</td>
+      </tr>
+      <tr>
+        <td>FEAT_Debugv8p9</td>
+        <td>Debug v8.9</td>
+      </tr>
+      <tr>
+        <td>FEAT_DoubleFault2</td>
+        <td>Enhancements to the Double Fault Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_EBEP</td>
+        <td>Exception-based Event Profiling</td>
+      </tr>
+      <tr>
+        <td>FEAT_ECBHB</td>
+        <td>Exploitative control using branch history information</td>
+      </tr>
+      <tr>
+        <td>FEAT_EDHSR</td>
+        <td>Support for EDHSR</td>
+      </tr>
+      <tr>
+        <td>FEAT_ETEv1p3</td>
+        <td>Embedded Trace Extension version 1.3</td>
+      </tr>
+      <tr>
+        <td>FEAT_FGT2</td>
+        <td>Fine-grained traps 2</td>
+      </tr>
+      <tr>
+        <td>FEAT_GCS</td>
+        <td>Guarded Control Stack Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_HAFT</td>
+        <td>Hardware managed Access Flag for Table descriptors</td>
+      </tr>
+      <tr>
+        <td>FEAT_ITE</td>
+        <td>Instrumentation Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_LRCPC3</td>
+        <td>Load-Acquire RCpc instructions version 3</td>
+      </tr>
+      <tr>
+        <td>FEAT_LSE128</td>
+        <td>128-bit Atomics</td>
+      </tr>
+      <tr>
+        <td>FEAT_LVA3</td>
+        <td>56-bit VA</td>
+      </tr>
+      <tr>
+        <td>FEAT_MEC</td>
+        <td>Memory Encryption Contexts</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE4</td>
+        <td>Enhanced Memory Tagging Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE_CANONICAL_TAGS</td>
+        <td>Canonical Tag checking for Untagged memory</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE_TAGGED_FAR</td>
+        <td>FAR_ELx on a Tag Check Fault</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE_STORE_ONLY</td>
+        <td>Store-only Tag Checking</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE_NO_ADDRESS_TAGS</td>
+        <td>Memory tagging with Address tagging disabled</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE_ASYM_FAULT</td>
+        <td>Memory tagging asymmetric faults</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE_ASYNC</td>
+        <td>Memory Tagging asynchronous faulting</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE_PERM_S1</td>
+        <td>Allocation tag access permission</td>
+      </tr>
+      <tr>
+        <td>FEAT_PCSRv8p9</td>
+        <td>Armv8.9 PC Sample-based Profiling Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_S1PIE</td>
+        <td>Permission model enhancements</td>
+      </tr>
+      <tr>
+        <td>FEAT_S2PIE</td>
+        <td>Permission model enhancements</td>
+      </tr>
+      <tr>
+        <td>FEAT_S1POE</td>
+        <td>Permission model enhancements</td>
+      </tr>
+      <tr>
+        <td>FEAT_S2POE</td>
+        <td>Permission model enhancements</td>
+      </tr>
+      <tr>
+        <td>FEAT_PFAR</td>
+        <td>Physical Fault Address Registers</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3p9</td>
+        <td>Armv8.9 PMU extensions</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_EDGE</td>
+        <td>PMU event edge detection</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_ICNTR</td>
+        <td>Fixed-function instruction counter</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_SS</td>
+        <td>PMU Snapshot Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_PRFMSLC</td>
+        <td>SLC target support for PRFM instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_RASv2</td>
+        <td>RAS version 2</td>
+      </tr>
+      <tr>
+        <td>FEAT_RASSAv2</td>
+        <td>RAS version 2 System Architecture</td>
+      </tr>
+      <tr>
+        <td>FEAT_RPRFM</td>
+        <td>Support for Range Prefetch Memory instruction</td>
+      </tr>
+      <tr>
+        <td>FEAT_SCTLR2</td>
+        <td>Extension to SCTLR_ELx</td>
+      </tr>
+      <tr>
+        <td>FEAT_SEBEP</td>
+        <td>Synchronous Exception-based Event Profiling</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME_F16F16</td>
+        <td>Non-widening half-precision FP16 to FP16 arithmetic for SME2.1</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME2</td>
+        <td>Scalable Matrix Extensions version 2</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME2p1</td>
+        <td>Scalable Matrix Extensions version 2.1</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPECRES2</td>
+        <td>Enhanced speculation restriction instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPMU</td>
+        <td>System Performance Monitors Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPEv1p4</td>
+        <td>Statistical Profiling Extension version 1.4</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPE_CRR</td>
+        <td>Call Return Branch Records</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPE_FDS</td>
+        <td>Data Source Filtering</td>
+      </tr>
+      <tr>
+        <td>FEAT_SVE2p1</td>
+        <td>Scalable Vector Extension version SVE2.1</td>
+      </tr>
+      <tr>
+        <td>FEAT_SVE_B16B16</td>
+        <td>Non-widening BFloat16 to BFloat16 arithmetic for SVE</td>
+      </tr>
+      <tr>
+        <td>FEAT_SYSINSTR128</td>
+        <td>128-bit System instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_SYSREG128</td>
+        <td>128-bit System registers</td>
+      </tr>
+      <tr>
+        <td>FEAT_TCR2</td>
+        <td>Extension to TCR_ELx</td>
+      </tr>
+      <tr>
+        <td>FEAT_THE</td>
+        <td>Translation Hardening Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_TRBE_EXT</td>
+        <td>Trace Buffer external mode</td>
+      </tr>
+      <tr>
+        <td>FEAT_TRBE_MPAM</td>
+        <td>Trace Buffer MPAM extension</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+
+  </p>
+
+    <h1>2021 Architecture Extensions</h1>
+  <table style="width: 814px; height: 70px;" border="1" cellpadding="0" cellspacing="0">
+    <tbody>
+      <tr>
+        <th>Feature Name</th>
+        <th>Short description</th>
+      </tr>
+      <tr>
+        <td>FEAT_CMOW</td>
+        <td>Control for cache maintenance permission</td>
+      </tr>
+      <tr>
+        <td>FEAT_CONSTPACFIELD</td>
+        <td>PAC algorithm enhancement</td>
+      </tr>
+      <tr>
+        <td>FEAT_Debugv8p8</td>
+        <td>Debug v8.8</td>
+      </tr>
+      <tr>
+        <td>FEAT_HBC</td>
+        <td>Hinted conditional branches</td>
+      </tr>
+      <tr>
+        <td>FEAT_HPMN0</td>
+        <td>Setting of MDCR_EL2.HPMN to zero</td>
+      </tr>
+      <tr>
+        <td>FEAT_NMI</td>
+        <td>Non-Maskable Interrupts</td>
+      </tr>
+      <tr>
+        <td>FEAT_GICv3_NMI</td>
+        <td>GIC Non-Maskable Interrupts</td>
+      </tr>
+      <tr>
+        <td>FEAT_MOPS</td>
+        <td>Standardization of memory operations</td>
+      </tr>
+      <tr>
+        <td>FEAT_PACQARMA3</td>
+        <td>Pointer authentication - QARMA3 algorithm</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_TH</td>
+        <td>Event counting threshold</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3p8</td>
+        <td>Armv8.8 PMU extensions</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_EXT64</td>
+        <td>64-bit external interface to the Performance Monitors</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_EXT32</td>
+        <td>32-bit external interface to the Performance Monitors</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3_EXT</td>
+        <td>External interface to the Performance Monitors</td>
+      </tr>
+      <tr>
+        <td>FEAT_RNG_TRAP</td>
+        <td>Trapping support for RNDR/RNDRRS</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPEv1p3</td>
+        <td>Statistical Profiling Extension version 1.3</td>
+      </tr>
+      <tr>
+        <td>FEAT_TIDCP1</td>
+        <td>EL0 use of IMPLEMENTATION DEFINED functionality</td>
+      </tr>
+      <tr>
+        <td>FEAT_BRBEv1p1</td>
+        <td>Branch Record Buffer Extension version 1.1</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+
+  </p>
+
+  <h1>2020 Architecture Extensions</h1>
+  <table style="width: 814px; height: 70px;" border="1" cellpadding="0" cellspacing="0">
+    <tbody>
+      <tr>
+        <th>Feature Name</th>
+        <th>Short description</th>
+      </tr>
+      <tr>
+        <td>FEAT_AFP</td>
+        <td>Alternate floating-point behavior</td>
+      </tr>
+      <tr>
+        <td>FEAT_HCX</td>
+        <td>Support for the HCRX_EL2 register</td>
+      </tr>
+      <tr>
+        <td>FEAT_LPA2</td>
+        <td>Larger physical address for 4KB and 16KB translation granules</td>
+      </tr>
+      <tr>
+        <td>FEAT_LS64</td>
+        <td>Support for 64 byte loads and stores without return</td>
+      </tr>
+      <tr>
+        <td>FEAT_LS64_V</td>
+        <td>Support for 64 byte stores with return</td>
+      </tr>
+      <tr>
+        <td>FEAT_LS64_ACCDATA</td>
+        <td>Support for 64-byte EL0 stores with return</td>
+      </tr>
+      <tr>
+        <td>FEAT_MTE3</td>
+        <td>MTE Asymmetric Fault Handling</td>
+      </tr>
+      <tr>
+        <td>FEAT_PAN3</td>
+        <td>Support for SCTLR_ELx.EPAN</td>
+      </tr>
+      <tr>
+        <td>FEAT_PMUv3p7</td>
+        <td>Armv8.7 PMU extensions</td>
+      </tr>
+      <tr>
+        <td>FEAT_RPRES</td>
+        <td>Increased precision of Reciprocal Estimate and Reciprocal Square Root Estimate</td>
+      </tr>
+      <tr>
+        <td>FEAT_RME</td>
+        <td>Realm Management Extension</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME_FA64</td>
+        <td>Full A64 instruction set support in Streaming SVE mode</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME_F64F64</td>
+        <td>Double-precision floating-point outer product instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_SME_I16I64</td>
+        <td>16-bit to 64-bit integer widening outer product instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_EBF16</td>
+        <td>AArch64 Extended BFloat16 instructions</td>
+      </tr>
+      <tr>
+        <td>FEAT_SPEv1p2</td>
+        <td>Statistical Profiling Extensions version 1.2</td>
+      </tr>
+      <tr>
+        <td>FEAT_WFxT</td>
+        <td>WFE and WFI instructions with timeout</td>
+      </tr>
+      <tr>
+        <td>FEAT_XS</td>
+        <td>XS attribute</td>
+      </tr>
+      <tr>
+        <td>FEAT_BRBE</td>
+        <td>Branch Record Buffer Extension</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+
+  </p>
+<h1>Features introduced prior to 2020</h1>
+<p>Prior to June 2020, features names did not follow the FEAT_ convention.
+    The table below lists old (ARMv8.x-) and new feature (FEAT_) names. Note
+    that some names have been split into two; for example, ARMv8.0-AES is split into AES and PMULL</p>
+  <table style="width: 814px; height: 70px;" border="1" cellpadding="0" cellspacing="0">
+    <tbody>
+      <tr>
+        <th>Old name</th>
+        <th>New name</th>
+        <th>Short description</th>
+        <th>Comments</th>
+      </tr>
+
+      <tr>
+        <td>ARMv8.0-AdvSIMD</td>
+        <td>FEAT_AdvSIMD</td>
+        <td>Advanced SIMD Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-AES</td>
+        <td>FEAT_AES</td>
+        <td>Advanced SIMD AES instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-AES</td>
+        <td>FEAT_PMULL</td>
+        <td>Advanced SIMD PMULL instructions</td>
+        <td>ARMv8.0-AES is split into AES and PMULL</td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-CP15SDISABLE2</td>
+        <td>FEAT_CP15SDISABLE2</td>
+        <td>CP15DISABLE2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-CSV2</td>
+        <td>FEAT_CSV2</td>
+        <td>Cache Speculation Variant 2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_CSV2_1p1</td>
+        <td>Cache Speculation Variant 2 version 1.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_CSV2_1p2</td>
+        <td>Cache Speculation Variant 2 version 1.2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-CSV2_2</td>
+        <td>FEAT_CSV2</td>
+        <td>Cache Speculation Variant 2 version 2.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-CSV3</td>
+        <td>FEAT_CSV3</td>
+        <td>Cache Speculation Variant 3</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-DGH</td>
+        <td>FEAT_DGH</td>
+        <td>Data Gathering Hint</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-DoubleLock</td>
+        <td>FEAT_DoubleLock</td>
+        <td>Double Lock</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>FEAT_ETS2</td>
+        <td>Enhanced Translation Synchronization</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-FP</td>
+        <td>FEAT_FP</td>
+        <td>Floating Point Extensions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_IVIPT</td>
+        <td>The IVIPT Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-PCSample</td>
+        <td>FEAT_PCSRv8</td>
+        <td>PC Sample-based Profiling extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-PredInv</td>
+        <td>FEAT_SPECRES</td>
+        <td>Speculation restriction instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>RAS</td>
+        <td>FEAT_RAS</td>
+        <td>Reliability, Availability, and Serviceability (RAS) Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-SB</td>
+        <td>FEAT_SB</td>
+        <td>Speculation Barrier</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-SHA</td>
+        <td>FEAT_SHA1</td>
+        <td>Advanced SIMD SHA1 instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-SHA</td>
+        <td>FEAT_SHA256</td>
+        <td>Advanced SIMD SHA256 instructions</td>
+        <td>Split ARMv8.2-SHA into SHA-256, SHA-512 and SHA-3</td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-SSBS</td>
+        <td>FEAT_SSBS</td>
+        <td>Speculative Store Bypass Safe</td>
+        <td>ARMv8.0-SSBS is split into SSBS and SSBS2</td>
+      </tr>
+      <tr>
+        <td>ARMv8.0-SSBS</td>
+        <td>FEAT_SSBS2</td>
+        <td>MRS and MSR instructions for SSBS version 2</td>
+        <td>ARMv8.0-SSBS is split into SSBS and SSBS2</td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_CRC32</td>
+        <td>CRC32 instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_nTLBPA</td>
+        <td>Intermediate caching of translation table walks</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-Debug</td>
+        <td>FEAT_Debugv8p1</td>
+        <td>Debug with VHE</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-HPD</td>
+        <td>FEAT_HPDS</td>
+        <td>Hierarchical permission disables in translation tables</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-LOR</td>
+        <td>FEAT_LOR</td>
+        <td>Limited ordering regions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-LSE</td>
+        <td>FEAT_LSE</td>
+        <td>Large System Extensions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-PAN</td>
+        <td>FEAT_PAN</td>
+        <td>Privileged access never</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-PMU</td>
+        <td>FEAT_PMUv3p1</td>
+        <td>Armv8.1 PMU extensions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-RDMA</td>
+        <td>FEAT_RDM</td>
+        <td>Advanced SIMD rounding double multiply accumulate instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-TTHM</td>
+        <td>FEAT_HAFDBS</td>
+        <td>Hardware management of the Access flag and dirty state</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-VHE</td>
+        <td>FEAT_VHE</td>
+        <td>Virtualization Host Extensions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.1-VMID16</td>
+        <td>FEAT_VMID16</td>
+        <td>16-bit VMID</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-AA32BF16</td>
+        <td>FEAT_AA32BF16</td>
+        <td>AArch32 BFloat16 instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-AA32HPD</td>
+        <td>FEAT_AA32HPD</td>
+        <td>AArch32 Hierarchical permission disables</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-AA32I8MM</td>
+        <td>FEAT_AA32I8MM</td>
+        <td>AArch32 Int8 matrix multiplication instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-ATS1E1</td>
+        <td>FEAT_PAN2</td>
+        <td>AT S1E1R and AT S1E1W instruction variants affected by PSTATE.PAN</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-BF16</td>
+        <td>FEAT_BF16</td>
+        <td>AARch64 BFloat16 instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-DCCVADP</td>
+        <td>FEAT_DPB2</td>
+        <td>DC CVADP instruction</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-DCPoP</td>
+        <td>FEAT_DPB</td>
+        <td>DC CVAP instruction</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-Debug</td>
+        <td>FEAT_Debugv8p2</td>
+        <td>Debug v8.2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-DotProd</td>
+        <td>FEAT_DotProd</td>
+        <td>Advanced SIMD dot product instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-EVT</td>
+        <td>FEAT_EVT</td>
+        <td>Enhanced Virtualization Traps</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-F32MM</td>
+        <td>FEAT_F32MM</td>
+        <td>Single-precision Matrix Multiplication</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-F64MM</td>
+        <td>FEAT_F64MM</td>
+        <td>Single-precision Matrix Multiplication</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-FHM</td>
+        <td>FEAT_FHM</td>
+        <td>Floating-point half-precision multiplication instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-FP16</td>
+        <td>FEAT_FP16</td>
+        <td>Half-precision floating-point data processing</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-I8MM</td>
+        <td>FEAT_I8MM</td>
+        <td>AArch64 Int8 matrix multiplication instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-IESB</td>
+        <td>FEAT_IESB</td>
+        <td>Implicit Error Synchronization event</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-LPA</td>
+        <td>FEAT_LPA</td>
+        <td>Large PA and IPA support</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-LSMAOC</td>
+        <td>FEAT_LSMAOC</td>
+        <td>AArch32 Load/Store Multiple instruction atomicity and ordering controls</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-LVA</td>
+        <td>FEAT_LVA</td>
+        <td>Large VA support</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>MPAM</td>
+        <td>FEAT_MPAM</td>
+        <td>Memory Partioning and Monitoring Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-PCSample</td>
+        <td>FEAT_PCSRv8p2</td>
+        <td>PC Sample-based Profiling Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-SHA</td>
+        <td>FEAT_SHA3</td>
+        <td>Advanced SIMD SHA3 instructions</td>
+        <td>Split ARMv8.2-SHA into SHA-256, SHA-512 and SHA-3 </td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-SHA</td>
+        <td>FEAT_SHA512</td>
+        <td>Advanced SIMD SHA512 instructions</td>
+        <td>Split ARMv8.2-SHA into SHA-256, SHA-512 and SHA-3</td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-SM</td>
+        <td>FEAT_SM3</td>
+        <td>Advanced SIMD SM3 instructions</td>
+        <td>Split into SM3 and SM4</td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-SM</td>
+        <td>FEAT_SM4</td>
+        <td>Advanced SIMD SM4 instructions</td>
+        <td>Split into SM3 and SM4</td>
+      </tr>
+      <tr>
+        <td>SPE</td>
+        <td>FEAT_SPE</td>
+        <td>Statistical Profiling Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>SVE</td>
+        <td>FEAT_SVE</td>
+        <td>Scalable Vector Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-TTCNP</td>
+        <td>FEAT_TTCNP</td>
+        <td>Translation table Common not private translations</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-TTPBHA</td>
+        <td>FEAT_HPDS2</td>
+        <td>Hierarchical permission disables</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-TTS2UXN</td>
+        <td>FEAT_XNX</td>
+        <td>Translation table stage 2 Unprivileged Execute-never</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-UAO</td>
+        <td>FEAT_UAO</td>
+        <td>Unprivileged Access Override control</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.2-VPIPT</td>
+        <td>FEAT_VPIPT</td>
+        <td>VMID-aware PIPT instruction cache</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-CCIDX</td>
+        <td>FEAT_CCIDX</td>
+        <td>Extended cache index</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-CompNum</td>
+        <td>FEAT_FCMA</td>
+        <td>Floating-point complex number instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-DoPD</td>
+        <td>FEAT_DoPD</td>
+        <td>Debug over Powerdown</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_EPAC</td>
+        <td>Enhanced pointer authentication</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-FPAC</td>
+        <td>FEAT_FPAC</td>
+        <td>Faulting on AUT* instructions</td>
+        <td> </td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_FPACCOMBINE</td>
+        <td>Faulting on combined pointer authentication instructions</td>
+        <td> </td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-JSConv</td>
+        <td>FEAT_JSCVT</td>
+        <td>JavaScript conversion instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-RCpc</td>
+        <td>FEAT_LRCPC</td>
+        <td>Load-Acquire RCpc instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-NV</td>
+        <td>FEAT_NV</td>
+        <td>Nested virtualization</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_PACQARMA5</td>
+        <td>Pointer authentication - QARMA5 algorithm</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_PACIMP</td>
+        <td>Pointer authentication - IMPLEMENTATION DEFINED algorithm</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-TPAuth</td>
+        <td>FEAT_PAuth</td>
+        <td>Pointer authentication</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-PAuth2</td>
+        <td>FEAT_PAuth2</td>
+        <td>Enhancements to pointer authentication</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.3-SPE</td>
+        <td>FEAT_SPEv1p1</td>
+        <td>Statistical Profiling Extensions version 1.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>AMUv1</td>
+        <td>FEAT_AMUv1</td>
+        <td>Activity Monitors Extension version 1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-CNTSC</td>
+        <td>FEAT_CNTSC</td>
+        <td>Generic Counter Scaling</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-Debug</td>
+        <td>FEAT_Debugv8p4</td>
+        <td>Debug v8.4</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-DFE</td>
+        <td>FEAT_DoubleFault</td>
+        <td>Double Fault Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-DIT</td>
+        <td>FEAT_DIT</td>
+        <td>Data Independent Timing instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-CondM</td>
+        <td>FEAT_FlagM</td>
+        <td>Condition flag manipulation instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-IDST</td>
+        <td>FEAT_IDST</td>
+        <td>ID space trap handling</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-RCpc</td>
+        <td>FEAT_LRCPC2</td>
+        <td>Load-Acquire RCpc instructions version 2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-LSE</td>
+        <td>FEAT_LSE2</td>
+        <td>Large System Extensions version 2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-NV</td>
+        <td>FEAT_NV2</td>
+        <td>Enhanced nested virtualization support</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-PMU</td>
+        <td>FEAT_PMUv3p4</td>
+        <td>Armv8.4 PMU Extensions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-RAS</td>
+        <td>FEAT_RASv1p1</td>
+        <td>RAS Extension v1.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>FEAT_RASSAv1p1</td>
+        <td>RAS Extension v1.1 System Architecture</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-S2FWB</td>
+        <td>FEAT_S2FWB</td>
+        <td>Stage 2 forced Write-Back</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-SecEL2</td>
+        <td>FEAT_SEL2</td>
+        <td>Secure EL2</td>
+        <td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-TLBI</td>
+        <td>FEAT_TLBIOS</td>
+        <td>TLB invalidate instructions in Outer Shareable domain</td>
+        <td>Split into TLBIOS and TLBIRANGE</td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-TLBI</td>
+        <td>FEAT_TLBIRANGE</td>
+        <td>TLB invalidate range instructions</td>
+        <td>Split into TLBIOS and TLBIRANGE</td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-Trace</td>
+        <td>FEAT_TRF</td>
+        <td>Self-hosted Trace Extensions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-TTL</td>
+        <td>FEAT_TTL</td>
+        <td>Translation Table Level</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-TTRem</td>
+        <td>FEAT_BBM</td>
+        <td>Translation table break-before-make levels</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.4-TTST</td>
+        <td>FEAT_TTST</td>
+        <td>Small translation tables</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-BTI</td>
+        <td>FEAT_BTI</td>
+        <td>Branch Target Identification</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-CondM</td>
+        <td>FEAT_FlagM2</td>
+        <td>Enhancements to flag manipulation instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-CSEH</td>
+        <td>FEAT_ExS</td>
+        <td>Context synchronization and exception handling</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-E0PD</td>
+        <td>FEAT_E0PD</td>
+        <td>Preventing EL0 access to halves of address maps</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-FRINT</td>
+        <td>FEAT_FRINTTS</td>
+        <td>Floating-point to integer instructions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-GTG</td>
+        <td>FEAT_GTG</td>
+        <td>Guest translation granule size</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-MemTag</td>
+        <td>FEAT_MTE</td>
+        <td>Instruction-only Memory Tagging Extension</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-MemTag</td>
+        <td>FEAT_MTE2</td>
+        <td>Memory Tagging Extension version 2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-PMU</td>
+        <td>FEAT_PMUv3p5</td>
+        <td>Armv8.5 PMU Extensions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.5-RNG</td>
+        <td>FEAT_RNG</td>
+        <td>Random number generator</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.6-AMU</td>
+        <td>FEAT_AMUv1p1</td>
+        <td>AMU Extensions version 1.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.6-ECV</td>
+        <td>FEAT_ECV</td>
+        <td>Enhanced Counter Virtualization</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.6-FGT</td>
+        <td>FEAT_FGT</td>
+        <td>Fine Grain Traps</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.6-MPAM</td>
+        <td>FEAT_MPAMv0p1</td>
+        <td>Memory Partitioning and Monitoring version 0.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.6-MPAM</td>
+        <td>FEAT_MPAMv1p1</td>
+        <td>Memory Partitioning and Monitoring version1.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.6-MTPMU</td>
+        <td>FEAT_MTPMU</td>
+        <td>Multi-threaded PMU Extensions</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ARMv8.6-TWED</td>
+        <td>FEAT_TWED</td>
+        <td>Delayed Trapping of WFE</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ETMv4</td>
+        <td>FEAT_ETMv4</td>
+        <td>Embedded Trace Macrocell version 4</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ETMv4.1</td>
+        <td>FEAT_ETMv4p1</td>
+        <td>Embedded Trace Macrocell version 4.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ETMv4.2</td>
+        <td>FEAT_ETMv4p2</td>
+        <td>Embedded Trace Macrocell version 4.2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ETMv4.3</td>
+        <td>FEAT_ETMv4p3</td>
+        <td>Embedded Trace Macrocell version 4.3</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ETMv4.4</td>
+        <td>FEAT_ETMv4p4</td>
+        <td>Embedded Trace Macrocell version 4.4</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ETMv4.5</td>
+        <td>FEAT_ETMv4p5</td>
+        <td>Embedded Trace Macrocell version 4.5</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>ETMv4.6</td>
+        <td>FEAT_ETMv4p6</td>
+        <td>Embedded Trace Macrocell version 4.6</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>GICv3</td>
+        <td>FEAT_GICv3</td>
+        <td>Generic Interrupt Controller version 3</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>GICv3.1</td>
+        <td>FEAT_GICv3p1</td>
+        <td>Generic Interrupt Controller version 3.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_GICv3_TDIR</td>
+        <td>Trapping Non-secure EL1 writes to ICV_DIR</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>GICv4</td>
+        <td>FEAT_GICv4</td>
+        <td>Generic Interrupt Controller version 4</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>GICv4.1</td>
+        <td>FEAT_GICv4p1</td>
+        <td>Generic Interrupt Controller version 4.1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>PMUv3</td>
+        <td>FEAT_PMUv3</td>
+        <td>PMU extension version 3</td>
+        <td></td>
+      </tr>
+
+      <tr>
+        <td>ETE</td>
+        <td>FEAT_ETE</td>
+        <td>Embedded Trace Extension</td>
+        <td>
+      </tr>
+      <tr>
+        <td>ETEv1.1</td>
+        <td>FEAT_ETEv1p1</td>
+        <td>Embedded Trace Extension, version 1.1</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>ETEv1.2</td>
+        <td>FEAT_ETEv1p2</td>
+        <td>Embedded Trace Extension, version 1.2</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>SVE2</td>
+        <td>FEAT_SVE2</td>
+        <td>Scalable Vector Extension version 2</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>SVE2-AES</td>
+        <td>FEAT_SVE_AES</td>
+        <td>Scalable Vector AES instructions</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>SVE2-AES</td>
+        <td>FEAT_SVE_PMULL128</td>
+        <td>Scalable Vector PMULL instructions</td>
+        <td>SVE2-AES is split into AES and PMULL support</td>
+        <td>
+      </tr>
+      <tr>
+        <td>SVE2-BitPerm</td>
+        <td>FEAT_SVE_BitPerm</td>
+        <td>Scalable Vector Bit Permutes instructions</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>SVE2-SHA3</td>
+        <td>FEAT_SVE_SHA3</td>
+        <td>Scalable Vector SHA3 instructions</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>SVE2-SM4</td>
+        <td>FEAT_SVE_SM4</td>
+        <td>Scalable Vector SM4 instructions</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>TME</td>
+        <td>FEAT_TME</td>
+        <td>Transactional Memory Extension</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>TRBE</td>
+        <td>FEAT_TRBE</td>
+        <td>Trace Buffer Extension</td>
+        <td></td>
+        <td>
+      </tr>
+      <tr>
+        <td>-</td>
+        <td>FEAT_SME</td>
+        <td>Scalable Matrix Extension</td>
+        <td></td>
+        <td>
+      </tr>
+    </tbody>
+  </table>
+
+</body>
+
+</html>
