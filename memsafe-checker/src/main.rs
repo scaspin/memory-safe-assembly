@@ -960,10 +960,10 @@ impl ARMCORTEXA {
 struct Args {
     file: PathBuf,
     label: String,
-    context: String,
-    input: String,
-    length: String,
-    length_value: usize,
+    context: Option<String>,
+    input: Option<String>,
+    length_reg: Option<String>,
+    length_value: Option<u64>,
 }
 
 fn main() -> std::io::Result<()> {
@@ -1042,9 +1042,17 @@ fn main() -> std::io::Result<()> {
     let mut computer = ARMCORTEXA::new();
 
     // this is the context, i.e. A,B,C,D,E for the function
-    computer.set_context(args.context);
-    computer.set_input(args.input);
-    computer.set_length(args.length, args.length_value.try_into().unwrap());
+    // FIX: when is context different than input? read but not write? not relevant for sha-256.
+    if let Some(context) = args.context {
+        computer.set_context(context);
+    }
+    if let Some(input) = args.input {
+        computer.set_input(input);
+    }
+    if let Some(length_reg) = args.length_reg {
+        computer.set_length(length_reg, args.length_value.unwrap());
+    }
+    
 
     //let mut alignment = 4;
     let mut address = 0;
