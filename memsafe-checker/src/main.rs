@@ -960,8 +960,8 @@ impl ARMCORTEXA {
 struct Args {
     file: PathBuf,
     label: String,
-    context: Option<String>,
     input: Option<String>,
+    context: Option<String>,
     length_reg: Option<String>,
     length_value: Option<u64>,
 }
