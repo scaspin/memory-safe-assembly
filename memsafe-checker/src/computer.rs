@@ -4,6 +4,8 @@ pub mod computer {
     use std::fmt;
     use std::str::FromStr;
 
+    mod common;
+
     #[derive(Debug, Clone)]
     struct MemorySafetyError {
         details: String,
@@ -279,28 +281,35 @@ pub mod computer {
             }
         }
     
-        pub fn set_input(&mut self, register: String) {
+        pub fn set_region(&mut self, register: String, type: common::REGION_TYPE) {
             self.registers[get_register_index(register)].set(
                 RegisterKind::Address,
-                Some("Input".to_string()),
+                Some(type.to_string()),
                 0,
             )
         }
     
-        pub fn set_context(&mut self, register: String) {
-            self.registers[get_register_index(register)].set(
-                RegisterKind::Address,
-                Some("Context".to_string()),
-                0,
-            )
-        }
+        // pub fn set_context(&mut self, register: String) {
+        //     self.registers[get_register_index(register)].set(
+        //         RegisterKind::Address,
+        //         Some("Context".to_string()),
+        //         0,
+        //     )
+        // }
     
-        pub fn set_length(&mut self, register: String, length: u64) {
-            self.input_length = length;
+        pub fn set_immediate(&mut self, register: String, value: u64) {
             self.registers[get_register_index(register)].set(
                 RegisterKind::Immediate,
                 None,
-                length as i64,
+                value as i64,
+            )
+        }
+
+        pub fn set_input(&mut self, register: String) {
+            self.registers[get_register_index(register)].set(
+                RegisterKind::Immediate,
+                Some("Input".to_string()),
+                0,
             )
         }
     

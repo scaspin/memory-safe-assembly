@@ -1,12 +1,10 @@
 use clap::Parser;
-use std::fmt;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufReader};
 use std::path::PathBuf;
-use std::result::Result;
-use std::str::FromStr;
 
 mod computer;
+mod common;
 
 #[derive(Parser)]
 struct Args {
@@ -26,15 +24,14 @@ struct Program {
 }
 
 
-struct Execution {
+struct ExecutionEngine {
     program: Program,
     computer: computer::ARMCORTEXA,
     pc: usize,
-    //permissions: 
+    memory_regions: Vec<common::MemorySafeRegion> , // FIX: necessary?
 }
 
-impl Execution {
-
+impl ExecutionEngine {
     fn new(reader: BufReader<R>) -> Execution  {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
@@ -103,6 +100,7 @@ impl Execution {
 
         let mut computer = computer::ARMCORTEXA::new();
 
+        // load computer static memory
         let mut address = 0;
         for def in defs.iter() {
             let v: Vec<&str> = def.split(|c| c == '\t' || c == ',').collect();
@@ -127,10 +125,21 @@ impl Execution {
             }
         }
 
+        // define allowable read write
         
+
         return Execution { program: Program {defs, code, labels, ifdefs}, computer, pc }
     }
 
+    fn add_region(&mut self, region: MemorySafeRegion) {
+        self.memory_regions.push(region);
+        self.computer.set_region(region);
+    }
+
+    fn add_immediate(&mut self, register: String, value: usize) {
+        self.computer.add_region(region);
+    }
+    
     fn start(&self, label: String) -> std::io::Result<()> {
         let program_length = self.program.code.len();
         let pc = self.pc ; // FIX: use accesses to data structure
@@ -181,8 +190,6 @@ impl Execution {
     }
 }   
 
-
-
 fn main() -> std::io::Result<()> {
     env_logger::init();
     let args = Args::parse();
@@ -191,13 +198,16 @@ fn main() -> std::io::Result<()> {
     let start = args.label;
 
     
-    let engine = Execution::new(reader);
-    // this is the context, i.e. A,B,C,D,E for the function
-    // computer.set_context(args.context);
-    // computer.set_input(args.input);
-    // computer.set_length(args.length, args.length_value.try_into().unwrap());
-    engine.start(start);
+    let engine = ExecutionEngine::new(reader);
 
+    // x0 -- context
+    engine.add_region(region: MemorySafeRegion{ region_type: RegionType::RW, args.context, 0, 48});
+    // x1 -- input blocks
+    engine.add_region(region: MemorySafeRegion{ region_type: RegionType::RW, args.input, 0, args.length_value});
+    // x2 -- number of blocks
+    engine.add_immediate(args.length, args.length_value);
+
+    engine.start(start);
     println!("Symbolic execution done");
 
     Ok(())
