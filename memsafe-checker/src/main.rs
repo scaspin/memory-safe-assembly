@@ -8,7 +8,7 @@ mod computer;
 
 struct Program {
     defs: Vec<String>,
-    code: Vec<computer::Instruction>,
+    code: Vec<common::Instruction>,
     labels: Vec<(String, usize)>,
     ifdefs: Vec<((String, usize), usize)>,
 }
@@ -24,7 +24,7 @@ impl ExecutionEngine {
     fn new(lines: Vec<String>) -> ExecutionEngine {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
-        let mut code: Vec<computer::Instruction> = Vec::new();
+        let mut code: Vec<common::Instruction> = Vec::new();
         let mut labels: Vec<(String, usize)> = Vec::new();
         let mut ifdefs: Vec<((String, usize), usize)> = Vec::new();
 
@@ -32,7 +32,6 @@ impl ExecutionEngine {
         let mut line_number = 0;
         let mut inifdef = false;
         let mut lastifdef: (String, usize) = ("Start".to_string(), 0);
-        let mut pc = 0;
 
         // first pass, move text into array
         for line in lines {
@@ -67,8 +66,9 @@ impl ExecutionEngine {
                     // if text == start {
                     //     pc = line_number;
                     // }
+                    code.push(common::Instruction::new(text))
                 } else {
-                    let parsed = text.parse::<computer::Instruction>();
+                    let parsed = text.parse::<common::Instruction>();
                     match parsed {
                         Ok(i) => code.push(i),
                         Err(_) => todo!(),
@@ -121,14 +121,13 @@ impl ExecutionEngine {
                 ifdefs,
             },
             computer,
-            pc,
+            pc: 0,
         };
     }
 
     fn add_region(&mut self, region: common::MemorySafeRegion) {
         // self.memory_regions.push(region);
-        self.computer
-            .set_region(region.register, region.region_type);
+        self.computer.set_region(region);
     }
 
     fn add_input(&mut self, register: String) {
@@ -228,21 +227,41 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
 
     // x0 -- context
     engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::READWRITE,
+        region_type: common::RegionType::READ,
         register: String::from("x0"),
         start_offset: 0,
-        end_offset: 64,
+        end_offset: 64, // FIX: verify
     });
+    engine.add_region(common::MemorySafeRegion {
+        region_type: common::RegionType::WRITE,
+        register: String::from("x0"),
+        start_offset: 0,
+        end_offset: 64, // FIX: verify
+    });
+
     // x1 -- input blocks
-    engine.add_input(String::from("x1"));
+    engine.add_input(String::from("x1")); // necessary to support various input designs
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::WRITE,
         register: String::from("x1"),
         start_offset: 0,
         end_offset: 256,
     });
+    engine.add_region(common::MemorySafeRegion {
+        region_type: common::RegionType::READ,
+        register: String::from("x1"),
+        start_offset: 0,
+        end_offset: 512, // TODO: make abstract!
+    });
+
     // x2 -- number of blocks
     engine.add_immediate(String::from("x2"), 256);
+    engine.add_region(common::MemorySafeRegion {
+        region_type: common::RegionType::READ,
+        register: String::from("x2"),
+        start_offset: 0,
+        end_offset: 64, // FIX: verify?
+    });
 
     engine.start(start_label)
 }

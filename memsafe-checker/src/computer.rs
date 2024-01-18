@@ -1,123 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::str::FromStr;
 
-use crate::common::{MemorySafeRegion, RegionType};
-
-#[derive(Debug, Clone)]
-struct MemorySafetyError {
-    details: String,
-}
-
-impl MemorySafetyError {
-    fn new(msg: &str) -> MemorySafetyError {
-        MemorySafetyError {
-            details: msg.to_string(),
-        }
-    }
-}
-impl fmt::Display for MemorySafetyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Instruction {
-    op: String,
-    r1: Option<String>,
-    r2: Option<String>,
-    r3: Option<String>,
-    r4: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ParseInstructionError;
-
-impl FromStr for Instruction {
-    type Err = ParseInstructionError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        //find if there's anything in brackets to allow fun addressing modes
-        let mut brac: String = Default::default();
-        if s.contains("[") {
-            let left = s.find('[');
-            let right = s.rfind(']');
-            let exclamation = s.rfind('!');
-            if left.is_some() && right.is_some() {
-                brac = s[left.unwrap()..right.unwrap()].to_string();
-            }
-            if exclamation.is_some() {
-                brac = brac + "!";
-            }
-        }
-
-        let v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
-
-        let v0 = v[0].to_string();
-        let v1: Option<String>;
-        let v2: Option<String>;
-        let v3: Option<String>;
-        let v4: Option<String>;
-
-        if v.len() > 1 {
-            let val1 = v[1].to_string();
-            if val1.contains("[") {
-                v1 = Some(brac.clone());
-            } else if val1.contains("]") {
-                v1 = None;
-            } else {
-                v1 = Some(val1);
-            }
-        } else {
-            v1 = None;
-        }
-        if v.len() > 2 {
-            let val2 = v[2].to_string();
-            if val2.contains("[") {
-                v2 = Some(brac.clone());
-            } else if val2.contains("]") {
-                v2 = None;
-            } else {
-                v2 = Some(val2);
-            }
-        } else {
-            v2 = None;
-        }
-        if v.len() > 3 && !v[3].is_empty() {
-            let val3 = v[3].to_string();
-            if val3.contains("[") {
-                v3 = Some(brac.clone());
-            } else if val3.contains("]") {
-                v3 = None;
-            } else {
-                v3 = Some(val3);
-            }
-        } else {
-            v3 = None;
-        }
-        if v.len() > 4 && !v[4].is_empty() {
-            let val4 = v[4].to_string();
-            if val4.contains("[") {
-                v4 = Some(brac);
-            } else if val4.contains("]") {
-                v4 = None;
-            } else {
-                v4 = Some(val4);
-            }
-        } else {
-            v4 = None;
-        }
-
-        Ok(Instruction {
-            op: v0,
-            r1: v1,
-            r2: v2,
-            r3: v3,
-            r4: v4,
-        })
-    }
-}
+//use crate::common::{MemorySafeRegion, RegionType};
+use crate::common;
 
 fn get_register_index(reg_name: String) -> usize {
     let name = reg_name.clone();
@@ -220,6 +105,7 @@ pub struct ARMCORTEXA {
     stack: HashMap<i64, RegisterValue>,
     stack_size: i64,
     input_length: u64,
+    memory_safe_regions: Vec<common::MemorySafeRegion>,
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -276,39 +162,33 @@ impl ARMCORTEXA {
             stack: HashMap::new(),
             stack_size: 0,
             input_length: 0,
+            memory_safe_regions: Vec::new(),
         }
     }
 
-    pub fn set_region(&mut self, register: String, kind: RegionType) {
-        self.registers[get_register_index(register)].set(
+    pub fn set_region(&mut self, region: common::MemorySafeRegion) {
+        self.registers[get_register_index(region.register.clone())].set(
             RegisterKind::Address,
-            Some(kind.to_string()),
-            0,
-        )
+            Some(region.register.clone()),
+            0 as i64,
+        );
+        self.memory_safe_regions.push(region);
     }
-
-    // pub fn set_context(&mut self, register: String) {
-    //     self.registers[get_register_index(register)].set(
-    //         RegisterKind::Address,
-    //         Some("Context".to_string()),
-    //         0,
-    //     )
-    // }
 
     pub fn set_immediate(&mut self, register: String, value: u64) {
         self.registers[get_register_index(register)].set(
             RegisterKind::Immediate,
             None,
             value as i64,
-        )
+        );
     }
 
     pub fn set_input(&mut self, register: String) {
         self.registers[get_register_index(register)].set(
             RegisterKind::Immediate,
-            Some("Input".to_string()),
+            Some("Input".to_string()), // FIX: treated any differently than regular regions?
             0,
-        )
+        );
     }
 
     fn set_register(
@@ -321,7 +201,7 @@ impl ARMCORTEXA {
         if name.contains("w") {
             self.registers[get_register_index(name)].set(kind, base, (offset as i32) as i64)
         } else {
-            self.registers[get_register_index(name)].set(kind, base, (offset as i32) as i64)
+            self.registers[get_register_index(name)].set(kind, base, offset as i64)
         }
     }
 
@@ -382,7 +262,7 @@ impl ARMCORTEXA {
 
     pub fn execute(
         &mut self,
-        instruction: &Instruction,
+        instruction: &common::Instruction,
     ) -> Result<Option<(Option<String>, Option<u128>)>, String> {
         if instruction.op == "add" {
             self.arithmetic(
@@ -642,72 +522,86 @@ impl ARMCORTEXA {
         Ok(None)
     }
 
-    fn mem_safe_read(&self, base: Option<String>, offset: i64) -> Result<(), MemorySafetyError> {
+    fn mem_safe_read(
+        &self,
+        base: Option<String>,
+        offset: i64,
+    ) -> Result<(), common::MemorySafetyError> {
         if let Some(regbase) = base {
+            // read from stack
             if regbase == "sp" || regbase == "x31" {
                 if self.stack.contains_key(&offset) {
                     return Ok(());
                 } else {
-                    return Err(MemorySafetyError::new(
+                    return Err(common::MemorySafetyError::new(
                         "Element at this address not in stack",
                     ));
                 }
-            } else if regbase == "Input" {
-                if offset < (self.input_length * 4).try_into().unwrap() {
-                    //again, keeping input size to 512 for now
-                    return Ok(());
-                } else {
-                    return Err(MemorySafetyError::new("reading past input size"));
-                }
-            } else if regbase == "Context" {
-                if offset < 8 * 32 {
-                    return Ok(());
-                } else {
-                    return Err(MemorySafetyError::new("reading past context size"));
-                }
+            // read from static memory
             } else if regbase == "Memory" {
                 // read from defs
                 if self.memory.get(&(offset)).is_some() {
                     return Ok(());
                 }
+            // read from input
+            } else if regbase == "Input" {
+                if offset < (self.input_length * 4).try_into().unwrap() {
+                    // TODO: abstract input size
+                    return Ok(());
+                } else {
+                    return Err(common::MemorySafetyError::new("reading past input size"));
+                }
             } else {
-                return Err(MemorySafetyError::new(
-                    "Cannot read using offsets from not the stack pointer or the input",
+                // check if read from memory safe region
+                for region in self.memory_safe_regions.clone() {
+                    if region.register == regbase
+                        && (region.region_type == common::RegionType::READ)
+                        && offset >= (region.start_offset as i64)
+                        && offset < ((region.end_offset - 4) as i64)
+                    {
+                        return Ok(());
+                    }
+                }
+                return Err(common::MemorySafetyError::new(
+                    "Reading at address outside allowable memory regions",
                 ));
             }
         }
-        Err(MemorySafetyError::new(
+        Err(common::MemorySafetyError::new(
             "Cannot read safely from this address",
         ))
     }
 
-    fn mem_safe_write(&self, base: Option<String>, offset: i64) -> Result<(), MemorySafetyError> {
+    fn mem_safe_write(
+        &self,
+        base: Option<String>,
+        offset: i64,
+    ) -> Result<(), common::MemorySafetyError> {
         if let Some(regbase) = base {
+            // write to stack
             if regbase == "sp" {
                 return Ok(());
-            } else if regbase == "Input" {
-                if offset < (self.input_length * 4).try_into().unwrap() {
-                    return Ok(());
-                } else {
-                    return Err(MemorySafetyError::new("wring past output size"));
-                }
-            } else if regbase == "Context" {
-                //FIX: should be general for multiple inputs
-                if offset < (48).try_into().unwrap() {
-                    return Ok(());
-                } else {
-                    return Err(MemorySafetyError::new("wring past contect buffer size"));
+            } else {
+                // check if read from memory safe region
+                for region in self.memory_safe_regions.clone() {
+                    if region.register == regbase
+                        && region.region_type == common::RegionType::WRITE
+                        && offset >= (region.start_offset as i64)
+                        && offset < ((region.end_offset - 4) as i64)
+                    {
+                        return Ok(());
+                    }
                 }
             }
-            return Err(MemorySafetyError::new(
-                "Cannot write using offsets from not the stack pointer or the input",
+            return Err(common::MemorySafetyError::new(
+                "Cannot write using offsets from not the stack pointer or a safe memory region",
             ));
         } else {
             // overwrite def
             if self.memory.get(&(offset)).is_some() {
                 return Ok(());
             }
-            return Err(MemorySafetyError::new(
+            return Err(common::MemorySafetyError::new(
                 "Cannot write to a random memory address",
             ));
         };
