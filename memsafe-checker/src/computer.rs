@@ -82,7 +82,8 @@ impl RegisterValue {
 }
 
 fn generate_expression(op: &str, a: String, b: String) -> String {
-    a + &op.to_string() + &b
+    //a + &op.to_string() + &b
+    String::new()
 }
 
 fn get_register_name_string(r: String) -> String {
@@ -110,7 +111,11 @@ pub struct ARMCORTEXA {
 
 impl fmt::Debug for ARMCORTEXA {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "registers: {:?}", &self.stack)
+        // write!(f, "stack: {:?}", &self.stack);
+        for i in [0..31] {
+            println!("register {:?}", &self.registers[i])
+        }
+      Ok(())  
     }
 }
 
@@ -167,11 +172,6 @@ impl ARMCORTEXA {
     }
 
     pub fn set_region(&mut self, region: common::MemorySafeRegion) {
-        self.registers[get_register_index(region.register.clone())].set(
-            RegisterKind::Address,
-            Some(region.register.clone()),
-            0 as i64,
-        );
         self.memory_safe_regions.push(region);
     }
 
@@ -215,13 +215,17 @@ impl ARMCORTEXA {
         // just an immediate
         if !v.contains('[') && v.contains('#') {
             let mut base: Option<String> = None;
+            let mut offset: &str = &v;
+
             if v.contains("ror") {
                 base = Some("ror".to_string());
+                offset = v.strip_prefix("ror#").unwrap_or("0");
             }
+           
             return RegisterValue {
                 kind: RegisterKind::Immediate,
                 base: base,
-                offset: string_to_int(&v.trim_matches('#')),
+                offset: string_to_int(&offset),
             };
 
         // address within register
@@ -255,15 +259,25 @@ impl ARMCORTEXA {
                     offset: 0,
                 };
             }
-        } else {
+        } else { //if v.contains("x") || v.contains("w"){
             return self.registers[get_register_index(v)].clone();
         }
+        // } else {
+        //     let int = v.parse::<i64>().unwrap();
+        //     return RegisterValue {
+        //         kind: RegisterKind::Immediate,
+        //         base: None,
+        //         offset: int,
+        //     }
+        // }
+
     }
 
     pub fn execute(
         &mut self,
         instruction: &common::Instruction,
     ) -> Result<Option<(Option<String>, Option<u128>)>, String> {
+
         if instruction.op == "add" {
             self.arithmetic(
                 &instruction.op,
@@ -308,16 +322,16 @@ impl ARMCORTEXA {
                 if let Some(expr) = &instruction.r4 {
                     let parts = expr.split_once('#').unwrap();
                     if parts.0 == "ror" {
-                        self.rotate(
+                        self.rotate_imm(
                             instruction.r1.clone().expect("Should be here"),
                             instruction.r1.clone().expect("Again"),
-                            parts.1.to_string(),
+                            string_to_int(parts.1),
                         );
                     }
                 }
             }
         } else if instruction.op == "ror" {
-            self.rotate(
+            self.rotate_reg(
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
@@ -347,8 +361,9 @@ impl ARMCORTEXA {
             );
         } else if instruction.op == "b.ne" {
             match self.zero {
+                // if zero is set to false, then cmp -> not equal and we branch
                 Some(b) => {
-                    if b {
+                    if !b {
                         return Ok(Some((instruction.r1.clone(), None)));
                     } else {
                         return Ok(None);
@@ -406,8 +421,6 @@ impl ARMCORTEXA {
             }
 
             self.load(reg1, base_add_reg.clone());
-
-            //println!("old register value in memory: {:?}", self.registers[get_register_index(get_register_name_string(reg2.clone()).to_string())].clone().offset);
 
             // post-index
             if instruction.r3.is_some() {
@@ -527,7 +540,7 @@ impl ARMCORTEXA {
         base: Option<String>,
         offset: i64,
     ) -> Result<(), common::MemorySafetyError> {
-        if let Some(regbase) = base {
+        if let Some(regbase) = base.clone() {
             // read from stack
             if regbase == "sp" || regbase == "x31" {
                 if self.stack.contains_key(&offset) {
@@ -568,7 +581,7 @@ impl ARMCORTEXA {
             }
         }
         Err(common::MemorySafetyError::new(
-            "Cannot read safely from this address",
+            format!("Cannot read safely from address with base {:?} and offset {:?}", base, offset).as_str()
         ))
     }
 
@@ -616,7 +629,7 @@ impl ARMCORTEXA {
         reg2: String,
     ) {
         let r1 = self.operand(reg1);
-        let r2 = self.operand(reg2);
+        let r2 = self.operand(reg2.clone());
 
         if r1.kind == r2.kind {
             match r1.kind {
@@ -661,17 +674,35 @@ impl ARMCORTEXA {
         } else if r1.kind == RegisterKind::Immediate {
             self.set_register(reg0, r2.kind, r2.base, op(r1.offset, r2.offset));
         } else if r2.kind == RegisterKind::Immediate {
-            self.set_register(reg0, r1.kind, r1.base, op(r1.offset, r2.offset));
+            let imm = op(r1.offset.clone(), r2.offset.clone());
+            self.set_register(reg0, r1.kind, r1.base, imm.clone());
         } else {
             log::error!("Cannot perform arithmetic on these two registers")
         }
     }
 
-    fn rotate(&mut self, reg1: String, reg2: String, reg3: String) {
+    fn rotate_reg(&mut self, reg1: String, reg2: String, reg3: String) {
         let r1 = self.registers[get_register_index(reg1.clone())].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
 
         let shift = self.operand(reg3).offset;
+        let new_offset = r2.offset >> (shift % 64);
+        self.set_register(
+            reg1,
+            r2.clone().kind,
+            Some(generate_expression(
+                "ror",
+                r1.base.unwrap_or("".to_string()),
+                r2.offset.to_string(),
+            )),
+            new_offset,
+        );
+    }
+
+    fn rotate_imm(&mut self, reg1: String, reg2: String, shift: i64) {
+        let r1 = self.registers[get_register_index(reg1.clone())].clone();
+        let r2 = self.registers[get_register_index(reg2)].clone();
+
         let new_offset = r2.offset >> shift;
         self.set_register(
             reg1,
@@ -689,7 +720,6 @@ impl ARMCORTEXA {
         let r1 = self.registers[get_register_index(reg1)].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
 
-        //println!("Register 1: {:?}, Register 2: {:?}", r1, r2);
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
@@ -800,7 +830,6 @@ impl ARMCORTEXA {
      * address: register with address as value
      */
     fn load(&mut self, t: String, address: RegisterValue) {
-        //println!("Loading {:?} {:?}", t, address);
 
         let res = self.mem_safe_read(address.base.clone(), address.offset);
         if res.is_ok() {

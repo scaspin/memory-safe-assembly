@@ -1,5 +1,4 @@
 use std::fmt;
-use std::io::Write;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

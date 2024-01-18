@@ -20,6 +20,7 @@ struct ExecutionEngine {
 }
 
 impl ExecutionEngine {
+
     fn new(lines: Vec<String>) -> ExecutionEngine {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
@@ -61,7 +62,8 @@ impl ExecutionEngine {
                 // code.push(text.clone());
 
                 if text.contains(":") {
-                    labels.push((text.to_string(), line_number));
+                    let label = text.strip_suffix(":").unwrap();
+                    labels.push((label.to_string(), line_number));
                     // if text == start {
                     //     pc = line_number;
                     // }
@@ -148,11 +150,20 @@ impl ExecutionEngine {
             }
         }
 
+        let mut count = 0;
         while pc < program_length {
             let instruction = self.program.code[pc].clone();
             log::info!("{:?}", instruction);
 
-            //println!("Running: {:?}", parsed_code[pc]);
+            // println!("Running: {:?}", instruction.clone());
+
+            // if (pc == 868  || pc == 869) && count < 6 {
+            //     println!("Running: {:?}", instruction.clone());
+            //     println!("Computer: {:?}", self.computer);
+            //     count = count + 1;
+            // }
+            // println!("Computer: {:?}", self.computer);
+
             let execute_result = self.computer.execute(&instruction);
             match execute_result {
                 Ok(some) => match some {
@@ -162,7 +173,7 @@ impl ExecutionEngine {
                                 break;
                             }
                             for l in self.program.labels.iter() {
-                                if l.0.contains(&label) {
+                                if l.0.contains(&label.clone()) && label.contains(&l.0.clone()){
                                     pc = l.1;
                                 }
                             }
@@ -194,6 +205,7 @@ impl ExecutionEngine {
                 }
             }
 
+            // println!("at line: {:?}", pc.clone());
             self.pc = pc;
         }
         Ok(())
@@ -229,7 +241,7 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
     });
 
     // x1 -- input blocks
-    engine.add_input(String::from("x1")); // necessary to support various input designs
+    // engine.add_input(String::from("x1")); // necessary to support various input designs
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::WRITE,
         register: String::from("x1"),
