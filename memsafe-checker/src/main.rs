@@ -1,7 +1,6 @@
-use clap::Parser;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::PathBuf;
+
 
 mod common;
 mod computer;
@@ -199,16 +198,6 @@ impl ExecutionEngine {
         }
         Ok(())
     }
-}
-
-#[derive(Parser)]
-struct Args {
-    file: PathBuf,
-    label: String,
-    context: String,
-    input: String,
-    length: String,
-    length_value: usize,
 }
 
 fn check_sha256_armv8_ios64() -> std::io::Result<()> {
