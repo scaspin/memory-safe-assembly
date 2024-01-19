@@ -102,7 +102,7 @@ pub struct ARMCORTEXA {
     neg: Option<bool>,
     carry: Option<bool>,
     overflow: Option<bool>,
-    memory: HashMap<i64, i64>,
+    pub memory: HashMap<i64, i64>,
     stack: HashMap<i64, RegisterValue>,
     stack_size: i64,
     input_length: u64,
@@ -348,11 +348,11 @@ impl ARMCORTEXA {
             let register = self.registers
                 [get_register_index(instruction.r1.clone().expect("Need one register"))]
             .clone();
-            if (register.base.is_none() || register.base.unwrap() == "zero") && register.offset == 0
+            if (register.base.is_none() || register.base.unwrap() == "") && register.offset == 0
             {
-                return Ok(Some((instruction.r2.clone(), None)));
-            } else {
                 return Ok(None);
+            } else {
+                return Ok(Some((instruction.r2.clone(), None)));
             }
         } else if instruction.op == "cmp" {
             self.cmp(

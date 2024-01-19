@@ -88,7 +88,7 @@ impl ExecutionEngine {
         let mut computer = computer::ARMCORTEXA::new();
 
         // load computer static memory
-        let mut address = 0;
+        let mut address = 4;
         for def in defs.iter() {
             let v: Vec<&str> = def.split(|c| c == '\t' || c == ',').collect();
             if v[0] == ".align" {
@@ -106,13 +106,12 @@ impl ExecutionEngine {
                         num = i.parse::<i64>().unwrap();
                     }
                     computer.add_memory(address, num);
-                    //address = address + (alignment as i64);
+                    // address = address + (alignment as i64);
+                    // heap grows down
                     address = address + 4;
                 }
             }
         }
-
-        // define allowable read write
 
         return ExecutionEngine {
             program: Program {
@@ -169,6 +168,7 @@ impl ExecutionEngine {
                 Ok(some) => match some {
                     Some(jump) => match jump {
                         (Some(label), None) => {
+                            // println!("jump to label: {:?}", label.clone());
                             if label == "Return".to_string() {
                                 break;
                             }
