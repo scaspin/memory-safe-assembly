@@ -1,17 +1,10 @@
-To run example:
+To run example from file assets/processed-sha256-armv8-ios64.S starting at label _sha256_block_data_order 
+just do :
 
-```RUST_LOG=info cargo run -- assets/processed-sha256-armv8-ios64.S _sha256_block_data_order x0 x1 x2 <input length>```
+```RUST_LOG=info cargo run```
 
-Need to specify the 
-1. file
-2. first label to start execution from
+The memory safety checks are run by instantiating a symbolic execution engine and providing it a file (vector of lines). 
+Then, defining any necessary immediate and memory regions.
+Memory regions are defined by a type (read or write), a register in which the address for the region in memory is stores, and the offsets from the address.
+How the checks were called on the sha256 example can be seen in ```check_sha256_armv8_ios64()``` in main.
 
-This sha-256 program's specific inputs: 
-4. context register
-5. input register
-6. input length register
-
-## TODOs
-- [ ] ensure all inputs lenghts are the same
-- [ ] re-introduce macros
-- [ ] allow flags to be set before program execution, but account for all possible settings
