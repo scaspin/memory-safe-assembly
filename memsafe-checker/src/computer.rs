@@ -102,11 +102,11 @@ pub struct ARMCORTEXA {
     neg: Option<bool>,
     carry: Option<bool>,
     overflow: Option<bool>,
-    pub memory: HashMap<i64, i64>,
+    memory: HashMap<i64, i64>,
     stack: HashMap<i64, RegisterValue>,
     stack_size: i64,
-    input_length: u64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
+    abstracts: Vec<common::AbstractValue>,
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -166,8 +166,8 @@ impl ARMCORTEXA {
             memory: HashMap::new(),
             stack: HashMap::new(),
             stack_size: 0,
-            input_length: 0,
             memory_safe_regions: Vec::new(),
+            abstracts: Vec::new()
         }
     }
 
@@ -181,6 +181,15 @@ impl ARMCORTEXA {
             None,
             value as i64,
         );
+    }
+
+    pub fn set_abstract(&mut self, register: String, value: common::AbstractValue) {
+        self.registers[get_register_index(register)].set(
+            RegisterKind::Number,
+            Some(value.name),
+            0,
+        );
+        self.abstracts.push(value);
     }
 
     pub fn set_input(&mut self, register: String) {
@@ -556,23 +565,36 @@ impl ARMCORTEXA {
                 if self.memory.get(&(offset)).is_some() {
                     return Ok(());
                 }
-            // read from input
-            } else if regbase == "Input" {
-                if offset < (self.input_length * 4).try_into().unwrap() {
-                    // TODO: abstract input size
-                    return Ok(());
-                } else {
-                    return Err(common::MemorySafetyError::new("reading past input size"));
-                }
             } else {
                 // check if read from memory safe region
                 for region in self.memory_safe_regions.clone() {
-                    if region.register == regbase
-                        && (region.region_type == common::RegionType::READ)
-                        && offset >= (region.start_offset as i64)
-                        && offset < ((region.end_offset - 4) as i64)
-                    {
-                        return Ok(());
+                    if region.register == regbase {
+                        match region.start_offset {
+                            common::ValueType::REAL(start) => {
+                                match region.end_offset {
+                                    common::ValueType::REAL(end) => {
+                                        if  (region.region_type == common::RegionType::READ)
+                                        && offset >= (start as i64)
+                                        && offset < ((end - 4) as i64) {
+                                            return Ok(())
+                                        }
+                                    },
+                                    common::ValueType::ABSTRACT(end) => {
+                                        
+                                    }
+                                }
+                            },
+                            common::ValueType::ABSTRACT(start) => {
+                                match region.end_offset {
+                                    common::ValueType::REAL(end) => {
+                                        
+                                    },
+                                    common::ValueType::ABSTRACT(end) => {
+                                        
+                                    },
+                                }
+                            },
+                        };
                     }
                 }
                 return Err(common::MemorySafetyError::new(

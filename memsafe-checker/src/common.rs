@@ -1,6 +1,19 @@
 use std::fmt;
 use std::str::FromStr;
 
+#[derive(Debug, Clone)]
+pub struct AbstractValue {
+    pub name: String,
+    min: Option<usize>,
+    max: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ValueType {
+    ABSTRACT(AbstractValue),   // string will be an identifier
+    REAL(usize),        
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum RegionType {
     READ,
@@ -23,8 +36,8 @@ impl fmt::Display for RegionType {
 pub struct MemorySafeRegion {
     pub region_type: RegionType,
     pub register: String,
-    pub start_offset: usize,
-    pub end_offset: usize,
+    pub start_offset: ValueType,
+    pub end_offset: ValueType,
 }
 
 #[derive(Debug, Clone)]

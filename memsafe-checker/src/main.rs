@@ -130,13 +130,12 @@ impl ExecutionEngine {
         self.computer.set_region(region);
     }
 
-    fn add_input(&mut self, register: String) {
-        // self.memory_regions.push(region);
-        self.computer.set_input(register);
-    }
-
     fn add_immediate(&mut self, register: String, value: usize) {
         self.computer.set_immediate(register, value as u64);
+    }
+
+    fn add_abstract(&mut self, register: String, value: common::AbstractValue) {
+        self.computer.set_abstract(register, value);
     }
 
     fn start(&mut self, start: String) -> std::io::Result<()> {
@@ -230,38 +229,39 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x0"),
-        start_offset: 0,
-        end_offset: 64, // FIX: verify
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(64), // FIX: verify
     });
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::WRITE,
         register: String::from("x0"),
-        start_offset: 0,
-        end_offset: 64, // FIX: verify
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(64), // FIX: verify
     });
 
+    let abstract_input_length = common::AbstractValue{ name: "InputLength".to_string(), min: Some(0), max: None};
     // x1 -- input blocks
     // engine.add_input(String::from("x1")); // necessary to support various input designs
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::WRITE,
         register: String::from("x1"),
-        start_offset: 0,
-        end_offset: 256,
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(256),
     });
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x1"),
-        start_offset: 0,
-        end_offset: 512, // TODO: make abstract!
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::ABSTRACT(abstract_input_length),
     });
 
     // x2 -- number of blocks
-    engine.add_immediate(String::from("x2"), 256);
+    engine.add_abstract(String::from("x2"), abstract_input_length);
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x2"),
-        start_offset: 0,
-        end_offset: 64, // FIX: verify?
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(256), 
     });
 
     engine.start(start_label)
