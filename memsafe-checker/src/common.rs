@@ -4,14 +4,14 @@ use std::str::FromStr;
 #[derive(Debug, Clone)]
 pub struct AbstractValue {
     pub name: String,
-    min: Option<usize>,
-    max: Option<usize>,
+    pub min: Option<usize>,
+    pub max: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
 pub enum ValueType {
-    ABSTRACT(AbstractValue),   // string will be an identifier
-    REAL(usize),        
+    ABSTRACT(AbstractValue), // string will be an identifier
+    REAL(usize),
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

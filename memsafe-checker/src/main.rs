@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
 
-
 mod common;
 mod computer;
 
@@ -20,7 +19,6 @@ struct ExecutionEngine {
 }
 
 impl ExecutionEngine {
-
     fn new(lines: Vec<String>) -> ExecutionEngine {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
@@ -172,7 +170,7 @@ impl ExecutionEngine {
                                 break;
                             }
                             for l in self.program.labels.iter() {
-                                if l.0.contains(&label.clone()) && label.contains(&l.0.clone()){
+                                if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
                                     pc = l.1;
                                 }
                             }
@@ -239,7 +237,11 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
         end_offset: common::ValueType::REAL(64), // FIX: verify
     });
 
-    let abstract_input_length = common::AbstractValue{ name: "InputLength".to_string(), min: Some(0), max: None};
+    let abstract_input_length = common::AbstractValue {
+        name: "InputLength".to_string(),
+        min: Some(0),
+        max: None,
+    };
     // x1 -- input blocks
     // engine.add_input(String::from("x1")); // necessary to support various input designs
     engine.add_region(common::MemorySafeRegion {
@@ -252,7 +254,7 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
         region_type: common::RegionType::READ,
         register: String::from("x1"),
         start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::ABSTRACT(abstract_input_length),
+        end_offset: common::ValueType::ABSTRACT(abstract_input_length.clone()),
     });
 
     // x2 -- number of blocks
@@ -261,7 +263,7 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
         region_type: common::RegionType::READ,
         register: String::from("x2"),
         start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(256), 
+        end_offset: common::ValueType::REAL(256),
     });
 
     engine.start(start_label)
