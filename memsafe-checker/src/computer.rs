@@ -82,8 +82,24 @@ impl RegisterValue {
 }
 
 fn generate_expression(op: &str, a: String, b: String) -> String {
-    //a + &op.to_string() + &b
+    // a + &op.to_string() + &b
+    // format!("{} {} {}", a, op, b)
     String::new()
+}
+
+fn add_regs(op: &str, a: String, b: String) -> String {
+    // a + &b
+    // String::new().push(op)
+    // format!("{} {} {}", a, op, b)
+    //String::new()
+    // op.to_string()
+    if a == String::new() {
+        return b
+    }
+    if b == String::new() {
+        return a
+    }
+    format!("{} {} {}", a, op, b) 
 }
 
 fn get_register_name_string(r: String) -> String {
@@ -790,6 +806,8 @@ impl ARMCORTEXA {
         let r1 = self.operand(reg1);
         let r2 = self.operand(reg2.clone());
 
+        // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string.clone(), r1.clone(), r2.clone() );
+
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
@@ -815,7 +833,25 @@ impl ARMCORTEXA {
                 }
                 RegisterKind::Number => {
                     // abstract numbers, value doesn't matter
-                    self.set_register(reg0, RegisterKind::Number, None, 0);
+                    let base = match r1.clone().base {
+                        Some(reg1base) => match r2.clone().base {
+                            Some(reg2base) => {
+                                let concat = add_regs(op_string, reg1base, reg2base);
+                                Some(concat)
+                            }
+                            None => Some(reg1base),
+                        },
+                        None => match r2.clone().base {
+                            Some(reg2base) => Some(reg2base),
+                            None => None,
+                        },
+                    };
+                    self.set_register(
+                        reg0,
+                        RegisterKind::Number,
+                        base,
+                        op(r1.offset, r2.offset),
+                    )
                 }
                 RegisterKind::Immediate => self.set_register(
                     reg0,
@@ -835,7 +871,49 @@ impl ARMCORTEXA {
         } else if r2.kind == RegisterKind::Immediate {
             let imm = op(r1.offset.clone(), r2.offset.clone());
             self.set_register(reg0, r1.kind, r1.base, imm.clone());
+        } else if r1.kind == RegisterKind::Number {
+            // abstract numbers, value doesn't matter
+            let base = match r1.clone().base {
+                Some(reg1base) => match r2.clone().base {
+                    Some(reg2base) => {
+                        let concat = add_regs(op_string, reg1base, reg2base);
+                        Some(concat)
+                    }
+                    None => Some(reg1base),
+                },
+                None => match r2.clone().base {
+                    Some(reg2base) => Some(reg2base),
+                    None => None,
+                },
+            };
+            self.set_register(
+                reg0,
+                RegisterKind::Number,
+                base,
+                op(r1.offset, r2.offset),
+            )
+        } else if r2.kind == RegisterKind::Number {
+            let base = match r2.clone().base {
+                Some(reg1base) => match r1.clone().base {
+                    Some(reg2base) => {
+                        let concat = add_regs(op_string, reg1base, reg2base);
+                        Some(concat)
+                    }
+                    None => Some(reg1base),
+                },
+                None => match r1.clone().base {
+                    Some(reg2base) => Some(reg2base),
+                    None => None,
+                },
+            };
+            self.set_register(
+                reg0,
+                RegisterKind::Number,
+                base,
+                op(r1.offset, r2.offset),
+            )
         } else {
+            // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string, r1, r2 );
             log::error!("Cannot perform arithmetic on these two registers")
         }
     }
@@ -878,6 +956,8 @@ impl ARMCORTEXA {
     fn cmp(&mut self, reg1: String, reg2: String) {
         let r1 = self.registers[get_register_index(reg1)].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
+        
+        // println!("Comparing r1: {:?}, r2: {:?}", r1, r2);
 
         if r1.kind == r2.kind {
             match r1.kind {
@@ -980,6 +1060,7 @@ impl ARMCORTEXA {
                 }
             }
         } else {
+            println!("Comparing r1: {:?}, r2: {:?}", r1, r2);
             log::error!("Cannot compare these two registers")
         }
     }
