@@ -151,13 +151,7 @@ impl ExecutionEngine {
             let instruction = self.program.code[pc].clone();
             log::info!("{:?}", instruction);
 
-            // println!("Running: {:?}", instruction.clone());
-
-            // if (pc == 868  || pc == 869) && count < 6 {
-            //     println!("Running: {:?}", instruction.clone());
-            //     println!("Computer: {:?}", self.computer);
-            //     count = count + 1;
-            // }
+            // println!("At line: {}", pc);
             // println!("Computer: {:?}", self.computer);
 
             let execute_result = self.computer.execute(&instruction);
@@ -202,7 +196,6 @@ impl ExecutionEngine {
                 }
             }
 
-            // println!("at line: {:?}", pc.clone());
             self.pc = pc;
         }
         Ok(())
@@ -237,11 +230,18 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
         end_offset: common::ValueType::REAL(64), // FIX: verify
     });
 
-    let abstract_input_length = common::AbstractValue {
-        name: "InputLength".to_string(),
+    let blocks = common::AbstractValue {
+        name: "Blocks".to_string(),
         min: Some(0),
         max: None,
     };
+
+    let length = common::AbstractValue {
+        name: "Blocks * 64".to_string(),
+        min: Some(0),
+        max: None,
+    };
+
     // x1 -- input blocks
     // engine.add_input(String::from("x1")); // necessary to support various input designs
     engine.add_region(common::MemorySafeRegion {
@@ -254,11 +254,11 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
         region_type: common::RegionType::READ,
         register: String::from("x1"),
         start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::ABSTRACT(abstract_input_length.clone()),
+        end_offset: common::ValueType::ABSTRACT(length.clone()), // should be * 64
     });
 
     // x2 -- number of blocks
-    engine.add_abstract(String::from("x2"), abstract_input_length);
+    engine.add_abstract(String::from("x2"), blocks);
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x2"),

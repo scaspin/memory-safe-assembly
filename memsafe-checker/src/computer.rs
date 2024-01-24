@@ -40,7 +40,8 @@ fn string_to_int(s: &str) -> i64 {
 enum RegisterKind {
     RegisterBase, // register name / expression + offset
     Number,       // abstract number (from input for example)
-    Immediate,    // known number
+    Abstract,
+    Immediate, // known number
     Address,
 }
 
@@ -82,24 +83,13 @@ impl RegisterValue {
 }
 
 fn generate_expression(op: &str, a: String, b: String) -> String {
-    // a + &op.to_string() + &b
-    // format!("{} {} {}", a, op, b)
-    String::new()
-}
-
-fn add_regs(op: &str, a: String, b: String) -> String {
-    // a + &b
-    // String::new().push(op)
-    // format!("{} {} {}", a, op, b)
-    //String::new()
-    // op.to_string()
     if a == String::new() {
-        return b
+        return b;
     }
     if b == String::new() {
-        return a
+        return a;
     }
-    format!("{} {} {}", a, op, b) 
+    format!("{} {} {}", a, op, b)
 }
 
 fn get_register_name_string(r: String) -> String {
@@ -129,7 +119,7 @@ impl fmt::Debug for ARMCORTEXA {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // write!(f, "stack: {:?}", &self.stack);
         for i in [0..31] {
-            println!("register {:?}", &self.registers[i])
+            println!("register {:?}", &self.registers[i]);
         }
         Ok(())
     }
@@ -201,16 +191,20 @@ impl ARMCORTEXA {
 
     pub fn set_abstract(&mut self, register: String, value: common::AbstractValue) {
         self.abstracts.push(value.clone());
-        self.registers[get_register_index(register)].set(RegisterKind::Number, Some(value.name), 0);
-    }
-
-    pub fn set_input(&mut self, register: String) {
         self.registers[get_register_index(register)].set(
-            RegisterKind::Immediate,
-            Some("Input".to_string()), // FIX: treated any differently than regular regions?
+            RegisterKind::Abstract,
+            Some(value.name),
             0,
         );
     }
+
+    // pub fn set_input(&mut self, register: String) {
+    //     self.registers[get_register_index(register)].set(
+    //         RegisterKind::Immediate,
+    //         Some("Input".to_string()), // FIX: treated any differently than regular regions?
+    //         0,
+    //     );
+    // }
 
     fn set_register(
         &mut self,
@@ -232,8 +226,6 @@ impl ARMCORTEXA {
 
     // handle different addressing modes
     fn operand(&mut self, v: String) -> RegisterValue {
-        //println!("Operand input: {:?}", v);
-        // just an immediate
         if !v.contains('[') && v.contains('#') {
             let mut base: Option<String> = None;
             let mut offset: &str = &v;
@@ -591,7 +583,7 @@ impl ARMCORTEXA {
                                     common::ValueType::ABSTRACT(end) => {
                                         if offset >= (start as i64) {
                                             for a in &self.abstracts {
-                                                if a.name == end.name {
+                                                if end.name.contains(&a.name) {
                                                     if let Some(e) = a.max {
                                                         if offset < ((e - 4) as i64) {
                                                             return Ok(());
@@ -667,7 +659,11 @@ impl ARMCORTEXA {
                     }
                 }
                 return Err(common::MemorySafetyError::new(
-                    "Reading at address outside allowable memory regions",
+                    format!(
+                        "Reading at address outside allowable memory regions {:?}, {:?}",
+                        regbase, offset
+                    )
+                    .as_str(),
                 ));
             }
         }
@@ -833,10 +829,13 @@ impl ARMCORTEXA {
                 }
                 RegisterKind::Number => {
                     // abstract numbers, value doesn't matter
+                    self.set_register(reg0, RegisterKind::Number, None, op(r1.offset, r2.offset))
+                }
+                RegisterKind::Abstract => {
                     let base = match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
                             Some(reg2base) => {
-                                let concat = add_regs(op_string, reg1base, reg2base);
+                                let concat = generate_expression(op_string, reg1base, reg2base);
                                 Some(concat)
                             }
                             None => Some(reg1base),
@@ -846,12 +845,7 @@ impl ARMCORTEXA {
                             None => None,
                         },
                     };
-                    self.set_register(
-                        reg0,
-                        RegisterKind::Number,
-                        base,
-                        op(r1.offset, r2.offset),
-                    )
+                    self.set_register(reg0, RegisterKind::Abstract, base, op(r1.offset, r2.offset))
                 }
                 RegisterKind::Immediate => self.set_register(
                     reg0,
@@ -869,34 +863,15 @@ impl ARMCORTEXA {
         } else if r1.kind == RegisterKind::Immediate {
             self.set_register(reg0, r2.kind, r2.base, op(r1.offset, r2.offset));
         } else if r2.kind == RegisterKind::Immediate {
-            let imm = op(r1.offset.clone(), r2.offset.clone());
-            self.set_register(reg0, r1.kind, r1.base, imm.clone());
-        } else if r1.kind == RegisterKind::Number {
+            self.set_register(reg0, r1.kind, r1.base, op(r1.offset, r2.offset));
+        } else if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
             // abstract numbers, value doesn't matter
-            let base = match r1.clone().base {
-                Some(reg1base) => match r2.clone().base {
-                    Some(reg2base) => {
-                        let concat = add_regs(op_string, reg1base, reg2base);
-                        Some(concat)
-                    }
-                    None => Some(reg1base),
-                },
-                None => match r2.clone().base {
-                    Some(reg2base) => Some(reg2base),
-                    None => None,
-                },
-            };
-            self.set_register(
-                reg0,
-                RegisterKind::Number,
-                base,
-                op(r1.offset, r2.offset),
-            )
-        } else if r2.kind == RegisterKind::Number {
+            self.set_register(reg0, RegisterKind::Number, None, op(r1.offset, r2.offset))
+        } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
             let base = match r2.clone().base {
                 Some(reg1base) => match r1.clone().base {
                     Some(reg2base) => {
-                        let concat = add_regs(op_string, reg1base, reg2base);
+                        let concat = generate_expression(op_string, reg1base, reg2base);
                         Some(concat)
                     }
                     None => Some(reg1base),
@@ -906,12 +881,7 @@ impl ARMCORTEXA {
                     None => None,
                 },
             };
-            self.set_register(
-                reg0,
-                RegisterKind::Number,
-                base,
-                op(r1.offset, r2.offset),
-            )
+            self.set_register(reg0, RegisterKind::Abstract, base, op(r1.offset, r2.offset))
         } else {
             // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string, r1, r2 );
             log::error!("Cannot perform arithmetic on these two registers")
@@ -956,7 +926,7 @@ impl ARMCORTEXA {
     fn cmp(&mut self, reg1: String, reg2: String) {
         let r1 = self.registers[get_register_index(reg1)].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
-        
+
         // println!("Comparing r1: {:?}, r2: {:?}", r1, r2);
 
         if r1.kind == r2.kind {
@@ -1058,9 +1028,9 @@ impl ARMCORTEXA {
                         Some(false)
                     };
                 }
+                RegisterKind::Abstract => todo!(),
             }
         } else {
-            println!("Comparing r1: {:?}, r2: {:?}", r1, r2);
             log::error!("Cannot compare these two registers")
         }
     }
@@ -1081,13 +1051,21 @@ impl ARMCORTEXA {
                         }
                         None => log::error!("No element at this address in stack"),
                     }
-                } else if base == "Input" {
-                    self.set_register(t, RegisterKind::Number, None, 0);
-                } else if base == "Context" {
-                    self.set_register(t, RegisterKind::Number, None, 0);
                 } else if base == "Memory" {
-                    let num = self.memory.get(&(address.offset)).unwrap();
-                    self.set_register(t, RegisterKind::Immediate, None, *num);
+                    let num = &self.memory.get(&(address.offset)).unwrap();
+                    self.set_register(t, RegisterKind::Immediate, None, **num);
+                } else {
+                    let mut exists = false;
+                    for r in &self.memory_safe_regions {
+                        if r.register == base {
+                            exists = true;
+                        }
+                    }
+                    if exists {
+                        self.set_register(t, RegisterKind::Number, None, 0);
+                    } else {
+                        log::error!("Could not read from base {:?}", base)
+                    }
                 }
             }
         } else {

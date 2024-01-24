@@ -29,9 +29,6 @@ impl fmt::Display for RegionType {
     }
 }
 
-// TODO: allow different types within one region at different offsets
-// for example for sha256 input is also output may be 1000 bits long but output is 256
-// so shouldn't write into the input buffer past 256 bits
 #[derive(Debug, Clone)]
 pub struct MemorySafeRegion {
     pub region_type: RegionType,
