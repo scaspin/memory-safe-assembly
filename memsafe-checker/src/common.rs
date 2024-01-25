@@ -14,6 +14,12 @@ pub enum ValueType {
     REAL(usize),
 }
 
+#[derive(Debug, Clone)]
+pub enum FlagType {
+    ABSTRACT(String), // TODO: change format so interpreter can evaluate without string manipulation
+    REAL(bool),
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum RegionType {
     READ,

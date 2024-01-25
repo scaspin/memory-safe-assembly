@@ -18,6 +18,13 @@ struct ExecutionEngine {
     // memory_regions: Vec<MemorySafeRegion> , // FIX: necessary?
 }
 
+// if true, we jump
+// if false, we continue
+// BIG TODO
+fn evaluate_jump_condition(expression: String) -> bool {
+    return false
+}
+
 impl ExecutionEngine {
     fn new(lines: Vec<String>) -> ExecutionEngine {
         // represent code this way, highly unoptimized
@@ -158,7 +165,30 @@ impl ExecutionEngine {
             match execute_result {
                 Ok(some) => match some {
                     Some(jump) => match jump {
-                        (Some(label), None) => {
+                        // (condition, label to jump to, line number to jump to)
+                        (Some(condition), Some(label), None) => {
+                            if evaluate_jump_condition(condition) {
+                                for l in self.program.labels.iter() {
+                                    if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
+                                        pc = l.1;
+                                    }
+                                }
+                            } else {
+                                pc = pc + 1;
+                            }
+                        }
+                        (Some(condition), None, Some(address)) => {
+                            if evaluate_jump_condition(condition) {
+                                if address == 0 {
+                                    // program is done
+                                    break;
+                                }
+                                pc = address as usize;
+                            } else {
+                                pc = pc + 1;
+                            }
+                        }
+                        (None, Some(label), None) => {
                             // println!("jump to label: {:?}", label.clone());
                             if label == "Return".to_string() {
                                 break;
@@ -169,14 +199,21 @@ impl ExecutionEngine {
                                 }
                             }
                         }
-                        (None, Some(address)) => {
+                        (None, None, Some(address)) => {
                             if address == 0 {
                                 // program is done
                                 break;
                             }
                             pc = address as usize;
                         }
-                        (None, None) | (Some(_), Some(_)) => {
+                        (Some(condition), None, None) => {
+                            log::error!(
+                                "No jump target for jump condition"
+                            )
+                        }
+                        (None, None, None)
+                        | (None, Some(_), Some(_))
+                        | (Some(_), Some(_), Some(_)) => {
                             log::error!(
                                 "Execute did not return valid response for jump or continue"
                             )
@@ -269,10 +306,13 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
     engine.start(start_label)
 }
 
-fn main() -> std::io::Result<()> {
+fn main() {
     env_logger::init();
 
     let res = check_sha256_armv8_ios64();
-    println!("{:?}", res);
-    res
+    if res.is_ok() {
+        println!("Programs are memory safe!");
+    } else {
+        println!("{:?}", res);
+    }
 }

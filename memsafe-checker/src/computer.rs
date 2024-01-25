@@ -104,10 +104,10 @@ fn get_register_name_string(r: String) -> String {
 
 pub struct ARMCORTEXA {
     registers: [RegisterValue; 33],
-    zero: Option<bool>,
-    neg: Option<bool>,
-    carry: Option<bool>,
-    overflow: Option<bool>,
+    zero: Option<common::FlagType>,
+    neg: Option<common::FlagType>,
+    carry: Option<common::FlagType>,
+    overflow: Option<common::FlagType>,
     memory: HashMap<i64, i64>,
     stack: HashMap<i64, RegisterValue>,
     stack_size: i64,
@@ -289,7 +289,7 @@ impl ARMCORTEXA {
     pub fn execute(
         &mut self,
         instruction: &common::Instruction,
-    ) -> Result<Option<(Option<String>, Option<u128>)>, String> {
+    ) -> Result<Option<(Option<String>, Option<String>, Option<u128>)>, String> {
         if instruction.op == "add" {
             self.arithmetic(
                 &instruction.op,
@@ -360,10 +360,21 @@ impl ARMCORTEXA {
             let register = self.registers
                 [get_register_index(instruction.r1.clone().expect("Need one register"))]
             .clone();
-            if (register.base.is_none() || register.base.unwrap() == "") && register.offset == 0 {
+            if (register.base.is_none() || register.base.clone().unwrap() == "")
+                && register.offset == 0
+            {
                 return Ok(None);
+            } else if register.kind == RegisterKind::Abstract {
+                return Ok(Some((
+                    Some(format!(
+                        "base {:?} offset {:?} cbnz 0",
+                        register.base, register.offset
+                    )),
+                    instruction.r2.clone(),
+                    None,
+                )));
             } else {
-                return Ok(Some((instruction.r2.clone(), None)));
+                return Ok(Some((None, instruction.r2.clone(), None)));
             }
         } else if instruction.op == "cmp" {
             self.cmp(
@@ -371,15 +382,20 @@ impl ARMCORTEXA {
                 instruction.r2.clone().expect("need register to compare"),
             );
         } else if instruction.op == "b.ne" {
-            match self.zero {
+            match &self.zero {
                 // if zero is set to false, then cmp -> not equal and we branch
-                Some(b) => {
-                    if !b {
-                        return Ok(Some((instruction.r1.clone(), None)));
-                    } else {
-                        return Ok(None);
+                Some(flag) => match flag {
+                    common::FlagType::REAL(b) => {
+                        if !b {
+                            return Ok(Some((None, instruction.r1.clone(), None)));
+                        } else {
+                            return Ok(None);
+                        }
                     }
-                }
+                    common::FlagType::ABSTRACT(s) => {
+                        return Ok(Some((Some(s.to_string()), instruction.r1.clone(), None)));
+                    }
+                },
                 None => return Err(
                     "Flag cannot be branched on since it has not been set within the program yet"
                         .to_string(),
@@ -399,10 +415,10 @@ impl ARMCORTEXA {
                 if x30.kind == RegisterKind::Address {
                     if x30.base.is_some() {
                         if x30.base.unwrap() == "Return" && x30.offset == 0 {
-                            return Ok(Some((None, Some(0))));
+                            return Ok(Some((None, None, Some(0))));
                         }
                     }
-                    return Ok(Some((None, Some(x30.offset.try_into().unwrap()))));
+                    return Ok(Some((None, None, Some(x30.offset.try_into().unwrap()))));
                 } else {
                     log::error!("cannot jump on non-address");
                 }
@@ -934,102 +950,154 @@ impl ARMCORTEXA {
                 RegisterKind::RegisterBase => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset < r2.offset {
-                            Some(true)
+                            Some(common::FlagType::REAL(true))
                         } else {
-                            Some(false)
+                            Some(common::FlagType::REAL(false))
                         };
                         self.zero = if r1.offset == r2.offset {
-                            Some(true)
+                            Some(common::FlagType::REAL(true))
                         } else {
-                            Some(false)
+                            Some(common::FlagType::REAL(false))
                         };
                         // signed vs signed distinction, maybe make offset generic to handle both?
                         self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(true)
+                            Some(common::FlagType::REAL(true))
                         } else {
-                            Some(false)
+                            Some(common::FlagType::REAL(false))
                         };
                         self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(true)
+                            Some(common::FlagType::REAL(true))
                         } else {
-                            Some(false)
+                            Some(common::FlagType::REAL(false))
                         };
+                    } else {
+                        let expression = String::from(format!(
+                            "({:?},{:?}) cmp ({:?},{:?})",
+                            r1.base, r1.offset, r2.base, r2.offset
+                        ));
+                        self.neg =
+                            Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
+                        self.zero =
+                            Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
+                        self.carry = Some(common::FlagType::ABSTRACT(format!(
+                            "({}) carry",
+                            expression
+                        )));
+                        self.overflow = Some(common::FlagType::ABSTRACT(format!(
+                            "({}) overflow",
+                            expression
+                        )));
                     }
                 }
                 RegisterKind::Number => {
-                    if r1.base.is_some() || r2.base.is_some() {
-                        log::error!("Cannot compare two undefined numbers");
-                    }
-                    self.neg = if r1.offset < r2.offset {
-                        Some(true)
-                    } else {
-                        Some(false)
-                    };
-                    self.zero = if r1.offset == r2.offset {
-                        Some(true)
-                    } else {
-                        Some(false)
-                    };
-                    // signed vs signed distinction, maybe make offset generic to handle both?
-                    self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(true)
-                    } else {
-                        Some(false)
-                    };
-                    self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(true)
-                    } else {
-                        Some(false)
-                    };
+                    log::error!("Cannot compare these two registers")
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
-                        Some(true)
+                        Some(common::FlagType::REAL(true))
                     } else {
-                        Some(false)
+                        Some(common::FlagType::REAL(false))
                     };
                     self.zero = if r1.offset == r2.offset {
-                        Some(true)
+                        Some(common::FlagType::REAL(true))
                     } else {
-                        Some(false)
+                        Some(common::FlagType::REAL(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(true)
+                        Some(common::FlagType::REAL(true))
                     } else {
-                        Some(false)
+                        Some(common::FlagType::REAL(false))
                     };
                     self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(true)
+                        Some(common::FlagType::REAL(true))
                     } else {
-                        Some(false)
+                        Some(common::FlagType::REAL(false))
                     };
                 }
                 RegisterKind::Address => {
                     self.neg = if r1.offset < r2.offset {
-                        Some(true)
+                        Some(common::FlagType::REAL(true))
                     } else {
-                        Some(false)
+                        Some(common::FlagType::REAL(false))
                     };
                     self.zero = if r1.offset == r2.offset {
-                        Some(true)
+                        Some(common::FlagType::REAL(true))
                     } else {
-                        Some(false)
+                        Some(common::FlagType::REAL(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(true)
+                        Some(common::FlagType::REAL(true))
                     } else {
-                        Some(false)
+                        Some(common::FlagType::REAL(false))
                     };
                     self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(true)
+                        Some(common::FlagType::REAL(true))
                     } else {
-                        Some(false)
+                        Some(common::FlagType::REAL(false))
                     };
                 }
-                RegisterKind::Abstract => todo!(),
+                RegisterKind::Abstract => {
+                    if r1.base.eq(&r2.base) {
+                        self.neg = if r1.offset < r2.offset {
+                            Some(common::FlagType::REAL(true))
+                        } else {
+                            Some(common::FlagType::REAL(false))
+                        };
+                        self.zero = if r1.offset == r2.offset {
+                            Some(common::FlagType::REAL(true))
+                        } else {
+                            Some(common::FlagType::REAL(false))
+                        };
+                        // signed vs signed distinction, maybe make offset generic to handle both?
+                        self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                            Some(common::FlagType::REAL(true))
+                        } else {
+                            Some(common::FlagType::REAL(false))
+                        };
+                        self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+                            Some(common::FlagType::REAL(true))
+                        } else {
+                            Some(common::FlagType::REAL(false))
+                        };
+                    } else {
+                        let expression = String::from(format!(
+                            "({:?},{:?}) cmp ({:?},{:?})",
+                            r1.base, r1.offset, r2.base, r2.offset
+                        ));
+                        self.neg =
+                            Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
+                        self.zero =
+                            Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
+                        self.carry = Some(common::FlagType::ABSTRACT(format!(
+                            "({}) carry",
+                            expression
+                        )));
+                        self.overflow = Some(common::FlagType::ABSTRACT(format!(
+                            "({}) overflow",
+                            expression
+                        )));
+                    }
+                }
             }
+        } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
+            let expression = String::from(format!(
+                "({:?},{:?}) cmp ({:?},{:?})",
+                r1.base, r1.offset, r2.base, r2.offset
+            ));
+            self.neg =
+                Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
+            self.zero =
+                Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
+            self.carry = Some(common::FlagType::ABSTRACT(format!(
+                "({}) carry",
+                expression
+            )));
+            self.overflow = Some(common::FlagType::ABSTRACT(format!(
+                "({}) overflow",
+                expression
+            )));
         } else {
             log::error!("Cannot compare these two registers")
         }
