@@ -116,7 +116,7 @@ pub struct ARMCORTEXA {
 }
 
 impl fmt::Debug for ARMCORTEXA {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // write!(f, "stack: {:?}", &self.stack);
         for i in [0..31] {
             println!("register {:?}", &self.registers[i]);
@@ -1086,10 +1086,8 @@ impl ARMCORTEXA {
                 "({:?},{:?}) cmp ({:?},{:?})",
                 r1.base, r1.offset, r2.base, r2.offset
             ));
-            self.neg =
-                Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
-            self.zero =
-                Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
+            self.neg = Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
+            self.zero = Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
             self.carry = Some(common::FlagType::ABSTRACT(format!(
                 "({}) carry",
                 expression

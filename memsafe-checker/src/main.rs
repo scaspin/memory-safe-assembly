@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
+use rand::Rng;
 
 mod common;
 mod computer;
@@ -21,8 +22,10 @@ struct ExecutionEngine {
 // if true, we jump
 // if false, we continue
 // BIG TODO
-fn evaluate_jump_condition(expression: String) -> bool {
-    return false
+fn evaluate_jump_condition(_expression: String) -> bool {
+    let mut rng = rand::thread_rng();
+    let r = rng.gen::<bool>();
+    r
 }
 
 impl ExecutionEngine {
@@ -153,14 +156,10 @@ impl ExecutionEngine {
             }
         }
 
-        let mut count = 0;
         while pc < program_length {
             let instruction = self.program.code[pc].clone();
             log::info!("{:?}", instruction);
-
-            // println!("At line: {}", pc);
-            // println!("Computer: {:?}", self.computer);
-
+            
             let execute_result = self.computer.execute(&instruction);
             match execute_result {
                 Ok(some) => match some {
@@ -169,7 +168,8 @@ impl ExecutionEngine {
                         (Some(condition), Some(label), None) => {
                             if evaluate_jump_condition(condition) {
                                 for l in self.program.labels.iter() {
-                                    if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
+                                    if l.0.contains(&label.clone()) && label.contains(&l.0.clone())
+                                    {
                                         pc = l.1;
                                     }
                                 }
@@ -207,9 +207,7 @@ impl ExecutionEngine {
                             pc = address as usize;
                         }
                         (Some(condition), None, None) => {
-                            log::error!(
-                                "No jump target for jump condition"
-                            )
+                            log::error!("No jump target for jump condition {}", condition)
                         }
                         (None, None, None)
                         | (None, Some(_), Some(_))
