@@ -1,6 +1,25 @@
 use std::fmt;
 use std::str::FromStr;
 
+#[derive(Debug, Clone)]
+pub struct AbstractValue {
+    pub name: String,
+    pub min: Option<usize>,
+    pub max: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ValueType {
+    ABSTRACT(AbstractValue), // string will be an identifier
+    REAL(usize),
+}
+
+#[derive(Debug, Clone)]
+pub enum FlagType {
+    ABSTRACT(String), // TODO: change format so interpreter can evaluate without string manipulation
+    REAL(bool),
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum RegionType {
     READ,
@@ -16,15 +35,12 @@ impl fmt::Display for RegionType {
     }
 }
 
-// TODO: allow different types within one region at different offsets
-// for example for sha256 input is also output may be 1000 bits long but output is 256
-// so shouldn't write into the input buffer past 256 bits
 #[derive(Debug, Clone)]
 pub struct MemorySafeRegion {
     pub region_type: RegionType,
     pub register: String,
-    pub start_offset: usize,
-    pub end_offset: usize,
+    pub start_offset: ValueType,
+    pub end_offset: ValueType,
 }
 
 #[derive(Debug, Clone)]

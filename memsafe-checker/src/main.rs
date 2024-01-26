@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
-
+use rand::Rng;
 
 mod common;
 mod computer;
@@ -19,8 +19,16 @@ struct ExecutionEngine {
     // memory_regions: Vec<MemorySafeRegion> , // FIX: necessary?
 }
 
-impl ExecutionEngine {
+// if true, we jump
+// if false, we continue
+// BIG TODO
+fn evaluate_jump_condition(_expression: String) -> bool {
+    let mut rng = rand::thread_rng();
+    let r = rng.gen::<bool>();
+    r
+}
 
+impl ExecutionEngine {
     fn new(lines: Vec<String>) -> ExecutionEngine {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
@@ -130,13 +138,12 @@ impl ExecutionEngine {
         self.computer.set_region(region);
     }
 
-    fn add_input(&mut self, register: String) {
-        // self.memory_regions.push(region);
-        self.computer.set_input(register);
-    }
-
     fn add_immediate(&mut self, register: String, value: usize) {
         self.computer.set_immediate(register, value as u64);
+    }
+
+    fn add_abstract(&mut self, register: String, value: common::AbstractValue) {
+        self.computer.set_abstract(register, value);
     }
 
     fn start(&mut self, start: String) -> std::io::Result<()> {
@@ -149,43 +156,62 @@ impl ExecutionEngine {
             }
         }
 
-        let mut count = 0;
         while pc < program_length {
             let instruction = self.program.code[pc].clone();
             log::info!("{:?}", instruction);
-
-            // println!("Running: {:?}", instruction.clone());
-
-            // if (pc == 868  || pc == 869) && count < 6 {
-            //     println!("Running: {:?}", instruction.clone());
-            //     println!("Computer: {:?}", self.computer);
-            //     count = count + 1;
-            // }
-            // println!("Computer: {:?}", self.computer);
-
+            
             let execute_result = self.computer.execute(&instruction);
             match execute_result {
                 Ok(some) => match some {
                     Some(jump) => match jump {
-                        (Some(label), None) => {
+                        // (condition, label to jump to, line number to jump to)
+                        (Some(condition), Some(label), None) => {
+                            if evaluate_jump_condition(condition) {
+                                for l in self.program.labels.iter() {
+                                    if l.0.contains(&label.clone()) && label.contains(&l.0.clone())
+                                    {
+                                        pc = l.1;
+                                    }
+                                }
+                            } else {
+                                pc = pc + 1;
+                            }
+                        }
+                        (Some(condition), None, Some(address)) => {
+                            if evaluate_jump_condition(condition) {
+                                if address == 0 {
+                                    // program is done
+                                    break;
+                                }
+                                pc = address as usize;
+                            } else {
+                                pc = pc + 1;
+                            }
+                        }
+                        (None, Some(label), None) => {
                             // println!("jump to label: {:?}", label.clone());
                             if label == "Return".to_string() {
                                 break;
                             }
                             for l in self.program.labels.iter() {
-                                if l.0.contains(&label.clone()) && label.contains(&l.0.clone()){
+                                if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
                                     pc = l.1;
                                 }
                             }
                         }
-                        (None, Some(address)) => {
+                        (None, None, Some(address)) => {
                             if address == 0 {
                                 // program is done
                                 break;
                             }
                             pc = address as usize;
                         }
-                        (None, None) | (Some(_), Some(_)) => {
+                        (Some(condition), None, None) => {
+                            log::error!("No jump target for jump condition {}", condition)
+                        }
+                        (None, None, None)
+                        | (None, Some(_), Some(_))
+                        | (Some(_), Some(_), Some(_)) => {
                             log::error!(
                                 "Execute did not return valid response for jump or continue"
                             )
@@ -205,7 +231,6 @@ impl ExecutionEngine {
                 }
             }
 
-            // println!("at line: {:?}", pc.clone());
             self.pc = pc;
         }
         Ok(())
@@ -230,47 +255,62 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x0"),
-        start_offset: 0,
-        end_offset: 64, // FIX: verify
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(64), // FIX: verify
     });
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::WRITE,
         register: String::from("x0"),
-        start_offset: 0,
-        end_offset: 64, // FIX: verify
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(64), // FIX: verify
     });
+
+    let blocks = common::AbstractValue {
+        name: "Blocks".to_string(),
+        min: Some(0),
+        max: None,
+    };
+
+    let length = common::AbstractValue {
+        name: "Blocks * 64".to_string(),
+        min: Some(0),
+        max: None,
+    };
 
     // x1 -- input blocks
     // engine.add_input(String::from("x1")); // necessary to support various input designs
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::WRITE,
         register: String::from("x1"),
-        start_offset: 0,
-        end_offset: 256,
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(256),
     });
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x1"),
-        start_offset: 0,
-        end_offset: 512, // TODO: make abstract!
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::ABSTRACT(length.clone()), // should be * 64
     });
 
     // x2 -- number of blocks
-    engine.add_immediate(String::from("x2"), 256);
+    engine.add_abstract(String::from("x2"), blocks);
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x2"),
-        start_offset: 0,
-        end_offset: 64, // FIX: verify?
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(256),
     });
 
     engine.start(start_label)
 }
 
-fn main() -> std::io::Result<()> {
+fn main() {
     env_logger::init();
 
     let res = check_sha256_armv8_ios64();
-    println!("{:?}", res);
-    res
+    if res.is_ok() {
+        println!("Programs are memory safe!");
+    } else {
+        println!("{:?}", res);
+    }
 }
