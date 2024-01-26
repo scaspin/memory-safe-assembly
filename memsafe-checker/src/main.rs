@@ -24,8 +24,7 @@ struct ExecutionEngine {
 // BIG TODO
 fn evaluate_jump_condition(_expression: String) -> bool {
     let mut rng = rand::thread_rng();
-    let r = rng.gen::<bool>();
-    r
+    rng.gen::<bool>()
 }
 
 impl ExecutionEngine {
@@ -304,12 +303,85 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
     engine.start(start_label)
 }
 
+fn check_aesv8_armv8_apple() -> std::io::Result<()> {
+    use std::io::BufRead;
+
+    let file = File::open("assets/aesv8-armv8-apple.S")?;
+    let reader = BufReader::new(file);
+    let start_label = String::from("_aes_hw_decrypt");
+
+    let mut program = Vec::new();
+    for line in reader.lines() {
+        program.push(line.unwrap_or(String::from("")));
+    }
+
+    let mut engine = ExecutionEngine::new(program);
+
+    // function call aes_hw_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key);
+    // AES_decrypt decrypts a single block from |in| to |out| with |key|. The |in|
+    // and |out| pointers may overlap.
+    // in.length == out.length
+
+    let length = common::AbstractValue {
+        name: "length".to_string(),
+        min: Some(0),
+        max: None,
+    };
+
+    // x0 -- input
+    engine.add_region(common::MemorySafeRegion {
+        region_type: common::RegionType::READ,
+        register: String::from("x0"),
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::ABSTRACT(length.clone()),
+    });
+
+    // x1 -- out
+    engine.add_region(common::MemorySafeRegion {
+        region_type: common::RegionType::WRITE,
+        register: String::from("x1"),
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::ABSTRACT(length),
+    });
+
+    // from comments:
+    // #define AES_ENCRYPT 1
+    // #define AES_DECRYPT 0
+    // // AES_MAXNR is the maximum number of AES rounds.
+    // #define AES_MAXNR 14
+    // #define AES_BLOCK_SIZE 16
+    // // aes_key_st should be an opaque type, but EVP requires that the size be
+    // // known.
+    // struct aes_key_st {
+    //   uint32_t rd_key[4 * (AES_MAXNR + 1)];
+    //   unsigned rounds;
+    // };
+    // typedef struct aes_key_st AES_KEY;
+
+    // x2 -- key
+    engine.add_region(common::MemorySafeRegion {
+        region_type: common::RegionType::READ,
+        register: String::from("x2"),
+        start_offset: common::ValueType::REAL(0),
+        end_offset: common::ValueType::REAL(256),
+    });
+
+    engine.start(start_label)
+}
+
 fn main() {
     env_logger::init();
 
-    let res = check_sha256_armv8_ios64();
+    let mut res = check_sha256_armv8_ios64();
     if res.is_ok() {
-        println!("Programs are memory safe!");
+        println!("Sha 256 checked is memory safe!");
+    } else {
+        println!("{:?}", res);
+    }
+
+    res = check_aesv8_armv8_apple();
+    if res.is_ok() {
+        println!("AES checked is memory safe!");
     } else {
         println!("{:?}", res);
     }
