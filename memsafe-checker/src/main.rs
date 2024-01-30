@@ -16,7 +16,7 @@ struct ExecutionEngine {
     program: Program,
     computer: computer::ARMCORTEXA,
     pc: usize,
-    loop_state: Vec<(String, Vec<String>)>,
+    loop_state: Vec<(String, Vec<common::MemoryAccess>)>,
 }
 
 impl ExecutionEngine {
@@ -187,7 +187,6 @@ impl ExecutionEngine {
                             }
                         }
                         (None, Some(label), None) => {
-                            // println!("jump to label: {:?}", label.clone());
                             if label == "Return".to_string() {
                                 break;
                             }
@@ -234,14 +233,27 @@ impl ExecutionEngine {
 
         self.computer.check_stack_pointer_restored();
 
+        for state in &self.loop_state {
+            println!("Condition: {:?}", state.0);
+            for rw in &state.1 {
+                println!("{}", rw);
+            }
+        }   
+        
         Ok(())
     }
 
     // if true, we jump
     // if false, we continue
     // BIG TODO
-    fn evaluate_jump_condition(&mut self, expression: String, rw_list: Vec<String>) -> bool {
-        self.loop_state.push((expression, rw_list));
+    fn evaluate_jump_condition(&mut self, expression: String, rw_list: Vec<common::MemoryAccess>) -> bool {
+        let mut relevant_rw_list = Vec::new();
+        for a in rw_list {
+            if expression.contains(&a.base) {
+                relevant_rw_list.push(a);
+            }
+        }
+        self.loop_state.push((expression, relevant_rw_list));
         let mut rng = rand::thread_rng();
         let r = rng.gen::<bool>();
         r

@@ -113,7 +113,7 @@ pub struct ARMCORTEXA {
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
     abstracts: Vec<common::AbstractValue>,
-    pub rw_queue: Vec<String>,
+    pub rw_queue: Vec<common::MemoryAccess>,
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -1144,7 +1144,7 @@ impl ARMCORTEXA {
                     }
                     if exists {
                         self.rw_queue
-                            .push(format!("Read: {:?}, {:?}", base, address.offset));
+                            .push(common::MemoryAccess{ kind: common::RegionType::READ, base, offset:address.offset});
                         self.set_register(t, RegisterKind::Number, None, 0);
                     } else {
                         log::error!("Could not read from base {:?}", base)
@@ -1189,9 +1189,9 @@ impl ARMCORTEXA {
                     }
                     if exists {
                         self.rw_queue
-                            .push(format!("Write: {:?}, {:?}", base, address.offset));
+                            .push(common::MemoryAccess{ kind: common::RegionType::WRITE, base, offset:address.offset});
                     } else {
-                        log::error!("Could not read from base {:?}", base)
+                        log::error!("Could not write to base {:?}", base)
                     }
                 }
             }
