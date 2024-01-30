@@ -1123,9 +1123,7 @@ impl ARMCORTEXA {
      */
     fn load(&mut self, t: String, address: RegisterValue) {
         let res = self.mem_safe_read(address.base.clone(), address.offset);
-        // 
-        // println!("Read: {:?}, {:?}", address.base.clone(), address.offset);
-
+        
         if res.is_ok() {
             if let Some(base) = address.base {
                 if base == "sp" {
@@ -1147,6 +1145,7 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
+                        println!("Read: {:?}, {:?}",base, address.offset);
                         self.set_register(t, RegisterKind::Number, None, 0);
                     } else {
                         log::error!("Could not read from base {:?}", base)
@@ -1164,7 +1163,6 @@ impl ARMCORTEXA {
      */
     fn store(&mut self, reg: String, address: RegisterValue) {
         let res = self.mem_safe_write(address.base.clone(), address.offset);
-        // println!("Write: {:?}, {:?}", address.base.clone(), address.offset);
 
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
@@ -1183,8 +1181,21 @@ impl ARMCORTEXA {
                     if index > self.stack_size {
                         self.stack_size = self.stack_size + 4;
                     }
+                
+                } else {
+                    let mut exists = false;
+                    for r in &self.memory_safe_regions {
+                        if r.register == base {
+                            exists = true;
+                        }
+                    }
+                    if exists {
+                        println!("Write: {:?}, {:?}", base.clone(), address.offset);
+                    } else {
+                        log::error!("Could not read from base {:?}", base)
+                    }
                 }
-            }
+            } 
         } else {
             log::error!("{:?}", res)
         }
