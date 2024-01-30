@@ -224,6 +224,22 @@ impl ARMCORTEXA {
         self.memory.insert(address, value);
     }
 
+    pub fn check_stack_pointer_restored(&self) {
+        let s = &self.registers[31];
+        match &s.base {
+            Some(b) => {
+                if b == "sp" && s.offset == 0 {
+                    log::info!("Stack pointer restored to start");
+                } else {
+                    log::error!("Stack pointer offset not restored");
+                }
+            }
+            None => {
+                log::error!("Stack pointer not restored {:?}", s.base);
+            }
+        }
+    }
+
     // handle different addressing modes
     fn operand(&mut self, v: String) -> RegisterValue {
         if !v.contains('[') && v.contains('#') {
@@ -1107,6 +1123,9 @@ impl ARMCORTEXA {
      */
     fn load(&mut self, t: String, address: RegisterValue) {
         let res = self.mem_safe_read(address.base.clone(), address.offset);
+        // 
+        // println!("Read: {:?}, {:?}", address.base.clone(), address.offset);
+
         if res.is_ok() {
             if let Some(base) = address.base {
                 if base == "sp" {
@@ -1145,6 +1164,8 @@ impl ARMCORTEXA {
      */
     fn store(&mut self, reg: String, address: RegisterValue) {
         let res = self.mem_safe_write(address.base.clone(), address.offset);
+        // println!("Write: {:?}, {:?}", address.base.clone(), address.offset);
+
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
             if let Some(base) = address.base {

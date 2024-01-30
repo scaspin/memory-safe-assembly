@@ -1,6 +1,6 @@
+use rand::Rng;
 use std::fs::File;
 use std::io::BufReader;
-use rand::Rng;
 
 mod common;
 mod computer;
@@ -22,7 +22,8 @@ struct ExecutionEngine {
 // if true, we jump
 // if false, we continue
 // BIG TODO
-fn evaluate_jump_condition(_expression: String) -> bool {
+fn evaluate_jump_condition(expression: String) -> bool {
+    println!("{}", expression);
     let mut rng = rand::thread_rng();
     let r = rng.gen::<bool>();
     r
@@ -159,7 +160,7 @@ impl ExecutionEngine {
         while pc < program_length {
             let instruction = self.program.code[pc].clone();
             log::info!("{:?}", instruction);
-            
+
             let execute_result = self.computer.execute(&instruction);
             match execute_result {
                 Ok(some) => match some {
@@ -233,6 +234,9 @@ impl ExecutionEngine {
 
             self.pc = pc;
         }
+
+        self.computer.check_stack_pointer_restored();
+
         Ok(())
     }
 }
