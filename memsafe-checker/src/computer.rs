@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
 
-//use crate::common::{MemorySafeRegion, RegionType};
 use crate::common;
 
 fn get_register_index(reg_name: String) -> usize {
@@ -82,6 +81,35 @@ impl RegisterValue {
     }
 }
 
+// 32 Vectors over 128-bit size registers that can be accessed
+// using as small as 8 bit parts
+
+#[derive(Debug, Clone)]
+struct VectorValue {
+    kind: RegisterKind,
+    bases: [Option<String>; 16],
+    offsets: [i8; 16],
+}
+
+// hack for initialization: https://github.com/rust-lang/rust/issues/44796
+const INIT: Option<String> = None;
+
+impl VectorValue {
+    fn new(name: &str) -> VectorValue {
+        VectorValue {
+            kind: RegisterKind::RegisterBase,
+            bases: [INIT; 16],
+            offsets: [0 as i8; 16],
+        }
+    }
+
+    fn set(&mut self, kind: RegisterKind, base: [Option<String>; 16], offset: [i8; 16]) {
+        self.kind = kind;
+        self.bases = base;
+        self.offsets = offset;
+    }
+}
+
 fn generate_expression(op: &str, a: String, b: String) -> String {
     if a == String::new() {
         return b;
@@ -104,6 +132,7 @@ fn get_register_name_string(r: String) -> String {
 
 pub struct ARMCORTEXA {
     registers: [RegisterValue; 33],
+    vectors: [VectorValue; 32],
     zero: Option<common::FlagType>,
     neg: Option<common::FlagType>,
     carry: Option<common::FlagType>,
@@ -164,8 +193,44 @@ impl ARMCORTEXA {
             RegisterValue::new("xzr"), // 64-bit zero
         ];
 
+        let vectors =  [
+            VectorValue::new("v0"),
+            VectorValue::new("v1"),
+            VectorValue::new("v2"),
+            VectorValue::new("v3"),
+            VectorValue::new("v4"),
+            VectorValue::new("v5"),
+            VectorValue::new("v6"),
+            VectorValue::new("v7"),
+            VectorValue::new("v8"),
+            VectorValue::new("v9"),
+            VectorValue::new("v10"),
+            VectorValue::new("v11"),
+            VectorValue::new("v12"),
+            VectorValue::new("v13"),
+            VectorValue::new("v14"),
+            VectorValue::new("v15"),
+            VectorValue::new("v16"),
+            VectorValue::new("v17"),
+            VectorValue::new("v18"),
+            VectorValue::new("v19"),
+            VectorValue::new("v20"),
+            VectorValue::new("v21"),
+            VectorValue::new("v22"),
+            VectorValue::new("v23"),
+            VectorValue::new("v24"),
+            VectorValue::new("v25"),
+            VectorValue::new("v26"),
+            VectorValue::new("v27"),
+            VectorValue::new("v28"),
+            VectorValue::new("v29"), 
+            VectorValue::new("v30"), 
+            VectorValue::new("v31"),  
+        ];
+
         ARMCORTEXA {
             registers,
+            vectors,
             zero: None,
             neg: None,
             carry: None,
@@ -1143,8 +1208,11 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
-                        self.rw_queue
-                            .push(common::MemoryAccess{ kind: common::RegionType::READ, base, offset:address.offset});
+                        self.rw_queue.push(common::MemoryAccess {
+                            kind: common::RegionType::READ,
+                            base,
+                            offset: address.offset,
+                        });
                         self.set_register(t, RegisterKind::Number, None, 0);
                     } else {
                         log::error!("Could not read from base {:?}", base)
@@ -1188,8 +1256,11 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
-                        self.rw_queue
-                            .push(common::MemoryAccess{ kind: common::RegionType::WRITE, base, offset:address.offset});
+                        self.rw_queue.push(common::MemoryAccess {
+                            kind: common::RegionType::WRITE,
+                            base,
+                            offset: address.offset,
+                        });
                     } else {
                         log::error!("Could not write to base {:?}", base)
                     }
