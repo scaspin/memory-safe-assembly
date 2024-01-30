@@ -113,6 +113,7 @@ pub struct ARMCORTEXA {
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
     abstracts: Vec<common::AbstractValue>,
+    pub rw_queue: Vec<String>,
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -174,6 +175,7 @@ impl ARMCORTEXA {
             stack_size: 0,
             memory_safe_regions: Vec::new(),
             abstracts: Vec::new(),
+            rw_queue: Vec::new(),
         }
     }
 
@@ -197,14 +199,6 @@ impl ARMCORTEXA {
             0,
         );
     }
-
-    // pub fn set_input(&mut self, register: String) {
-    //     self.registers[get_register_index(register)].set(
-    //         RegisterKind::Immediate,
-    //         Some("Input".to_string()), // FIX: treated any differently than regular regions?
-    //         0,
-    //     );
-    // }
 
     fn set_register(
         &mut self,
@@ -238,6 +232,10 @@ impl ARMCORTEXA {
                 log::error!("Stack pointer not restored {:?}", s.base);
             }
         }
+    }
+
+    pub fn clear_rw_queue(&mut self) {
+        self.rw_queue = Vec::new();
     }
 
     // handle different addressing modes
@@ -615,7 +613,7 @@ impl ARMCORTEXA {
                                     common::ValueType::ABSTRACT(end) => {
                                         if offset >= (start as i64) {
                                             for a in &self.abstracts {
-                                                if end.name.contains(&a.name) {
+                                                if end.name == end.name {
                                                     if let Some(e) = a.max {
                                                         if offset < ((e - 4) as i64) {
                                                             return Ok(());
@@ -1123,7 +1121,7 @@ impl ARMCORTEXA {
      */
     fn load(&mut self, t: String, address: RegisterValue) {
         let res = self.mem_safe_read(address.base.clone(), address.offset);
-        
+
         if res.is_ok() {
             if let Some(base) = address.base {
                 if base == "sp" {
@@ -1145,7 +1143,8 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
-                        println!("Read: {:?}, {:?}",base, address.offset);
+                        self.rw_queue
+                            .push(format!("Read: {:?}, {:?}", base, address.offset));
                         self.set_register(t, RegisterKind::Number, None, 0);
                     } else {
                         log::error!("Could not read from base {:?}", base)
@@ -1181,7 +1180,6 @@ impl ARMCORTEXA {
                     if index > self.stack_size {
                         self.stack_size = self.stack_size + 4;
                     }
-                
                 } else {
                     let mut exists = false;
                     for r in &self.memory_safe_regions {
@@ -1190,12 +1188,13 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
-                        println!("Write: {:?}, {:?}", base.clone(), address.offset);
+                        self.rw_queue
+                            .push(format!("Write: {:?}, {:?}", base, address.offset));
                     } else {
                         log::error!("Could not read from base {:?}", base)
                     }
                 }
-            } 
+            }
         } else {
             log::error!("{:?}", res)
         }
