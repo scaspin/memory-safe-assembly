@@ -1,6 +1,6 @@
+use rand::Rng;
 use std::fs::File;
 use std::io::BufReader;
-use rand::Rng;
 
 mod common;
 mod computer;
@@ -16,15 +16,7 @@ struct ExecutionEngine {
     program: Program,
     computer: computer::ARMCORTEXA,
     pc: usize,
-    // memory_regions: Vec<MemorySafeRegion> , // FIX: necessary?
-}
-
-// if true, we jump
-// if false, we continue
-// BIG TODO
-fn evaluate_jump_condition(_expression: String) -> bool {
-    let mut rng = rand::thread_rng();
-    rng.gen::<bool>()
+    loop_state: Vec<(String, Vec<common::MemoryAccess>)>,
 }
 
 impl ExecutionEngine {
@@ -129,6 +121,7 @@ impl ExecutionEngine {
             },
             computer,
             pc: 0,
+            loop_state: Vec::new(),
         };
     }
 
@@ -158,18 +151,21 @@ impl ExecutionEngine {
         while pc < program_length {
             let instruction = self.program.code[pc].clone();
             log::info!("{:?}", instruction);
-            
+
             let execute_result = self.computer.execute(&instruction);
             match execute_result {
                 Ok(some) => match some {
                     Some(jump) => match jump {
                         // (condition, label to jump to, line number to jump to)
                         (Some(condition), Some(label), None) => {
-                            if evaluate_jump_condition(condition) {
+                            if self
+                                .evaluate_jump_condition(condition, self.computer.rw_queue.clone())
+                            {
                                 for l in self.program.labels.iter() {
                                     if l.0.contains(&label.clone()) && label.contains(&l.0.clone())
                                     {
                                         pc = l.1;
+                                        self.computer.clear_rw_queue();
                                     }
                                 }
                             } else {
@@ -177,18 +173,20 @@ impl ExecutionEngine {
                             }
                         }
                         (Some(condition), None, Some(address)) => {
-                            if evaluate_jump_condition(condition) {
+                            if self
+                                .evaluate_jump_condition(condition, self.computer.rw_queue.clone())
+                            {
                                 if address == 0 {
                                     // program is done
                                     break;
                                 }
                                 pc = address as usize;
+                                self.computer.clear_rw_queue();
                             } else {
                                 pc = pc + 1;
                             }
                         }
                         (None, Some(label), None) => {
-                            // println!("jump to label: {:?}", label.clone());
                             if label == "Return".to_string() {
                                 break;
                             }
@@ -232,7 +230,33 @@ impl ExecutionEngine {
 
             self.pc = pc;
         }
+
+        self.computer.check_stack_pointer_restored();
+
+        for state in &self.loop_state {
+            println!("Condition: {:?}", state.0);
+            for rw in &state.1 {
+                println!("{}", rw);
+            }
+        }   
+        
         Ok(())
+    }
+
+    // if true, we jump
+    // if false, we continue
+    // BIG TODO
+    fn evaluate_jump_condition(&mut self, expression: String, rw_list: Vec<common::MemoryAccess>) -> bool {
+        let mut relevant_rw_list = Vec::new();
+        for a in rw_list {
+            if expression.contains(&a.base) {
+                relevant_rw_list.push(a);
+            }
+        }
+        self.loop_state.push((expression, relevant_rw_list));
+        let mut rng = rand::thread_rng();
+        let r = rng.gen::<bool>();
+        r
     }
 }
 
@@ -264,20 +288,13 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
         end_offset: common::ValueType::REAL(64), // FIX: verify
     });
 
-    let blocks = common::AbstractValue {
-        name: "Blocks".to_string(),
-        min: Some(0),
-        max: None,
-    };
-
     let length = common::AbstractValue {
-        name: "Blocks * 64".to_string(),
+        name: "Length".to_string(),
         min: Some(0),
         max: None,
     };
 
     // x1 -- input blocks
-    // engine.add_input(String::from("x1")); // necessary to support various input designs
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::WRITE,
         register: String::from("x1"),
@@ -288,11 +305,11 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
         region_type: common::RegionType::READ,
         register: String::from("x1"),
         start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::ABSTRACT(length.clone()), // should be * 64
+        end_offset: common::ValueType::ABSTRACT(length.clone()),
     });
 
     // x2 -- number of blocks
-    engine.add_abstract(String::from("x2"), blocks);
+    engine.add_abstract(String::from("x2"), length);
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x2"),

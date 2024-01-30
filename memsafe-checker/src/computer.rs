@@ -113,6 +113,7 @@ pub struct ARMCORTEXA {
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
     abstracts: Vec<common::AbstractValue>,
+    pub rw_queue: Vec<common::MemoryAccess>,
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -174,6 +175,7 @@ impl ARMCORTEXA {
             stack_size: 0,
             memory_safe_regions: Vec::new(),
             abstracts: Vec::new(),
+            rw_queue: Vec::new(),
         }
     }
 
@@ -198,14 +200,6 @@ impl ARMCORTEXA {
         );
     }
 
-    // pub fn set_input(&mut self, register: String) {
-    //     self.registers[get_register_index(register)].set(
-    //         RegisterKind::Immediate,
-    //         Some("Input".to_string()), // FIX: treated any differently than regular regions?
-    //         0,
-    //     );
-    // }
-
     fn set_register(
         &mut self,
         name: String,
@@ -222,6 +216,26 @@ impl ARMCORTEXA {
 
     pub fn add_memory(&mut self, address: i64, value: i64) {
         self.memory.insert(address, value);
+    }
+
+    pub fn check_stack_pointer_restored(&self) {
+        let s = &self.registers[31];
+        match &s.base {
+            Some(b) => {
+                if b == "sp" && s.offset == 0 {
+                    log::info!("Stack pointer restored to start");
+                } else {
+                    log::error!("Stack pointer offset not restored");
+                }
+            }
+            None => {
+                log::error!("Stack pointer not restored {:?}", s.base);
+            }
+        }
+    }
+
+    pub fn clear_rw_queue(&mut self) {
+        self.rw_queue = Vec::new();
     }
 
     // handle different addressing modes
@@ -599,7 +613,7 @@ impl ARMCORTEXA {
                                     common::ValueType::ABSTRACT(end) => {
                                         if offset >= (start as i64) {
                                             for a in &self.abstracts {
-                                                if end.name.contains(&a.name) {
+                                                if end.name == end.name {
                                                     if let Some(e) = a.max {
                                                         if offset < ((e - 4) as i64) {
                                                             return Ok(());
@@ -1107,6 +1121,7 @@ impl ARMCORTEXA {
      */
     fn load(&mut self, t: String, address: RegisterValue) {
         let res = self.mem_safe_read(address.base.clone(), address.offset);
+
         if res.is_ok() {
             if let Some(base) = address.base {
                 if base == "sp" {
@@ -1128,6 +1143,8 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
+                        self.rw_queue
+                            .push(common::MemoryAccess{ kind: common::RegionType::READ, base, offset:address.offset});
                         self.set_register(t, RegisterKind::Number, None, 0);
                     } else {
                         log::error!("Could not read from base {:?}", base)
@@ -1145,6 +1162,7 @@ impl ARMCORTEXA {
      */
     fn store(&mut self, reg: String, address: RegisterValue) {
         let res = self.mem_safe_write(address.base.clone(), address.offset);
+
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
             if let Some(base) = address.base {
@@ -1161,6 +1179,19 @@ impl ARMCORTEXA {
                     // check stack sizing
                     if index > self.stack_size {
                         self.stack_size = self.stack_size + 4;
+                    }
+                } else {
+                    let mut exists = false;
+                    for r in &self.memory_safe_regions {
+                        if r.register == base {
+                            exists = true;
+                        }
+                    }
+                    if exists {
+                        self.rw_queue
+                            .push(common::MemoryAccess{ kind: common::RegionType::WRITE, base, offset:address.offset});
+                    } else {
+                        log::error!("Could not write to base {:?}", base)
                     }
                 }
             }

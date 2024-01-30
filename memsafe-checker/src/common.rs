@@ -2,6 +2,19 @@ use std::fmt;
 use std::str::FromStr;
 
 #[derive(Debug, Clone)]
+pub struct MemoryAccess {
+    pub kind: RegionType,
+    pub base: String,
+    pub offset : i64,
+}
+
+impl fmt::Display for MemoryAccess {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}, {}, {:?}", self.kind, self.base, self.offset)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct AbstractValue {
     pub name: String,
     pub min: Option<usize>,
@@ -168,3 +181,4 @@ impl FromStr for Instruction {
         })
     }
 }
+
