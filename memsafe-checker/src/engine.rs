@@ -1,9 +1,6 @@
+use crate::common;
+use crate::computer;
 use rand::Rng;
-use std::fs::File;
-use std::io::BufReader;
-
-mod common;
-mod computer;
 
 struct Program {
     defs: Vec<String>,
@@ -12,7 +9,7 @@ struct Program {
     ifdefs: Vec<((String, usize), usize)>,
 }
 
-struct ExecutionEngine {
+pub struct ExecutionEngine {
     program: Program,
     computer: computer::ARMCORTEXA,
     pc: usize,
@@ -20,7 +17,7 @@ struct ExecutionEngine {
 }
 
 impl ExecutionEngine {
-    fn new(lines: Vec<String>) -> ExecutionEngine {
+    pub fn new(lines: Vec<String>) -> ExecutionEngine {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
         let mut code: Vec<common::Instruction> = Vec::new();
@@ -125,20 +122,20 @@ impl ExecutionEngine {
         };
     }
 
-    fn add_region(&mut self, region: common::MemorySafeRegion) {
+    pub fn add_region(&mut self, region: common::MemorySafeRegion) {
         // self.memory_regions.push(region);
         self.computer.set_region(region);
     }
 
-    fn add_immediate(&mut self, register: String, value: usize) {
+    pub fn add_immediate(&mut self, register: String, value: usize) {
         self.computer.set_immediate(register, value as u64);
     }
 
-    fn add_abstract(&mut self, register: String, value: common::AbstractValue) {
+    pub fn add_abstract(&mut self, register: String, value: common::AbstractValue) {
         self.computer.set_abstract(register, value);
     }
 
-    fn start(&mut self, start: String) -> std::io::Result<()> {
+    pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let program_length = self.program.code.len();
         let mut pc = 0;
 
@@ -261,82 +258,5 @@ impl ExecutionEngine {
         let mut rng = rand::thread_rng();
         let r = rng.gen::<bool>();
         r
-    }
-}
-
-fn check_sha256_armv8_ios64() -> std::io::Result<()> {
-    use std::io::BufRead;
-
-    let file = File::open("assets/processed-sha256-armv8-ios64.S")?;
-    let reader = BufReader::new(file);
-    let start_label = String::from("_sha256_block_data_order");
-
-    let mut program = Vec::new();
-    for line in reader.lines() {
-        program.push(line.unwrap_or(String::from("")));
-    }
-
-    let mut engine = ExecutionEngine::new(program);
-
-    // x0 -- context
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::READ,
-        register: String::from("x0"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(64), // FIX: verify
-    });
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::WRITE,
-        register: String::from("x0"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(64), // FIX: verify
-    });
-
-    let blocks = common::AbstractValue {
-        name: "Blocks".to_string(),
-        min: Some(1),
-        max: None,
-    };
-
-    let length = common::AbstractValue {
-        name: "Blocks lsl 6".to_string(),
-        min: Some(1),
-        max: None,
-    };
-
-    // x1 -- input blocks
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::WRITE,
-        register: String::from("x1"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(256),
-    });
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::READ,
-        register: String::from("x1"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::ABSTRACT(length.clone()),
-    });
-
-    // x2 -- number of blocks
-    engine.add_abstract(String::from("x2"), blocks);
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::READ,
-        register: String::from("x2"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(64),
-    });
-
-    engine.start(start_label)
-}
-
-fn main() {
-    env_logger::init();
-
-    let res = check_sha256_armv8_ios64();
-    if res.is_ok() {
-        println!("Programs are memory safe!");
-    } else {
-        println!("{:?}", res);
     }
 }
