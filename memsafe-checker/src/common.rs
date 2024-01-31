@@ -5,7 +5,7 @@ use std::str::FromStr;
 pub struct MemoryAccess {
     pub kind: RegionType,
     pub base: String,
-    pub offset : i64,
+    pub offset: i64,
 }
 
 impl fmt::Display for MemoryAccess {
@@ -181,4 +181,3 @@ impl FromStr for Instruction {
         })
     }
 }
-

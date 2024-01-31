@@ -36,6 +36,19 @@ fn string_to_int(s: &str) -> i64 {
     return value;
 }
 
+fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
+    let new_offset = register.offset >> shift;
+    RegisterValue {
+        kind: register.kind,
+        base: Some(generate_expression(
+            &op,
+            register.base.unwrap_or("".to_string()),
+            shift.to_string(),
+        )),
+        offset: new_offset,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum RegisterKind {
     RegisterBase, // register name / expression + offset
@@ -89,7 +102,7 @@ fn generate_expression(op: &str, a: String, b: String) -> String {
     if b == String::new() {
         return a;
     }
-    format!("{} {} {}", a, op, b)
+    format!("({} {} {})", a, op, b)
 }
 
 fn get_register_name_string(r: String) -> String {
@@ -290,14 +303,6 @@ impl ARMCORTEXA {
             //if v.contains("x") || v.contains("w"){
             return self.registers[get_register_index(v)].clone();
         }
-        // } else {
-        //     let int = v.parse::<i64>().unwrap();
-        //     return RegisterValue {
-        //         kind: RegisterKind::Immediate,
-        //         base: None,
-        //         offset: int,
-        //     }
-        // }
     }
 
     pub fn execute(
@@ -311,6 +316,7 @@ impl ARMCORTEXA {
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
+                instruction.r4.clone(),
             );
         } else if instruction.op == "sub" {
             self.arithmetic(
@@ -319,6 +325,7 @@ impl ARMCORTEXA {
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
+                instruction.r4.clone(),
             );
         } else if instruction.op == "and" {
             self.arithmetic(
@@ -327,6 +334,7 @@ impl ARMCORTEXA {
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
+                instruction.r4.clone(),
             );
         } else if instruction.op == "orr" {
             self.arithmetic(
@@ -335,6 +343,7 @@ impl ARMCORTEXA {
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
+                instruction.r4.clone(),
             );
         } else if instruction.op == "eor" {
             self.arithmetic(
@@ -343,21 +352,19 @@ impl ARMCORTEXA {
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
+                instruction.r4.clone(),
             );
-            if instruction.r4.is_some() {
-                if let Some(expr) = &instruction.r4 {
-                    let parts = expr.split_once('#').unwrap();
-                    if parts.0 == "ror" {
-                        self.rotate_imm(
-                            instruction.r1.clone().expect("Should be here"),
-                            instruction.r1.clone().expect("Again"),
-                            string_to_int(parts.1),
-                        );
-                    }
-                }
-            }
+        } else if instruction.op == "bic" {
+            self.arithmetic(
+                &instruction.op,
+                &|x, y| x & !y,
+                instruction.r1.clone().expect("Need dst register"),
+                instruction.r2.clone().expect("Need one operand"),
+                instruction.r3.clone().expect("Need two operand"),
+                instruction.r4.clone(),
+            );
         } else if instruction.op == "ror" {
-            self.rotate_reg(
+            self.shift_reg(
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
                 instruction.r3.clone().expect("Need two operand"),
@@ -415,14 +422,6 @@ impl ARMCORTEXA {
                         .to_string(),
                 ),
             }
-        } else if instruction.op == "bic" {
-            self.arithmetic(
-                &instruction.op,
-                &|x, y| x & !y,
-                instruction.r1.clone().expect("Need dst register"),
-                instruction.r2.clone().expect("Need one operand"),
-                instruction.r3.clone().expect("Need two operand"),
-            );
         } else if instruction.op == "ret" {
             if instruction.r1.is_none() {
                 let x30 = self.registers[30].clone();
@@ -828,11 +827,20 @@ impl ARMCORTEXA {
         reg0: String,
         reg1: String,
         reg2: String,
+        reg3: Option<String>,
     ) {
         let r1 = self.operand(reg1);
-        let r2 = self.operand(reg2.clone());
+        let mut r2 = self.operand(reg2.clone());
 
         // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string.clone(), r1.clone(), r2.clone() );
+
+        if reg3.is_some() {
+            if let Some(expr) = reg3 {
+                let parts = expr.split_once('#').unwrap();
+
+                r2 = shift_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
+            }
+        }
 
         if r1.kind == r2.kind {
             match r1.kind {
@@ -918,29 +926,12 @@ impl ARMCORTEXA {
         }
     }
 
-    fn rotate_reg(&mut self, reg1: String, reg2: String, reg3: String) {
+    fn shift_reg(&mut self, reg1: String, reg2: String, reg3: String) {
         let r1 = self.registers[get_register_index(reg1.clone())].clone();
         let r2 = self.registers[get_register_index(reg2)].clone();
 
         let shift = self.operand(reg3).offset;
         let new_offset = r2.offset >> (shift % 64);
-        self.set_register(
-            reg1,
-            r2.clone().kind,
-            Some(generate_expression(
-                "ror",
-                r1.base.unwrap_or("".to_string()),
-                r2.offset.to_string(),
-            )),
-            new_offset,
-        );
-    }
-
-    fn rotate_imm(&mut self, reg1: String, reg2: String, shift: i64) {
-        let r1 = self.registers[get_register_index(reg1.clone())].clone();
-        let r2 = self.registers[get_register_index(reg2)].clone();
-
-        let new_offset = r2.offset >> shift;
         self.set_register(
             reg1,
             r2.clone().kind,
@@ -1143,8 +1134,11 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
-                        self.rw_queue
-                            .push(common::MemoryAccess{ kind: common::RegionType::READ, base, offset:address.offset});
+                        self.rw_queue.push(common::MemoryAccess {
+                            kind: common::RegionType::READ,
+                            base,
+                            offset: address.offset,
+                        });
                         self.set_register(t, RegisterKind::Number, None, 0);
                     } else {
                         log::error!("Could not read from base {:?}", base)
@@ -1188,8 +1182,11 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
-                        self.rw_queue
-                            .push(common::MemoryAccess{ kind: common::RegionType::WRITE, base, offset:address.offset});
+                        self.rw_queue.push(common::MemoryAccess {
+                            kind: common::RegionType::WRITE,
+                            base,
+                            offset: address.offset,
+                        });
                     } else {
                         log::error!("Could not write to base {:?}", base)
                     }

@@ -238,15 +238,19 @@ impl ExecutionEngine {
             for rw in &state.1 {
                 println!("{}", rw);
             }
-        }   
-        
+        }
+
         Ok(())
     }
 
     // if true, we jump
     // if false, we continue
     // BIG TODO
-    fn evaluate_jump_condition(&mut self, expression: String, rw_list: Vec<common::MemoryAccess>) -> bool {
+    fn evaluate_jump_condition(
+        &mut self,
+        expression: String,
+        rw_list: Vec<common::MemoryAccess>,
+    ) -> bool {
         let mut relevant_rw_list = Vec::new();
         for a in rw_list {
             if expression.contains(&a.base) {
@@ -288,9 +292,15 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
         end_offset: common::ValueType::REAL(64), // FIX: verify
     });
 
+    let blocks = common::AbstractValue {
+        name: "Blocks".to_string(),
+        min: Some(1),
+        max: None,
+    };
+
     let length = common::AbstractValue {
-        name: "Length".to_string(),
-        min: Some(0),
+        name: "Blocks lsl 6".to_string(),
+        min: Some(1),
         max: None,
     };
 
@@ -309,12 +319,12 @@ fn check_sha256_armv8_ios64() -> std::io::Result<()> {
     });
 
     // x2 -- number of blocks
-    engine.add_abstract(String::from("x2"), length);
+    engine.add_abstract(String::from("x2"), blocks);
     engine.add_region(common::MemorySafeRegion {
         region_type: common::RegionType::READ,
         register: String::from("x2"),
         start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(256),
+        end_offset: common::ValueType::REAL(64),
     });
 
     engine.start(start_label)
