@@ -14,7 +14,7 @@ fn get_register_index(reg_name: String) -> usize {
         .strip_prefix("w")
         .unwrap_or(&r0)
         .parse::<usize>()
-        .expect("Invalid register value 3");
+        .expect(format!("Invalid register value {:?}", reg_name).as_str());
     return r1;
 }
 
