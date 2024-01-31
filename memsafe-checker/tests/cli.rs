@@ -6,7 +6,7 @@ mod tests {
 
     #[test]
     fn check_sha256_armv8_ios64() -> std::io::Result<()> {
-        let file = File::open("assets/processed-sha256-armv8-ios64.S")?;
+        let file = File::open("tests/asm-examples/processed-sha256-armv8-ios64.S")?;
         let reader = BufReader::new(file);
         let start_label = String::from("_sha256_block_data_order");
 
