@@ -5,7 +5,7 @@ mod tests {
     use std::io::{BufRead, BufReader};
 
     #[test]
-    fn check_sha256_armv8_ios64() -> std::io::Result<()> {
+    fn sha256_armv8_ios64() -> std::io::Result<()> {
         let file = File::open("tests/asm-examples/processed-sha256-armv8-ios64.S")?;
         let reader = BufReader::new(file);
         let start_label = String::from("_sha256_block_data_order");
@@ -20,13 +20,13 @@ mod tests {
         // x0 -- context
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            register: String::from("x0"),
+            base: String::from("x0"),
             start_offset: common::ValueType::REAL(0),
             end_offset: common::ValueType::REAL(64), // FIX: verify
         });
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::WRITE,
-            register: String::from("x0"),
+            base: String::from("x0"),
             start_offset: common::ValueType::REAL(0),
             end_offset: common::ValueType::REAL(64), // FIX: verify
         });
@@ -43,16 +43,23 @@ mod tests {
             max: None,
         };
 
+        let base = common::AbstractValue {
+            name: "Base".to_string(),
+            min: Some(1),
+            max: None,
+        };
+
         // x1 -- input blocks
+        engine.add_abstract(String::from("x1"), base);
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::WRITE,
-            register: String::from("x1"),
+            base: String::from("Base"),
             start_offset: common::ValueType::REAL(0),
             end_offset: common::ValueType::REAL(256),
         });
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            register: String::from("x1"),
+            base: String::from("Base"),
             start_offset: common::ValueType::REAL(0),
             end_offset: common::ValueType::ABSTRACT(length.clone()),
         });
@@ -61,7 +68,7 @@ mod tests {
         engine.add_abstract(String::from("x2"), blocks);
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            register: String::from("x2"),
+            base: String::from("x2"),
             start_offset: common::ValueType::REAL(0),
             end_offset: common::ValueType::REAL(64),
         });
@@ -105,9 +112,16 @@ mod tests {
             max: None,
         };
 
+        let base = common::AbstractValue {
+            name: "Base".to_string(),
+            min: Some(1),
+            max: None,
+        };
+
+        engine.add_abstract(String::from("x1"), base);
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            register: String::from("x1"),
+            base: String::from("Base"),
             start_offset: common::ValueType::REAL(0),
             end_offset: common::ValueType::ABSTRACT(length.clone()),
         });
@@ -115,7 +129,7 @@ mod tests {
         engine.add_abstract(String::from("x2"), length);
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            register: String::from("x2"),
+            base: String::from("x2"),
             start_offset: common::ValueType::REAL(0),
             end_offset: common::ValueType::REAL(64),
         });

@@ -51,7 +51,7 @@ impl fmt::Display for RegionType {
 #[derive(Debug, Clone)]
 pub struct MemorySafeRegion {
     pub region_type: RegionType,
-    pub register: String,
+    pub base: String,
     pub start_offset: ValueType,
     pub end_offset: ValueType,
 }

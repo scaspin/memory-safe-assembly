@@ -599,8 +599,7 @@ impl ARMCORTEXA {
             } else {
                 // check if read from memory safe region
                 for region in self.memory_safe_regions.clone() {
-                    if region.register == regbase && region.region_type == common::RegionType::READ
-                    {
+                    if region.base == regbase && region.region_type == common::RegionType::READ {
                         match region.start_offset {
                             common::ValueType::REAL(start) => {
                                 match region.end_offset {
@@ -717,8 +716,7 @@ impl ARMCORTEXA {
             } else {
                 // check if read from memory safe region
                 for region in self.memory_safe_regions.clone() {
-                    if region.register == regbase && region.region_type == common::RegionType::WRITE
-                    {
+                    if region.base == regbase && region.region_type == common::RegionType::WRITE {
                         match region.start_offset {
                             common::ValueType::REAL(start) => {
                                 match region.end_offset {
@@ -1129,7 +1127,7 @@ impl ARMCORTEXA {
                 } else {
                     let mut exists = false;
                     for r in &self.memory_safe_regions {
-                        if r.register == base {
+                        if r.base == base {
                             exists = true;
                         }
                     }
@@ -1177,7 +1175,7 @@ impl ARMCORTEXA {
                 } else {
                     let mut exists = false;
                     for r in &self.memory_safe_regions {
-                        if r.register == base {
+                        if r.base == base {
                             exists = true;
                         }
                     }

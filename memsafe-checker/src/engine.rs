@@ -146,8 +146,14 @@ impl ExecutionEngine {
         }
 
         while pc < program_length {
-            let instruction = self.program.code[pc].clone();
+            let mut instruction = self.program.code[pc].clone();
             log::info!("{:?}", instruction);
+
+            // skip instruction if it is a label
+            if instruction.op.contains(":") {
+                pc = pc + 1;
+                instruction = self.program.code[pc].clone();
+            }
 
             let execute_result = self.computer.execute(&instruction);
             match execute_result {
