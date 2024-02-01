@@ -245,19 +245,26 @@ impl ExecutionEngine {
         expression: String,
         rw_list: Vec<common::MemoryAccess>,
     ) -> bool {
-
-        for e in &self.loop_state {
-            if e.0 == expression && e.1 == rw_list{
-                return false;
-            }
-        }
-
         let mut relevant_rw_list = Vec::new();
         for a in rw_list {
             if expression.contains(&a.base) {
                 relevant_rw_list.push(a);
             }
         }
+
+        // println!("loop expression: {}", expression);
+        // println!("loop expression: {:#?}", relevant_rw_list.clone());
+        // for a in &relevant_rw_list.clone() {
+        //     println!("{:?}", a);
+        // }
+
+        for e in &self.loop_state {
+            if e.0 == expression && e.1.clone() == relevant_rw_list.clone() {
+                // do something that replaces tha ? with "Length"
+                return false;
+            }
+        }
+
         self.loop_state.push((expression.clone(), relevant_rw_list));
         self.computer.clear_rw_queue();
 
@@ -269,6 +276,6 @@ impl ExecutionEngine {
             }
         }
 
-        return true
+        return true;
     }
 }

@@ -1,7 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct MemoryAccess {
     pub kind: RegionType,
     pub base: String,
@@ -13,6 +13,14 @@ impl fmt::Display for MemoryAccess {
         write!(f, "{:?}, {}, {:?}", self.kind, self.base, self.offset)
     }
 }
+
+impl PartialEq for MemoryAccess {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind && self.base == other.base && self.offset == other.offset
+    }
+}
+
+impl Eq for MemoryAccess {}
 
 #[derive(Debug, Clone)]
 pub struct AbstractValue {

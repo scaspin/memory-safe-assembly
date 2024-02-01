@@ -507,6 +507,9 @@ impl ARMCORTEXA {
 
             // post-index
             if instruction.r4.is_some() {
+                if self.loop_abstracts.contains(&reg3base) || reg3base.contains(&"?".to_string()) {
+                    return Ok(None);
+                }
                 let new_imm = self.operand(instruction.r4.clone().unwrap());
                 self.set_register(
                     reg3base,
@@ -537,6 +540,9 @@ impl ARMCORTEXA {
 
             // post-index
             if instruction.r3.is_some() {
+                if self.loop_abstracts.contains(&reg2base) || reg2base.contains(&"?".to_string()) {
+                    return Ok(None);
+                }
                 let new_imm = self.operand(instruction.r3.clone().unwrap());
                 self.set_register(
                     reg2base,
@@ -570,6 +576,9 @@ impl ARMCORTEXA {
 
             // post-index
             if instruction.r4.is_some() {
+                if self.loop_abstracts.contains(&reg3base) || reg3base.contains(&"?".to_string()) {
+                    return Ok(None);
+                }
                 let new_imm = self.operand(instruction.r4.clone().unwrap());
                 self.set_register(
                     reg3base,
@@ -609,7 +618,9 @@ impl ARMCORTEXA {
             } else {
                 // check if read from memory safe region
                 for region in self.memory_safe_regions.clone() {
-                    if regbase.contains(&region.base) && region.region_type == common::RegionType::READ {
+                    if regbase.contains(&region.base)
+                        && region.region_type == common::RegionType::READ
+                    {
                         match region.start_offset {
                             common::ValueType::REAL(start) => {
                                 match region.end_offset {
@@ -841,7 +852,7 @@ impl ARMCORTEXA {
         let mut r2 = self.operand(reg2.clone());
 
         // if we're tracking r1 or r2 for abstract looping, we're just gonna operate
-        // some abstract 
+        // some abstract
         if self.loop_abstracts.contains(&reg1) || self.loop_abstracts.contains(&reg2) {
             let mut r0 = self.operand(reg0.clone());
             // need to make sure this works if r2 isn't immediate
@@ -851,11 +862,21 @@ impl ARMCORTEXA {
                     b.push_str(op_string);
                     b.push_str(" ");
                     b.push_str("?");
-                    self.set_register(reg0, r1.kind, Some(b.to_string()), r1.offset);
+                    self.set_register(reg0, r1.kind, Some(b.to_string()), 0);
                 }
-                return
+                return;
             }
-            
+
+            if let Some(mut b) = r2.base.clone() {
+                if !b.contains("?") {
+                    b.push_str(" ");
+                    b.push_str(op_string);
+                    b.push_str(" ");
+                    b.push_str("?");
+                    self.set_register(reg0, r2.kind, Some(b.to_string()), r2.offset);
+                }
+                return;
+            }
         }
 
         if reg3.is_some() {
