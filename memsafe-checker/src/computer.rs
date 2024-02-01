@@ -848,13 +848,12 @@ impl ARMCORTEXA {
         reg2: String,
         reg3: Option<String>,
     ) {
-        let mut r1 = self.operand(reg1.clone());
+        let r1 = self.operand(reg1.clone());
         let mut r2 = self.operand(reg2.clone());
 
         // if we're tracking r1 or r2 for abstract looping, we're just gonna operate
         // some abstract
         if self.loop_abstracts.contains(&reg1) || self.loop_abstracts.contains(&reg2) {
-            let mut r0 = self.operand(reg0.clone());
             // need to make sure this works if r2 isn't immediate
             if let Some(mut b) = r1.base.clone() {
                 if !b.contains("?") {

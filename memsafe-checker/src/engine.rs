@@ -1,6 +1,5 @@
 use crate::common;
 use crate::computer;
-use rand::Rng;
 
 struct Program {
     defs: Vec<String>,
