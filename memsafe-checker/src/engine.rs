@@ -162,13 +162,12 @@ impl ExecutionEngine {
                         // (condition, label to jump to, line number to jump to)
                         (Some(condition), Some(label), None) => {
                             if self
-                                .evaluate_jump_condition(condition, self.computer.rw_queue.clone())
+                                .evaluate_jump_condition(condition, self.computer.read_rw_queue())
                             {
                                 for l in self.program.labels.iter() {
                                     if l.0.contains(&label.clone()) && label.contains(&l.0.clone())
                                     {
                                         pc = l.1;
-                                        self.computer.clear_rw_queue();
                                     }
                                 }
                             } else {
@@ -177,14 +176,13 @@ impl ExecutionEngine {
                         }
                         (Some(condition), None, Some(address)) => {
                             if self
-                                .evaluate_jump_condition(condition, self.computer.rw_queue.clone())
+                                .evaluate_jump_condition(condition, self.computer.read_rw_queue())
                             {
                                 if address == 0 {
                                     // program is done
                                     break;
                                 }
                                 pc = address as usize;
-                                self.computer.clear_rw_queue();
                             } else {
                                 pc = pc + 1;
                             }
@@ -236,13 +234,6 @@ impl ExecutionEngine {
 
         self.computer.check_stack_pointer_restored();
 
-        for state in &self.loop_state {
-            println!("Condition: {:?}", state.0);
-            for rw in &state.1 {
-                println!("{}", rw);
-            }
-        }
-
         Ok(())
     }
 
@@ -254,15 +245,30 @@ impl ExecutionEngine {
         expression: String,
         rw_list: Vec<common::MemoryAccess>,
     ) -> bool {
+
+        for e in &self.loop_state {
+            if e.0 == expression && e.1 == rw_list{
+                return false;
+            }
+        }
+
         let mut relevant_rw_list = Vec::new();
         for a in rw_list {
             if expression.contains(&a.base) {
                 relevant_rw_list.push(a);
             }
         }
-        self.loop_state.push((expression, relevant_rw_list));
-        let mut rng = rand::thread_rng();
-        let r = rng.gen::<bool>();
-        r
+        self.loop_state.push((expression.clone(), relevant_rw_list));
+        self.computer.clear_rw_queue();
+
+        // FIX: bad bad bad bad way to do this
+        let v: Vec<&str> = expression.split(&['(', ')', '\\', '"', ',']).collect();
+        for s in v {
+            if s.contains("x") || s.contains("w") {
+                self.computer.track_register(s.to_string());
+            }
+        }
+
+        return true
     }
 }

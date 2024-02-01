@@ -126,6 +126,7 @@ pub struct ARMCORTEXA {
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
     abstracts: Vec<common::AbstractValue>,
+    loop_abstracts: Vec<String>,
     pub rw_queue: Vec<common::MemoryAccess>,
 }
 
@@ -188,6 +189,7 @@ impl ARMCORTEXA {
             stack_size: 0,
             memory_safe_regions: Vec::new(),
             abstracts: Vec::new(),
+            loop_abstracts: Vec::new(),
             rw_queue: Vec::new(),
         }
     }
@@ -251,6 +253,14 @@ impl ARMCORTEXA {
         self.rw_queue = Vec::new();
     }
 
+    pub fn read_rw_queue(&self) -> Vec<common::MemoryAccess> {
+        self.rw_queue.clone()
+    }
+
+    pub fn track_register(&mut self, register: String) {
+        self.loop_abstracts.push(register);
+    }
+
     // handle different addressing modes
     fn operand(&mut self, v: String) -> RegisterValue {
         if !v.contains('[') && v.contains('#') {
@@ -311,7 +321,7 @@ impl ARMCORTEXA {
     ) -> Result<Option<(Option<String>, Option<String>, Option<u128>)>, String> {
         if instruction.op == "add" {
             self.arithmetic(
-                &instruction.op,
+                "+",
                 &|x, y| x + y,
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
@@ -599,7 +609,7 @@ impl ARMCORTEXA {
             } else {
                 // check if read from memory safe region
                 for region in self.memory_safe_regions.clone() {
-                    if region.base == regbase && region.region_type == common::RegionType::READ {
+                    if regbase.contains(&region.base) && region.region_type == common::RegionType::READ {
                         match region.start_offset {
                             common::ValueType::REAL(start) => {
                                 match region.end_offset {
@@ -827,10 +837,26 @@ impl ARMCORTEXA {
         reg2: String,
         reg3: Option<String>,
     ) {
-        let r1 = self.operand(reg1);
+        let mut r1 = self.operand(reg1.clone());
         let mut r2 = self.operand(reg2.clone());
 
-        // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string.clone(), r1.clone(), r2.clone() );
+        // if we're tracking r1 or r2 for abstract looping, we're just gonna operate
+        // some abstract 
+        if self.loop_abstracts.contains(&reg1) || self.loop_abstracts.contains(&reg2) {
+            let mut r0 = self.operand(reg0.clone());
+            // need to make sure this works if r2 isn't immediate
+            if let Some(mut b) = r1.base.clone() {
+                if !b.contains("?") {
+                    b.push_str(" ");
+                    b.push_str(op_string);
+                    b.push_str(" ");
+                    b.push_str("?");
+                    self.set_register(reg0, r1.kind, Some(b.to_string()), r1.offset);
+                }
+                return
+            }
+            
+        }
 
         if reg3.is_some() {
             if let Some(expr) = reg3 {
@@ -943,8 +969,8 @@ impl ARMCORTEXA {
     }
 
     fn cmp(&mut self, reg1: String, reg2: String) {
-        let r1 = self.registers[get_register_index(reg1)].clone();
-        let r2 = self.registers[get_register_index(reg2)].clone();
+        let r1 = self.registers[get_register_index(reg1.clone())].clone();
+        let r2 = self.registers[get_register_index(reg2.clone())].clone();
 
         // println!("Comparing r1: {:?}, r2: {:?}", r1, r2);
 
@@ -975,8 +1001,8 @@ impl ARMCORTEXA {
                         };
                     } else {
                         let expression = String::from(format!(
-                            "({:?},{:?}) cmp ({:?},{:?})",
-                            r1.base, r1.offset, r2.base, r2.offset
+                            "{:?}({:?},{:?}) cmp {:?}({:?},{:?})",
+                            reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
                         ));
                         self.neg =
                             Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
@@ -1066,8 +1092,8 @@ impl ARMCORTEXA {
                         };
                     } else {
                         let expression = String::from(format!(
-                            "({:?},{:?}) cmp ({:?},{:?})",
-                            r1.base, r1.offset, r2.base, r2.offset
+                            "{:?}({:?},{:?}) cmp {:?}({:?},{:?})",
+                            reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
                         ));
                         self.neg =
                             Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
@@ -1086,8 +1112,8 @@ impl ARMCORTEXA {
             }
         } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
             let expression = String::from(format!(
-                "({:?},{:?}) cmp ({:?},{:?})",
-                r1.base, r1.offset, r2.base, r2.offset
+                "{:?}({:?},{:?}) cmp {:?}({:?},{:?})",
+                reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
             ));
             self.neg = Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
             self.zero = Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
@@ -1127,7 +1153,7 @@ impl ARMCORTEXA {
                 } else {
                     let mut exists = false;
                     for r in &self.memory_safe_regions {
-                        if r.base == base {
+                        if base.contains(&r.base) {
                             exists = true;
                         }
                     }
