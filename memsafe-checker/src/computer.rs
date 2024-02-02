@@ -58,6 +58,7 @@ enum RegisterKind {
     Address,
 }
 
+// TODO: add a field for "name" which will hold the current register location
 #[derive(Debug, Clone)]
 struct RegisterValue {
     kind: RegisterKind,
@@ -127,7 +128,7 @@ pub struct ARMCORTEXA {
     memory_safe_regions: Vec<common::MemorySafeRegion>,
     abstracts: Vec<common::AbstractValue>,
     loop_abstracts: Vec<String>,
-    pub rw_queue: Vec<common::MemoryAccess>,
+    rw_queue: Vec<common::MemoryAccess>,
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -261,8 +262,28 @@ impl ARMCORTEXA {
         self.loop_abstracts.push(register);
     }
 
+    pub fn untrack_registers(&mut self, register: String) {
+        let mut index = self.loop_abstracts.iter().position(|n| n == &register);
+        match index {
+            Some(i) => self.loop_abstracts.remove(i),
+            None => return,
+        };
+    }
+
+    // FIX: better name for what this is? make tokens not just ?
+    pub fn replace_abstract(&mut self, token: &str, value: &str) {
+        for i in 0..self.registers.len() {
+            if let Some(b) = &self.registers[i].base {
+                if b.contains(&token) {
+                    self.registers[i].base = Some(b.replace(token, value));
+                }
+            }
+        }
+        // TODO: update flags and stack as well?
+    }
+
     // handle different addressing modes
-    fn operand(&mut self, v: String) -> RegisterValue {
+    fn operand(&self, v: String) -> RegisterValue {
         if !v.contains('[') && v.contains('#') {
             let mut base: Option<String> = None;
             let mut offset: &str = &v;

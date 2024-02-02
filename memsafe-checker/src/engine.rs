@@ -244,6 +244,17 @@ impl ExecutionEngine {
         expression: String,
         rw_list: Vec<common::MemoryAccess>,
     ) -> bool {
+        // figure out relevant registers
+        // FIX: bad bad bad bad way to do this
+        let mut relevant_registers = Vec::new();
+        let v: Vec<&str> = expression.split(&['(', ')', '\\', '"', ',']).collect();
+        for s in v {
+            if s.contains("x") || s.contains("w") {
+                relevant_registers.push(s.to_string());
+            }
+        }
+
+        // filter memory accesses by relevant registers
         let mut relevant_rw_list = Vec::new();
         for a in rw_list {
             if expression.contains(&a.base) {
@@ -251,29 +262,44 @@ impl ExecutionEngine {
             }
         }
 
-        // println!("loop expression: {}", expression);
-        // println!("loop expression: {:#?}", relevant_rw_list.clone());
-        // for a in &relevant_rw_list.clone() {
-        //     println!("{:?}", a);
-        // }
-
         for e in &self.loop_state {
-            if e.0 == expression && e.1.clone() == relevant_rw_list.clone() {
-                // do something that replaces tha ? with "Length"
+            if e.0 == expression && e.1 == relevant_rw_list {
+                // replace the abstract ? with matching expression
+                // FIX: find a better way to do this since this is just brute force really
+                let mut parts: Vec<&str> = expression.split(&['\\', '"', ',']).collect::<Vec<_>>();
+                let mut relevant_parts = Vec::new();
+                for p in parts {
+                    if p == "" {
+                        continue;
+                    }
+                    relevant_parts.push(p);
+                }
+                let mut index = relevant_parts
+                    .iter()
+                    .position(|n| n.contains("cmp"))
+                    .unwrap_or(relevant_parts.len());
+                let mut v2 = relevant_parts.split_off(index);
+
+                let mut a_index = relevant_parts
+                    .iter()
+                    .position(|n| n.contains("?"))
+                    .unwrap_or(relevant_parts.len());
+
+                let value = v2[a_index];
+                for r in relevant_registers {
+                    self.computer.untrack_registers(r);
+                }
+                self.computer
+                    .replace_abstract(relevant_parts[a_index], v2[a_index]);
                 return false;
             }
         }
 
         self.loop_state.push((expression.clone(), relevant_rw_list));
-        self.computer.clear_rw_queue();
-
-        // FIX: bad bad bad bad way to do this
-        let v: Vec<&str> = expression.split(&['(', ')', '\\', '"', ',']).collect();
-        for s in v {
-            if s.contains("x") || s.contains("w") {
-                self.computer.track_register(s.to_string());
-            }
+        for r in relevant_registers {
+            self.computer.track_register(r);
         }
+        self.computer.clear_rw_queue();
 
         return true;
     }
