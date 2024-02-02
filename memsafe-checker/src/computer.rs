@@ -263,7 +263,7 @@ impl ARMCORTEXA {
     }
 
     pub fn untrack_registers(&mut self, register: String) {
-        let mut index = self.loop_abstracts.iter().position(|n| n == &register);
+        let index = self.loop_abstracts.iter().position(|n| n == &register);
         match index {
             Some(i) => self.loop_abstracts.remove(i),
             None => return,

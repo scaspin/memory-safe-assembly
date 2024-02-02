@@ -266,7 +266,7 @@ impl ExecutionEngine {
             if e.0 == expression && e.1 == relevant_rw_list {
                 // replace the abstract ? with matching expression
                 // FIX: find a better way to do this since this is just brute force really
-                let mut parts: Vec<&str> = expression.split(&['\\', '"', ',']).collect::<Vec<_>>();
+                let parts: Vec<&str> = expression.split(&['\\', '"', ',']).collect::<Vec<_>>();
                 let mut relevant_parts = Vec::new();
                 for p in parts {
                     if p == "" {
@@ -274,23 +274,24 @@ impl ExecutionEngine {
                     }
                     relevant_parts.push(p);
                 }
-                let mut index = relevant_parts
+                let index = relevant_parts
                     .iter()
                     .position(|n| n.contains("cmp"))
                     .unwrap_or(relevant_parts.len());
-                let mut v2 = relevant_parts.split_off(index);
+                let v2 = relevant_parts.split_off(index);
 
-                let mut a_index = relevant_parts
+                let a_index = relevant_parts
                     .iter()
                     .position(|n| n.contains("?"))
                     .unwrap_or(relevant_parts.len());
 
-                let value = v2[a_index];
+                self.computer
+                    .replace_abstract(relevant_parts[a_index], v2[a_index]);
+
+                // untrack registers used to resolve this loop
                 for r in relevant_registers {
                     self.computer.untrack_registers(r);
                 }
-                self.computer
-                    .replace_abstract(relevant_parts[a_index], v2[a_index]);
                 return false;
             }
         }
