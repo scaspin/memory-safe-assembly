@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn abstract_loop() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
         let reader = BufReader::new(file);
@@ -132,6 +132,62 @@ mod tests {
             base: String::from("x2"),
             start_offset: common::ValueType::REAL(0),
             end_offset: common::ValueType::REAL(64),
+        });
+
+        engine.start(start_label)
+    }
+
+    #[test]
+    fn double_abstract_loop() -> std::io::Result<()> {
+        env_logger::init();
+
+        let file = File::open("tests/asm-examples/double-abstract-loop.S")?;
+        let reader = BufReader::new(file);
+        let start_label = String::from("start");
+
+        let mut program = Vec::new();
+        for line in reader.lines() {
+            program.push(line.unwrap_or(String::from("")));
+        }
+
+        let mut engine = bums::engine::ExecutionEngine::new(program);
+
+        let length1 = common::AbstractValue {
+            name: "Length1".to_string(),
+            min: Some(1),
+            max: None,
+        };
+
+        let length2 = common::AbstractValue {
+            name: "Length2".to_string(),
+            min: Some(1),
+            max: None,
+        };
+
+        let base1 = common::AbstractValue {
+            name: "Base1".to_string(),
+            min: Some(1),
+            max: None,
+        };
+        let base2 = common::AbstractValue {
+            name: "Base2".to_string(),
+            min: Some(1),
+            max: None,
+        };
+
+        engine.add_abstract(String::from("x1"), base1);
+        engine.add_region(common::MemorySafeRegion {
+            region_type: common::RegionType::READ,
+            base: String::from("Base1"),
+            start_offset: common::ValueType::REAL(0),
+            end_offset: common::ValueType::ABSTRACT(length1.clone()),
+        });
+        engine.add_abstract(String::from("x2"), base2);
+        engine.add_region(common::MemorySafeRegion {
+            region_type: common::RegionType::READ,
+            base: String::from("Base2"),
+            start_offset: common::ValueType::REAL(0),
+            end_offset: common::ValueType::ABSTRACT(length2.clone()),
         });
 
         engine.start(start_label)

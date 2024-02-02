@@ -1,7 +1,6 @@
 start: 
     add x3,x1,x2
     add x4,x1,x2
-    add x2,x1,#0
 loop_1:
     ldr x5,[x1]
     add x1,x1,#1
