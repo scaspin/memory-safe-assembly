@@ -1,6 +1,59 @@
 use std::fmt;
 use std::str::FromStr;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum RegisterKind {
+    RegisterBase, // register name / expression + offset
+    Number,       // abstract number (from input for example)
+    Abstract,     // abstract name / asbtract expression + offset
+    Immediate,    // known number
+    Address,      // known number we can jump to!
+}
+
+// TODO: add a field for "name" which will hold the current register location
+#[derive(Debug, Clone)]
+pub struct RegisterValue {
+    pub name: String,
+    pub kind: RegisterKind,
+    pub base: Option<String>,
+    pub offset: i64,
+}
+
+impl RegisterValue {
+    pub fn new(name: &str) -> RegisterValue {
+        let string_name = name.to_string();
+        if name == "sp" || name == "x29" {
+            return RegisterValue {
+                name: string_name,
+                kind: RegisterKind::Address,
+                base: Some("sp".to_string()),
+                offset: 0,
+            };
+        }
+        if name == "x30" {
+            return RegisterValue {
+                name: string_name,
+                kind: RegisterKind::Address,
+                base: Some("Return".to_string()),
+                offset: 0,
+            };
+        }
+        RegisterValue {
+            name: string_name.clone(),
+            kind: RegisterKind::RegisterBase,
+            base: Some(string_name),
+            offset: 0,
+        }
+    }
+
+    pub fn set(&mut self, name: String, kind: RegisterKind, base: Option<String>, offset: i64) {
+        self.name = name;
+        self.kind = kind;
+        self.base = base;
+        self.offset = offset;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MemoryAccess {
     pub kind: RegionType,
@@ -36,8 +89,8 @@ pub enum ValueType {
 }
 
 #[derive(Debug, Clone)]
-pub enum FlagType {
-    ABSTRACT(String), // TODO: change format so interpreter can evaluate without string manipulation
+pub enum FlagValue {
+    ABSTRACT(String),
     REAL(bool),
 }
 
@@ -187,5 +240,57 @@ impl FromStr for Instruction {
             r3: v3,
             r4: v4,
         })
+    }
+}
+
+pub fn generate_expression(op: &str, a: String, b: String) -> String {
+    if a == String::new() {
+        return b;
+    }
+    if b == String::new() {
+        return a;
+    }
+    format!("({} {} {})", a, op, b)
+}
+
+pub fn get_register_name_string(r: String) -> String {
+    let a: Vec<&str> = r.split(",").collect();
+    for i in a {
+        let name = i.trim_matches('[').to_string();
+        return name;
+    }
+
+    return r;
+}
+
+pub fn string_to_int(s: &str) -> i64 {
+    let mut value = 1;
+    let v = s.trim_matches('#');
+    if v.contains('*') {
+        let parts = v.split('*');
+        for part in parts {
+            let m = part.parse::<i64>().unwrap();
+            value = value * m;
+        }
+    } else if v.contains("x") {
+        value = i64::from_str_radix(v.strip_prefix("0x").unwrap(), 16).unwrap();
+    } else {
+        value = v.parse::<i64>().unwrap();
+    }
+
+    return value;
+}
+
+pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
+    let new_offset = register.offset >> shift;
+    RegisterValue {
+        name: register.name,
+        kind: register.kind,
+        base: Some(generate_expression(
+            &op,
+            register.base.unwrap_or("".to_string()),
+            shift.to_string(),
+        )),
+        offset: new_offset,
     }
 }

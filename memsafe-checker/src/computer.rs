@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
-//use crate::common::{MemorySafeRegion, RegionType};
 use crate::common;
+use crate::common::{AbstractExpression, RegisterKind, RegisterValue};
 
 fn get_register_index(reg_name: String) -> usize {
     let name = reg_name.clone();
@@ -18,110 +18,12 @@ fn get_register_index(reg_name: String) -> usize {
     return r1;
 }
 
-fn string_to_int(s: &str) -> i64 {
-    let mut value = 1;
-    let v = s.trim_matches('#');
-    if v.contains('*') {
-        let parts = v.split('*');
-        for part in parts {
-            let m = part.parse::<i64>().unwrap();
-            value = value * m;
-        }
-    } else if v.contains("x") {
-        value = i64::from_str_radix(v.strip_prefix("0x").unwrap(), 16).unwrap();
-    } else {
-        value = v.parse::<i64>().unwrap();
-    }
-
-    return value;
-}
-
-fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
-    let new_offset = register.offset >> shift;
-    RegisterValue {
-        kind: register.kind,
-        base: Some(generate_expression(
-            &op,
-            register.base.unwrap_or("".to_string()),
-            shift.to_string(),
-        )),
-        offset: new_offset,
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum RegisterKind {
-    RegisterBase, // register name / expression + offset
-    Number,       // abstract number (from input for example)
-    Abstract,
-    Immediate, // known number
-    Address,
-}
-
-// TODO: add a field for "name" which will hold the current register location
-#[derive(Debug, Clone)]
-struct RegisterValue {
-    kind: RegisterKind,
-    base: Option<String>,
-    offset: i64,
-}
-
-impl RegisterValue {
-    fn new(name: &str) -> RegisterValue {
-        if name == "sp" || name == "x29" {
-            return RegisterValue {
-                kind: RegisterKind::Address,
-                base: Some("sp".to_string()),
-                offset: 0,
-            };
-        }
-        if name == "x30" {
-            return RegisterValue {
-                kind: RegisterKind::Address,
-                base: Some("Return".to_string()),
-                offset: 0,
-            };
-        }
-        RegisterValue {
-            kind: RegisterKind::RegisterBase,
-            base: Some(name.to_string()),
-            offset: 0,
-        }
-    }
-
-    fn set(&mut self, kind: RegisterKind, base: Option<String>, offset: i64) {
-        self.kind = kind;
-        self.base = base;
-        self.offset = offset;
-    }
-}
-
-fn generate_expression(op: &str, a: String, b: String) -> String {
-    if a == String::new() {
-        return b;
-    }
-    if b == String::new() {
-        return a;
-    }
-    format!("({} {} {})", a, op, b)
-}
-
-fn get_register_name_string(r: String) -> String {
-    let a: Vec<&str> = r.split(",").collect();
-    for i in a {
-        let name = i.trim_matches('[').to_string();
-        return name;
-    }
-
-    return r;
-}
-
 pub struct ARMCORTEXA {
     registers: [RegisterValue; 33],
-    zero: Option<common::FlagType>,
-    neg: Option<common::FlagType>,
-    carry: Option<common::FlagType>,
-    overflow: Option<common::FlagType>,
+    zero: Option<common::FlagValue>,
+    neg: Option<common::FlagValue>,
+    carry: Option<common::FlagValue>,
+    overflow: Option<common::FlagValue>,
     memory: HashMap<i64, i64>,
     stack: HashMap<i64, RegisterValue>,
     stack_size: i64,
@@ -200,20 +102,12 @@ impl ARMCORTEXA {
     }
 
     pub fn set_immediate(&mut self, register: String, value: u64) {
-        self.registers[get_register_index(register)].set(
-            RegisterKind::Immediate,
-            None,
-            value as i64,
-        );
+        self.set_register(register, RegisterKind::Immediate, None, value as i64);
     }
 
     pub fn set_abstract(&mut self, register: String, value: common::AbstractValue) {
         self.abstracts.push(value.clone());
-        self.registers[get_register_index(register)].set(
-            RegisterKind::Abstract,
-            Some(value.name),
-            0,
-        );
+        self.set_register(register, RegisterKind::Abstract, Some(value.name), 0);
     }
 
     fn set_register(
@@ -224,9 +118,14 @@ impl ARMCORTEXA {
         offset: i64,
     ) {
         if name.contains("w") {
-            self.registers[get_register_index(name)].set(kind, base, (offset as i32) as i64)
+            self.registers[get_register_index(name.clone())].set(
+                name,
+                kind,
+                base,
+                (offset as i32) as i64,
+            )
         } else {
-            self.registers[get_register_index(name)].set(kind, base, offset as i64)
+            self.registers[get_register_index(name.clone())].set(name, kind, base, offset as i64)
         }
     }
 
@@ -294,15 +193,17 @@ impl ARMCORTEXA {
             }
 
             return RegisterValue {
+                name: "IntermediateRegister".to_string(),
                 kind: RegisterKind::Immediate,
                 base: base,
-                offset: string_to_int(&offset),
+                offset: common::string_to_int(&offset),
             };
 
         // address within register
         } else if v.contains('[') && !v.contains(',') {
             let reg = self.registers[get_register_index(v.trim_matches('[').to_string())].clone();
             return RegisterValue {
+                name: "IntermediateRegister".to_string(),
                 kind: RegisterKind::Address,
                 base: reg.base,
                 offset: reg.offset,
@@ -311,20 +212,23 @@ impl ARMCORTEXA {
             let a = v.split_once(',').unwrap();
             let reg = self.registers[get_register_index(a.0.trim_matches('[').to_string())].clone();
             return RegisterValue {
+                name: "IntermediateRegister".to_string(),
                 kind: RegisterKind::Address,
                 base: reg.base,
-                offset: reg.offset + string_to_int(a.1.trim_matches(']')),
+                offset: reg.offset + common::string_to_int(a.1.trim_matches(']')),
             };
         } else if v.contains("@") {
             // TODO : expand functionality
             if v.contains("OFF") {
                 return RegisterValue {
+                    name: "IntermediateRegister".to_string(),
                     kind: RegisterKind::Immediate,
                     base: None,
                     offset: 4, // TODO: alightment, need to make dynamic?
                 };
             } else {
                 return RegisterValue {
+                    name: "IntermediateRegister".to_string(),
                     kind: RegisterKind::Address,
                     base: None,
                     offset: 0,
@@ -437,14 +341,14 @@ impl ARMCORTEXA {
             match &self.zero {
                 // if zero is set to false, then cmp -> not equal and we branch
                 Some(flag) => match flag {
-                    common::FlagType::REAL(b) => {
+                    common::FlagValue::REAL(b) => {
                         if !b {
                             return Ok(Some((None, instruction.r1.clone(), None)));
                         } else {
                             return Ok(None);
                         }
                     }
-                    common::FlagType::ABSTRACT(s) => {
+                    common::FlagValue::ABSTRACT(s) => {
                         return Ok(Some((Some(s.to_string()), instruction.r1.clone(), None)));
                     }
                 },
@@ -478,7 +382,7 @@ impl ARMCORTEXA {
             let reg1 = instruction.r1.clone().unwrap();
             let reg2 = instruction.r2.clone().unwrap();
 
-            let reg2base = get_register_name_string(reg2.clone());
+            let reg2base = common::get_register_name_string(reg2.clone());
             let mut base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
 
             // pre-index increment
@@ -508,7 +412,7 @@ impl ARMCORTEXA {
             let reg2 = instruction.r2.clone().unwrap();
             let reg3 = instruction.r3.clone().unwrap();
 
-            let reg3base = get_register_name_string(reg3.clone());
+            let reg3base = common::get_register_name_string(reg3.clone());
             let mut base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
 
             // pre-index increment
@@ -543,7 +447,7 @@ impl ARMCORTEXA {
             let reg1 = instruction.r1.clone().unwrap();
             let reg2 = instruction.r2.clone().unwrap();
 
-            let reg2base = get_register_name_string(reg2.clone());
+            let reg2base = common::get_register_name_string(reg2.clone());
             let mut base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
 
             // pre-index increment
@@ -556,7 +460,7 @@ impl ARMCORTEXA {
                 }
             }
 
-            let reg2base = get_register_name_string(reg2.clone());
+            let reg2base = common::get_register_name_string(reg2.clone());
             self.store(reg1, base_add_reg.clone());
 
             // post-index
@@ -577,7 +481,7 @@ impl ARMCORTEXA {
             let reg2 = instruction.r2.clone().unwrap();
             let reg3 = instruction.r3.clone().unwrap();
 
-            let reg3base = get_register_name_string(reg3.clone());
+            let reg3base = common::get_register_name_string(reg3.clone());
             let mut base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
 
             // pre-index increment
@@ -903,7 +807,11 @@ impl ARMCORTEXA {
             if let Some(expr) = reg3 {
                 let parts = expr.split_once('#').unwrap();
 
-                r2 = shift_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
+                r2 = common::shift_imm(
+                    parts.0.to_string(),
+                    r2.clone(),
+                    common::string_to_int(parts.1),
+                );
             }
         }
 
@@ -913,7 +821,8 @@ impl ARMCORTEXA {
                     let base = match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
                             Some(reg2base) => {
-                                let concat = generate_expression(op_string, reg1base, reg2base);
+                                let concat =
+                                    common::generate_expression(op_string, reg1base, reg2base);
                                 Some(concat)
                             }
                             None => Some(reg1base),
@@ -938,7 +847,8 @@ impl ARMCORTEXA {
                     let base = match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
                             Some(reg2base) => {
-                                let concat = generate_expression(op_string, reg1base, reg2base);
+                                let concat =
+                                    common::generate_expression(op_string, reg1base, reg2base);
                                 Some(concat)
                             }
                             None => Some(reg1base),
@@ -974,7 +884,7 @@ impl ARMCORTEXA {
             let base = match r2.clone().base {
                 Some(reg1base) => match r1.clone().base {
                     Some(reg2base) => {
-                        let concat = generate_expression(op_string, reg1base, reg2base);
+                        let concat = common::generate_expression(op_string, reg1base, reg2base);
                         Some(concat)
                     }
                     None => Some(reg1base),
@@ -1000,7 +910,7 @@ impl ARMCORTEXA {
         self.set_register(
             reg1,
             r2.clone().kind,
-            Some(generate_expression(
+            Some(common::generate_expression(
                 "ror",
                 r1.base.unwrap_or("".to_string()),
                 r2.offset.to_string(),
@@ -1020,25 +930,25 @@ impl ARMCORTEXA {
                 RegisterKind::RegisterBase => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset < r2.offset {
-                            Some(common::FlagType::REAL(true))
+                            Some(common::FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagType::REAL(false))
+                            Some(common::FlagValue::REAL(false))
                         };
                         self.zero = if r1.offset == r2.offset {
-                            Some(common::FlagType::REAL(true))
+                            Some(common::FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagType::REAL(false))
+                            Some(common::FlagValue::REAL(false))
                         };
                         // signed vs signed distinction, maybe make offset generic to handle both?
                         self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(common::FlagType::REAL(true))
+                            Some(common::FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagType::REAL(false))
+                            Some(common::FlagValue::REAL(false))
                         };
                         self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(common::FlagType::REAL(true))
+                            Some(common::FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagType::REAL(false))
+                            Some(common::FlagValue::REAL(false))
                         };
                     } else {
                         let expression = String::from(format!(
@@ -1046,14 +956,16 @@ impl ARMCORTEXA {
                             reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
                         ));
                         self.neg =
-                            Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
-                        self.zero =
-                            Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
-                        self.carry = Some(common::FlagType::ABSTRACT(format!(
+                            Some(common::FlagValue::ABSTRACT(format!("({}) neg", expression)));
+                        self.zero = Some(common::FlagValue::ABSTRACT(format!(
+                            "({}) zero",
+                            expression
+                        )));
+                        self.carry = Some(common::FlagValue::ABSTRACT(format!(
                             "({}) carry",
                             expression
                         )));
-                        self.overflow = Some(common::FlagType::ABSTRACT(format!(
+                        self.overflow = Some(common::FlagValue::ABSTRACT(format!(
                             "({}) overflow",
                             expression
                         )));
@@ -1064,72 +976,72 @@ impl ARMCORTEXA {
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
-                        Some(common::FlagType::REAL(true))
+                        Some(common::FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagType::REAL(false))
+                        Some(common::FlagValue::REAL(false))
                     };
                     self.zero = if r1.offset == r2.offset {
-                        Some(common::FlagType::REAL(true))
+                        Some(common::FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagType::REAL(false))
+                        Some(common::FlagValue::REAL(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(common::FlagType::REAL(true))
+                        Some(common::FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagType::REAL(false))
+                        Some(common::FlagValue::REAL(false))
                     };
                     self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(common::FlagType::REAL(true))
+                        Some(common::FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagType::REAL(false))
+                        Some(common::FlagValue::REAL(false))
                     };
                 }
                 RegisterKind::Address => {
                     self.neg = if r1.offset < r2.offset {
-                        Some(common::FlagType::REAL(true))
+                        Some(common::FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagType::REAL(false))
+                        Some(common::FlagValue::REAL(false))
                     };
                     self.zero = if r1.offset == r2.offset {
-                        Some(common::FlagType::REAL(true))
+                        Some(common::FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagType::REAL(false))
+                        Some(common::FlagValue::REAL(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(common::FlagType::REAL(true))
+                        Some(common::FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagType::REAL(false))
+                        Some(common::FlagValue::REAL(false))
                     };
                     self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(common::FlagType::REAL(true))
+                        Some(common::FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagType::REAL(false))
+                        Some(common::FlagValue::REAL(false))
                     };
                 }
                 RegisterKind::Abstract => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset < r2.offset {
-                            Some(common::FlagType::REAL(true))
+                            Some(common::FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagType::REAL(false))
+                            Some(common::FlagValue::REAL(false))
                         };
                         self.zero = if r1.offset == r2.offset {
-                            Some(common::FlagType::REAL(true))
+                            Some(common::FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagType::REAL(false))
+                            Some(common::FlagValue::REAL(false))
                         };
                         // signed vs signed distinction, maybe make offset generic to handle both?
                         self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(common::FlagType::REAL(true))
+                            Some(common::FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagType::REAL(false))
+                            Some(common::FlagValue::REAL(false))
                         };
                         self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(common::FlagType::REAL(true))
+                            Some(common::FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagType::REAL(false))
+                            Some(common::FlagValue::REAL(false))
                         };
                     } else {
                         let expression = String::from(format!(
@@ -1137,14 +1049,16 @@ impl ARMCORTEXA {
                             reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
                         ));
                         self.neg =
-                            Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
-                        self.zero =
-                            Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
-                        self.carry = Some(common::FlagType::ABSTRACT(format!(
+                            Some(common::FlagValue::ABSTRACT(format!("({}) neg", expression)));
+                        self.zero = Some(common::FlagValue::ABSTRACT(format!(
+                            "({}) zero",
+                            expression
+                        )));
+                        self.carry = Some(common::FlagValue::ABSTRACT(format!(
                             "({}) carry",
                             expression
                         )));
-                        self.overflow = Some(common::FlagType::ABSTRACT(format!(
+                        self.overflow = Some(common::FlagValue::ABSTRACT(format!(
                             "({}) overflow",
                             expression
                         )));
@@ -1156,13 +1070,16 @@ impl ARMCORTEXA {
                 "{:?}({:?},{:?}) cmp {:?}({:?},{:?})",
                 reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
             ));
-            self.neg = Some(common::FlagType::ABSTRACT(format!("({}) neg", expression)));
-            self.zero = Some(common::FlagType::ABSTRACT(format!("({}) zero", expression)));
-            self.carry = Some(common::FlagType::ABSTRACT(format!(
+            self.neg = Some(common::FlagValue::ABSTRACT(format!("({}) neg", expression)));
+            self.zero = Some(common::FlagValue::ABSTRACT(format!(
+                "({}) zero",
+                expression
+            )));
+            self.carry = Some(common::FlagValue::ABSTRACT(format!(
                 "({}) carry",
                 expression
             )));
-            self.overflow = Some(common::FlagType::ABSTRACT(format!(
+            self.overflow = Some(common::FlagValue::ABSTRACT(format!(
                 "({}) overflow",
                 expression
             )));
