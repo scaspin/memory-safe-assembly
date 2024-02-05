@@ -243,7 +243,7 @@ impl ARMCORTEXA {
     pub fn execute(
         &mut self,
         instruction: &common::Instruction,
-    ) -> Result<Option<(Option<String>, Option<String>, Option<u128>)>, String> {
+    ) -> Result<Option<(Option<AbstractExpression>, Option<String>, Option<u128>)>, String> {
         if instruction.op == "add" {
             self.arithmetic(
                 "+",
@@ -322,9 +322,9 @@ impl ARMCORTEXA {
                 return Ok(None);
             } else if register.kind == RegisterKind::Abstract {
                 return Ok(Some((
-                    Some(format!(
-                        "base {:?} offset {:?} cbnz 0",
-                        register.base, register.offset
+                    Some(AbstractExpression::Solution(
+                        0,
+                        Box::new(AbstractExpression::Register(register)),
                     )),
                     instruction.r2.clone(),
                     None,
@@ -349,7 +349,7 @@ impl ARMCORTEXA {
                         }
                     }
                     common::FlagValue::ABSTRACT(s) => {
-                        return Ok(Some((Some(s.to_string()), instruction.r1.clone(), None)));
+                        return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
                     }
                 },
                 None => return Err(
@@ -951,24 +951,36 @@ impl ARMCORTEXA {
                             Some(common::FlagValue::REAL(false))
                         };
                     } else {
-                        let expression = String::from(format!(
-                            "{:?}({:?},{:?}) cmp {:?}({:?},{:?})",
-                            reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
-                        ));
+                        let expression = AbstractExpression::Expression(
+                            "-".to_string(),
+                            Box::new(AbstractExpression::Register(r1)),
+                            Box::new(AbstractExpression::Register(r2)),
+                        );
                         self.neg =
-                            Some(common::FlagValue::ABSTRACT(format!("({}) neg", expression)));
-                        self.zero = Some(common::FlagValue::ABSTRACT(format!(
-                            "({}) zero",
-                            expression
-                        )));
-                        self.carry = Some(common::FlagValue::ABSTRACT(format!(
-                            "({}) carry",
-                            expression
-                        )));
-                        self.overflow = Some(common::FlagValue::ABSTRACT(format!(
-                            "({}) overflow",
-                            expression
-                        )));
+                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                                "<".to_string(),
+                                Box::new(expression.clone()),
+                                Box::new(AbstractExpression::Immediate(0)),
+                            )));
+                        self.zero =
+                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                                "==".to_string(),
+                                Box::new(expression.clone()),
+                                Box::new(AbstractExpression::Immediate(0)),
+                            )));
+                        // FIX carry + overflow
+                        self.carry =
+                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                                "<".to_string(),
+                                Box::new(expression.clone()),
+                                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
+                            )));
+                        self.overflow =
+                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                                "<".to_string(),
+                                Box::new(expression),
+                                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
+                            )));
                     }
                 }
                 RegisterKind::Number => {
@@ -1044,47 +1056,66 @@ impl ARMCORTEXA {
                             Some(common::FlagValue::REAL(false))
                         };
                     } else {
-                        let expression = String::from(format!(
-                            "{:?}({:?},{:?}) cmp {:?}({:?},{:?})",
-                            reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
-                        ));
+                        let expression = AbstractExpression::Expression(
+                            "-".to_string(),
+                            Box::new(AbstractExpression::Register(r1)),
+                            Box::new(AbstractExpression::Register(r2)),
+                        );
                         self.neg =
-                            Some(common::FlagValue::ABSTRACT(format!("({}) neg", expression)));
-                        self.zero = Some(common::FlagValue::ABSTRACT(format!(
-                            "({}) zero",
-                            expression
-                        )));
-                        self.carry = Some(common::FlagValue::ABSTRACT(format!(
-                            "({}) carry",
-                            expression
-                        )));
-                        self.overflow = Some(common::FlagValue::ABSTRACT(format!(
-                            "({}) overflow",
-                            expression
-                        )));
+                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                                "<".to_string(),
+                                Box::new(expression.clone()),
+                                Box::new(AbstractExpression::Immediate(0)),
+                            )));
+                        self.zero =
+                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                                "==".to_string(),
+                                Box::new(expression.clone()),
+                                Box::new(AbstractExpression::Immediate(0)),
+                            )));
+                        // FIX carry + overflow
+                        self.carry =
+                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                                "<".to_string(),
+                                Box::new(expression.clone()),
+                                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
+                            )));
+                        self.overflow =
+                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                                "<".to_string(),
+                                Box::new(expression.clone()),
+                                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
+                            )));
                     }
                 }
             }
         } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
-            let expression = String::from(format!(
-                "{:?}({:?},{:?}) cmp {:?}({:?},{:?})",
-                reg1, r1.base, r1.offset, reg2, r2.base, r2.offset
-            ));
-            self.neg = Some(common::FlagValue::ABSTRACT(format!("({}) neg", expression)));
-            self.zero = Some(common::FlagValue::ABSTRACT(format!(
-                "({}) zero",
-                expression
+            let expression = AbstractExpression::Expression(
+                "-".to_string(),
+                Box::new(AbstractExpression::Register(r1)),
+                Box::new(AbstractExpression::Register(r2)),
+            );
+            self.neg = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                "<".to_string(),
+                Box::new(expression.clone()),
+                Box::new(AbstractExpression::Immediate(0)),
             )));
-            self.carry = Some(common::FlagValue::ABSTRACT(format!(
-                "({}) carry",
-                expression
+            self.zero = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                "==".to_string(),
+                Box::new(expression.clone()),
+                Box::new(AbstractExpression::Immediate(0)),
             )));
-            self.overflow = Some(common::FlagValue::ABSTRACT(format!(
-                "({}) overflow",
-                expression
+            // FIX carry + overflow
+            self.carry = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                "<".to_string(),
+                Box::new(expression.clone()),
+                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
             )));
-        } else {
-            log::error!("Cannot compare these two registers")
+            self.overflow = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
+                "<".to_string(),
+                Box::new(expression),
+                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
+            )));
         }
     }
 

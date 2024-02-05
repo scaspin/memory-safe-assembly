@@ -11,7 +11,7 @@ pub enum RegisterKind {
 }
 
 // TODO: add a field for "name" which will hold the current register location
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RegisterValue {
     pub name: String,
     pub kind: RegisterKind,
@@ -54,6 +54,55 @@ impl RegisterValue {
     }
 }
 
+// is there a better way to do this?
+#[derive(Debug, Clone, PartialEq)]
+pub enum AbstractExpression {
+    Immediate(i64),
+    Abstract(String),
+    Register(RegisterValue),
+    Solution(i64, Box<AbstractExpression>),
+    Expression(String, Box<AbstractExpression>, Box<AbstractExpression>),
+}
+
+impl fmt::Display for AbstractExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AbstractExpression::Immediate(value) => write!(f, "{}", value),
+            AbstractExpression::Abstract(name) => write!(f, "{}", name),
+            AbstractExpression::Register(reg) => {
+                write!(f, "({:?})", reg)
+            }
+            AbstractExpression::Solution(num, expr) => {
+                write!(f, "{} == {}", num, expr)
+            }
+            AbstractExpression::Expression(func, arg1, arg2) => {
+                write!(f, "{}({}, {})", func, arg1, arg2)
+            }
+        }
+    }
+}
+
+impl AbstractExpression {
+    pub fn get_register_names(&self) -> Vec<String> {
+        let mut registers = Vec::new();
+        match self {
+            AbstractExpression::Register(reg) => {
+                registers.push(reg.name.clone());
+            }
+            AbstractExpression::Solution(_, expr) => {
+                registers.append(&mut expr.get_register_names());
+            }
+            AbstractExpression::Expression(_, arg1, arg2) => {
+                registers.append(&mut arg1.get_register_names());
+                registers.append(&mut arg2.get_register_names());
+            }
+            _ => (),
+        }
+
+        registers
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MemoryAccess {
     pub kind: RegionType,
@@ -90,7 +139,7 @@ pub enum ValueType {
 
 #[derive(Debug, Clone)]
 pub enum FlagValue {
-    ABSTRACT(String),
+    ABSTRACT(AbstractExpression),
     REAL(bool),
 }
 

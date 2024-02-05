@@ -12,7 +12,7 @@ pub struct ExecutionEngine {
     program: Program,
     computer: computer::ARMCORTEXA,
     pc: usize,
-    loop_state: Vec<(String, Vec<common::MemoryAccess>)>,
+    loop_state: Vec<(common::AbstractExpression, Vec<common::MemoryAccess>)>,
 }
 
 impl ExecutionEngine {
@@ -241,52 +241,28 @@ impl ExecutionEngine {
     // BIG TODO
     fn evaluate_jump_condition(
         &mut self,
-        expression: String,
+        expression: common::AbstractExpression,
         rw_list: Vec<common::MemoryAccess>,
     ) -> bool {
+        log::info!("jump condition: {}", expression.clone());
+        log::info!("memory accesses: {:#?}", rw_list.clone());
+
         // figure out relevant registers
-        // FIX: bad bad bad bad way to do this
-        let mut relevant_registers = Vec::new();
-        let v: Vec<&str> = expression.split(&['(', ')', '\\', '"', ',']).collect();
-        for s in v {
-            if s.contains("x") || s.contains("w") {
-                relevant_registers.push(s.to_string());
-            }
-        }
+        let relevant_registers = expression.get_register_names();
 
         // filter memory accesses by relevant registers
         let mut relevant_rw_list = Vec::new();
         for a in rw_list {
-            if expression.contains(&a.base) {
+            if relevant_registers.contains(&a.base) {
                 relevant_rw_list.push(a);
             }
         }
 
         for e in &self.loop_state {
             if e.0 == expression && e.1 == relevant_rw_list {
-                // replace the abstract ? with matching expression
-                // FIX: find a better way to do this since this is just brute force really
-                let parts: Vec<&str> = expression.split(&['\\', '"', ',']).collect::<Vec<_>>();
-                let mut relevant_parts = Vec::new();
-                for p in parts {
-                    if p == "" {
-                        continue;
-                    }
-                    relevant_parts.push(p);
-                }
-                let index = relevant_parts
-                    .iter()
-                    .position(|n| n.contains("cmp"))
-                    .unwrap_or(relevant_parts.len());
-                let v2 = relevant_parts.split_off(index);
-
-                let a_index = relevant_parts
-                    .iter()
-                    .position(|n| n.contains("?"))
-                    .unwrap_or(relevant_parts.len());
-
-                self.computer
-                    .replace_abstract(relevant_parts[a_index], v2[a_index]);
+                // TODO replace ? with value
+                // self.computer
+                //     .replace_abstract(relevant_parts[a_index], v2[a_index]);
 
                 // untrack registers used to resolve this loop
                 for r in relevant_registers {
