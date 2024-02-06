@@ -15,7 +15,7 @@ pub enum RegisterKind {
 pub struct RegisterValue {
     pub name: String,
     pub kind: RegisterKind,
-    pub base: Option<String>,
+    pub base: Option<AbstractExpression>,
     pub offset: i64,
 }
 
@@ -26,7 +26,7 @@ impl RegisterValue {
             return RegisterValue {
                 name: string_name,
                 kind: RegisterKind::Address,
-                base: Some("sp".to_string()),
+                base: Some(AbstractExpression::Abstract("sp".to_string())),
                 offset: 0,
             };
         }
@@ -34,19 +34,25 @@ impl RegisterValue {
             return RegisterValue {
                 name: string_name,
                 kind: RegisterKind::Address,
-                base: Some("Return".to_string()),
+                base: Some(AbstractExpression::Abstract("Return".to_string())),
                 offset: 0,
             };
         }
         RegisterValue {
             name: string_name.clone(),
             kind: RegisterKind::RegisterBase,
-            base: Some(string_name),
+            base: Some(AbstractExpression::Abstract(string_name.to_string())),
             offset: 0,
         }
     }
 
-    pub fn set(&mut self, name: String, kind: RegisterKind, base: Option<String>, offset: i64) {
+    pub fn set(
+        &mut self,
+        name: String,
+        kind: RegisterKind,
+        base: Option<AbstractExpression>,
+        offset: i64,
+    ) {
         self.name = name;
         self.kind = kind;
         self.base = base;
@@ -54,12 +60,21 @@ impl RegisterValue {
     }
 }
 
+pub fn generate_expression(
+    op: &str,
+    a: AbstractExpression,
+    b: AbstractExpression,
+) -> AbstractExpression {
+    AbstractExpression::Expression(op.to_string(), Box::new(a), Box::new(b))
+}
+
 // is there a better way to do this?
 #[derive(Debug, Clone, PartialEq)]
 pub enum AbstractExpression {
+    Empty,
     Immediate(i64),
     Abstract(String),
-    Register(RegisterValue),
+    Register(Box<RegisterValue>), // only use to box in expressions for compares
     Solution(i64, Box<AbstractExpression>),
     Expression(String, Box<AbstractExpression>, Box<AbstractExpression>),
 }
@@ -67,6 +82,7 @@ pub enum AbstractExpression {
 impl fmt::Display for AbstractExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            AbstractExpression::Empty => write!(f, "Empty"),
             AbstractExpression::Immediate(value) => write!(f, "{}", value),
             AbstractExpression::Abstract(name) => write!(f, "{}", name),
             AbstractExpression::Register(reg) => {
@@ -76,7 +92,7 @@ impl fmt::Display for AbstractExpression {
                 write!(f, "{} == {}", num, expr)
             }
             AbstractExpression::Expression(func, arg1, arg2) => {
-                write!(f, "{}({}, {})", func, arg1, arg2)
+                write!(f, "({} {} {})", arg1, func, arg2)
             }
         }
     }
@@ -100,6 +116,55 @@ impl AbstractExpression {
         }
 
         registers
+    }
+
+    pub fn contains(&self, token: &str) -> bool {
+        match self {
+            AbstractExpression::Abstract(value) => {
+                if value.contains(token) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            AbstractExpression::Register(reg) => match &reg.base {
+                Some(e) => return e.contains(token),
+                None => return false,
+            },
+            AbstractExpression::Solution(_, expr) => {
+                return expr.contains(token);
+            }
+            AbstractExpression::Expression(_, arg1, arg2) => {
+                return arg1.contains(token) || arg2.contains(token);
+            }
+            _ => return false,
+        }
+    }
+
+    pub fn replace(&self, token: &str, value: &str) -> AbstractExpression {
+        match self {
+            AbstractExpression::Immediate(num) => {
+                return AbstractExpression::Immediate(*num);
+            }
+            AbstractExpression::Abstract(old) => {
+                return AbstractExpression::Abstract(value.to_string())
+            }
+            AbstractExpression::Register(reg) => return AbstractExpression::Register(reg.clone()),
+            AbstractExpression::Solution(num, old) => {
+                let new = old.replace(token, value);
+                return AbstractExpression::Solution(*num, Box::new(new));
+            }
+            AbstractExpression::Expression(op, old1, old2) => {
+                let new1 = old1.replace(token, value);
+                let new2 = old2.replace(token, value);
+                return AbstractExpression::Expression(
+                    op.to_string(),
+                    Box::new(new1),
+                    Box::new(new2),
+                );
+            }
+            AbstractExpression::Empty => return AbstractExpression::Empty,
+        }
     }
 }
 
@@ -292,16 +357,6 @@ impl FromStr for Instruction {
     }
 }
 
-pub fn generate_expression(op: &str, a: String, b: String) -> String {
-    if a == String::new() {
-        return b;
-    }
-    if b == String::new() {
-        return a;
-    }
-    format!("({} {} {})", a, op, b)
-}
-
 pub fn get_register_name_string(r: String) -> String {
     let a: Vec<&str> = r.split(",").collect();
     for i in a {
@@ -337,8 +392,8 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
         kind: register.kind,
         base: Some(generate_expression(
             &op,
-            register.base.unwrap_or("".to_string()),
-            shift.to_string(),
+            register.base.unwrap_or(AbstractExpression::Empty),
+            AbstractExpression::Immediate(shift),
         )),
         offset: new_offset,
     }

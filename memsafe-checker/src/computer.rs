@@ -107,14 +107,19 @@ impl ARMCORTEXA {
 
     pub fn set_abstract(&mut self, register: String, value: common::AbstractValue) {
         self.abstracts.push(value.clone());
-        self.set_register(register, RegisterKind::Abstract, Some(value.name), 0);
+        self.set_register(
+            register,
+            RegisterKind::Abstract,
+            Some(AbstractExpression::Abstract(value.name)),
+            0,
+        );
     }
 
     fn set_register(
         &mut self,
         name: String,
         kind: RegisterKind,
-        base: Option<String>,
+        base: Option<AbstractExpression>,
         offset: i64,
     ) {
         if name.contains("w") {
@@ -137,7 +142,7 @@ impl ARMCORTEXA {
         let s = &self.registers[31];
         match &s.base {
             Some(b) => {
-                if b == "sp" && s.offset == 0 {
+                if b == &AbstractExpression::Abstract("sp".to_string()) && s.offset == 0 {
                     log::info!("Stack pointer restored to start");
                 } else {
                     log::error!("Stack pointer offset not restored");
@@ -184,11 +189,11 @@ impl ARMCORTEXA {
     // handle different addressing modes
     fn operand(&self, v: String) -> RegisterValue {
         if !v.contains('[') && v.contains('#') {
-            let mut base: Option<String> = None;
+            let mut base: Option<AbstractExpression> = None;
             let mut offset: &str = &v;
 
             if v.contains("ror") {
-                base = Some("ror".to_string());
+                base = Some(AbstractExpression::Abstract("ror".to_string()));
                 offset = v.strip_prefix("ror#").unwrap_or("0");
             }
 
@@ -309,14 +314,15 @@ impl ARMCORTEXA {
             self.set_register(
                 instruction.r1.clone().expect("need dst register"),
                 RegisterKind::Address,
-                Some("Memory".to_string()), // FIX: needs to be more general
+                Some(AbstractExpression::Abstract("Memory".to_string())), // FIX: needs to be more general
                 address.offset,
             );
         } else if instruction.op == "cbnz" {
             let register = self.registers
                 [get_register_index(instruction.r1.clone().expect("Need one register"))]
             .clone();
-            if (register.base.is_none() || register.base.clone().unwrap() == "")
+            if (register.base.is_none()
+                || register.base.clone().unwrap() == AbstractExpression::Empty)
                 && register.offset == 0
             {
                 return Ok(None);
@@ -324,7 +330,7 @@ impl ARMCORTEXA {
                 return Ok(Some((
                     Some(AbstractExpression::Solution(
                         0,
-                        Box::new(AbstractExpression::Register(register)),
+                        Box::new(AbstractExpression::Register(Box::new(register))),
                     )),
                     instruction.r2.clone(),
                     None,
@@ -361,8 +367,8 @@ impl ARMCORTEXA {
             if instruction.r1.is_none() {
                 let x30 = self.registers[30].clone();
                 if x30.kind == RegisterKind::Address {
-                    if x30.base.is_some() {
-                        if x30.base.unwrap() == "Return" && x30.offset == 0 {
+                    if let Some(AbstractExpression::Abstract(address)) = x30.base {
+                        if address == "Return" && x30.offset == 0 {
                             return Ok(Some((None, None, Some(0))));
                         }
                     }
@@ -521,10 +527,10 @@ impl ARMCORTEXA {
 
     fn mem_safe_read(
         &self,
-        base: Option<String>,
+        base: Option<AbstractExpression>,
         offset: i64,
     ) -> Result<(), common::MemorySafetyError> {
-        if let Some(regbase) = base.clone() {
+        if let Some(AbstractExpression::Abstract(regbase)) = base.clone() {
             // read from stack
             if regbase == "sp" || regbase == "x31" {
                 if self.stack.contains_key(&offset) {
@@ -652,10 +658,10 @@ impl ARMCORTEXA {
 
     fn mem_safe_write(
         &self,
-        base: Option<String>,
+        base: Option<AbstractExpression>,
         offset: i64,
     ) -> Result<(), common::MemorySafetyError> {
-        if let Some(regbase) = base {
+        if let Some(AbstractExpression::Abstract(regbase)) = base {
             // write to stack
             if regbase == "sp" {
                 return Ok(());
@@ -782,22 +788,24 @@ impl ARMCORTEXA {
             // need to make sure this works if r2 isn't immediate
             if let Some(mut b) = r1.base.clone() {
                 if !b.contains("?") {
-                    b.push_str(" ");
-                    b.push_str(op_string);
-                    b.push_str(" ");
-                    b.push_str("?");
-                    self.set_register(reg0, r1.kind, Some(b.to_string()), 0);
+                    let new_base = AbstractExpression::Expression(
+                        op_string.to_string(),
+                        Box::new(r1.base.unwrap_or(AbstractExpression::Empty)),
+                        Box::new(AbstractExpression::Abstract("?".to_string())),
+                    );
+                    self.set_register(reg0, r1.kind, Some(new_base), r1.offset);
                 }
                 return;
             }
 
             if let Some(mut b) = r2.base.clone() {
                 if !b.contains("?") {
-                    b.push_str(" ");
-                    b.push_str(op_string);
-                    b.push_str(" ");
-                    b.push_str("?");
-                    self.set_register(reg0, r2.kind, Some(b.to_string()), r2.offset);
+                    let new_base = AbstractExpression::Expression(
+                        op_string.to_string(),
+                        Box::new(r2.base.unwrap_or(AbstractExpression::Empty)),
+                        Box::new(AbstractExpression::Abstract("?".to_string())),
+                    );
+                    self.set_register(reg0, r2.kind, Some(new_base), r2.offset);
                 }
                 return;
             }
@@ -912,8 +920,8 @@ impl ARMCORTEXA {
             r2.clone().kind,
             Some(common::generate_expression(
                 "ror",
-                r1.base.unwrap_or("".to_string()),
-                r2.offset.to_string(),
+                r1.base.unwrap_or(AbstractExpression::Empty),
+                AbstractExpression::Immediate(r2.offset),
             )),
             new_offset,
         );
@@ -953,8 +961,8 @@ impl ARMCORTEXA {
                     } else {
                         let expression = AbstractExpression::Expression(
                             "-".to_string(),
-                            Box::new(AbstractExpression::Register(r1)),
-                            Box::new(AbstractExpression::Register(r2)),
+                            Box::new(AbstractExpression::Register(Box::new(r1))),
+                            Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
                         self.neg =
                             Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
@@ -1058,8 +1066,8 @@ impl ARMCORTEXA {
                     } else {
                         let expression = AbstractExpression::Expression(
                             "-".to_string(),
-                            Box::new(AbstractExpression::Register(r1)),
-                            Box::new(AbstractExpression::Register(r2)),
+                            Box::new(AbstractExpression::Register(Box::new(r1))),
+                            Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
                         self.neg =
                             Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
@@ -1092,8 +1100,8 @@ impl ARMCORTEXA {
         } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
             let expression = AbstractExpression::Expression(
                 "-".to_string(),
-                Box::new(AbstractExpression::Register(r1)),
-                Box::new(AbstractExpression::Register(r2)),
+                Box::new(AbstractExpression::Register(Box::new(r1))),
+                Box::new(AbstractExpression::Register(Box::new(r2))),
             );
             self.neg = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
                 "<".to_string(),
@@ -1127,7 +1135,7 @@ impl ARMCORTEXA {
         let res = self.mem_safe_read(address.base.clone(), address.offset);
 
         if res.is_ok() {
-            if let Some(base) = address.base {
+            if let Some(AbstractExpression::Abstract(base)) = address.base {
                 if base == "sp" {
                     let val = self.stack.get(&address.offset);
                     match val {
@@ -1172,7 +1180,7 @@ impl ARMCORTEXA {
 
         if res.is_ok() {
             let reg = self.registers[get_register_index(reg)].clone();
-            if let Some(base) = address.base {
+            if let Some(AbstractExpression::Abstract(base)) = address.base {
                 if base == "sp" {
                     // FIX: stack addressing
                     let index = address.offset;
