@@ -29,7 +29,7 @@ pub struct ARMCORTEXA {
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
     abstracts: Vec<common::AbstractValue>,
-    loop_abstracts: Vec<String>,
+    tracked_loop_abstracts: Vec<String>,
     rw_queue: Vec<common::MemoryAccess>,
 }
 
@@ -92,7 +92,7 @@ impl ARMCORTEXA {
             stack_size: 0,
             memory_safe_regions: Vec::new(),
             abstracts: Vec::new(),
-            loop_abstracts: Vec::new(),
+            tracked_loop_abstracts: Vec::new(),
             rw_queue: Vec::new(),
         }
     }
@@ -163,13 +163,16 @@ impl ARMCORTEXA {
     }
 
     pub fn track_register(&mut self, register: String) {
-        self.loop_abstracts.push(register);
+        self.tracked_loop_abstracts.push(register);
     }
 
     pub fn untrack_registers(&mut self, register: String) {
-        let index = self.loop_abstracts.iter().position(|n| n == &register);
+        let index = self
+            .tracked_loop_abstracts
+            .iter()
+            .position(|n| n == &register);
         match index {
-            Some(i) => self.loop_abstracts.remove(i),
+            Some(i) => self.tracked_loop_abstracts.remove(i),
             None => return,
         };
     }
@@ -343,6 +346,8 @@ impl ARMCORTEXA {
                 instruction.r1.clone().expect("need register to compare"),
                 instruction.r2.clone().expect("need register to compare"),
             );
+        // TODO: make branch more general
+        // https://developer.arm.com/documentation/dui0068/b/ARM-Instruction-Reference/Conditional-execution
         } else if instruction.op == "b.ne" {
             match &self.zero {
                 // if zero is set to false, then cmp -> not equal and we branch
@@ -438,7 +443,9 @@ impl ARMCORTEXA {
 
             // post-index
             if instruction.r4.is_some() {
-                if self.loop_abstracts.contains(&reg3base) || reg3base.contains(&"?".to_string()) {
+                if self.tracked_loop_abstracts.contains(&reg3base)
+                    || reg3base.contains(&"?".to_string())
+                {
                     return Ok(None);
                 }
                 let new_imm = self.operand(instruction.r4.clone().unwrap());
@@ -471,7 +478,9 @@ impl ARMCORTEXA {
 
             // post-index
             if instruction.r3.is_some() {
-                if self.loop_abstracts.contains(&reg2base) || reg2base.contains(&"?".to_string()) {
+                if self.tracked_loop_abstracts.contains(&reg2base)
+                    || reg2base.contains(&"?".to_string())
+                {
                     return Ok(None);
                 }
                 let new_imm = self.operand(instruction.r3.clone().unwrap());
@@ -507,7 +516,9 @@ impl ARMCORTEXA {
 
             // post-index
             if instruction.r4.is_some() {
-                if self.loop_abstracts.contains(&reg3base) || reg3base.contains(&"?".to_string()) {
+                if self.tracked_loop_abstracts.contains(&reg3base)
+                    || reg3base.contains(&"?".to_string())
+                {
                     return Ok(None);
                 }
                 let new_imm = self.operand(instruction.r4.clone().unwrap());
@@ -646,10 +657,12 @@ impl ARMCORTEXA {
                     .as_str(),
                 ));
             }
+        } else if let Some(exp) = base.clone() {
+            if exp.contains("?") {}
         }
         Err(common::MemorySafetyError::new(
             format!(
-                "Cannot read safely from address with base {:?} and offset {:?}",
+                "Cannot read safely from address with base {:?} offset {:?}",
                 base, offset
             )
             .as_str(),
@@ -784,13 +797,15 @@ impl ARMCORTEXA {
 
         // if we're tracking r1 or r2 for abstract looping, we're just gonna operate
         // some abstract
-        if self.loop_abstracts.contains(&reg1) || self.loop_abstracts.contains(&reg2) {
+        if self.tracked_loop_abstracts.contains(&reg1)
+            || self.tracked_loop_abstracts.contains(&reg2)
+        {
             // need to make sure this works if r2 isn't immediate
-            if let Some(mut b) = r1.base.clone() {
+            if let Some(b) = r1.base.clone() {
                 if !b.contains("?") {
                     let new_base = AbstractExpression::Expression(
                         op_string.to_string(),
-                        Box::new(r1.base.unwrap_or(AbstractExpression::Empty)),
+                        Box::new(b),
                         Box::new(AbstractExpression::Abstract("?".to_string())),
                     );
                     self.set_register(reg0, r1.kind, Some(new_base), r1.offset);
@@ -798,11 +813,11 @@ impl ARMCORTEXA {
                 return;
             }
 
-            if let Some(mut b) = r2.base.clone() {
+            if let Some(b) = r2.base.clone() {
                 if !b.contains("?") {
                     let new_base = AbstractExpression::Expression(
                         op_string.to_string(),
-                        Box::new(r2.base.unwrap_or(AbstractExpression::Empty)),
+                        Box::new(b),
                         Box::new(AbstractExpression::Abstract("?".to_string())),
                     );
                     self.set_register(reg0, r2.kind, Some(new_base), r2.offset);

@@ -118,6 +118,33 @@ impl AbstractExpression {
         registers
     }
 
+    pub fn get_abstracts(&self) -> Vec<String> {
+        let mut abstracts = Vec::new();
+        match self {
+            AbstractExpression::Abstract(value) => {
+                abstracts.push(value.to_string());
+            }
+            AbstractExpression::Register(reg) => {
+                abstracts.append(
+                    &mut reg
+                        .base
+                        .clone()
+                        .unwrap_or(AbstractExpression::Empty)
+                        .get_abstracts(),
+                );
+            }
+            AbstractExpression::Solution(_, expr) => {
+                abstracts.append(&mut expr.get_abstracts());
+            }
+            AbstractExpression::Expression(_, arg1, arg2) => {
+                abstracts.append(&mut arg1.get_abstracts());
+                abstracts.append(&mut arg2.get_abstracts());
+            }
+            _ => (),
+        }
+        abstracts
+    }
+
     pub fn contains(&self, token: &str) -> bool {
         match self {
             AbstractExpression::Abstract(value) => {
@@ -146,7 +173,7 @@ impl AbstractExpression {
             AbstractExpression::Immediate(num) => {
                 return AbstractExpression::Immediate(*num);
             }
-            AbstractExpression::Abstract(old) => {
+            AbstractExpression::Abstract(_) => {
                 return AbstractExpression::Abstract(value.to_string())
             }
             AbstractExpression::Register(reg) => return AbstractExpression::Register(reg.clone()),
@@ -166,6 +193,147 @@ impl AbstractExpression {
             AbstractExpression::Empty => return AbstractExpression::Empty,
         }
     }
+
+    pub fn reduce_solution(&self) -> (AbstractExpression, AbstractExpression) {
+        match self {
+            AbstractExpression::Solution(num, old) => {
+                if *num == 0 {
+                    if let AbstractExpression::Expression(op, exp1, exp2) = *old.clone() {
+                        if op == "-" {
+                            if exp1 == exp2 {
+                                return (AbstractExpression::Empty, AbstractExpression::Empty);
+                            }
+                            return simplify_equality(*exp1, *exp2);
+                        }
+                    }
+                }
+            }
+            AbstractExpression::Expression(op, exp1, exp2) => {
+                if *exp1.clone() == AbstractExpression::Immediate(0) {
+                    if let AbstractExpression::Expression(op, left, right) = *exp2.clone() {
+                        if op == "-" {
+                            if left == right {
+                                return (AbstractExpression::Empty, AbstractExpression::Empty);
+                            }
+                            return simplify_equality(*left, *right);
+                        }
+                    }
+                } else if *exp2.clone() == AbstractExpression::Immediate(0) {
+                    if let AbstractExpression::Expression(op, left, right) = *exp1.clone() {
+                        if op == "-" {
+                            if left == right {
+                                return (AbstractExpression::Empty, AbstractExpression::Empty);
+                            }
+                            return simplify_equality(*left, *right);
+                        }
+                    }
+                }
+            }
+            _ => {
+                log::error!(
+                    "Can't reduce solution on an abstract expression that is not a solution"
+                );
+                return (AbstractExpression::Empty, AbstractExpression::Empty);
+            }
+        }
+        (AbstractExpression::Empty, AbstractExpression::Empty)
+    }
+}
+
+fn same_exp_type(left: AbstractExpression, right: AbstractExpression) -> bool {
+    match (left, right) {
+        (AbstractExpression::Empty, AbstractExpression::Empty) => true,
+        (AbstractExpression::Immediate(_), AbstractExpression::Immediate(_)) => true,
+        (AbstractExpression::Register(_), AbstractExpression::Register(_)) => true,
+        (AbstractExpression::Solution(_, _), AbstractExpression::Solution(_, _)) => true,
+        (AbstractExpression::Expression(_, _, _), AbstractExpression::Expression(_, _, _)) => true,
+        (_, _) => false,
+    }
+}
+
+fn simplify_expression(exp: AbstractExpression) -> AbstractExpression {
+    match exp.clone() {
+        AbstractExpression::Expression(func, arg1, arg2) => {
+            if func == "+" || func == "-" {
+                if *arg1 == AbstractExpression::Immediate(0) {
+                    return *arg2;
+                } else if *arg2 == AbstractExpression::Immediate(0) {
+                    return *arg1;
+                } else {
+                    return exp;
+                }
+            } else {
+                return exp;
+            }
+        }
+        _ => return exp,
+    }
+}
+
+fn simplify_equality(
+    left: AbstractExpression,
+    right: AbstractExpression,
+) -> (AbstractExpression, AbstractExpression) {
+    if same_exp_type(left.clone(), right.clone()) {
+        match left.clone() {
+            AbstractExpression::Immediate(_) => {
+                // cant simplify numbers
+                return (left, right);
+            }
+            AbstractExpression::Register(left_reg) => {
+                if let AbstractExpression::Register(right_reg) = right {
+                    let left_expr = AbstractExpression::Expression(
+                        "+".to_string(),
+                        Box::new(left_reg.base.unwrap_or(AbstractExpression::Empty)),
+                        Box::new(AbstractExpression::Immediate(left_reg.offset)),
+                    );
+                    let right_expr = AbstractExpression::Expression(
+                        "+".to_string(),
+                        Box::new(right_reg.base.unwrap_or(AbstractExpression::Empty)),
+                        Box::new(AbstractExpression::Immediate(right_reg.offset)),
+                    );
+                    return simplify_equality(left_expr, right_expr);
+                }
+            }
+            AbstractExpression::Expression(left_op, left_expr1, left_expr2) => {
+                if let AbstractExpression::Expression(right_op, right_expr1, right_expr2) =
+                    right.clone()
+                {
+                    if left_op == right_op && left_op == "+" {
+                        // imagine a + b = c + d
+                        let (a, c) = simplify_equality(
+                            simplify_expression(*left_expr1),
+                            simplify_expression(*right_expr1),
+                        );
+                        let (b, d) = simplify_equality(
+                            simplify_expression(*left_expr2),
+                            simplify_expression(*right_expr2),
+                        );
+                        let (e, f) = simplify_equality(a, d);
+                        let (g, h) = simplify_equality(b, c);
+
+                        let new_left = AbstractExpression::Expression(
+                            "+".to_string(),
+                            Box::new(e),
+                            Box::new(g),
+                        );
+                        let new_right = AbstractExpression::Expression(
+                            "+".to_string(),
+                            Box::new(f),
+                            Box::new(h),
+                        );
+                        return (simplify_expression(new_left), simplify_expression(new_right));
+                    } else {
+                        return (simplify_expression(left), simplify_expression(right));
+                    }
+                }
+            }
+            // solution needs to be expanded first before we can simplify, see reduce_solution
+            // others don't make much sense
+            _ => return (left, right),
+        }
+    }
+    (left, right)
 }
 
 #[derive(Debug, Clone)]
