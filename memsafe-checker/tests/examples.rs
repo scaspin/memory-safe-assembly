@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn abstract_loop() -> std::io::Result<()> {
-        // env_logger::init();
+        env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
         let reader = BufReader::new(file);
@@ -114,10 +114,11 @@ mod tests {
 
         let base = common::AbstractValue {
             name: "Base".to_string(),
-            min: Some(1),
+            min: Some(0),
             max: None,
         };
 
+        // Base is the base address of the input buffer
         engine.add_abstract(String::from("x1"), base);
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
@@ -127,19 +128,13 @@ mod tests {
         });
 
         engine.add_abstract(String::from("x2"), length);
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: String::from("x2"),
-            start_offset: common::ValueType::REAL(0),
-            end_offset: common::ValueType::REAL(64),
-        });
+        // x2 has the length, not the address to the length
 
         engine.start(start_label)
     }
-
     #[test]
-    fn double_abstract_loop() -> std::io::Result<()> {
-        env_logger::init();
+    fn double_loop() -> std::io::Result<()> {
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/double-abstract-loop.S")?;
         let reader = BufReader::new(file);

@@ -146,13 +146,14 @@ impl ExecutionEngine {
 
         while pc < program_length {
             let mut instruction = self.program.code[pc].clone();
-            log::info!("{:?}", instruction);
 
             // skip instruction if it is a label
             if instruction.op.contains(":") {
                 pc = pc + 1;
                 instruction = self.program.code[pc].clone();
             }
+
+            log::info!("{:?}", instruction);
 
             let execute_result = self.computer.execute(&instruction);
             match execute_result {
@@ -267,8 +268,7 @@ impl ExecutionEngine {
                 if left.contains("?") || right.contains("?") {
                     // FIX: cannot call solve for if it doesn't have key
                     let solved = common::solve_for("?", left, right);
-                    self.computer
-                        .replace_abstract("?", solved);
+                    self.computer.replace_abstract("?", solved);
                 }
                 // untrack registers used to resolve this loop
                 for r in relevant_registers {

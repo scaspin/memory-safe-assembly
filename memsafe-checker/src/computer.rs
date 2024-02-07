@@ -1170,6 +1170,11 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
+                        log::info!(
+                            "Load from address {:?} + {}",
+                            base.clone(),
+                            address.offset.clone()
+                        );
                         self.rw_queue.push(common::MemoryAccess {
                             kind: common::RegionType::READ,
                             base,
@@ -1218,6 +1223,11 @@ impl ARMCORTEXA {
                         }
                     }
                     if exists {
+                        log::info!(
+                            "Store to address {:?} + {}",
+                            base.clone(),
+                            address.offset.clone()
+                        );
                         self.rw_queue.push(common::MemoryAccess {
                             kind: common::RegionType::WRITE,
                             base,
