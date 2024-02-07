@@ -218,13 +218,15 @@ impl ExecutionEngine {
                         pc = pc + 1;
                     }
                 },
-                Err(_) => {
+                Err(err) => {
                     log::error!(
-                        "Instruction could not execute at line {:?} : {:?}",
+                        "At line {:?} instruction {:?} error {:?}",
                         pc,
-                        instruction
+                        instruction,
+                        err
                     );
                     break;
+                    // TODO: do we need to reflect these errors in failing test
                 }
             }
 
@@ -261,9 +263,13 @@ impl ExecutionEngine {
         for e in &self.loop_state {
             if e.0 == expression && e.1 == relevant_rw_list {
                 // TODO replace ? with value
-                // self.computer
-                //     .replace_abstract(relevant_parts[a_index], v2[a_index]);
-
+                let (left, right) = expression.reduce_solution();
+                if left.contains("?") || right.contains("?") {
+                    // FIX: cannot call solve for if it doesn't have key
+                    let solved = common::solve_for("?", left, right);
+                    self.computer
+                        .replace_abstract("?", solved);
+                }
                 // untrack registers used to resolve this loop
                 for r in relevant_registers {
                     self.computer.untrack_registers(r);

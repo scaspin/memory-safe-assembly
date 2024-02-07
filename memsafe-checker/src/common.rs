@@ -168,13 +168,13 @@ impl AbstractExpression {
         }
     }
 
-    pub fn replace(&self, token: &str, value: &str) -> AbstractExpression {
+    pub fn replace(&self, token: &str, value: AbstractExpression) -> AbstractExpression {
         match self {
             AbstractExpression::Immediate(num) => {
                 return AbstractExpression::Immediate(*num);
             }
             AbstractExpression::Abstract(_) => {
-                return AbstractExpression::Abstract(value.to_string())
+                return value;
             }
             AbstractExpression::Register(reg) => return AbstractExpression::Register(reg.clone()),
             AbstractExpression::Solution(num, old) => {
@@ -182,8 +182,38 @@ impl AbstractExpression {
                 return AbstractExpression::Solution(*num, Box::new(new));
             }
             AbstractExpression::Expression(op, old1, old2) => {
-                let new1 = old1.replace(token, value);
+                let new1 = old1.replace(token, value.clone());
                 let new2 = old2.replace(token, value);
+                return AbstractExpression::Expression(
+                    op.to_string(),
+                    Box::new(new1),
+                    Box::new(new2),
+                );
+            }
+            AbstractExpression::Empty => return AbstractExpression::Empty,
+        }
+    }
+
+    pub fn remove(&self, token: &str) -> AbstractExpression {
+        match self {
+            AbstractExpression::Immediate(num) => {
+                return AbstractExpression::Immediate(*num);
+            }
+            AbstractExpression::Abstract(value) => {
+                if value == token {
+                    return AbstractExpression::Empty;
+                } else {
+                    return self.clone();
+                }
+            }
+            AbstractExpression::Register(reg) => return AbstractExpression::Register(reg.clone()),
+            AbstractExpression::Solution(num, old) => {
+                let new = old.remove(token);
+                return AbstractExpression::Solution(*num, Box::new(new));
+            }
+            AbstractExpression::Expression(op, old1, old2) => {
+                let new1 = simplify_expression(old1.remove(token));
+                let new2 = simplify_expression(old2.remove(token));
                 return AbstractExpression::Expression(
                     op.to_string(),
                     Box::new(new1),
@@ -208,7 +238,7 @@ impl AbstractExpression {
                     }
                 }
             }
-            AbstractExpression::Expression(op, exp1, exp2) => {
+            AbstractExpression::Expression(_, exp1, exp2) => {
                 if *exp1.clone() == AbstractExpression::Immediate(0) {
                     if let AbstractExpression::Expression(op, left, right) = *exp2.clone() {
                         if op == "-" {
@@ -255,9 +285,11 @@ fn simplify_expression(exp: AbstractExpression) -> AbstractExpression {
     match exp.clone() {
         AbstractExpression::Expression(func, arg1, arg2) => {
             if func == "+" || func == "-" {
-                if *arg1 == AbstractExpression::Immediate(0) {
+                if *arg1 == AbstractExpression::Immediate(0) || *arg1 == AbstractExpression::Empty {
                     return *arg2;
-                } else if *arg2 == AbstractExpression::Immediate(0) {
+                } else if *arg2 == AbstractExpression::Immediate(0)
+                    || *arg2 == AbstractExpression::Empty
+                {
                     return *arg1;
                 } else {
                     return exp;
@@ -292,7 +324,10 @@ fn simplify_equality(
                         Box::new(right_reg.base.unwrap_or(AbstractExpression::Empty)),
                         Box::new(AbstractExpression::Immediate(right_reg.offset)),
                     );
-                    return simplify_equality(left_expr, right_expr);
+                    return simplify_equality(
+                        simplify_expression(left_expr),
+                        simplify_expression(right_expr),
+                    );
                 }
             }
             AbstractExpression::Expression(left_op, left_expr1, left_expr2) => {
@@ -322,7 +357,10 @@ fn simplify_equality(
                             Box::new(f),
                             Box::new(h),
                         );
-                        return (simplify_expression(new_left), simplify_expression(new_right));
+                        return (
+                            simplify_expression(new_left),
+                            simplify_expression(new_right),
+                        );
                     } else {
                         return (simplify_expression(left), simplify_expression(right));
                     }
@@ -330,10 +368,108 @@ fn simplify_equality(
             }
             // solution needs to be expanded first before we can simplify, see reduce_solution
             // others don't make much sense
-            _ => return (left, right),
+            _ => return (simplify_expression(left), simplify_expression(right)),
+        }
+    } else if let AbstractExpression::Abstract(value_left) = left.clone() {
+        if let AbstractExpression::Abstract(value_right) = right.clone() {
+            if value_left == value_right {
+                return (AbstractExpression::Empty, AbstractExpression::Empty);
+            }
+        } else if right.contains(&value_left) {
+            let left_rem = simplify_expression(left.remove(&value_left));
+            let right_rem = simplify_expression(right.remove(&value_left));
+            return (left_rem, right_rem);
+        }
+    } else if let AbstractExpression::Abstract(value_right) = right.clone() {
+        if left.contains(&value_right) {
+            let left_rem = simplify_expression(left.remove(&value_right));
+            let right_rem = simplify_expression(right.remove(&value_right));
+            return (left_rem, right_rem);
         }
     }
     (left, right)
+}
+
+pub fn solve_for(
+    token: &str,
+    left: AbstractExpression,
+    right: AbstractExpression,
+) -> AbstractExpression {
+    if !left.contains(token) && !right.contains(token) {
+        return AbstractExpression::Empty;
+    }
+    if left.contains(token) {
+        if AbstractExpression::Abstract(token.to_string()) == left {
+            return right;
+        }
+        if let AbstractExpression::Expression(op, expr1, expr2) = left {
+            if expr1.contains(token) {
+                if op == "+" {
+                    return solve_for(
+                        token,
+                        *expr1,
+                        AbstractExpression::Expression("-".to_string(), Box::new(right), expr2),
+                    );
+                } else if op == "-" {
+                    return solve_for(
+                        token,
+                        *expr1,
+                        AbstractExpression::Expression("+".to_string(), Box::new(right), expr2),
+                    );
+                }
+            } else if expr2.contains(token) {
+                if op == "+" {
+                    return solve_for(
+                        token,
+                        *expr2,
+                        AbstractExpression::Expression("-".to_string(), Box::new(right), expr1),
+                    );
+                } else if op == "-" {
+                    return solve_for(
+                        token,
+                        *expr2,
+                        AbstractExpression::Expression("+".to_string(), Box::new(right), expr1),
+                    );
+                }
+            }
+        }
+    } else if right.contains(token) {
+        if AbstractExpression::Abstract(token.to_string()) == right {
+            return left;
+        }
+        if let AbstractExpression::Expression(op, expr1, expr2) = right {
+            if expr1.contains(token) {
+                if op == "+" {
+                    return solve_for(
+                        token,
+                        *expr1,
+                        AbstractExpression::Expression("-".to_string(), Box::new(left), expr2),
+                    );
+                } else if op == "-" {
+                    return solve_for(
+                        token,
+                        *expr1,
+                        AbstractExpression::Expression("+".to_string(), Box::new(left), expr2),
+                    );
+                }
+            } else if expr2.contains(token) {
+                if op == "+" {
+                    return solve_for(
+                        token,
+                        *expr2,
+                        AbstractExpression::Expression("-".to_string(), Box::new(left), expr1),
+                    );
+                } else if op == "-" {
+                    return solve_for(
+                        token,
+                        *expr2,
+                        AbstractExpression::Expression("+".to_string(), Box::new(left), expr1),
+                    );
+                }
+            }
+        }
+    }
+    AbstractExpression::Empty
 }
 
 #[derive(Debug, Clone)]

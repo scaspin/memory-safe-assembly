@@ -178,11 +178,11 @@ impl ARMCORTEXA {
     }
 
     // FIX: better name for what this is? make tokens not just ?
-    pub fn replace_abstract(&mut self, token: &str, value: &str) {
+    pub fn replace_abstract(&mut self, token: &str, value: AbstractExpression) {
         for i in 0..self.registers.len() {
             if let Some(b) = &self.registers[i].base {
                 if b.contains(&token) {
-                    self.registers[i].base = Some(b.replace(token, value));
+                    self.registers[i].base = Some(b.replace(token, value.clone()));
                 }
             }
         }
