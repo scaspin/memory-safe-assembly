@@ -1,6 +1,9 @@
 use std::fmt;
 use std::str::FromStr;
 
+// TODO: find a way to make solving easier? less verbose
+// static OPERATIONS : [(&str, &str); 3] = [("+", "-"), ("-", "+"), ("<", ">")];
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RegisterKind {
     RegisterBase, // register name / expression + offset
@@ -168,6 +171,20 @@ impl AbstractExpression {
         }
     }
 
+    pub fn contains_expression(&self, expr: &AbstractExpression) -> bool {
+        if self == expr {
+            return true;
+        }
+        match self {
+            AbstractExpression::Solution(_, inner) => {
+                return inner.contains_expression(expr);
+            }
+            AbstractExpression::Expression(_, arg1, arg2) => {
+                return arg1.contains_expression(expr) || arg2.contains_expression(expr);
+            }
+            _ => return false,
+        }
+    }
     pub fn replace(&self, token: &str, value: AbstractExpression) -> AbstractExpression {
         match self {
             AbstractExpression::Immediate(num) => {
@@ -268,6 +285,33 @@ impl AbstractExpression {
         }
         (AbstractExpression::Empty, AbstractExpression::Empty)
     }
+
+    pub fn simplify(&self) -> AbstractExpression {
+        match self.clone() {
+            AbstractExpression::Expression(func, arg1, arg2) => {
+                if func == "+" || func == "-" {
+                    if *arg1 == AbstractExpression::Immediate(0)
+                        || *arg1 == AbstractExpression::Empty
+                    {
+                        return *arg2;
+                    } else if *arg2 == AbstractExpression::Immediate(0)
+                        || *arg2 == AbstractExpression::Empty
+                    {
+                        return *arg1;
+                    } else {
+                        return self.clone();
+                    }
+                } else {
+                    return self.clone();
+                }
+            }
+            _ => return self.clone(),
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        format!("{}", &self)
+    }
 }
 
 fn same_exp_type(left: AbstractExpression, right: AbstractExpression) -> bool {
@@ -281,25 +325,9 @@ fn same_exp_type(left: AbstractExpression, right: AbstractExpression) -> bool {
     }
 }
 
-fn simplify_expression(exp: AbstractExpression) -> AbstractExpression {
-    match exp.clone() {
-        AbstractExpression::Expression(func, arg1, arg2) => {
-            if func == "+" || func == "-" {
-                if *arg1 == AbstractExpression::Immediate(0) || *arg1 == AbstractExpression::Empty {
-                    return *arg2;
-                } else if *arg2 == AbstractExpression::Immediate(0)
-                    || *arg2 == AbstractExpression::Empty
-                {
-                    return *arg1;
-                } else {
-                    return exp;
-                }
-            } else {
-                return exp;
-            }
-        }
-        _ => return exp,
-    }
+// TODO: refactor computer to use .simplify
+pub fn simplify_expression(exp: AbstractExpression) -> AbstractExpression {
+    exp.simplify()
 }
 
 fn simplify_equality(
@@ -494,19 +522,6 @@ impl PartialEq for MemoryAccess {
 impl Eq for MemoryAccess {}
 
 #[derive(Debug, Clone)]
-pub struct AbstractValue {
-    pub name: String,
-    pub min: Option<usize>,
-    pub max: Option<usize>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ValueType {
-    ABSTRACT(AbstractValue), // string will be an identifier
-    REAL(usize),
-}
-
-#[derive(Debug, Clone)]
 pub enum FlagValue {
     ABSTRACT(AbstractExpression),
     REAL(bool),
@@ -530,9 +545,9 @@ impl fmt::Display for RegionType {
 #[derive(Debug, Clone)]
 pub struct MemorySafeRegion {
     pub region_type: RegionType,
-    pub base: String,
-    pub start_offset: ValueType,
-    pub end_offset: ValueType,
+    pub base: AbstractExpression,
+    pub start: AbstractExpression,
+    pub end: AbstractExpression,
 }
 
 #[derive(Debug, Clone)]

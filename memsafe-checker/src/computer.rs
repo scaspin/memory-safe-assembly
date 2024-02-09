@@ -28,9 +28,11 @@ pub struct ARMCORTEXA {
     stack: HashMap<i64, RegisterValue>,
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
-    abstracts: Vec<common::AbstractValue>,
+    abstracts: Vec<AbstractExpression>, // maybe unecessary can be expressed as contrains
+    constraints: Vec<AbstractExpression>,
     tracked_loop_abstracts: Vec<String>,
     rw_queue: Vec<common::MemoryAccess>,
+    // add alignment value
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -93,26 +95,41 @@ impl ARMCORTEXA {
             memory_safe_regions: Vec::new(),
             abstracts: Vec::new(),
             tracked_loop_abstracts: Vec::new(),
+            constraints: Vec::new(),
             rw_queue: Vec::new(),
         }
     }
 
     pub fn set_region(&mut self, region: common::MemorySafeRegion) {
-        self.memory_safe_regions.push(region);
+        self.memory_safe_regions.push(region.clone());
+        self.constraints.push(AbstractExpression::Expression(
+            "=<".to_string(),
+            Box::new(AbstractExpression::Expression(
+                "+".to_string(),
+                Box::new(region.base.clone()),
+                Box::new(region.start),
+            )),
+            Box::new(AbstractExpression::Expression(
+                "+".to_string(),
+                Box::new(region.base),
+                Box::new(region.end),
+            )),
+        ));
     }
 
     pub fn set_immediate(&mut self, register: String, value: u64) {
         self.set_register(register, RegisterKind::Immediate, None, value as i64);
     }
 
-    pub fn set_abstract(&mut self, register: String, value: common::AbstractValue) {
+    pub fn set_abstract(&mut self, register: String, value: AbstractExpression) {
         self.abstracts.push(value.clone());
-        self.set_register(
-            register,
-            RegisterKind::Abstract,
-            Some(AbstractExpression::Abstract(value.name)),
-            0,
-        );
+        self.set_register(register, RegisterKind::Abstract, Some(value), 0);
+    }
+
+    pub fn add_constraint(&mut self, constraint: AbstractExpression) {
+        if !self.constraints.contains(&constraint.clone()) {
+            self.constraints.push(constraint);
+        }
     }
 
     fn set_register(
@@ -536,253 +553,6 @@ impl ARMCORTEXA {
         Ok(None)
     }
 
-    fn mem_safe_read(
-        &self,
-        base: Option<AbstractExpression>,
-        offset: i64,
-    ) -> Result<(), common::MemorySafetyError> {
-        if let Some(AbstractExpression::Abstract(regbase)) = base.clone() {
-            // read from stack
-            if regbase == "sp" || regbase == "x31" {
-                if self.stack.contains_key(&offset) {
-                    return Ok(());
-                } else {
-                    return Err(common::MemorySafetyError::new(
-                        "Element at this address not in stack",
-                    ));
-                }
-            // read from static memory
-            } else if regbase == "Memory" {
-                // read from defs
-                if self.memory.get(&(offset)).is_some() {
-                    return Ok(());
-                }
-            } else {
-                // check if read from memory safe region
-                for region in self.memory_safe_regions.clone() {
-                    if regbase.contains(&region.base)
-                        && region.region_type == common::RegionType::READ
-                    {
-                        match region.start_offset {
-                            common::ValueType::REAL(start) => {
-                                match region.end_offset {
-                                    common::ValueType::REAL(end) => {
-                                        if offset >= (start as i64) && offset < ((end - 4) as i64) {
-                                            return Ok(());
-                                        }
-                                    }
-                                    common::ValueType::ABSTRACT(end) => {
-                                        if offset >= (start as i64) {
-                                            for a in &self.abstracts {
-                                                if end.name == end.name {
-                                                    if let Some(e) = a.max {
-                                                        if offset < ((e - 4) as i64) {
-                                                            return Ok(());
-                                                        }
-                                                    } else {
-                                                        // there is no maximum value of abstract!
-                                                        return Ok(());
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            common::ValueType::ABSTRACT(start) => {
-                                match region.end_offset {
-                                    common::ValueType::REAL(end) => {
-                                        if offset < ((end - 4) as i64) {
-                                            for a in &self.abstracts {
-                                                if a.name == start.name {
-                                                    if let Some(e) = a.min {
-                                                        if offset >= (e as i64) {
-                                                            return Ok(());
-                                                        }
-                                                    } else {
-                                                        // there is no minim value of abstract!
-                                                        return Ok(());
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // both bounds are abstract
-                                    common::ValueType::ABSTRACT(end) => {
-                                        for a in &self.abstracts {
-                                            if a.name == start.name {
-                                                if let Some(e) = a.min {
-                                                    if offset >= (e as i64) {
-                                                        return Ok(());
-                                                    } else {
-                                                        return Err(
-                                                            common::MemorySafetyError::new(
-                                                                "below min of abstract",
-                                                            ),
-                                                        );
-                                                    }
-                                                } else {
-                                                    // there is no minim value of abstract!
-                                                    return Ok(());
-                                                }
-                                            }
-                                            if a.name == end.name {
-                                                if let Some(e) = a.max {
-                                                    if offset < ((e - 4) as i64) {
-                                                        return Ok(());
-                                                    } else {
-                                                        return Err(
-                                                            common::MemorySafetyError::new(
-                                                                "above max of abstract",
-                                                            ),
-                                                        );
-                                                    }
-                                                } else {
-                                                    // there is no maximum value of abstract!
-                                                    return Ok(());
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        };
-                    }
-                }
-                return Err(common::MemorySafetyError::new(
-                    format!(
-                        "Reading at address outside allowable memory regions {:?}, {:?}",
-                        regbase, offset
-                    )
-                    .as_str(),
-                ));
-            }
-        } else if let Some(exp) = base.clone() {
-            if exp.contains("?") {}
-        }
-        Err(common::MemorySafetyError::new(
-            format!(
-                "Cannot read safely from address with base {:?} offset {:?}",
-                base, offset
-            )
-            .as_str(),
-        ))
-    }
-
-    fn mem_safe_write(
-        &self,
-        base: Option<AbstractExpression>,
-        offset: i64,
-    ) -> Result<(), common::MemorySafetyError> {
-        if let Some(AbstractExpression::Abstract(regbase)) = base {
-            // write to stack
-            if regbase == "sp" {
-                return Ok(());
-            } else {
-                // check if read from memory safe region
-                for region in self.memory_safe_regions.clone() {
-                    if region.base == regbase && region.region_type == common::RegionType::WRITE {
-                        match region.start_offset {
-                            common::ValueType::REAL(start) => {
-                                match region.end_offset {
-                                    common::ValueType::REAL(end) => {
-                                        if offset >= (start as i64) && offset < ((end - 4) as i64) {
-                                            return Ok(());
-                                        }
-                                    }
-                                    common::ValueType::ABSTRACT(end) => {
-                                        if offset >= (start as i64) {
-                                            for a in &self.abstracts {
-                                                if a.name == end.name {
-                                                    if let Some(e) = a.max {
-                                                        if offset < ((e - 4) as i64) {
-                                                            return Ok(());
-                                                        }
-                                                    } else {
-                                                        // there is no maximum value of abstract!
-                                                        return Ok(());
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            common::ValueType::ABSTRACT(start) => {
-                                match region.end_offset {
-                                    common::ValueType::REAL(end) => {
-                                        if offset < ((end - 4) as i64) {
-                                            for a in &self.abstracts {
-                                                if a.name == start.name {
-                                                    if let Some(e) = a.min {
-                                                        if offset >= (e as i64) {
-                                                            return Ok(());
-                                                        }
-                                                    } else {
-                                                        // there is no minim value of abstract!
-                                                        return Ok(());
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // both bounds are abstract
-                                    common::ValueType::ABSTRACT(end) => {
-                                        for a in &self.abstracts {
-                                            if a.name == start.name {
-                                                if let Some(e) = a.min {
-                                                    if offset >= (e as i64) {
-                                                        return Ok(());
-                                                    } else {
-                                                        return Err(
-                                                            common::MemorySafetyError::new(
-                                                                "below min of abstract",
-                                                            ),
-                                                        );
-                                                    }
-                                                } else {
-                                                    // there is no minim value of abstract!
-                                                    return Ok(());
-                                                }
-                                            }
-                                            if a.name == end.name {
-                                                if let Some(e) = a.max {
-                                                    if offset < ((e - 4) as i64) {
-                                                        return Ok(());
-                                                    } else {
-                                                        return Err(
-                                                            common::MemorySafetyError::new(
-                                                                "above max of abstract",
-                                                            ),
-                                                        );
-                                                    }
-                                                } else {
-                                                    // there is no maximum value of abstract!
-                                                    return Ok(());
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        };
-                    }
-                }
-            }
-            return Err(common::MemorySafetyError::new(
-                "Cannot write using offsets from not the stack pointer or a safe memory region",
-            ));
-        } else {
-            // overwrite def
-            if self.memory.get(&(offset)).is_some() {
-                return Ok(());
-            }
-            return Err(common::MemorySafetyError::new(
-                "Cannot write to a random memory address",
-            ));
-        };
-    }
-
     fn arithmetic(
         &mut self,
         op_string: &str,
@@ -792,8 +562,11 @@ impl ARMCORTEXA {
         reg2: String,
         reg3: Option<String>,
     ) {
+        let r0 = self.operand(reg0.clone());
         let r1 = self.operand(reg1.clone());
         let mut r2 = self.operand(reg2.clone());
+
+        // println!("constraints: {:#?}", self. constraints);
 
         // if we're tracking r1 or r2 for abstract looping, we're just gonna operate
         // some abstract
@@ -808,7 +581,20 @@ impl ARMCORTEXA {
                         Box::new(b),
                         Box::new(AbstractExpression::Abstract("?".to_string())),
                     );
-                    self.set_register(reg0, r1.kind, Some(new_base), r1.offset);
+                    self.set_register(reg0, r1.kind, Some(new_base), 0);
+                    self.add_constraint(AbstractExpression::Expression(
+                        ">".to_string(),
+                        Box::new(AbstractExpression::Abstract("?".to_string())),
+                        Box::new(AbstractExpression::Immediate(op(r1.offset, r2.offset))),
+                    ));
+                    // FIX: this is a bit brute forcey?
+                    self.add_constraint(AbstractExpression::Expression(
+                        ">".to_string(),
+                        Box::new(AbstractExpression::Abstract("?".to_string())),
+                        Box::new(AbstractExpression::Immediate(0)),
+                    ));
+                    self.untrack_registers(reg1);
+                    self.untrack_registers(reg2);
                 }
                 return;
             }
@@ -820,7 +606,9 @@ impl ARMCORTEXA {
                         Box::new(b),
                         Box::new(AbstractExpression::Abstract("?".to_string())),
                     );
-                    self.set_register(reg0, r2.kind, Some(new_base), r2.offset);
+                    self.set_register(reg0, r2.kind, Some(new_base), op(r1.offset, r2.offset));
+                    self.untrack_registers(reg1);
+                    self.untrack_registers(reg2);
                 }
                 return;
             }
@@ -921,6 +709,18 @@ impl ARMCORTEXA {
         } else {
             // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string, r1, r2 );
             log::error!("Cannot perform arithmetic on these two registers")
+        }
+
+        // remove constraints on the base of the result
+        // since performing arithmetic potentially invalidates these
+        if let Some(base) = r0.base {
+            let mut new_constraints = Vec::new();
+            for exp in &self.constraints {
+                if !exp.contains_expression(&base) {
+                    new_constraints.push(exp.clone());
+                }
+            }
+            self.constraints = new_constraints;
         }
     }
 
@@ -1165,26 +965,37 @@ impl ARMCORTEXA {
                 } else {
                     let mut exists = false;
                     for r in &self.memory_safe_regions {
-                        if base.contains(&r.base) {
+                        if r.base.contains(&base) {
                             exists = true;
                         }
                     }
                     if exists {
-                        log::info!(
-                            "Load from address {:?} + {}",
-                            base.clone(),
-                            address.offset.clone()
-                        );
+                        log::info!("Load from base {:?} + offset {}", base, address.offset);
                         self.rw_queue.push(common::MemoryAccess {
                             kind: common::RegionType::READ,
-                            base,
+                            base: base,
                             offset: address.offset,
                         });
-                        self.set_register(t, RegisterKind::Number, None, 0);
                     } else {
-                        log::error!("Could not read from base {:?}", base)
+                        log::error!(" Cannot read from base {:?}", base)
                     }
                 }
+            } else {
+                let base = address
+                    .base
+                    .unwrap_or(AbstractExpression::Empty)
+                    .to_string();
+                log::info!(
+                    "Load from base {:?} + offset {}",
+                    base,
+                    address.offset.clone()
+                );
+                self.rw_queue.push(common::MemoryAccess {
+                    kind: common::RegionType::READ,
+                    base: base,
+                    offset: address.offset,
+                });
+                self.set_register(t, RegisterKind::Number, None, 0);
             }
         } else {
             log::error!("{:?}", res)
@@ -1218,7 +1029,7 @@ impl ARMCORTEXA {
                 } else {
                     let mut exists = false;
                     for r in &self.memory_safe_regions {
-                        if r.base == base {
+                        if r.base.contains(&base) {
                             exists = true;
                         }
                     }
@@ -1241,5 +1052,163 @@ impl ARMCORTEXA {
         } else {
             log::error!("{:?}", res)
         }
+    }
+
+    // SAFETY CHECKS
+
+    fn mem_safe_read(
+        &self,
+        base: Option<AbstractExpression>,
+        offset: i64,
+    ) -> Result<(), common::MemorySafetyError> {
+        if let Some(AbstractExpression::Abstract(regbase)) = base.clone() {
+            // read from stack
+            if regbase == "sp" || regbase == "x31" {
+                if self.stack.contains_key(&offset) {
+                    return Ok(());
+                } else {
+                    return Err(common::MemorySafetyError::new(
+                        "Element at this address not in stack",
+                    ));
+                }
+            // read from static memory
+            } else if regbase == "Memory" {
+                // read from defs
+                if self.memory.get(&(offset)).is_some() {
+                    return Ok(());
+                }
+            } else {
+                // check if read from memory safe region
+                for region in self.memory_safe_regions.clone() {
+                    if region.base.contains(&regbase)
+                        && region.region_type == common::RegionType::READ
+                    {
+                        match (region.start.clone(), region.end.clone()) {
+                            (
+                                AbstractExpression::Immediate(min),
+                                AbstractExpression::Immediate(max),
+                            ) => {
+                                if offset >= min && offset < max {
+                                    return Ok(());
+                                }
+                            }
+                            (
+                                AbstractExpression::Immediate(min),
+                                AbstractExpression::Abstract(_),
+                            ) => {
+                                if min == offset {
+                                    return Ok(());
+                                }
+                                for c in &self.constraints {
+                                    if common::simplify_expression(c.clone())
+                                        == common::simplify_expression(
+                                            AbstractExpression::Expression(
+                                                "<".to_string(),
+                                                Box::new(AbstractExpression::Immediate(offset)),
+                                                Box::new(region.end.clone()),
+                                            ),
+                                        )
+                                    {
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                            (_, _) => {
+                                todo!();
+                            }
+                        }
+                    }
+                }
+                return Err(common::MemorySafetyError::new(
+                    format!(
+                        "Reading at address outside allowable memory regions {:?}, {:?}",
+                        regbase, offset
+                    )
+                    .as_str(),
+                ));
+            }
+        } else if let Some(AbstractExpression::Expression(op, left, right)) = base.clone() {
+            for region in self.memory_safe_regions.clone() {
+                if region.region_type == common::RegionType::READ
+                    && op == "+"
+                    && region.base == *left.clone()
+                {
+                    let min_constraint = AbstractExpression::Expression(
+                        ">".to_string(),
+                        right.clone(),
+                        Box::new(region.start.clone()),
+                    );
+                    let max_constraint = AbstractExpression::Expression(
+                        "<".to_string(),
+                        right.clone(),
+                        Box::new(region.end.clone()),
+                    );
+                    if self.constraints.contains(&max_constraint)
+                        && self.constraints.contains(&min_constraint)
+                    {
+                        return Ok(());
+                    }
+                } else if region.region_type == common::RegionType::READ
+                    && op == "+"
+                    && region.base == *left.clone()
+                {
+                    let min_constraint = AbstractExpression::Expression(
+                        ">".to_string(),
+                        left.clone(),
+                        Box::new(region.start.clone()),
+                    );
+                    let max_constraint = AbstractExpression::Expression(
+                        "<".to_string(),
+                        left.clone(),
+                        Box::new(region.end.clone()),
+                    );
+                    if self.constraints.contains(&max_constraint)
+                        && self.constraints.contains(&min_constraint)
+                    {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        Err(common::MemorySafetyError::new(
+            format!(
+                "Cannot read safely from address with base {:?} offset {:?}",
+                base, offset
+            )
+            .as_str(),
+        ))
+    }
+
+    fn mem_safe_write(
+        &self,
+        base: Option<AbstractExpression>,
+        offset: i64,
+    ) -> Result<(), common::MemorySafetyError> {
+        if let Some(AbstractExpression::Abstract(regbase)) = base.clone() {
+            // write to stack
+            if regbase == "sp" {
+                return Ok(());
+            } else {
+                // check if read from memory safe region
+                for region in self.memory_safe_regions.clone() {
+                    if region.base == base.clone().unwrap()
+                        && region.region_type == common::RegionType::WRITE
+                    {
+                        todo!();
+                    }
+                }
+            }
+            return Err(common::MemorySafetyError::new(
+                "Cannot write using offsets from not the stack pointer or a safe memory region",
+            ));
+        } else {
+            // overwrite def
+            if self.memory.get(&(offset)).is_some() {
+                return Ok(());
+            }
+            return Err(common::MemorySafetyError::new(
+                "Cannot write to a random memory address",
+            ));
+        };
     }
 }

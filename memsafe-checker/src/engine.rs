@@ -130,7 +130,7 @@ impl ExecutionEngine {
         self.computer.set_immediate(register, value as u64);
     }
 
-    pub fn add_abstract(&mut self, register: String, value: common::AbstractValue) {
+    pub fn add_abstract(&mut self, register: String, value: common::AbstractExpression) {
         self.computer.set_abstract(register, value);
     }
 
@@ -248,21 +248,13 @@ impl ExecutionEngine {
         rw_list: Vec<common::MemoryAccess>,
     ) -> bool {
         log::info!("jump condition: {}", expression.clone());
-        log::info!("memory accesses: {:#?}", rw_list.clone());
+        // log::info!("memory accesses: {:?}", rw_list.clone());
 
         // figure out relevant registers
         let relevant_registers = expression.get_register_names();
 
-        // filter memory accesses by relevant registers
-        let mut relevant_rw_list = Vec::new();
-        for a in rw_list {
-            if relevant_registers.contains(&a.base) {
-                relevant_rw_list.push(a);
-            }
-        }
-
         for e in &self.loop_state {
-            if e.0 == expression && e.1 == relevant_rw_list {
+            if e.0 == expression && e.1 == rw_list {
                 // TODO replace ? with value
                 let (left, right) = expression.reduce_solution();
                 if left.contains("?") || right.contains("?") {
@@ -270,19 +262,26 @@ impl ExecutionEngine {
                     let solved = common::solve_for("?", left, right);
                     self.computer.replace_abstract("?", solved);
                 }
-                // untrack registers used to resolve this loop
-                for r in relevant_registers {
-                    self.computer.untrack_registers(r);
-                }
+
+                println!("e.0 {:?}, expression {:?}", e.0, expression);
+                println!("e.1 {:?}, relevant_rw {:?}", e.1, rw_list);
                 return false;
             }
         }
 
-        self.loop_state.push((expression.clone(), relevant_rw_list));
+        self.loop_state.push((expression.clone(), rw_list));
         for r in relevant_registers {
             self.computer.track_register(r);
         }
         self.computer.clear_rw_queue();
+
+        let (left, right) = expression.reduce_solution();
+        self.computer
+            .add_constraint(common::AbstractExpression::Expression(
+                "<".to_string(),
+                Box::new(left),
+                Box::new(right),
+            ));
 
         return true;
     }
