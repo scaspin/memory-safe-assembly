@@ -423,7 +423,11 @@ impl ARMCORTEXA {
                 }
             }
 
-            self.load(reg1, base_add_reg.clone());
+            let res = self.load(reg1, base_add_reg.clone());
+            match res {
+                Err(e) => return Err(e.to_string()),
+                _ => (),
+            }
 
             // post-index
             if instruction.r3.is_some() {
@@ -453,10 +457,18 @@ impl ARMCORTEXA {
                 }
             }
 
-            self.load(reg1, base_add_reg.clone());
+            let res = self.load(reg1, base_add_reg.clone());
+            match res {
+                Err(e) => return Err(e.to_string()),
+                _ => (),
+            }
             let mut next = base_add_reg.clone();
             next.offset = next.offset + 8;
-            self.load(reg2, next);
+            let res = self.load(reg2, next);
+            match res {
+                Err(e) => return Err(e.to_string()),
+                _ => (),
+            }
 
             // post-index
             if instruction.r4.is_some() {
@@ -491,7 +503,11 @@ impl ARMCORTEXA {
             }
 
             let reg2base = common::get_register_name_string(reg2.clone());
-            self.store(reg1, base_add_reg.clone());
+            let res = self.store(reg1, base_add_reg.clone());
+            match res {
+                Err(e) => return Err(e.to_string()),
+                _ => (),
+            }
 
             // post-index
             if instruction.r3.is_some() {
@@ -526,10 +542,18 @@ impl ARMCORTEXA {
                 }
             }
 
-            self.store(reg1, base_add_reg.clone());
+            let res = self.store(reg1, base_add_reg.clone());
+            match res {
+                Err(e) => return Err(e.to_string()),
+                _ => (),
+            }
             let mut next = base_add_reg.clone();
             next.offset = next.offset + 8;
-            self.store(reg2, next);
+            let res = self.store(reg2, next);
+            match res {
+                Err(e) => return Err(e.to_string()),
+                _ => (),
+            }
 
             // post-index
             if instruction.r4.is_some() {
@@ -946,7 +970,7 @@ impl ARMCORTEXA {
      * t: register name to load into
      * address: register with address as value
      */
-    fn load(&mut self, t: String, address: RegisterValue) {
+    fn load(&mut self, t: String, address: RegisterValue) -> Result<(), common::MemorySafetyError> {
         let res = self.mem_safe_read(address.base.clone(), address.offset);
 
         if res.is_ok() {
@@ -956,12 +980,19 @@ impl ARMCORTEXA {
                     match val {
                         Some(v) => {
                             self.set_register(t, v.kind.clone(), v.base.clone(), v.offset);
+                            Ok(())
                         }
-                        None => log::error!("No element at this address in stack"),
+                        None => {
+                            log::error!("No element at this address in stack");
+                            return Err(common::MemorySafetyError::new(
+                                "Cannot read element at this address from the stack",
+                            ));
+                        }
                     }
                 } else if base == "Memory" {
                     let num = &self.memory.get(&(address.offset)).unwrap();
                     self.set_register(t, RegisterKind::Immediate, None, **num);
+                    Ok(())
                 } else {
                     let mut exists = false;
                     for r in &self.memory_safe_regions {
@@ -976,8 +1007,12 @@ impl ARMCORTEXA {
                             base: base,
                             offset: address.offset,
                         });
+                        Ok(())
                     } else {
-                        log::error!(" Cannot read from base {:?}", base)
+                        log::error!("Cannot read from base {:?}", base);
+                        return Err(common::MemorySafetyError::new(
+                            "Cannot read from address with this base",
+                        ));
                     }
                 }
             } else {
@@ -996,9 +1031,11 @@ impl ARMCORTEXA {
                     offset: address.offset,
                 });
                 self.set_register(t, RegisterKind::Number, None, 0);
+                Ok(())
             }
         } else {
-            log::error!("{:?}", res)
+            log::error!("{:?}", res);
+            return res;
         }
     }
 
@@ -1006,7 +1043,11 @@ impl ARMCORTEXA {
      * t: register to be stored
      * address: where to store it
      */
-    fn store(&mut self, reg: String, address: RegisterValue) {
+    fn store(
+        &mut self,
+        reg: String,
+        address: RegisterValue,
+    ) -> Result<(), common::MemorySafetyError> {
         let res = self.mem_safe_write(address.base.clone(), address.offset);
 
         if res.is_ok() {
@@ -1026,6 +1067,7 @@ impl ARMCORTEXA {
                     if index > self.stack_size {
                         self.stack_size = self.stack_size + 4;
                     }
+                    Ok(())
                 } else {
                     let mut exists = false;
                     for r in &self.memory_safe_regions {
@@ -1044,13 +1086,20 @@ impl ARMCORTEXA {
                             base,
                             offset: address.offset,
                         });
+                        Ok(())
                     } else {
-                        log::error!("Could not write to base {:?}", base)
+                        log::error!("Could not write to base {:?}", base);
+                        return Err(common::MemorySafetyError::new(
+                            "Cannot store to address with this base",
+                        ));
                     }
                 }
+            } else {
+                todo!();
             }
         } else {
-            log::error!("{:?}", res)
+            log::error!("{:?}", res);
+            return res;
         }
     }
 

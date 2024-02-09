@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn abstract_loop() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
         let reader = BufReader::new(file);
@@ -105,18 +105,6 @@ mod tests {
         }
 
         let mut engine = bums::engine::ExecutionEngine::new(program);
-
-        // let length = common::AbstractValue {
-        //     name: "Length".to_string(),
-        //     min: Some(0),
-        //     max: None,
-        // };
-
-        // let base = common::AbstractValue {
-        //     name: "Base".to_string(),
-        //     min: None,
-        //     max: None,
-        // };
 
         let length = common::AbstractExpression::Abstract("Length".to_string());
         let base = common::AbstractExpression::Abstract("Base".to_string());
@@ -132,6 +120,39 @@ mod tests {
         engine.add_abstract(String::from("x2"), length);
         engine.start(start_label)
     }
+
+    #[test]
+    fn bad_abstract_loop() -> std::io::Result<()> {
+        // env_logger::init();
+
+        let file = File::open("tests/asm-examples/bad-abstract-loop.S")?;
+        let reader = BufReader::new(file);
+        let start_label = String::from("start");
+
+        let mut program = Vec::new();
+        for line in reader.lines() {
+            program.push(line.unwrap_or(String::from("")));
+        }
+
+        let mut engine = bums::engine::ExecutionEngine::new(program);
+
+        let length = common::AbstractExpression::Abstract("Length".to_string());
+        let base = common::AbstractExpression::Abstract("Base".to_string());
+        // Base is the base address of the input buffer
+        engine.add_abstract(String::from("x1"), base.clone());
+        engine.add_region(common::MemorySafeRegion {
+            region_type: common::RegionType::READ,
+            base: base,
+            start: common::AbstractExpression::Immediate(0),
+            end: length.clone(),
+        });
+
+        engine.add_abstract(String::from("x2"), length);
+        let res = engine.start(start_label);
+        assert!(res.is_err());
+        Ok(())
+    }
+
     // #[test]
     // fn double_loop() -> std::io::Result<()> {
     //     // env_logger::init();

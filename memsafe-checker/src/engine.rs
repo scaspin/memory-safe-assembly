@@ -1,3 +1,5 @@
+use std::io::{Error, ErrorKind};
+
 use crate::common;
 use crate::computer;
 
@@ -226,8 +228,7 @@ impl ExecutionEngine {
                         instruction,
                         err
                     );
-                    break;
-                    // TODO: do we need to reflect these errors in failing test
+                    return Err(Error::new(ErrorKind::Other, err));
                 }
             }
 
@@ -262,9 +263,6 @@ impl ExecutionEngine {
                     let solved = common::solve_for("?", left, right);
                     self.computer.replace_abstract("?", solved);
                 }
-
-                println!("e.0 {:?}, expression {:?}", e.0, expression);
-                println!("e.1 {:?}, relevant_rw {:?}", e.1, rw_list);
                 return false;
             }
         }

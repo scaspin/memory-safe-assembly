@@ -561,6 +561,10 @@ impl MemorySafetyError {
             details: msg.to_string(),
         }
     }
+
+    pub fn to_string(&self) -> String {
+        format!("{}", &self.details)
+    }
 }
 impl fmt::Display for MemorySafetyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
