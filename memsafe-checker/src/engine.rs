@@ -15,6 +15,7 @@ pub struct ExecutionEngine {
     computer: computer::ARMCORTEXA,
     pc: usize,
     loop_state: Vec<(common::AbstractExpression, Vec<common::MemoryAccess>)>,
+    fail_fast: bool,
 }
 
 impl ExecutionEngine {
@@ -120,6 +121,7 @@ impl ExecutionEngine {
             computer,
             pc: 0,
             loop_state: Vec::new(),
+            fail_fast: true,
         };
     }
 
@@ -136,6 +138,9 @@ impl ExecutionEngine {
         self.computer.set_abstract(register, value);
     }
 
+    pub fn dont_fail_fast(&mut self) {
+        self.fail_fast = false;
+    }
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let program_length = self.program.code.len();
         let mut pc = 0;
@@ -228,7 +233,10 @@ impl ExecutionEngine {
                         instruction,
                         err
                     );
-                    return Err(Error::new(ErrorKind::Other, err));
+                    if self.fail_fast {
+                        return Err(Error::new(ErrorKind::Other, err));
+                    }
+                    pc = pc + 1;
                 }
             }
 
@@ -262,6 +270,9 @@ impl ExecutionEngine {
                     // FIX: cannot call solve for if it doesn't have key
                     let solved = common::solve_for("?", left, right);
                     self.computer.replace_abstract("?", solved);
+                }
+                for reg in relevant_registers {
+                    self.computer.untrack_register(reg);
                 }
                 return false;
             }

@@ -190,8 +190,11 @@ impl AbstractExpression {
             AbstractExpression::Immediate(num) => {
                 return AbstractExpression::Immediate(*num);
             }
-            AbstractExpression::Abstract(_) => {
-                return value;
+            AbstractExpression::Abstract(a) => {
+                if a == token {
+                    return value;
+                }
+                return self.clone();
             }
             AbstractExpression::Register(reg) => return AbstractExpression::Register(reg.clone()),
             AbstractExpression::Solution(num, old) => {
@@ -698,6 +701,7 @@ pub fn string_to_int(s: &str) -> i64 {
         for part in parts {
             let m = part.parse::<i64>().unwrap();
             value = value * m;
+            // println!("value: {:?}", value);
         }
     } else if v.contains("x") {
         value = i64::from_str_radix(v.strip_prefix("0x").unwrap(), 16).unwrap();

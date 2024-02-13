@@ -38,9 +38,10 @@ pub struct ARMCORTEXA {
 impl fmt::Debug for ARMCORTEXA {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // write!(f, "stack: {:?}", &self.stack);
-        for i in [0..31] {
-            println!("register {:?}", &self.registers[i]);
-        }
+        // for i in [0..31] {
+        //     println!("register {:?}", &self.registers[i]);
+        // }
+        println!("registers {:?}", &self.registers);
         Ok(())
     }
 }
@@ -102,18 +103,23 @@ impl ARMCORTEXA {
 
     pub fn set_region(&mut self, region: common::MemorySafeRegion) {
         self.memory_safe_regions.push(region.clone());
-        self.constraints.push(AbstractExpression::Expression(
-            "=<".to_string(),
+        self.add_constraint(AbstractExpression::Expression(
+            "<".to_string(),
             Box::new(AbstractExpression::Expression(
                 "+".to_string(),
                 Box::new(region.base.clone()),
-                Box::new(region.start),
+                Box::new(region.start.clone()),
             )),
             Box::new(AbstractExpression::Expression(
                 "+".to_string(),
-                Box::new(region.base),
+                Box::new(region.base.clone()),
                 Box::new(region.end),
             )),
+        ));
+        self.add_constraint(AbstractExpression::Expression(
+            "<".to_string(),
+            Box::new(region.start),
+            Box::new(region.base),
         ));
     }
 
@@ -183,7 +189,7 @@ impl ARMCORTEXA {
         self.tracked_loop_abstracts.push(register);
     }
 
-    pub fn untrack_registers(&mut self, register: String) {
+    pub fn untrack_register(&mut self, register: String) {
         let index = self
             .tracked_loop_abstracts
             .iter()
@@ -280,7 +286,7 @@ impl ARMCORTEXA {
             );
         } else if instruction.op == "sub" {
             self.arithmetic(
-                &instruction.op,
+                "-",
                 &|x, y| x - y,
                 instruction.r1.clone().expect("Need dst register"),
                 instruction.r2.clone().expect("Need one operand"),
@@ -457,18 +463,11 @@ impl ARMCORTEXA {
                 }
             }
 
-            let res = self.load(reg1, base_add_reg.clone());
-            match res {
-                Err(e) => return Err(e.to_string()),
-                _ => (),
-            }
+            let res1 = self.load(reg1, base_add_reg.clone());
+
             let mut next = base_add_reg.clone();
             next.offset = next.offset + 8;
-            let res = self.load(reg2, next);
-            match res {
-                Err(e) => return Err(e.to_string()),
-                _ => (),
-            }
+            let res2 = self.load(reg2, next);
 
             // post-index
             if instruction.r4.is_some() {
@@ -484,6 +483,15 @@ impl ARMCORTEXA {
                     base_add_reg.base,
                     base_add_reg.offset + new_imm.offset,
                 );
+            }
+
+            match res1 {
+                Err(e) => return Err(e.to_string()),
+                _ => (),
+            }
+            match res2 {
+                Err(e) => return Err(e.to_string()),
+                _ => (),
             }
         } else if instruction.op == "str" {
             let reg1 = instruction.r1.clone().unwrap();
@@ -617,8 +625,8 @@ impl ARMCORTEXA {
                         Box::new(AbstractExpression::Abstract("?".to_string())),
                         Box::new(AbstractExpression::Immediate(0)),
                     ));
-                    self.untrack_registers(reg1);
-                    self.untrack_registers(reg2);
+                    self.untrack_register(reg1);
+                    self.untrack_register(reg2);
                 }
                 return;
             }
@@ -631,8 +639,8 @@ impl ARMCORTEXA {
                         Box::new(AbstractExpression::Abstract("?".to_string())),
                     );
                     self.set_register(reg0, r2.kind, Some(new_base), op(r1.offset, r2.offset));
-                    self.untrack_registers(reg1);
-                    self.untrack_registers(reg2);
+                    self.untrack_register(reg1);
+                    self.untrack_register(reg2);
                 }
                 return;
             }
@@ -676,7 +684,7 @@ impl ARMCORTEXA {
                 }
                 RegisterKind::Number => {
                     // abstract numbers, value doesn't matter
-                    self.set_register(reg0, RegisterKind::Number, None, op(r1.offset, r2.offset))
+                    self.set_register(reg0, RegisterKind::Number, None, 0)
                 }
                 RegisterKind::Abstract => {
                     let base = match r1.clone().base {
@@ -714,7 +722,7 @@ impl ARMCORTEXA {
             self.set_register(reg0, r1.kind, r1.base, op(r1.offset, r2.offset));
         } else if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
             // abstract numbers, value doesn't matter
-            self.set_register(reg0, RegisterKind::Number, None, op(r1.offset, r2.offset))
+            self.set_register(reg0, RegisterKind::Number, None, 0)
         } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
             let base = match r2.clone().base {
                 Some(reg1base) => match r1.clone().base {
@@ -1002,6 +1010,7 @@ impl ARMCORTEXA {
                     }
                     if exists {
                         log::info!("Load from base {:?} + offset {}", base, address.offset);
+                        self.set_register(t, RegisterKind::Number, None, 0);
                         self.rw_queue.push(common::MemoryAccess {
                             kind: common::RegionType::READ,
                             base: base,
@@ -1162,6 +1171,37 @@ impl ARMCORTEXA {
                                     }
                                 }
                             }
+                            (AbstractExpression::Immediate(min), exp) => {
+                                if offset == min {
+                                    return Ok(());
+                                }
+                                //FIX: possibly combine with previous case
+                                if offset > min {
+                                    for c in &self.constraints.clone() {
+                                        if common::simplify_expression(c.clone())
+                                            == common::simplify_expression(
+                                                AbstractExpression::Expression(
+                                                    "<".to_string(),
+                                                    Box::new(AbstractExpression::Expression(
+                                                        "+".to_string(),
+                                                        Box::new(
+                                                            base.clone().unwrap_or(
+                                                                AbstractExpression::Empty,
+                                                            ),
+                                                        ),
+                                                        Box::new(AbstractExpression::Immediate(
+                                                            offset,
+                                                        )),
+                                                    )),
+                                                    Box::new(exp.clone()),
+                                                ),
+                                            )
+                                        {
+                                            return Ok(());
+                                        }
+                                    }
+                                }
+                            }
                             (_, _) => {
                                 todo!();
                             }
@@ -1243,7 +1283,22 @@ impl ARMCORTEXA {
                     if region.base == base.clone().unwrap()
                         && region.region_type == common::RegionType::WRITE
                     {
-                        todo!();
+                        match (region.start, region.end) {
+                            (
+                                common::AbstractExpression::Immediate(start),
+                                common::AbstractExpression::Immediate(end),
+                            ) => {
+                                // TODO alignment
+                                if offset >= start && offset < end - 4 {
+                                    return Ok(());
+                                } else {
+                                    todo!();
+                                }
+                            }
+                            (_, _) => {
+                                todo!();
+                            }
+                        }
                     }
                 }
             }
