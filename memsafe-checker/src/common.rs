@@ -13,7 +13,6 @@ pub enum RegisterKind {
     Address,      // known number we can jump to!
 }
 
-// TODO: add a field for "name" which will hold the current register location
 #[derive(Debug, Clone, PartialEq)]
 pub struct RegisterValue {
     pub name: String,
@@ -304,6 +303,10 @@ impl AbstractExpression {
                     } else {
                         return self.clone();
                     }
+                } else if func == "<" || func == ">" || func == "=<" || func == ">=" || func == "=="
+                {
+                    let (left, right) = simplify_equality(*arg1, *arg2);
+                    return AbstractExpression::Expression(func, Box::new(left), Box::new(right));
                 } else {
                     return self.clone();
                 }
@@ -314,6 +317,41 @@ impl AbstractExpression {
 
     pub fn to_string(&self) -> String {
         format!("{}", &self)
+    }
+
+    // see whether two expressions contradict
+    // None -> expressions cannot be compared
+    // true -> expressions do not contradict
+    // false -> expressions contradict
+    pub fn contradicts(&self, exp: AbstractExpression) -> Option<bool> {
+        match (self, exp) {
+            (
+                AbstractExpression::Expression(op1, left1, right1),
+                AbstractExpression::Expression(op2, left2, right2),
+            ) => {
+                if op1 == &op2 && right1 == &right2 {
+                    if op1 == "<" {
+                        return evaluate(AbstractExpression::Expression(
+                            "<".to_string(),
+                            left2,
+                            left1.clone(),
+                        ));
+                    }
+                } else if op1 == &op2 && left1 == &left2 {
+                    if op1 == "<" {
+                        return evaluate(AbstractExpression::Expression(
+                            "<".to_string(),
+                            right2,
+                            right1.clone(),
+                        ));
+                    }
+                } else {
+                    todo!();
+                }
+            }
+            (_, _) => todo!(),
+        }
+        None
     }
 }
 
@@ -501,6 +539,60 @@ pub fn solve_for(
         }
     }
     AbstractExpression::Empty
+}
+
+pub fn evaluate(a: AbstractExpression) -> Option<bool> {
+    match a {
+        AbstractExpression::Expression(op, left, right) => match (*left, *right) {
+            (AbstractExpression::Immediate(l), AbstractExpression::Immediate(r)) => {
+                if op == "==" {
+                    if l == r {
+                        return Some(true);
+                    } else {
+                        return Some(false);
+                    }
+                } else if op == "<" {
+                    if l < r {
+                        return Some(true);
+                    } else {
+                        return Some(false);
+                    }
+                } else if op == ">" {
+                    if l > r {
+                        return Some(true);
+                    } else {
+                        return Some(false);
+                    }
+                } else if op == ">=" {
+                    if l >= r {
+                        return Some(true);
+                    } else {
+                        return Some(false);
+                    }
+                } else if op == "=<" {
+                    if l > r {
+                        return Some(true);
+                    } else {
+                        return Some(false);
+                    }
+                } else {
+                    return None;
+                }
+            }
+            (AbstractExpression::Abstract(l), AbstractExpression::Abstract(r)) => {
+                if op == "==" {
+                    if l == r {
+                        return Some(true);
+                    } else {
+                        return Some(false);
+                    }
+                }
+                return None;
+            }
+            (_, _) => todo!(),
+        },
+        _ => todo!(),
+    }
 }
 
 #[derive(Debug, Clone)]

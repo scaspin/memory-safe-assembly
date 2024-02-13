@@ -594,7 +594,7 @@ impl ARMCORTEXA {
         reg2: String,
         reg3: Option<String>,
     ) {
-        let r0 = self.operand(reg0.clone());
+        //let saved_reg0 = reg0.clone();
         let r1 = self.operand(reg1.clone());
         let mut r2 = self.operand(reg2.clone());
 
@@ -717,9 +717,9 @@ impl ARMCORTEXA {
                 }
             }
         } else if r1.kind == RegisterKind::Immediate {
-            self.set_register(reg0, r2.kind, r2.base, op(r1.offset, r2.offset));
+            self.set_register(reg0, r2.kind.clone(), r2.base.clone(), op(r1.offset, r2.offset));
         } else if r2.kind == RegisterKind::Immediate {
-            self.set_register(reg0, r1.kind, r1.base, op(r1.offset, r2.offset));
+            self.set_register(reg0, r1.kind.clone(), r1.base.clone(), op(r1.offset, r2.offset));
         } else if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
             // abstract numbers, value doesn't matter
             self.set_register(reg0, RegisterKind::Number, None, 0)
@@ -745,15 +745,20 @@ impl ARMCORTEXA {
 
         // remove constraints on the base of the result
         // since performing arithmetic potentially invalidates these
-        if let Some(base) = r0.base {
-            let mut new_constraints = Vec::new();
-            for exp in &self.constraints {
-                if !exp.contains_expression(&base) {
-                    new_constraints.push(exp.clone());
-                }
-            }
-            self.constraints = new_constraints;
-        }
+
+        // TODO: revisit when to drop constraints
+        // let mut new_constraints = Vec::new();
+        // let result = self.operand(saved_reg0);
+        // println!("result: {:?}", result.clone());
+        // for exp in &self.constraints {
+        //     if !exp.contains_expression(&result.base.clone().unwrap_or(common::AbstractExpression::Empty)) {
+        //         new_constraints.push(exp.clone());
+        //     } else {
+        //         println!("constraint: {:#?}", exp.clone());
+        //         new_constraints.push(exp.clone());
+        //     }
+        // }
+        // self.constraints = new_constraints;
     }
 
     fn shift_reg(&mut self, reg1: String, reg2: String, reg3: String) {
@@ -1043,7 +1048,6 @@ impl ARMCORTEXA {
                 Ok(())
             }
         } else {
-            log::error!("{:?}", res);
             return res;
         }
     }
@@ -1104,10 +1108,23 @@ impl ARMCORTEXA {
                     }
                 }
             } else {
-                todo!();
+                let base = address
+                    .base
+                    .unwrap_or(AbstractExpression::Empty)
+                    .to_string();
+                log::info!(
+                    "Store to base {:?} + offset {}",
+                    base,
+                    address.offset.clone()
+                );
+                self.rw_queue.push(common::MemoryAccess {
+                    kind: common::RegionType::READ,
+                    base: base,
+                    offset: address.offset,
+                });
+                Ok(())
             }
         } else {
-            log::error!("{:?}", res);
             return res;
         }
     }
@@ -1154,6 +1171,7 @@ impl ARMCORTEXA {
                                 AbstractExpression::Immediate(min),
                                 AbstractExpression::Abstract(_),
                             ) => {
+                                //FIX this check
                                 if min == offset {
                                     return Ok(());
                                 }
@@ -1172,39 +1190,41 @@ impl ARMCORTEXA {
                                 }
                             }
                             (AbstractExpression::Immediate(min), exp) => {
+                                //FIX this check
                                 if offset == min {
                                     return Ok(());
                                 }
                                 //FIX: possibly combine with previous case
                                 if offset > min {
-                                    for c in &self.constraints.clone() {
-                                        if common::simplify_expression(c.clone())
-                                            == common::simplify_expression(
-                                                AbstractExpression::Expression(
-                                                    "<".to_string(),
-                                                    Box::new(AbstractExpression::Expression(
-                                                        "+".to_string(),
-                                                        Box::new(
-                                                            base.clone().unwrap_or(
-                                                                AbstractExpression::Empty,
-                                                            ),
-                                                        ),
-                                                        Box::new(AbstractExpression::Immediate(
-                                                            offset,
-                                                        )),
-                                                    )),
-                                                    Box::new(exp.clone()),
+                                    let bound = common::simplify_expression(
+                                        AbstractExpression::Expression(
+                                            "<".to_string(),
+                                            Box::new(AbstractExpression::Expression(
+                                                "+".to_string(),
+                                                Box::new(
+                                                    base.clone()
+                                                        .unwrap_or(AbstractExpression::Empty),
                                                 ),
-                                            )
-                                        {
+                                                Box::new(AbstractExpression::Immediate(offset)),
+                                            )),
+                                            Box::new(AbstractExpression::Expression(
+                                                "+".to_string(),
+                                                Box::new(
+                                                    base.clone()
+                                                        .unwrap_or(AbstractExpression::Empty),
+                                                ),
+                                                Box::new(exp.clone()),
+                                            )),
+                                        ),
+                                    );
+                                    for c in &self.constraints.clone() {
+                                        if common::simplify_expression(c.clone()) == bound {
                                             return Ok(());
                                         }
                                     }
                                 }
                             }
-                            (_, _) => {
-                                todo!();
-                            }
+                            (_, _) => (),
                         }
                     }
                 }
@@ -1239,7 +1259,7 @@ impl ARMCORTEXA {
                     }
                 } else if region.region_type == common::RegionType::READ
                     && op == "+"
-                    && region.base == *left.clone()
+                    && region.base == *right.clone()
                 {
                     let min_constraint = AbstractExpression::Expression(
                         ">".to_string(),
@@ -1283,21 +1303,39 @@ impl ARMCORTEXA {
                     if region.base == base.clone().unwrap()
                         && region.region_type == common::RegionType::WRITE
                     {
-                        match (region.start, region.end) {
+                        match (region.start, region.end.clone()) {
                             (
                                 common::AbstractExpression::Immediate(start),
                                 common::AbstractExpression::Immediate(end),
                             ) => {
                                 // TODO alignment
-                                if offset >= start && offset < end - 4 {
+                                if offset >= start && offset < end {
                                     return Ok(());
-                                } else {
-                                    todo!();
                                 }
                             }
-                            (_, _) => {
-                                todo!();
+                            (
+                                AbstractExpression::Immediate(min),
+                                AbstractExpression::Abstract(_),
+                            ) => {
+                                //FIX this check
+                                if min == offset {
+                                    return Ok(());
+                                }
+                                for c in &self.constraints {
+                                    if common::simplify_expression(c.clone())
+                                        == common::simplify_expression(
+                                            AbstractExpression::Expression(
+                                                "<".to_string(),
+                                                Box::new(AbstractExpression::Immediate(offset)),
+                                                Box::new(region.end.clone()),
+                                            ),
+                                        )
+                                    {
+                                        return Ok(());
+                                    }
+                                }
                             }
+                            (_, _) => (),
                         }
                     }
                 }
