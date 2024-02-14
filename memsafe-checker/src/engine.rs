@@ -1,9 +1,7 @@
-use std::fs::File;
-use std::io::BufReader;
-use rand::Rng;
+use std::io::{Error, ErrorKind};
 
-mod common;
-mod computer;
+use crate::common;
+use crate::computer;
 
 struct Program {
     defs: Vec<String>,
@@ -12,24 +10,16 @@ struct Program {
     ifdefs: Vec<((String, usize), usize)>,
 }
 
-struct ExecutionEngine {
+pub struct ExecutionEngine {
     program: Program,
     computer: computer::ARMCORTEXA,
     pc: usize,
-    // memory_regions: Vec<MemorySafeRegion> , // FIX: necessary?
-}
-
-// if true, we jump
-// if false, we continue
-// BIG TODO
-fn evaluate_jump_condition(_expression: String) -> bool {
-    let mut rng = rand::thread_rng();
-    let r = rng.gen::<bool>();
-    r
+    loop_state: Vec<(common::AbstractExpression, Vec<common::MemoryAccess>)>,
+    fail_fast: bool,
 }
 
 impl ExecutionEngine {
-    fn new(lines: Vec<String>) -> ExecutionEngine {
+    pub fn new(lines: Vec<String>) -> ExecutionEngine {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
         let mut code: Vec<common::Instruction> = Vec::new();
@@ -130,23 +120,33 @@ impl ExecutionEngine {
             },
             computer,
             pc: 0,
+            loop_state: Vec::new(),
+            fail_fast: true,
         };
     }
 
-    fn add_region(&mut self, region: common::MemorySafeRegion) {
+    pub fn add_region(&mut self, region: common::MemorySafeRegion) {
         // self.memory_regions.push(region);
         self.computer.set_region(region);
     }
 
-    fn add_immediate(&mut self, register: String, value: usize) {
+    pub fn add_immediate(&mut self, register: String, value: usize) {
         self.computer.set_immediate(register, value as u64);
     }
 
-    fn add_abstract(&mut self, register: String, value: common::AbstractValue) {
+    pub fn add_abstract(&mut self, register: String, value: common::AbstractExpression) {
         self.computer.set_abstract(register, value);
     }
 
-    fn start(&mut self, start: String) -> std::io::Result<()> {
+    pub fn dont_fail_fast(&mut self) {
+        self.fail_fast = false;
+    }
+
+    pub fn change_alignment(&mut self, value: i64) {
+        self.computer.change_alignment(value);
+    }
+
+    pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let program_length = self.program.code.len();
         let mut pc = 0;
 
@@ -157,16 +157,25 @@ impl ExecutionEngine {
         }
 
         while pc < program_length {
-            let instruction = self.program.code[pc].clone();
+            let mut instruction = self.program.code[pc].clone();
+
+            // skip instruction if it is a label
+            if instruction.op.contains(":") {
+                pc = pc + 1;
+                instruction = self.program.code[pc].clone();
+            }
+
             log::info!("{:?}", instruction);
-            
+
             let execute_result = self.computer.execute(&instruction);
             match execute_result {
                 Ok(some) => match some {
                     Some(jump) => match jump {
                         // (condition, label to jump to, line number to jump to)
                         (Some(condition), Some(label), None) => {
-                            if evaluate_jump_condition(condition) {
+                            if self
+                                .evaluate_jump_condition(condition, self.computer.read_rw_queue())
+                            {
                                 for l in self.program.labels.iter() {
                                     if l.0.contains(&label.clone()) && label.contains(&l.0.clone())
                                     {
@@ -178,7 +187,9 @@ impl ExecutionEngine {
                             }
                         }
                         (Some(condition), None, Some(address)) => {
-                            if evaluate_jump_condition(condition) {
+                            if self
+                                .evaluate_jump_condition(condition, self.computer.read_rw_queue())
+                            {
                                 if address == 0 {
                                     // program is done
                                     break;
@@ -189,7 +200,6 @@ impl ExecutionEngine {
                             }
                         }
                         (None, Some(label), None) => {
-                            // println!("jump to label: {:?}", label.clone());
                             if label == "Return".to_string() {
                                 break;
                             }
@@ -221,96 +231,72 @@ impl ExecutionEngine {
                         pc = pc + 1;
                     }
                 },
-                Err(_) => {
+                Err(err) => {
                     log::error!(
-                        "Instruction could not execute at line {:?} : {:?}",
+                        "At line {:?} instruction {:?} error {:?}",
                         pc,
-                        instruction
+                        instruction,
+                        err
                     );
-                    break;
+                    if self.fail_fast {
+                        return Err(Error::new(ErrorKind::Other, err));
+                    }
+                    pc = pc + 1;
                 }
             }
 
             self.pc = pc;
         }
+
+        self.computer.check_stack_pointer_restored();
+
         Ok(())
     }
-}
 
-fn check_sha256_armv8_ios64() -> std::io::Result<()> {
-    use std::io::BufRead;
+    // if true, we jump
+    // if false, we continue
+    // BIG TODO
+    fn evaluate_jump_condition(
+        &mut self,
+        expression: common::AbstractExpression,
+        rw_list: Vec<common::MemoryAccess>,
+    ) -> bool {
+        log::info!("jump condition: {}", expression.clone());
+        // log::info!("memory accesses: {:?}", rw_list.clone());
 
-    let file = File::open("assets/processed-sha256-armv8-ios64.S")?;
-    let reader = BufReader::new(file);
-    let start_label = String::from("_sha256_block_data_order");
+        // figure out relevant registers
+        let relevant_registers = expression.get_register_names();
 
-    let mut program = Vec::new();
-    for line in reader.lines() {
-        program.push(line.unwrap_or(String::from("")));
-    }
+        for e in &self.loop_state {
+            if e.0 == expression && e.1 == rw_list {
+                // TODO replace ? with value
+                let (left, right) = expression.reduce_solution();
+                if left.contains("?") || right.contains("?") {
+                    // FIX: cannot call solve for if it doesn't have key
+                    let solved = common::solve_for("?", left, right);
+                    self.computer.replace_abstract("?", solved);
+                }
+                for reg in relevant_registers {
+                    self.computer.untrack_register(reg);
+                }
+                return false;
+            }
+        }
 
-    let mut engine = ExecutionEngine::new(program);
+        self.loop_state.push((expression.clone(), rw_list));
+        for r in relevant_registers {
+            self.computer.track_register(r);
+        }
+        self.computer.clear_rw_queue();
 
-    // x0 -- context
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::READ,
-        register: String::from("x0"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(64), // FIX: verify
-    });
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::WRITE,
-        register: String::from("x0"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(64), // FIX: verify
-    });
+        let (left, right) = expression.reduce_solution();
+        self.computer
+            .add_constraint(common::AbstractExpression::Expression(
+                "<".to_string(),
+                Box::new(left),
+                Box::new(right),
+            ));
 
-    let blocks = common::AbstractValue {
-        name: "Blocks".to_string(),
-        min: Some(0),
-        max: None,
-    };
-
-    let length = common::AbstractValue {
-        name: "Blocks * 64".to_string(),
-        min: Some(0),
-        max: None,
-    };
-
-    // x1 -- input blocks
-    // engine.add_input(String::from("x1")); // necessary to support various input designs
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::WRITE,
-        register: String::from("x1"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(256),
-    });
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::READ,
-        register: String::from("x1"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::ABSTRACT(length.clone()), // should be * 64
-    });
-
-    // x2 -- number of blocks
-    engine.add_abstract(String::from("x2"), blocks);
-    engine.add_region(common::MemorySafeRegion {
-        region_type: common::RegionType::READ,
-        register: String::from("x2"),
-        start_offset: common::ValueType::REAL(0),
-        end_offset: common::ValueType::REAL(256),
-    });
-
-    engine.start(start_label)
-}
-
-fn main() {
-    env_logger::init();
-
-    let res = check_sha256_armv8_ios64();
-    if res.is_ok() {
-        println!("Programs are memory safe!");
-    } else {
-        println!("{:?}", res);
+        return true;
     }
 }
