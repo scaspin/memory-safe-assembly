@@ -6,8 +6,6 @@ mod tests {
 
     #[test]
     fn sha256_armv8_ios64() -> std::io::Result<()> {
-        // env_logger::init();
-
         let file = File::open("tests/asm-examples/processed-sha256-armv8-ios64.S")?;
         let reader = BufReader::new(file);
         let start_label = String::from("_sha256_block_data_order");
@@ -37,7 +35,7 @@ mod tests {
         let length = common::AbstractExpression::Expression(
             "lsl".to_string(),
             Box::new(blocks.clone()),
-            Box::new(common::AbstractExpression::Immediate(4)),
+            Box::new(common::AbstractExpression::Immediate(6)),
         );
         let base = common::AbstractExpression::Abstract("Base".to_string());
 
@@ -65,6 +63,7 @@ mod tests {
             end: common::AbstractExpression::Immediate(64),
         });
 
+        //engine.dont_fail_fast();
         engine.start(start_label)
     }
 
@@ -85,7 +84,7 @@ mod tests {
 
     #[test]
     fn abstract_loop() -> std::io::Result<()> {
-        // env_logger::init();
+        //env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
         let reader = BufReader::new(file);
@@ -110,6 +109,8 @@ mod tests {
         });
 
         engine.add_abstract(String::from("x2"), length);
+
+        engine.change_alignment(1);
         engine.start(start_label)
     }
 
@@ -140,6 +141,8 @@ mod tests {
         });
 
         engine.add_abstract(String::from("x2"), length);
+
+        engine.change_alignment(1);
         let res = engine.start(start_label);
         assert!(res.is_err());
         Ok(())
@@ -176,6 +179,7 @@ mod tests {
         });
         engine.add_abstract(String::from("x2"), length2.clone());
 
+        engine.change_alignment(1);
         let res = engine.start(start_label);
         assert!(res.is_err());
         Ok(())
@@ -206,7 +210,7 @@ mod tests {
         });
 
         engine.add_abstract(String::from("x2"), length);
-
+        engine.change_alignment(1);
         engine.start(start_label)
     }
 }

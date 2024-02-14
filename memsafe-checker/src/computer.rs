@@ -28,11 +28,10 @@ pub struct ARMCORTEXA {
     stack: HashMap<i64, RegisterValue>,
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
-    abstracts: Vec<AbstractExpression>, // maybe unecessary can be expressed as contrains
     constraints: Vec<AbstractExpression>,
     tracked_loop_abstracts: Vec<String>,
     rw_queue: Vec<common::MemoryAccess>,
-    // add alignment value
+    alignment: i64,
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -94,10 +93,10 @@ impl ARMCORTEXA {
             stack: HashMap::new(),
             stack_size: 0,
             memory_safe_regions: Vec::new(),
-            abstracts: Vec::new(),
             tracked_loop_abstracts: Vec::new(),
             constraints: Vec::new(),
             rw_queue: Vec::new(),
+            alignment: 4,
         }
     }
 
@@ -128,7 +127,6 @@ impl ARMCORTEXA {
     }
 
     pub fn set_abstract(&mut self, register: String, value: AbstractExpression) {
-        self.abstracts.push(value.clone());
         self.set_register(register, RegisterKind::Abstract, Some(value), 0);
     }
 
@@ -212,6 +210,10 @@ impl ARMCORTEXA {
         // TODO: update flags and stack as well?
     }
 
+    pub fn change_alignment(&mut self, value: i64) {
+        self.alignment = value;
+    }
+
     // handle different addressing modes
     fn operand(&self, v: String) -> RegisterValue {
         if !v.contains('[') && v.contains('#') {
@@ -255,7 +257,7 @@ impl ARMCORTEXA {
                     name: "IntermediateRegister".to_string(),
                     kind: RegisterKind::Immediate,
                     base: None,
-                    offset: 4, // TODO: alightment, need to make dynamic?
+                    offset: self.alignment,
                 };
             } else {
                 return RegisterValue {
@@ -594,11 +596,9 @@ impl ARMCORTEXA {
         reg2: String,
         reg3: Option<String>,
     ) {
-        //let saved_reg0 = reg0.clone();
+        let saved_reg0 = reg0.clone();
         let r1 = self.operand(reg1.clone());
         let mut r2 = self.operand(reg2.clone());
-
-        // println!("constraints: {:#?}", self. constraints);
 
         // if we're tracking r1 or r2 for abstract looping, we're just gonna operate
         // some abstract
@@ -717,9 +717,19 @@ impl ARMCORTEXA {
                 }
             }
         } else if r1.kind == RegisterKind::Immediate {
-            self.set_register(reg0, r2.kind.clone(), r2.base.clone(), op(r1.offset, r2.offset));
+            self.set_register(
+                reg0,
+                r2.kind.clone(),
+                r2.base.clone(),
+                op(r1.offset, r2.offset),
+            );
         } else if r2.kind == RegisterKind::Immediate {
-            self.set_register(reg0, r1.kind.clone(), r1.base.clone(), op(r1.offset, r2.offset));
+            self.set_register(
+                reg0,
+                r1.kind.clone(),
+                r1.base.clone(),
+                op(r1.offset, r2.offset),
+            );
         } else if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
             // abstract numbers, value doesn't matter
             self.set_register(reg0, RegisterKind::Number, None, 0)
@@ -745,20 +755,22 @@ impl ARMCORTEXA {
 
         // remove constraints on the base of the result
         // since performing arithmetic potentially invalidates these
-
-        // TODO: revisit when to drop constraints
-        // let mut new_constraints = Vec::new();
-        // let result = self.operand(saved_reg0);
-        // println!("result: {:?}", result.clone());
-        // for exp in &self.constraints {
-        //     if !exp.contains_expression(&result.base.clone().unwrap_or(common::AbstractExpression::Empty)) {
-        //         new_constraints.push(exp.clone());
-        //     } else {
-        //         println!("constraint: {:#?}", exp.clone());
-        //         new_constraints.push(exp.clone());
-        //     }
-        // }
-        // self.constraints = new_constraints;
+        let result = self.operand(saved_reg0);
+        if let Some(base) = result.base {
+            let mut new_constraints = Vec::new();
+            for exp in &self.constraints {
+                if exp.contains_expression(&base.clone()) {
+                    let comparison = exp.contradicts(base.clone());
+                    match comparison {
+                        Some(true) => (),
+                        _ => new_constraints.push(exp.clone()),
+                    }
+                } else {
+                    new_constraints.push(exp.clone());
+                }
+            }
+            self.constraints = new_constraints;
+        }
     }
 
     fn shift_reg(&mut self, reg1: String, reg2: String, reg3: String) {
@@ -1078,7 +1090,7 @@ impl ARMCORTEXA {
 
                     // check stack sizing
                     if index > self.stack_size {
-                        self.stack_size = self.stack_size + 4;
+                        self.stack_size = self.stack_size + self.alignment;
                     }
                     Ok(())
                 } else {
@@ -1163,38 +1175,14 @@ impl ARMCORTEXA {
                                 AbstractExpression::Immediate(min),
                                 AbstractExpression::Immediate(max),
                             ) => {
-                                if offset >= min && offset < max {
+                                if offset >= min && offset < max - self.alignment {
                                     return Ok(());
-                                }
-                            }
-                            (
-                                AbstractExpression::Immediate(min),
-                                AbstractExpression::Abstract(_),
-                            ) => {
-                                //FIX this check
-                                if min == offset {
-                                    return Ok(());
-                                }
-                                for c in &self.constraints {
-                                    if common::simplify_expression(c.clone())
-                                        == common::simplify_expression(
-                                            AbstractExpression::Expression(
-                                                "<".to_string(),
-                                                Box::new(AbstractExpression::Immediate(offset)),
-                                                Box::new(region.end.clone()),
-                                            ),
-                                        )
-                                    {
-                                        return Ok(());
-                                    }
                                 }
                             }
                             (AbstractExpression::Immediate(min), exp) => {
-                                //FIX this check
-                                if offset == min {
+                                if offset == min && exp != AbstractExpression::Empty {
                                     return Ok(());
                                 }
-                                //FIX: possibly combine with previous case
                                 if offset > min {
                                     let bound = common::simplify_expression(
                                         AbstractExpression::Expression(
@@ -1308,8 +1296,7 @@ impl ARMCORTEXA {
                                 common::AbstractExpression::Immediate(start),
                                 common::AbstractExpression::Immediate(end),
                             ) => {
-                                // TODO alignment
-                                if offset >= start && offset < end {
+                                if offset >= start && offset <= (end - self.alignment) {
                                     return Ok(());
                                 }
                             }

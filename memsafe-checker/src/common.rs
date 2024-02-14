@@ -292,16 +292,22 @@ impl AbstractExpression {
         match self.clone() {
             AbstractExpression::Expression(func, arg1, arg2) => {
                 if func == "+" || func == "-" {
-                    if *arg1 == AbstractExpression::Immediate(0)
-                        || *arg1 == AbstractExpression::Empty
-                    {
-                        return *arg2;
-                    } else if *arg2 == AbstractExpression::Immediate(0)
-                        || *arg2 == AbstractExpression::Empty
-                    {
-                        return *arg1;
-                    } else {
-                        return self.clone();
+                    match (func.as_str(), *arg1.clone(), *arg2.clone()) {
+                        (
+                            "+",
+                            AbstractExpression::Immediate(a),
+                            AbstractExpression::Immediate(b),
+                        ) => return AbstractExpression::Immediate(a + b),
+                        (
+                            "-",
+                            AbstractExpression::Immediate(a),
+                            AbstractExpression::Immediate(b),
+                        ) => return AbstractExpression::Immediate(a - b),
+                        (_, AbstractExpression::Immediate(0), _)
+                        | (_, AbstractExpression::Empty, _) => return *arg2,
+                        (_, _, AbstractExpression::Immediate(0))
+                        | (_, _, AbstractExpression::Empty) => return *arg1,
+                        (_, _, _) => self.clone(),
                     }
                 } else if func == "<" || func == ">" || func == "=<" || func == ">=" || func == "=="
                 {
@@ -323,6 +329,7 @@ impl AbstractExpression {
     // None -> expressions cannot be compared
     // true -> expressions do not contradict
     // false -> expressions contradict
+    // TODO: make this wayyyy more general
     pub fn contradicts(&self, exp: AbstractExpression) -> Option<bool> {
         match (self, exp) {
             (
@@ -339,6 +346,7 @@ impl AbstractExpression {
                     }
                 } else if op1 == &op2 && left1 == &left2 {
                     if op1 == "<" {
+                        println!("right: {:?}, right: {:?}", right2, right1);
                         return evaluate(AbstractExpression::Expression(
                             "<".to_string(),
                             right2,
@@ -346,10 +354,10 @@ impl AbstractExpression {
                         ));
                     }
                 } else {
-                    todo!();
+                    ();
                 }
             }
-            (_, _) => todo!(),
+            (_, _) => (),
         }
         None
     }

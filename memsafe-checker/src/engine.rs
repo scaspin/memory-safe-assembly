@@ -141,6 +141,11 @@ impl ExecutionEngine {
     pub fn dont_fail_fast(&mut self) {
         self.fail_fast = false;
     }
+
+    pub fn change_alignment(&mut self, value: i64) {
+        self.computer.change_alignment(value);
+    }
+
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let program_length = self.program.code.len();
         let mut pc = 0;
