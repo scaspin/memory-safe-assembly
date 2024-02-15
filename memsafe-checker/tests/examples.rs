@@ -213,4 +213,18 @@ mod tests {
         engine.change_alignment(1);
         engine.start(start_label)
     }
+
+    use my_macro_library::runtime_check;
+    #[runtime_check(safe_assembly)]
+    fn safe_assembly(filename: String) {
+        // Your function body here
+        println!("This is my function");
+    }
+
+    #[test]
+    fn macro_test() -> std::io::Result<()> {
+        //let res = bums::safe_asm!("tests/asm-examples/stack-push-pop.S", "stack_test");
+        safe_assembly("tests/asm-examples/stack-push-pop.S");
+        Ok(())
+    }
 }
