@@ -1,67 +1,71 @@
 extern crate proc_macro;
 use proc_macro::TokenStream;
+use proc_macro_error::{abort_call_site, proc_macro_error};
 use quote::quote;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_macro_input, Ident, Result, Token};
+use syn::{parse_macro_input,Expr, Lit, Result};
 
 use bums;
 
 #[derive(Debug)]
 struct MacroInput {
-    filename: Ident,
+    filename: String,
 }
 
 impl Parse for MacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
-        Ok(MacroInput {
-            filename: input.parse()?,
-        })
+        let expr = input.parse()?;
+        // filename should be a string literal or a reference to a literal
+        match expr {
+            Expr::Lit(literal) => {
+                let value = literal.lit;
+                match value {
+                    Lit::Str(literal_string) => Ok(MacroInput {
+                        filename: literal_string.value(),
+                    }),
+                    _ => todo!(),
+                }
+            }
+            _ => todo!(),
+        }
     }
 }
 
 #[proc_macro]
+#[proc_macro_error]
 pub fn safe_asm(input: TokenStream) -> TokenStream {
     //Parse the input as a function
     let vars = parse_macro_input!(input as MacroInput);
-    println!("input: {:?}", vars);
 
-    let res = File::open("example.S");
-    let mut file: File;
+    let res = File::open(vars.filename);
+    let file: File;
     match res {
         Ok(opened) => {
-            println!("opened file");
-            file = opened
+            file = opened;
         }
         Err(error) => {
-            println!("did not open");
-            println!("error: {:?}", error);
-            return quote!("Could not open assembly file").into();
+            // make more specific span
+            abort_call_site!(error);
         }
     };
 
-    // let reader = BufReader::new(file);
-    // let start_label = String::from("start");
+    let reader = BufReader::new(file);
+    let mut program = Vec::new();
+    for line in reader.lines() {
+        program.push(line.unwrap_or(String::from("")));
+    }
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    // let mut program = Vec::new();
-    // for line in reader.lines() {
-    //     program.push(line.unwrap_or(String::from("")));
-    // }
-    // let mut engine = engine::ExecutionEngine::new(program);
-
-    // let check_succeeded = engine.start("start".to_string()).is_ok();
-    // let output = if check_succeeded {
-    //     let fn_name = &input_fn.sig.ident;
-    //     quote! {
-    //         #input_fn
-    //     }
-    // } else {
-    //     //syn::Error::new("hey".span(), "Assembly not memory safe").to_compile_error();
-    //     //compile_error!("Assembly not memory safe");
-    //     quote! {}
-    // };
-
-    println!("hello");
-    quote!("hey").into()
+    let res = engine.start("start".to_string());
+    match res {
+        Ok(_) => {
+            return quote! {
+                asm!(input);
+            }
+            .into()
+        }
+        Err(error) => abort_call_site!(error),
+    };
 }
