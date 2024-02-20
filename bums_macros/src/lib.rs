@@ -1,33 +1,39 @@
 extern crate proc_macro;
 use proc_macro::TokenStream;
+use proc_macro2::Literal;
 use proc_macro_error::{abort_call_site, proc_macro_error};
 use quote::quote;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_macro_input,Expr, Lit, Result};
+use syn::{parse_macro_input, Expr, Lit, Result};
 
 use bums;
 
 #[derive(Debug)]
 struct MacroInput {
-    filename: String,
+    filename_literal: Literal,
+    filename_string: String,
 }
 
 impl Parse for MacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
+        let mut fl: Literal = proc_macro2::Literal::string("");
+        let mut fs = String::new();
+
         let expr = input.parse()?;
         // filename should be a string literal or a reference to a literal
         match expr {
-            Expr::Lit(literal) => {
-                let value = literal.lit;
-                match value {
-                    Lit::Str(literal_string) => Ok(MacroInput {
-                        filename: literal_string.value(),
-                    }),
-                    _ => todo!(),
+            Expr::Lit(literal) => match literal.lit {
+                Lit::Str(string) => {
+                    let s = string.value();
+                    return Ok(MacroInput {
+                        filename_literal: proc_macro2::Literal::string(&s),
+                        filename_string: s,
+                    });
                 }
-            }
+                _ => todo!(),
+            },
             _ => todo!(),
         }
     }
@@ -38,8 +44,9 @@ impl Parse for MacroInput {
 pub fn safe_asm(input: TokenStream) -> TokenStream {
     //Parse the input as a function
     let vars = parse_macro_input!(input as MacroInput);
+    println!("vars: {:#?}", vars);
 
-    let res = File::open(vars.filename);
+    let res = File::open(vars.filename_string);
     let file: File;
     match res {
         Ok(opened) => {
@@ -58,11 +65,16 @@ pub fn safe_asm(input: TokenStream) -> TokenStream {
     }
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
+    // TODO add regions
+
     let res = engine.start("start".to_string());
     match res {
         Ok(_) => {
             return quote! {
-                asm!(input);
+                unsafe {
+                    use std::arch::global_asm;
+                    global_asm!(vars.filename_string);
+                }
             }
             .into()
         }

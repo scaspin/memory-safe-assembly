@@ -12,5 +12,5 @@ proc-macro=true
 quote = "1.0.35"
 syn = {version = "2.0.49", features = ["full", "extra-traits"]}
 bums = { path = "../memsafe-checker" }
-full = "0.1.0"
 proc-macro-error = "1.0.4"
+proc-macro2 = {version="1.0.78", features=["proc-macro"]}
