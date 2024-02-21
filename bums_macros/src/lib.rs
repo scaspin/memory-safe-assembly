@@ -10,6 +10,16 @@ use syn::{parse_macro_input, Expr, Ident, Lit, Result, Token};
 
 use bums;
 
+// ATTRIBUTE ON EXTERN BLOCK
+#[proc_macro_attribute]
+pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
+    println!("attribute: {:?}", item);
+    return item
+}
+
+// FUNCTION LIKE PROC MACRO
+// todo: attribute on asm call
+
 #[derive(Debug)]
 struct InlineInput {
     code: Expr,
@@ -147,9 +157,7 @@ pub fn safe_global_asm(input: TokenStream) -> TokenStream {
                             use std::arch::global_asm;
                             global_asm!(include_str!(#filename));
 
-                            extern "C" {
-                                fn #funcall();
-                            }
+                            extern "C" { fn #funcall(); }
             }
             .into();
         }
