@@ -1,10 +1,10 @@
 extern crate proc_macro;
-use proc_macro::TokenStream;
-use proc_macro2::Span;
+use proc_macro::{Span, TokenStream, TokenTree};
 use proc_macro_error::{abort_call_site, proc_macro_error};
 use quote::quote;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::process::Command;
 use syn::parse::{Parse, ParseStream};
 use syn::{parse_macro_input, Expr, Ident, Lit, Result, Token};
 
@@ -13,8 +13,30 @@ use bums;
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
-    println!("attribute: {:?}", item);
-    return item
+
+    let ident_extern = TokenStream::from(TokenTree::Ident(proc_macro::Ident::new(
+        "extern",
+        Span::call_site(),
+    )));
+    let literal_str = TokenStream::from(TokenTree::Literal(proc_macro::Literal::string("C")));
+    let group_internal = TokenStream::from(TokenTree::Group(proc_macro::Group::new(
+        proc_macro::Delimiter::Brace,
+        item,
+    )));
+
+    let i = [ident_extern, literal_str, group_internal];
+    let token_stream = TokenStream::from_iter(i);
+
+    // make this path
+    let filename = attr.to_string();
+
+    Command::new("gcc")
+        .args(&["-s", &(filename.clone() + ".s"), "-o", &(filename + ".o")])
+        .output()
+        .expect("Failed to compile assembly code");
+    //let returned = quote! {  extern "C" { #savedfunccall } };
+    //println!("returned: {:#?}", returned.clone());
+    return token_stream;
 }
 
 // FUNCTION LIKE PROC MACRO
@@ -152,7 +174,7 @@ pub fn safe_global_asm(input: TokenStream) -> TokenStream {
 
     match res {
         Ok(_) => {
-            let funcall = Ident::new(&label, Span::call_site());
+            let funcall = Ident::new(&label, Span::call_site().into());
             return quote! {
                             use std::arch::global_asm;
                             global_asm!(include_str!(#filename));
