@@ -6,14 +6,30 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::process::Command;
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_macro_input, Expr, Ident, Lit, Result, Token};
+use syn::{parse_macro_input, Expr, Ident, Lit, Result, Signature, Token};
 
 use bums;
 
+#[derive(Debug)]
+struct CallColon {
+    item_fn: Signature,
+    _end_token: Token![;],
+}
+
+impl Parse for CallColon {
+    fn parse(input: ParseStream) -> Result<Self> {
+        return Ok(Self {
+            item_fn: input.parse()?,
+            _end_token: input.parse()?,
+        });
+    }
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
+#[proc_macro_error]
 pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
-
+    // construct what the call should actually look like in rust
     let ident_extern = TokenStream::from(TokenTree::Ident(proc_macro::Ident::new(
         "extern",
         Span::call_site(),
@@ -21,22 +37,56 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let literal_str = TokenStream::from(TokenTree::Literal(proc_macro::Literal::string("C")));
     let group_internal = TokenStream::from(TokenTree::Group(proc_macro::Group::new(
         proc_macro::Delimiter::Brace,
-        item,
+        item.clone(),
     )));
 
     let i = [ident_extern, literal_str, group_internal];
     let token_stream = TokenStream::from_iter(i);
 
+    // process function to get params for mem safety checks
+    let vars = parse_macro_input!(item as CallColon);
+
     // make this path
     let filename = attr.to_string();
 
     Command::new("gcc")
-        .args(&["-s", &(filename.clone() + ".s"), "-o", &(filename + ".o")])
+        .args(&[
+            "-s",
+            &(filename.clone() + ".s"),
+            "-o",
+            &(filename.clone() + ".o"),
+        ])
         .output()
         .expect("Failed to compile assembly code");
-    //let returned = quote! {  extern "C" { #savedfunccall } };
-    //println!("returned: {:#?}", returned.clone());
-    return token_stream;
+
+    let res = File::open(filename.clone() + ".s");
+    let file: File;
+    match res {
+        Ok(opened) => {
+            file = opened;
+        }
+        Err(error) => {
+            // make more specific span
+            abort_call_site!(error);
+        }
+    };
+
+    let reader = BufReader::new(file);
+    let mut program = Vec::new();
+    for line in reader.lines() {
+        program.push(line.unwrap_or(String::from("")));
+    }
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+
+    // TODO add regions
+
+    let label = vars.item_fn.ident.to_string();
+    let res = engine.start(label.clone());
+
+    match res {
+        Ok(_) => return token_stream,
+        Err(error) => abort_call_site!(error),
+    };
 }
 
 // FUNCTION LIKE PROC MACRO
