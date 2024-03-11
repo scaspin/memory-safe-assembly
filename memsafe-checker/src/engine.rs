@@ -133,42 +133,34 @@ impl ExecutionEngine {
     pub fn add_region_from(&mut self, base: String, length: (Option<usize>, Option<String>)) {
         match length {
             (Some(num), _) => {
-                self.computer.set_region(
-                    common::MemorySafeRegion{
-                        region_type: common::RegionType::WRITE,
-                        base: common::AbstractExpression::Abstract(base.clone()),
-                        start: common::AbstractExpression::Immediate(0),
-                        end: common::AbstractExpression::Immediate((num.clone() as i64)*4),
-                    }
-                );
-                self.computer.set_region(
-                    common::MemorySafeRegion{
-                        region_type: common::RegionType::READ,
-                        base: common::AbstractExpression::Abstract(base),
-                        start: common::AbstractExpression::Immediate(0),
-                        end: common::AbstractExpression::Immediate((num as i64)*4),
-                    }
-                );
-            },
+                self.computer.set_region(common::MemorySafeRegion {
+                    region_type: common::RegionType::WRITE,
+                    base: common::AbstractExpression::Abstract(base.clone()),
+                    start: common::AbstractExpression::Immediate(0),
+                    end: common::AbstractExpression::Immediate((num.clone() as i64) * 8),
+                });
+                self.computer.set_region(common::MemorySafeRegion {
+                    region_type: common::RegionType::READ,
+                    base: common::AbstractExpression::Abstract(base),
+                    start: common::AbstractExpression::Immediate(0),
+                    end: common::AbstractExpression::Immediate((num as i64) * 8),
+                });
+            }
             (None, Some(abs)) => {
-                self.computer.set_region(
-                    common::MemorySafeRegion{
-                        region_type: common::RegionType::WRITE,
-                        base: common::AbstractExpression::Abstract(base.clone()),
-                        start: common::AbstractExpression::Immediate(0),
-                        end: common::AbstractExpression::Abstract(abs.clone()),
-                    }
-                );
-                self.computer.set_region(
-                    common::MemorySafeRegion{
-                        region_type: common::RegionType::READ,
-                        base: common::AbstractExpression::Abstract(base),
-                        start: common::AbstractExpression::Immediate(0),
-                        end: common::AbstractExpression::Abstract(abs),
-                    }
-                );
-            },
-            (_,_) => ()  // should never happen! just to be safe
+                self.computer.set_region(common::MemorySafeRegion {
+                    region_type: common::RegionType::WRITE,
+                    base: common::AbstractExpression::Abstract(base.clone()),
+                    start: common::AbstractExpression::Immediate(0),
+                    end: common::AbstractExpression::Abstract(abs.clone()),
+                });
+                self.computer.set_region(common::MemorySafeRegion {
+                    region_type: common::RegionType::READ,
+                    base: common::AbstractExpression::Abstract(base),
+                    start: common::AbstractExpression::Immediate(0),
+                    end: common::AbstractExpression::Abstract(abs),
+                });
+            }
+            (_, _) => (), // should never happen! just to be safe
         }
     }
 

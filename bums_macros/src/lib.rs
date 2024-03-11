@@ -8,8 +8,8 @@ use std::io::{BufRead, BufReader};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
-    parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result,
-    Signature, Stmt, Token,
+    parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result, Signature,
+    Stmt, Token,
 };
 
 use bums;
@@ -29,19 +29,17 @@ impl Parse for CallColon {
     }
 }
 
-fn calculate_size_of(ty: String) -> (Option<usize>, Option<String>) {
+fn calculate_size_of(ty: String) -> usize {
     match ty.as_str() {
-        "i8" => (Some(std::mem::size_of::<i8>()), None),
-        "i16" => (Some(std::mem::size_of::<i16>()), None),
-        "i32" => (Some(std::mem::size_of::<i32>()), None),
-        "i64" => (Some(std::mem::size_of::<i64>()), None),
-        "u8" => (Some(std::mem::size_of::<u8>()), None),
-        "u16" => (Some(std::mem::size_of::<u16>()), None),
-        "u32" => (Some(std::mem::size_of::<u32>()), None),
-        "u64" => (Some(std::mem::size_of::<u64>()), None),
-        s => {
-            (None, None)
-        }
+        "i8" => std::mem::size_of::<i8>(),
+        "i16" => std::mem::size_of::<i16>(),
+        "i32" => std::mem::size_of::<i32>(),
+        "i64" => std::mem::size_of::<i64>(),
+        "u8" => std::mem::size_of::<u8>(),
+        "u16" => std::mem::size_of::<u16>(),
+        "u32" => std::mem::size_of::<u32>(),
+        "u64" => std::mem::size_of::<u64>(),
+        _ => 0,
     }
 }
 
@@ -52,7 +50,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
 
     //get args from function call to pass to invocation
-    let mut arguments_to_memory_safe_regions= Vec::new();
+    let mut arguments_to_memory_safe_regions = Vec::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
     for i in &vars.item_fn.inputs {
         arguments_to_memory_safe_regions.push(i.clone());
@@ -131,7 +129,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     //     ])
     //     .output()
     //     .expect("Failed to compile assembly code");
-    
+
     let res = File::open(filename.clone() + ".s");
     let file: File;
     match res {
@@ -154,34 +152,52 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // add memory safe regions
     for a in &arguments_to_memory_safe_regions {
         let mut name = String::new();
-        let mut size: (Option<usize>, Option<String>) = (None, None);
+        let mut size: usize = 0;
 
         match a {
             FnArg::Typed(pat_type) => {
+                // get name
                 match &*pat_type.pat {
                     Pat::Ident(b) => {
                         name = b.ident.clone().to_string();
                     }
                     _ => (),
                 }
+                //get type to get size
                 match &*pat_type.ty {
                     // simple types
                     syn::Type::Path(a) => {
                         for c in &a.path.segments {
-                            let res = calculate_size_of(c.ident.to_string());
-                            match res {
-                                (Some(_), None) | (None, Some(_)) => size = res,
-                                _ => abort_call_site!("Cannot calculate size of simple type")
-                            }
+                            size = calculate_size_of(c.ident.to_string());
                         }
-                    },
+                    }
+                    syn::Type::Array(a) => {
+                        let mut elem: String = String::new();
+                        let mut len: usize = 0;
+                        match &*a.elem {
+                            syn::Type::Path(b) => {
+                                elem = b.path.segments[0].ident.to_string();
+                            }
+                            _ => (),
+                        }
+                        match &a.len {
+                            Expr::Lit(b) => match &b.lit {
+                                Lit::Int(i) => {
+                                    len = i.token().to_string().parse::<usize>().unwrap();
+                                }
+                                _ => (),
+                            },
+                            _ => (),
+                        }
+                        size = calculate_size_of(elem) * len;
+                    }
                     _ => println!("yet unsupported type: {:#?}", pat_type.ty),
                 }
             }
             _ => (),
         }
 
-        engine.add_region_from(name, size) // size is in bytes if number
+        engine.add_region_from(name, (Some(size), None)) // size is in bytes if number
     }
 
     let label = vars.item_fn.ident.to_string();
