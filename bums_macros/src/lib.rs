@@ -4,7 +4,7 @@ use proc_macro_error::{abort_call_site, proc_macro_error};
 use quote::quote;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::process::Command;
+// use std::process::Command;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
@@ -29,6 +29,22 @@ impl Parse for CallColon {
     }
 }
 
+fn calculate_size_of(ty: String) -> (Option<usize>, Option<String>) {
+    match ty.as_str() {
+        "i8" => (Some(std::mem::size_of::<i8>()), None),
+        "i16" => (Some(std::mem::size_of::<i16>()), None),
+        "i32" => (Some(std::mem::size_of::<i32>()), None),
+        "i64" => (Some(std::mem::size_of::<i64>()), None),
+        "u8" => (Some(std::mem::size_of::<u8>()), None),
+        "u16" => (Some(std::mem::size_of::<u16>()), None),
+        "u32" => (Some(std::mem::size_of::<u32>()), None),
+        "u64" => (Some(std::mem::size_of::<u64>()), None),
+        s => {
+            (None, None)
+        }
+    }
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -36,20 +52,20 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
 
     //get args from function call to pass to invocation
-    let mut arguments: Punctuated<_, _> = Punctuated::new();
+    let mut arguments_to_memory_safe_regions= Vec::new();
+    let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
     for i in &vars.item_fn.inputs {
+        arguments_to_memory_safe_regions.push(i.clone());
         match i {
             FnArg::Typed(pat_type) => {
                 match &*pat_type.pat {
                     Pat::Ident(a) => {
                         let s = a.ident.clone();
-                        // let mut p = Punctuated::new();
                         let mut q = Punctuated::new();
                         q.push(syn::PathSegment {
                             ident: s,
                             arguments: syn::PathArguments::None,
                         });
-                        // p.push(
                         let w = Expr::Path(syn::ExprPath {
                             attrs: Vec::new(),
                             qself: None,
@@ -58,8 +74,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 segments: q,
                             },
                         });
-                        // ));
-                        arguments.push(w);
+                        arguments_to_pass.push(w);
                     }
                     _ => (),
                 }
@@ -87,7 +102,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             },
         })),
         paren_token: Default::default(),
-        args: arguments,
+        args: arguments_to_pass,
     };
 
     let extern_fn = vars.item_fn.clone();
@@ -104,9 +119,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let token_stream = quote!(#unsafe_block).into();
 
+    // compile file
     // make this path
     let filename = attr.to_string();
-
     // Command::new("gcc")
     //     .args(&[
     //         "-s",
@@ -116,7 +131,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     //     ])
     //     .output()
     //     .expect("Failed to compile assembly code");
-
+    
     let res = File::open(filename.clone() + ".s");
     let file: File;
     match res {
@@ -136,7 +151,38 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    // TODO add regions
+    // add memory safe regions
+    for a in &arguments_to_memory_safe_regions {
+        let mut name = String::new();
+        let mut size: (Option<usize>, Option<String>) = (None, None);
+
+        match a {
+            FnArg::Typed(pat_type) => {
+                match &*pat_type.pat {
+                    Pat::Ident(b) => {
+                        name = b.ident.clone().to_string();
+                    }
+                    _ => (),
+                }
+                match &*pat_type.ty {
+                    // simple types
+                    syn::Type::Path(a) => {
+                        for c in &a.path.segments {
+                            let res = calculate_size_of(c.ident.to_string());
+                            match res {
+                                (Some(_), None) | (None, Some(_)) => size = res,
+                                _ => abort_call_site!("Cannot calculate size of simple type")
+                            }
+                        }
+                    },
+                    _ => println!("yet unsupported type: {:#?}", pat_type.ty),
+                }
+            }
+            _ => (),
+        }
+
+        engine.add_region_from(name, size) // size is in bytes if number
+    }
 
     let label = vars.item_fn.ident.to_string();
     let res = engine.start(label.clone());
@@ -148,7 +194,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 // FUNCTION LIKE PROC MACRO
-// todo: attribute on asm call
+// todo: attribute on asm call instead?
 
 #[derive(Debug)]
 struct InlineInput {
