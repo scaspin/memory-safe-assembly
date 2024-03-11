@@ -1,12 +1,16 @@
 extern crate proc_macro;
-use proc_macro::{Span, TokenStream, TokenTree};
+use proc_macro::{Span, TokenStream};
 use proc_macro_error::{abort_call_site, proc_macro_error};
 use quote::quote;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::process::Command;
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_macro_input, Expr, Ident, Lit, Result, Signature, Token};
+use syn::punctuated::Punctuated;
+use syn::{
+    parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result,
+    Signature, Stmt, Token,
+};
 
 use bums;
 
@@ -29,35 +33,89 @@ impl Parse for CallColon {
 #[proc_macro_attribute]
 #[proc_macro_error]
 pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
-    // construct what the call should actually look like in rust
-    let ident_extern = TokenStream::from(TokenTree::Ident(proc_macro::Ident::new(
-        "extern",
-        Span::call_site(),
-    )));
-    let literal_str = TokenStream::from(TokenTree::Literal(proc_macro::Literal::string("C")));
-    let group_internal = TokenStream::from(TokenTree::Group(proc_macro::Group::new(
-        proc_macro::Delimiter::Brace,
-        item.clone(),
-    )));
-
-    let i = [ident_extern, literal_str, group_internal];
-    let token_stream = TokenStream::from_iter(i);
-
-    // process function to get params for mem safety checks
     let vars = parse_macro_input!(item as CallColon);
+
+    //get args from function call to pass to invocation
+    let mut arguments: Punctuated<_, _> = Punctuated::new();
+    for i in &vars.item_fn.inputs {
+        match i {
+            FnArg::Typed(pat_type) => {
+                match &*pat_type.pat {
+                    Pat::Ident(a) => {
+                        let s = a.ident.clone();
+                        // let mut p = Punctuated::new();
+                        let mut q = Punctuated::new();
+                        q.push(syn::PathSegment {
+                            ident: s,
+                            arguments: syn::PathArguments::None,
+                        });
+                        // p.push(
+                        let w = Expr::Path(syn::ExprPath {
+                            attrs: Vec::new(),
+                            qself: None,
+                            path: syn::Path {
+                                leading_colon: None,
+                                segments: q,
+                            },
+                        });
+                        // ));
+                        arguments.push(w);
+                    }
+                    _ => (),
+                }
+                // input_names.push(a.pat)
+            }
+            _ => (),
+        }
+    }
+
+    // extract name of function being invoked to pass to invocation
+    let mut q = Punctuated::new();
+    q.push(syn::PathSegment {
+        ident: vars.item_fn.ident.clone(),
+        arguments: syn::PathArguments::None,
+    });
+
+    let invocation: ExprCall = ExprCall {
+        attrs: vec![],
+        func: Box::new(Expr::Path(syn::ExprPath {
+            attrs: Vec::new(),
+            qself: None,
+            path: syn::Path {
+                leading_colon: None,
+                segments: q,
+            },
+        })),
+        paren_token: Default::default(),
+        args: arguments,
+    };
+
+    let extern_fn = vars.item_fn.clone();
+    let unsafe_block: Stmt = parse_quote! {
+        #extern_fn {
+            extern "C" {
+                #extern_fn;
+            }
+            unsafe {
+                #invocation;
+            }
+        }
+    };
+
+    let token_stream = quote!(#unsafe_block).into();
 
     // make this path
     let filename = attr.to_string();
 
-    Command::new("gcc")
-        .args(&[
-            "-s",
-            &(filename.clone() + ".s"),
-            "-o",
-            &(filename.clone() + ".o"),
-        ])
-        .output()
-        .expect("Failed to compile assembly code");
+    // Command::new("gcc")
+    //     .args(&[
+    //         "-s",
+    //         &(filename.clone() + ".s"),
+    //         "-o",
+    //         &(filename.clone() + ".o"),
+    //     ])
+    //     .output()
+    //     .expect("Failed to compile assembly code");
 
     let res = File::open(filename.clone() + ".s");
     let file: File;
