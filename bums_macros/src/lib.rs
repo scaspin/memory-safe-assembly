@@ -8,8 +8,8 @@ use std::io::{BufRead, BufReader};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
-    parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result,
-    Signature, Stmt, Token,
+    parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result, Signature,
+    Stmt, Token,
 };
 
 use bums;
@@ -106,9 +106,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         for i in &attributes.argument_list {
             arguments_to_pass.push(i.clone());
         }
-        for i in &vars.item_fn.inputs {
-            arguments_to_memory_safe_regions.push(i.clone());
-        }
     }
 
     // extract name of function being invoked to pass to invocation
@@ -139,17 +136,41 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
         for i in attributes.argument_list {
             match i {
-                Expr::MethodCall(a) => match a.method.to_string().as_str() {
-                    "len" => new_args.push(parse_quote! {length: usize}),
-                    "as_ptr" => new_args.push(parse_quote! {pointer: *const u8}),
-                    _ => (),
-                },
+                Expr::MethodCall(a) => {
+                    let mut var_name: String = String::new();
+                    let mut span = proc_macro2::Span::call_site();
+                    match *a.receiver {
+                        Expr::Path(a) => {
+                            var_name = a.path.segments[0].ident.to_string();
+                            span = a.path.segments[0].ident.span();
+                        }
+                        _ => (),
+                    }
+                    match a.method.to_string().as_str() {
+                        "len" => {
+                            let n = Ident::new(&(var_name + "_len"), span.into());
+                            new_args.push(parse_quote! {#n: usize});
+                        }
+                        "as_ptr" => {
+                            let n = Ident::new(&(var_name + "_as_ptr"), span.into());
+                            new_args.push(parse_quote! {#n: *const u8});
+                        }
+                        "as_mut_ptr" => {
+                            let n = Ident::new(&(var_name + "_as_mut_ptr"), span.into());
+                            new_args.push(parse_quote! {#n: *mut u8});
+                        }
+                        _ => (),
+                    };
+                }
                 Expr::Reference(_) => {
                     // TODO include a name in var name for uniqueness
                     new_args.push(parse_quote! {reference:u32});
                 }
                 _ => (),
             }
+        }
+        for a in &new_args {
+            arguments_to_memory_safe_regions.push(a.clone());
         }
         extern_fn = parse_quote! {fn #inner_fn_name(#new_args)};
     }
@@ -200,11 +221,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
+    // TODO: make sure to handle overflows into Stack
     // add memory safe regions
-    for a in &arguments_to_memory_safe_regions {
+    for i in 0..arguments_to_memory_safe_regions.len() {
         let mut name = String::new();
-        let mut size: usize = 0;
 
+        let a = &arguments_to_memory_safe_regions[i];
         match a {
             FnArg::Typed(pat_type) => {
                 // get name
@@ -216,11 +238,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 //get type to get size
                 match &*pat_type.ty {
-                    // simple types
-                    syn::Type::Path(a) => {
-                        for c in &a.path.segments {
-                            size = size + calculate_size_of(c.ident.to_string());
-                        }
+                    syn::Type::Path(_) => {
+                        // simple types that fit in a register?
+                        // for c in &a.path.segments {
+                        //      size = size + calculate_size_of(c.ident.to_string());
+                        // }
+                        engine.add_abstract_from(i, name.clone());
                     }
                     syn::Type::Array(a) => {
                         let mut elem: String = String::new();
@@ -240,15 +263,37 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             },
                             _ => (),
                         }
-                        size = calculate_size_of(elem) * len;
+                        let size = calculate_size_of(elem) * len;
+                        engine.add_abstract_from(i, name.clone());
+                        engine.add_region_from(RegionType::WRITE, name.clone(), (Some(size), None));
+                        engine.add_region_from(RegionType::READ, name.clone(), (Some(size), None));
+                    }
+                    syn::Type::Ptr(a) => {
+                        // load pointer into register
+                        engine.add_abstract_from(i, name.clone());
+
+                        //derive memory safe region based on length
+                        let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
+                        let no_suffix = no_mut_name.strip_suffix("_as_ptr").unwrap_or(no_mut_name);
+                        let bound = no_suffix.to_owned() + "_len";
+                        engine.add_region_from(
+                            RegionType::READ,
+                            name.clone(),
+                            (None, Some(bound.clone())),
+                        );
+                        if a.mutability.is_some() {
+                            engine.add_region_from(
+                                RegionType::WRITE,
+                                name.clone(),
+                                (None, Some(bound)),
+                            );
+                        }
                     }
                     _ => println!("yet unsupported type: {:?}", pat_type.ty),
                 }
             }
             _ => (),
         }
-        engine.add_region_from(RegionType::READ, name.clone(), (Some(size.clone()), None)); // size is in bytes if number
-        engine.add_region_from(RegionType::WRITE, name, (Some(size), None));
     }
 
     let label = vars.item_fn.ident.to_string();

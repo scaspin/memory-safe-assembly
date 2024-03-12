@@ -1,10 +1,10 @@
 use bums_macros;
 
-#[bums_macros::check_mem_safe("example", a.as_ptr(), a.len())]
-fn somefuncwithweirdcallingconvention(a: &[u8]);
+#[bums_macros::check_mem_safe("example", a.as_mut_ptr(), a.len())]
+fn somefuncwithweirdcallingconvention(a: &mut [u8]);
 
-// #[bums_macros::check_mem_safe("example")]
-// fn somefuncwithslice(a: &[u8]);
+#[bums_macros::check_mem_safe("example")]
+fn somefuncwithslice(a: &[u8]);
 
 #[bums_macros::check_mem_safe("example")]
 fn somefuncwitharray(a: [u8; 4]);
@@ -22,11 +22,14 @@ fn main() {
         "begin"
     );
 
-    //global asm
-    //FIX: uses different locations of example.S, give global address
+    // global asm
+    // FIX: uses different locations of example.S, give global address
     unsafe {
         start();
     }
 
-    // somefunc(1, 2);
+    somefunc(1, 2);
+
+    let mut slice = vec![1, 2, 3];
+    somefuncwithweirdcallingconvention(&mut slice);
 }

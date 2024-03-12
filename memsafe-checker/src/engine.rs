@@ -165,6 +165,13 @@ impl ExecutionEngine {
         self.computer.set_abstract(register, value);
     }
 
+    pub fn add_abstract_from(&mut self, register: usize, value: String) {
+        self.computer.set_abstract(
+            ("x".to_owned() + &register.to_string()).to_string(),
+            common::AbstractExpression::Abstract(value),
+        );
+    }
+
     pub fn dont_fail_fast(&mut self) {
         self.fail_fast = false;
     }

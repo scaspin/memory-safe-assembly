@@ -10,7 +10,7 @@ proc-macro=true
 
 [dependencies]
 quote = "1.0.35"
-syn = {version = "2.0.49", features = ["full", "extra-traits", "parsing"]}
+syn = {version = "2.0.49", features = ["full", "extra-traits", "parsing", "derive"]}
 bums = { path = "../memsafe-checker" }
 proc-macro-error = "1.0.4"
 proc-macro2 = {version="1.0.78", features=["proc-macro"]}
