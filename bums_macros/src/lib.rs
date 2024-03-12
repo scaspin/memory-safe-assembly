@@ -8,11 +8,12 @@ use std::io::{BufRead, BufReader};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
-    parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result, Signature,
-    Stmt, Token,
+    parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result,
+    Signature, Stmt, Token,
 };
 
 use bums;
+use bums::common::RegionType;
 
 #[derive(Debug)]
 struct CallColon {
@@ -25,6 +26,23 @@ impl Parse for CallColon {
         return Ok(Self {
             item_fn: input.parse()?,
             _end_token: input.parse()?,
+        });
+    }
+}
+
+#[derive(Debug)]
+struct AttributeList {
+    filename: syn::LitStr,
+    separator: Option<Token![,]>,
+    argument_list: Punctuated<Expr, Token![,]>,
+}
+
+impl Parse for AttributeList {
+    fn parse(input: ParseStream) -> Result<Self> {
+        return Ok(Self {
+            filename: input.parse()?,
+            separator: input.parse()?,
+            argument_list: syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)?,
         });
     }
 }
@@ -48,15 +66,20 @@ fn calculate_size_of(ty: String) -> usize {
 #[proc_macro_error]
 pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
+    let attributes = parse_macro_input!(attr as AttributeList);
+    let inner_fn_name = Ident::new(
+        &("inner_".to_owned() + &vars.item_fn.ident.to_string()),
+        vars.item_fn.ident.span(),
+    );
 
     //get args from function call to pass to invocation
     let mut arguments_to_memory_safe_regions = Vec::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
-    for i in &vars.item_fn.inputs {
-        arguments_to_memory_safe_regions.push(i.clone());
-        match i {
-            FnArg::Typed(pat_type) => {
-                match &*pat_type.pat {
+    if attributes.argument_list.is_empty() {
+        for i in &vars.item_fn.inputs {
+            arguments_to_memory_safe_regions.push(i.clone());
+            match i {
+                FnArg::Typed(pat_type) => match &*pat_type.pat {
                     Pat::Ident(a) => {
                         let s = a.ident.clone();
                         let mut q = Punctuated::new();
@@ -75,17 +98,23 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         arguments_to_pass.push(w);
                     }
                     _ => (),
-                }
-                // input_names.push(a.pat)
+                },
+                _ => (),
             }
-            _ => (),
+        }
+    } else {
+        for i in &attributes.argument_list {
+            arguments_to_pass.push(i.clone());
+        }
+        for i in &vars.item_fn.inputs {
+            arguments_to_memory_safe_regions.push(i.clone());
         }
     }
 
     // extract name of function being invoked to pass to invocation
     let mut q = Punctuated::new();
     q.push(syn::PathSegment {
-        ident: vars.item_fn.ident.clone(),
+        ident: inner_fn_name.clone(),
         arguments: syn::PathArguments::None,
     });
 
@@ -103,9 +132,31 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         args: arguments_to_pass,
     };
 
-    let extern_fn = vars.item_fn.clone();
+    let mut extern_fn = vars.item_fn.clone();
+    extern_fn.ident = inner_fn_name.clone();
+    if !attributes.argument_list.is_empty() {
+        // println!("extern: {:?}", extern_fn);
+        let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
+        for i in attributes.argument_list {
+            match i {
+                Expr::MethodCall(a) => match a.method.to_string().as_str() {
+                    "len" => new_args.push(parse_quote! {length: usize}),
+                    "as_ptr" => new_args.push(parse_quote! {pointer: *const u8}),
+                    _ => (),
+                },
+                Expr::Reference(_) => {
+                    // TODO include a name in var name for uniqueness
+                    new_args.push(parse_quote! {reference:u32});
+                }
+                _ => (),
+            }
+        }
+        extern_fn = parse_quote! {fn #inner_fn_name(#new_args)};
+    }
+
+    let original_fn_call = vars.item_fn.clone();
     let unsafe_block: Stmt = parse_quote! {
-        #extern_fn {
+        #original_fn_call {
             extern "C" {
                 #extern_fn;
             }
@@ -119,7 +170,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // compile file
     // make this path
-    let filename = attr.to_string();
+    let filename = attributes.filename.value();
     // Command::new("gcc")
     //     .args(&[
     //         "-s",
@@ -137,7 +188,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             file = opened;
         }
         Err(error) => {
-            // make more specific span
+            // make more specific using span
             abort_call_site!(error);
         }
     };
@@ -168,7 +219,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // simple types
                     syn::Type::Path(a) => {
                         for c in &a.path.segments {
-                            size = calculate_size_of(c.ident.to_string());
+                            size = size + calculate_size_of(c.ident.to_string());
                         }
                     }
                     syn::Type::Array(a) => {
@@ -191,13 +242,13 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                         size = calculate_size_of(elem) * len;
                     }
-                    _ => println!("yet unsupported type: {:#?}", pat_type.ty),
+                    _ => println!("yet unsupported type: {:?}", pat_type.ty),
                 }
             }
             _ => (),
         }
-
-        engine.add_region_from(name, (Some(size), None)) // size is in bytes if number
+        engine.add_region_from(RegionType::READ, name.clone(), (Some(size.clone()), None)); // size is in bytes if number
+        engine.add_region_from(RegionType::WRITE, name, (Some(size), None));
     }
 
     let label = vars.item_fn.ident.to_string();
