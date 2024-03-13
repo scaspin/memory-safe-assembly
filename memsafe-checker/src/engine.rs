@@ -130,12 +130,46 @@ impl ExecutionEngine {
         self.computer.set_region(region);
     }
 
+    pub fn add_region_from(
+        &mut self,
+        ty: common::RegionType,
+        base: String,
+        length: (Option<usize>, Option<String>),
+    ) {
+        match length {
+            (Some(num), _) => {
+                self.computer.set_region(common::MemorySafeRegion {
+                    region_type: ty,
+                    base: common::AbstractExpression::Abstract(base.clone()),
+                    start: common::AbstractExpression::Immediate(0),
+                    end: common::AbstractExpression::Immediate((num.clone() as i64) * 8),
+                });
+            }
+            (None, Some(abs)) => {
+                self.computer.set_region(common::MemorySafeRegion {
+                    region_type: ty,
+                    base: common::AbstractExpression::Abstract(base.clone()),
+                    start: common::AbstractExpression::Immediate(0),
+                    end: common::AbstractExpression::Abstract(abs.clone()),
+                });
+            }
+            (_, _) => (), // should never happen! just to be safe
+        }
+    }
+
     pub fn add_immediate(&mut self, register: String, value: usize) {
         self.computer.set_immediate(register, value as u64);
     }
 
     pub fn add_abstract(&mut self, register: String, value: common::AbstractExpression) {
         self.computer.set_abstract(register, value);
+    }
+
+    pub fn add_abstract_from(&mut self, register: usize, value: String) {
+        self.computer.set_abstract(
+            ("x".to_owned() + &register.to_string()).to_string(),
+            common::AbstractExpression::Abstract(value),
+        );
     }
 
     pub fn dont_fail_fast(&mut self) {
