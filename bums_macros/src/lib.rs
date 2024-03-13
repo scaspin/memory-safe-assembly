@@ -67,10 +67,7 @@ fn calculate_size_of(ty: String) -> usize {
 pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
     let attributes = parse_macro_input!(attr as AttributeList);
-    let inner_fn_name = Ident::new(
-        &("inner_".to_owned() + &vars.item_fn.ident.to_string()),
-        vars.item_fn.ident.span(),
-    );
+    let fn_name = &vars.item_fn.ident;
 
     //get args from function call to pass to invocation
     let mut arguments_to_memory_safe_regions = Vec::new();
@@ -111,7 +108,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // extract name of function being invoked to pass to invocation
     let mut q = Punctuated::new();
     q.push(syn::PathSegment {
-        ident: inner_fn_name.clone(),
+        ident: fn_name.clone(),
         arguments: syn::PathArguments::None,
     });
 
@@ -130,7 +127,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let mut extern_fn = vars.item_fn.clone();
-    extern_fn.ident = inner_fn_name.clone();
+    extern_fn.ident = fn_name.clone();
     if !attributes.argument_list.is_empty() {
         // println!("extern: {:?}", extern_fn);
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
@@ -172,7 +169,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         for a in &new_args {
             arguments_to_memory_safe_regions.push(a.clone());
         }
-        extern_fn = parse_quote! {fn #inner_fn_name(#new_args)};
+        extern_fn = parse_quote! {fn #fn_name(#new_args)};
     }
 
     let original_fn_call = vars.item_fn.clone();
