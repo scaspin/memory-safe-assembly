@@ -1,4 +1,5 @@
 use std::io::{Error, ErrorKind};
+use z3::*;
 
 use crate::common;
 use crate::computer;
@@ -10,16 +11,18 @@ struct Program {
     ifdefs: Vec<((String, usize), usize)>,
 }
 
-pub struct ExecutionEngine {
+pub struct ExecutionEngine<'ctx> {
     program: Program,
     computer: computer::ARMCORTEXA,
     pc: usize,
     loop_state: Vec<(common::AbstractExpression, Vec<common::MemoryAccess>)>,
     fail_fast: bool,
+    context: &'ctx Context,
+    solver: Solver<'ctx>,
 }
 
-impl ExecutionEngine {
-    pub fn new(lines: Vec<String>) -> ExecutionEngine {
+impl<'ctx> ExecutionEngine<'ctx> {
+    pub fn new(lines: Vec<String>, context: &'ctx Context) -> ExecutionEngine<'ctx> {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
         let mut code: Vec<common::Instruction> = Vec::new();
@@ -83,6 +86,9 @@ impl ExecutionEngine {
             }
         }
 
+        // create z3 context
+        let solver = Solver::new(&context);
+
         let mut computer = computer::ARMCORTEXA::new();
 
         // load computer static memory
@@ -122,6 +128,8 @@ impl ExecutionEngine {
             pc: 0,
             loop_state: Vec::new(),
             fail_fast: true,
+            context: &context,
+            solver,
         };
     }
 

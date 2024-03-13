@@ -3,6 +3,7 @@ mod tests {
     use bums::common;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
+    use z3::*;
 
     #[test]
     fn sha256_armv8_ios64() -> std::io::Result<()> {
@@ -15,7 +16,9 @@ mod tests {
             program.push(line.unwrap_or(String::from("")));
         }
 
-        let mut engine = bums::engine::ExecutionEngine::new(program);
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         // x0 -- context
         engine.add_region(common::MemorySafeRegion {
@@ -78,7 +81,9 @@ mod tests {
             program.push(line.unwrap_or(String::from("")));
         }
 
-        let mut engine = bums::engine::ExecutionEngine::new(program);
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
         engine.start(start_label)
     }
 
@@ -95,7 +100,9 @@ mod tests {
             program.push(line.unwrap_or(String::from("")));
         }
 
-        let mut engine = bums::engine::ExecutionEngine::new(program);
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         let length = common::AbstractExpression::Abstract("Length".to_string());
         let base = common::AbstractExpression::Abstract("Base".to_string());
@@ -127,7 +134,9 @@ mod tests {
             program.push(line.unwrap_or(String::from("")));
         }
 
-        let mut engine = bums::engine::ExecutionEngine::new(program);
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         let length = common::AbstractExpression::Abstract("Length".to_string());
         let base = common::AbstractExpression::Abstract("Base".to_string());
@@ -164,7 +173,9 @@ mod tests {
             program.push(line.unwrap_or(String::from("")));
         }
 
-        let mut engine = bums::engine::ExecutionEngine::new(program);
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         let length1 = common::AbstractExpression::Abstract("Length1".to_string());
         let length2 = common::AbstractExpression::Abstract("Length2".to_string());
@@ -196,7 +207,9 @@ mod tests {
             program.push(line.unwrap_or(String::from("")));
         }
 
-        let mut engine = bums::engine::ExecutionEngine::new(program);
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         let length = common::AbstractExpression::Abstract("Length".to_string());
         let base = common::AbstractExpression::Abstract("Base".to_string());
