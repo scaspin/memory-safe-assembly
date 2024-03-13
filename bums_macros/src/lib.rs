@@ -4,7 +4,6 @@ use proc_macro_error::{abort_call_site, proc_macro_error};
 use quote::quote;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-// use std::process::Command;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
@@ -179,7 +178,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #extern_fn;
             }
             unsafe {
-                #invocation;
+                return #invocation;
             }
         }
     };
@@ -439,10 +438,10 @@ pub fn safe_global_asm(input: TokenStream) -> TokenStream {
         Ok(_) => {
             let funcall = Ident::new(&label, Span::call_site().into());
             return quote! {
-                            use std::arch::global_asm;
-                            global_asm!(include_str!(#filename));
+                use std::arch::global_asm;
+                global_asm!(include_str!(#filename));
 
-                            extern "C" { fn #funcall(); }
+                extern "C" { fn #funcall(); }
             }
             .into();
         }
