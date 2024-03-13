@@ -32,7 +32,7 @@ impl Parse for CallColon {
 #[derive(Debug)]
 struct AttributeList {
     filename: syn::LitStr,
-    separator: Option<Token![,]>,
+    _separator: Option<Token![,]>,
     argument_list: Punctuated<Expr, Token![,]>,
 }
 
@@ -40,7 +40,7 @@ impl Parse for AttributeList {
     fn parse(input: ParseStream) -> Result<Self> {
         return Ok(Self {
             filename: input.parse()?,
-            separator: input.parse()?,
+            _separator: input.parse()?,
             argument_list: syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)?,
         });
     }
