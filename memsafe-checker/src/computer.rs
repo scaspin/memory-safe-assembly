@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use z3::*;
 
 use crate::common;
 use crate::common::{AbstractExpression, RegisterKind, RegisterValue};
@@ -18,7 +19,42 @@ fn get_register_index(reg_name: String) -> usize {
     return r1;
 }
 
-pub struct ARMCORTEXA {
+pub fn to_ast(context: &Context, expression: AbstractExpression) -> Option<ast::Int> {
+    match expression {
+        AbstractExpression::Immediate(num) => {
+            return Some(ast::Int::from_i64(context, num));
+        }
+        AbstractExpression::Abstract(a) => {
+            return Some(ast::Int::new_const(context, a));
+        }
+        AbstractExpression::Register(reg) => {
+            let base = to_ast(context, reg.base.clone().unwrap()).unwrap();
+            let offset = ast::Int::from_i64(context, reg.offset);
+            return Some(ast::Int::add(context, &[&base, &offset]));
+        }
+        // this is a solution? don't need ast, can solve, different type
+        // TODO: get rid of solution, make expression just for math, not for constraints
+        // AbstractExpression::Solution(num, old) => {
+        //     let expression = old.to_ast(context);
+        //     let equals = ast::Int::from_i64(num)
+        //     return ast::Int::eq(context, &[&base, &offset]),
+        // }
+        AbstractExpression::Expression(op, old1, old2) => {
+            let new1 = to_ast(context, *old1).unwrap();
+            let new2 = to_ast(context, *old2).unwrap();
+            match op.as_str() {
+                "+" => return Some(ast::Int::add(context, &[&new1, &new2])),
+                "-" => return Some(ast::Int::sub(context, &[&new1, &new2])),
+                "<<" => return Some(ast::Int::sub(context, &[&new1, &new2])),
+                // ">" => return ast::Int::ge(context, &[&old1, &old2]),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    }
+}
+
+pub struct ARMCORTEXA<'ctx> {
     registers: [RegisterValue; 33],
     zero: Option<common::FlagValue>,
     neg: Option<common::FlagValue>,
@@ -32,9 +68,11 @@ pub struct ARMCORTEXA {
     tracked_loop_abstracts: Vec<String>,
     rw_queue: Vec<common::MemoryAccess>,
     alignment: i64,
+    pub context: &'ctx Context,
+    pub solver: Solver<'ctx>,
 }
 
-impl fmt::Debug for ARMCORTEXA {
+impl<'ctx> fmt::Debug for ARMCORTEXA<'ctx> {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // write!(f, "stack: {:?}", &self.stack);
         // for i in [0..31] {
@@ -45,8 +83,8 @@ impl fmt::Debug for ARMCORTEXA {
     }
 }
 
-impl ARMCORTEXA {
-    pub fn new() -> ARMCORTEXA {
+impl<'ctx> ARMCORTEXA<'_> {
+    pub fn new(context: &'ctx Context) -> ARMCORTEXA<'ctx> {
         let registers = [
             RegisterValue::new("x0"),
             RegisterValue::new("x1"),
@@ -83,6 +121,8 @@ impl ARMCORTEXA {
             RegisterValue::new("xzr"), // 64-bit zero
         ];
 
+        let solver = Solver::new(&context);
+
         ARMCORTEXA {
             registers,
             zero: None,
@@ -97,6 +137,8 @@ impl ARMCORTEXA {
             constraints: Vec::new(),
             rw_queue: Vec::new(),
             alignment: 4,
+            context,
+            solver,
         }
     }
 
@@ -1213,6 +1255,42 @@ impl ARMCORTEXA {
                                 }
                             }
                             (_, _) => (),
+                        }
+
+                        self.solver.push();
+                        let abs_offset = ast::Int::from_i64(self.context, offset);
+                        let abstract_pointer_from_base = ast::Int::fresh_const(
+                            self.context,
+                            &("pointer_".to_owned() + &regbase),
+                        );
+                        let access = ast::Int::add(
+                            self.context,
+                            &[&abstract_pointer_from_base, &abs_offset],
+                        );
+                        let lowerbound = to_ast(self.context, region.start.clone()).unwrap();
+                        let upperbound = to_ast(self.context, region.end.clone()).unwrap();
+                        let l = lowerbound.lt(&access);
+                        self.solver.assert(&l);
+                        let u = upperbound.gt(&access);
+                        self.solver.assert(&u);
+
+                        match self.solver.check() {
+                            SatResult::Sat => {
+                                log::info!("memory safe with solver!");
+                                return Ok(());
+                            }
+                            SatResult::Unknown => {
+                                log::info!(
+                                    "unknown with solver! core: {:?}",
+                                    self.solver.get_reason_unknown()
+                                );
+                            }
+                            SatResult::Unsat => {
+                                log::info!(
+                                    "Unsat with solver! unsat core: {:?}",
+                                    self.solver.get_unsat_core()
+                                );
+                            }
                         }
                     }
                 }

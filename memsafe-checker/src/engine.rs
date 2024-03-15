@@ -13,12 +13,10 @@ struct Program {
 
 pub struct ExecutionEngine<'ctx> {
     program: Program,
-    computer: computer::ARMCORTEXA,
+    computer: computer::ARMCORTEXA<'ctx>,
     pc: usize,
     loop_state: Vec<(common::AbstractExpression, Vec<common::MemoryAccess>)>,
     fail_fast: bool,
-    context: &'ctx Context,
-    solver: Solver<'ctx>,
 }
 
 impl<'ctx> ExecutionEngine<'ctx> {
@@ -87,9 +85,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
         }
 
         // create z3 context
-        let solver = Solver::new(&context);
 
-        let mut computer = computer::ARMCORTEXA::new();
+        let mut computer = computer::ARMCORTEXA::new(context);
 
         // load computer static memory
         let mut address = 4;
@@ -128,14 +125,24 @@ impl<'ctx> ExecutionEngine<'ctx> {
             pc: 0,
             loop_state: Vec::new(),
             fail_fast: true,
-            context: &context,
-            solver,
         };
     }
 
     pub fn add_region(&mut self, region: common::MemorySafeRegion) {
         // self.memory_regions.push(region);
-        self.computer.set_region(region);
+        self.computer.set_region(region.clone());
+        let zero = ast::Int::from_i64(self.computer.context, 0);
+        let abstract_pointer_from_base = ast::Int::new_const(
+            self.computer.context,
+            "pointer_".to_owned() + &region.base.to_string(),
+        );
+        let bound = ast::Int::new_const(self.computer.context, region.end.to_string());
+        self.computer
+            .solver
+            .assert(&abstract_pointer_from_base.gt(&zero));
+        self.computer
+            .solver
+            .assert(&bound.gt(&abstract_pointer_from_base));
     }
 
     pub fn add_region_from(
@@ -160,6 +167,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     start: common::AbstractExpression::Immediate(0),
                     end: common::AbstractExpression::Abstract(abs.clone()),
                 });
+                let zero = ast::Int::from_i64(self.computer.context, 0);
+                let abstract_pointer_from_base =
+                    ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
+                let bound = ast::Int::new_const(self.computer.context, abs);
+                self.computer
+                    .solver
+                    .assert(&abstract_pointer_from_base.gt(&zero).not());
+                self.computer
+                    .solver
+                    .assert(&bound.gt(&abstract_pointer_from_base).not());
             }
             (_, _) => (), // should never happen! just to be safe
         }
@@ -167,6 +184,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     pub fn add_immediate(&mut self, register: String, value: usize) {
         self.computer.set_immediate(register, value as u64);
+        // ast::Int::from_i64(self.computer.context, value as i64);
     }
 
     pub fn add_abstract(&mut self, register: String, value: common::AbstractExpression) {
@@ -174,10 +192,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn add_abstract_from(&mut self, register: usize, value: String) {
-        self.computer.set_abstract(
-            ("x".to_owned() + &register.to_string()).to_string(),
-            common::AbstractExpression::Abstract(value),
-        );
+        let name = ("x".to_owned() + &register.to_string()).to_string();
+        self.computer
+            .set_abstract(name.clone(), common::AbstractExpression::Abstract(value));
+        // ast::Int::new_const(self.computer.context, name);
     }
 
     pub fn dont_fail_fast(&mut self) {
@@ -191,6 +209,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let program_length = self.program.code.len();
         let mut pc = 0;
+
+        println!("assertions: {:?}", self.computer.solver.get_assertions());
 
         for label in self.program.labels.clone() {
             if label.0 == start {

@@ -16,23 +16,18 @@ mod tests {
             program.push(line.unwrap_or(String::from("")));
         }
 
-        let cfg = Config::new();
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
         let ctx = Context::new(&cfg);
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         // x0 -- context
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: common::AbstractExpression::Abstract("x0".to_string()),
-            start: common::AbstractExpression::Immediate(0),
-            end: common::AbstractExpression::Immediate(64), // FIX: verify
-        });
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::WRITE,
-            base: common::AbstractExpression::Abstract("x0".to_string()),
-            start: common::AbstractExpression::Immediate(0),
-            end: common::AbstractExpression::Immediate(64), // FIX: verify
-        });
+        engine.add_region_from(common::RegionType::READ, "x0".to_string(), (Some(64), None));
+        engine.add_region_from(
+            common::RegionType::WRITE,
+            "x0".to_string(),
+            (Some(64), None),
+        );
 
         let blocks = common::AbstractExpression::Abstract("Blocks".to_string());
         let length = common::AbstractExpression::Expression(
@@ -89,7 +84,7 @@ mod tests {
 
     #[test]
     fn abstract_loop() -> std::io::Result<()> {
-        //env_logger::init();
+        env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
         let reader = BufReader::new(file);
@@ -108,12 +103,11 @@ mod tests {
         let base = common::AbstractExpression::Abstract("Base".to_string());
         // Base is the base address of the input buffer
         engine.add_abstract(String::from("x1"), base.clone());
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: base,
-            start: common::AbstractExpression::Immediate(0),
-            end: length.clone(),
-        });
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (None, Some("length".to_string())),
+        );
 
         engine.add_abstract(String::from("x2"), length);
 
@@ -225,5 +219,29 @@ mod tests {
         engine.add_abstract(String::from("x2"), length);
         engine.change_alignment(1);
         engine.start(start_label)
+    }
+
+    #[test]
+    fn z3_setup() -> std::io::Result<()> {
+        env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        for _ in 0..5 {
+            program.push("ldr x1,[x0,#4]".to_string());
+        }
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "base".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (None, Some("length".to_string())),
+        );
+
+        engine.start("start".to_string())
     }
 }
