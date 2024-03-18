@@ -222,8 +222,8 @@ mod tests {
     }
 
     #[test]
-    fn z3_setup() -> std::io::Result<()> {
-        env_logger::init();
+    fn z3_simple_bound_unsafe() -> std::io::Result<()> {
+        // env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
@@ -242,6 +242,34 @@ mod tests {
             (None, Some("length".to_string())),
         );
 
-        engine.start("start".to_string())
+        let res = engine.start("start".to_string());
+        assert!(res.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_simple_bound_unsafe_zero_buffer() -> std::io::Result<()> {
+        env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        for _ in 0..5 {
+            program.push("ldr x1,[x0,#0]".to_string());
+        }
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "base".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (None, Some("length".to_string())),
+        );
+
+        let res = engine.start("start".to_string());
+        assert!(res.is_err());
+        Ok(())
     }
 }

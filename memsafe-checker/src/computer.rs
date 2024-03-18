@@ -1212,83 +1212,83 @@ impl<'ctx> ARMCORTEXA<'_> {
                     if region.base.contains(&regbase)
                         && region.region_type == common::RegionType::READ
                     {
-                        match (region.start.clone(), region.end.clone()) {
-                            (
-                                AbstractExpression::Immediate(min),
-                                AbstractExpression::Immediate(max),
-                            ) => {
-                                if offset >= min && offset < max - self.alignment {
-                                    return Ok(());
-                                }
-                            }
-                            (AbstractExpression::Immediate(min), exp) => {
-                                if offset == min && exp != AbstractExpression::Empty {
-                                    return Ok(());
-                                }
-                                if offset > min {
-                                    let bound = common::simplify_expression(
-                                        AbstractExpression::Expression(
-                                            "<".to_string(),
-                                            Box::new(AbstractExpression::Expression(
-                                                "+".to_string(),
-                                                Box::new(
-                                                    base.clone()
-                                                        .unwrap_or(AbstractExpression::Empty),
-                                                ),
-                                                Box::new(AbstractExpression::Immediate(offset)),
-                                            )),
-                                            Box::new(AbstractExpression::Expression(
-                                                "+".to_string(),
-                                                Box::new(
-                                                    base.clone()
-                                                        .unwrap_or(AbstractExpression::Empty),
-                                                ),
-                                                Box::new(exp.clone()),
-                                            )),
-                                        ),
-                                    );
-                                    for c in &self.constraints.clone() {
-                                        if common::simplify_expression(c.clone()) == bound {
-                                            return Ok(());
-                                        }
-                                    }
-                                }
-                            }
-                            (_, _) => (),
-                        }
+                        // match (region.start.clone(), region.end.clone()) {
+                        //     (
+                        //         AbstractExpression::Immediate(min),
+                        //         AbstractExpression::Immediate(max),
+                        //     ) => {
+                        //         if offset >= min && offset < max - self.alignment {
+                        //             return Ok(());
+                        //         }
+                        //     }
+                        //     (AbstractExpression::Immediate(min), exp) => {
+                        //         if offset == min && exp != AbstractExpression::Empty {
+                        //             return Ok(());
+                        //         }
+                        //         if offset > min {
+                        //             let bound = common::simplify_expression(
+                        //                 AbstractExpression::Expression(
+                        //                     "<".to_string(),
+                        //                     Box::new(AbstractExpression::Expression(
+                        //                         "+".to_string(),
+                        //                         Box::new(
+                        //                             base.clone()
+                        //                                 .unwrap_or(AbstractExpression::Empty),
+                        //                         ),
+                        //                         Box::new(AbstractExpression::Immediate(offset)),
+                        //                     )),
+                        //                     Box::new(AbstractExpression::Expression(
+                        //                         "+".to_string(),
+                        //                         Box::new(
+                        //                             base.clone()
+                        //                                 .unwrap_or(AbstractExpression::Empty),
+                        //                         ),
+                        //                         Box::new(exp.clone()),
+                        //                     )),
+                        //                 ),
+                        //             );
+                        //             for c in &self.constraints.clone() {
+                        //                 if common::simplify_expression(c.clone()) == bound {
+                        //                     return Ok(());
+                        //                 }
+                        //             }
+                        //         }
+                        //     }
+                        //     (_, _) => (),
+                        // }
 
-                        self.solver.push();
                         let abs_offset = ast::Int::from_i64(self.context, offset);
-                        let abstract_pointer_from_base = ast::Int::fresh_const(
+                        let align = ast::Int::from_i64(self.context, self.alignment);
+                        let abstract_pointer_from_base = ast::Int::new_const(
                             self.context,
-                            &("pointer_".to_owned() + &regbase),
+                            &*("pointer_".to_owned() + &regbase),
                         );
                         let access = ast::Int::add(
                             self.context,
                             &[&abstract_pointer_from_base, &abs_offset],
                         );
+                        // println!("access: {:?}", abstract_pointer_from_base);
                         let lowerbound = to_ast(self.context, region.start.clone()).unwrap();
                         let upperbound = to_ast(self.context, region.end.clone()).unwrap();
-                        let l = lowerbound.lt(&access);
-                        self.solver.assert(&l);
-                        let u = upperbound.gt(&access);
-                        self.solver.assert(&u);
+                        // access is NOT less than lower bound
+                        let l = access.lt(&lowerbound);
+                        //self.solver.assert(&l);
+                        // access is NOT greater than lower bound
+                        let upperbound_align = ast::Int::sub(self.context, &[&upperbound, &align]);
+                        let u = access.gt(&upperbound_align);
+                        //self.solver.assert(&u);
 
-                        match self.solver.check() {
-                            SatResult::Sat => {
-                                log::info!("memory safe with solver!");
+                        match (self.solver.check_assumptions(&[l.clone()]), self.solver.check_assumptions(&[u])) {
+                            (SatResult::Unsat, SatResult::Unsat) => {
+                                log::info!(
+                                    "Memory safe with solver!",
+                                );
+                                log::info!("unsat core low: {:?}", self.solver.get_unsat_core());
                                 return Ok(());
                             }
-                            SatResult::Unknown => {
-                                log::info!(
-                                    "unknown with solver! core: {:?}",
-                                    self.solver.get_reason_unknown()
-                                );
-                            }
-                            SatResult::Unsat => {
-                                log::info!(
-                                    "Unsat with solver! unsat core: {:?}",
-                                    self.solver.get_unsat_core()
+                            (_,_) => {
+                                log::error!(
+                                    "Not memory safe with solver."
                                 );
                             }
                         }

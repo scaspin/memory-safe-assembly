@@ -173,10 +173,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 let bound = ast::Int::new_const(self.computer.context, abs);
                 self.computer
                     .solver
-                    .assert(&abstract_pointer_from_base.gt(&zero).not());
+                    .assert(&abstract_pointer_from_base.ge(&zero));
                 self.computer
                     .solver
-                    .assert(&bound.gt(&abstract_pointer_from_base).not());
+                    .assert(&bound.gt(&abstract_pointer_from_base));
             }
             (_, _) => (), // should never happen! just to be safe
         }
@@ -210,7 +210,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let program_length = self.program.code.len();
         let mut pc = 0;
 
-        println!("assertions: {:?}", self.computer.solver.get_assertions());
+        // println!("assertions: {:?}", self.computer.solver.get_assertions());
 
         for label in self.program.labels.clone() {
             if label.0 == start {
