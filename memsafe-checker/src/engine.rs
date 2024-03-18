@@ -153,33 +153,80 @@ impl<'ctx> ExecutionEngine<'ctx> {
     ) {
         match length {
             (Some(num), _) => {
+                // FIX: decide whether to include alignment or not
+                let region_size = ((num.clone() as i64) - 1) * self.computer.alignment;
+
                 self.computer.set_region(common::MemorySafeRegion {
                     region_type: ty,
                     base: common::AbstractExpression::Abstract(base.clone()),
                     start: common::AbstractExpression::Immediate(0),
-                    end: common::AbstractExpression::Immediate((num.clone() as i64) * 8),
+                    end: common::AbstractExpression::Immediate(region_size.clone()),
                 });
+
+                let zero = ast::Int::from_i64(self.computer.context, 0);
+                // define bound of region with respect to the pointer
+                let bound = ast::Int::from_i64(self.computer.context, region_size);
+                let abs_base = ast::Int::new_const(self.computer.context, base.clone());
+                let lower_bound = ast::Int::add(self.computer.context, &[&abs_base, &zero]);
+                let upper_bound = ast::Int::add(self.computer.context, &[&abs_base, &bound]);
+
+                let pointer =
+                    ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
+
+                // basics are positive
+                self.computer.solver.assert(&lower_bound.ge(&zero));
+                self.computer.solver.assert(&upper_bound.ge(&zero));
+                self.computer.solver.assert(&abs_base.ge(&zero));
+
+                // address is positive
+                self.computer.solver.assert(&pointer.ge(&zero));
+                // can access this region starting with 0
+                self.computer.solver.assert(&pointer.ge(&lower_bound));
+                // can access this region up to and including address of upper bound
+                self.computer.solver.assert(&pointer.le(&upper_bound));
             }
             (None, Some(abs)) => {
+                let zero = ast::Int::from_i64(self.computer.context, 0);
+                let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
+                let bound = ast::Int::new_const(self.computer.context, abs.clone());
+                let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
+                let abstract_pointer_from_base =
+                    ast::Int::new_const(self.computer.context, base.clone());
+
+                // upper bound is the base pointer + bound value - alignment
+                let upper_bound = ast::Int::add(
+                    self.computer.context,
+                    &[&abstract_pointer_from_base, &bound_aligned],
+                );
+
                 self.computer.set_region(common::MemorySafeRegion {
                     region_type: ty,
                     base: common::AbstractExpression::Abstract(base.clone()),
                     start: common::AbstractExpression::Immediate(0),
-                    end: common::AbstractExpression::Abstract(abs.clone()),
+                    end: common::AbstractExpression::Expression(
+                        "-".to_string(),
+                        Box::new(common::AbstractExpression::Abstract(abs.clone())),
+                        Box::new(common::AbstractExpression::Immediate(
+                            self.computer.alignment,
+                        )),
+                    ),
                 });
-                let zero = ast::Int::from_i64(self.computer.context, 0);
-                let abstract_pointer_from_base =
+
+                let pointer =
                     ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
-                let bound = ast::Int::new_const(self.computer.context, abs);
+
+                // can access this region starting with 0
                 self.computer
                     .solver
                     .assert(&abstract_pointer_from_base.ge(&zero));
-                self.computer
-                    .solver
-                    .assert(&bound.gt(&abstract_pointer_from_base));
+
+                // can access this region up to and including address of upper bound
+                self.computer.solver.assert(&pointer.le(&upper_bound));
             }
             (_, _) => (), // should never happen! just to be safe
         }
+
+        // println!("constraints: {:?}", self.computer.solver.get_assertions());
     }
 
     pub fn add_immediate(&mut self, register: String, value: usize) {
@@ -209,8 +256,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let program_length = self.program.code.len();
         let mut pc = 0;
-
-        // println!("assertions: {:?}", self.computer.solver.get_assertions());
 
         for label in self.program.labels.clone() {
             if label.0 == start {

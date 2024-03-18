@@ -222,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn z3_simple_bound_unsafe() -> std::io::Result<()> {
+    fn z3_abstract_bound_unsafe() -> std::io::Result<()> {
         // env_logger::init();
 
         let mut program = Vec::new();
@@ -248,9 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn z3_simple_bound_unsafe_zero_buffer() -> std::io::Result<()> {
-        env_logger::init();
-
+    fn z3_abstract_bound_unsafe_zero() -> std::io::Result<()> {
         let mut program = Vec::new();
         program.push("start:".to_string());
         for _ in 0..5 {
@@ -266,6 +264,60 @@ mod tests {
             common::RegionType::READ,
             "base".to_string(),
             (None, Some("length".to_string())),
+        );
+
+        let res = engine.start("start".to_string());
+        assert!(res.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_real_bound_safe() -> std::io::Result<()> {
+        // env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        for _ in 0..5 {
+            program.push("ldr x1,[x0,#0]".to_string());
+            program.push("ldr x1,[x0,#4]".to_string());
+        }
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "base".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (Some(2), None),
+        );
+
+        let res = engine.start("start".to_string());
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_real_bound_unsafe() -> std::io::Result<()> {
+        // env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        for _ in 0..5 {
+            program.push("ldr x1,[x0,#0]".to_string());
+            program.push("ldr x1,[x0,#8]".to_string());
+        }
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "base".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (Some(2), None),
         );
 
         let res = engine.start("start".to_string());

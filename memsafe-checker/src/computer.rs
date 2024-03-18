@@ -67,7 +67,7 @@ pub struct ARMCORTEXA<'ctx> {
     constraints: Vec<AbstractExpression>,
     tracked_loop_abstracts: Vec<String>,
     rw_queue: Vec<common::MemoryAccess>,
-    alignment: i64,
+    pub alignment: i64,
     pub context: &'ctx Context,
     pub solver: Solver<'ctx>,
 }
@@ -1212,85 +1212,42 @@ impl<'ctx> ARMCORTEXA<'_> {
                     if region.base.contains(&regbase)
                         && region.region_type == common::RegionType::READ
                     {
-                        // match (region.start.clone(), region.end.clone()) {
-                        //     (
-                        //         AbstractExpression::Immediate(min),
-                        //         AbstractExpression::Immediate(max),
-                        //     ) => {
-                        //         if offset >= min && offset < max - self.alignment {
-                        //             return Ok(());
-                        //         }
-                        //     }
-                        //     (AbstractExpression::Immediate(min), exp) => {
-                        //         if offset == min && exp != AbstractExpression::Empty {
-                        //             return Ok(());
-                        //         }
-                        //         if offset > min {
-                        //             let bound = common::simplify_expression(
-                        //                 AbstractExpression::Expression(
-                        //                     "<".to_string(),
-                        //                     Box::new(AbstractExpression::Expression(
-                        //                         "+".to_string(),
-                        //                         Box::new(
-                        //                             base.clone()
-                        //                                 .unwrap_or(AbstractExpression::Empty),
-                        //                         ),
-                        //                         Box::new(AbstractExpression::Immediate(offset)),
-                        //                     )),
-                        //                     Box::new(AbstractExpression::Expression(
-                        //                         "+".to_string(),
-                        //                         Box::new(
-                        //                             base.clone()
-                        //                                 .unwrap_or(AbstractExpression::Empty),
-                        //                         ),
-                        //                         Box::new(exp.clone()),
-                        //                     )),
-                        //                 ),
-                        //             );
-                        //             for c in &self.constraints.clone() {
-                        //                 if common::simplify_expression(c.clone()) == bound {
-                        //                     return Ok(());
-                        //                 }
-                        //             }
-                        //         }
-                        //     }
-                        //     (_, _) => (),
-                        // }
-
                         let abs_offset = ast::Int::from_i64(self.context, offset);
-                        let align = ast::Int::from_i64(self.context, self.alignment);
-                        let abstract_pointer_from_base = ast::Int::new_const(
-                            self.context,
-                            &*("pointer_".to_owned() + &regbase),
-                        );
-                        let access = ast::Int::add(
-                            self.context,
-                            &[&abstract_pointer_from_base, &abs_offset],
-                        );
-                        // println!("access: {:?}", abstract_pointer_from_base);
-                        let lowerbound = to_ast(self.context, region.start.clone()).unwrap();
-                        let upperbound = to_ast(self.context, region.end.clone()).unwrap();
-                        // access is NOT less than lower bound
-                        let l = access.lt(&lowerbound);
-                        //self.solver.assert(&l);
-                        // access is NOT greater than lower bound
-                        let upperbound_align = ast::Int::sub(self.context, &[&upperbound, &align]);
-                        let u = access.gt(&upperbound_align);
-                        //self.solver.assert(&u);
+                        let base = ast::Int::new_const(self.context, regbase.clone());
+                        let abstract_pointer_from_base =
+                            ast::Int::new_const(self.context, &*("pointer_".to_owned() + &regbase));
+                        let access = ast::Int::add(self.context, &[&base, &abs_offset]);
+                        // pointer = base + index
+                        let assignment1 = access.ge(&abstract_pointer_from_base);
+                        let assignment2 = access.le(&abstract_pointer_from_base);
 
-                        match (self.solver.check_assumptions(&[l.clone()]), self.solver.check_assumptions(&[u])) {
-                            (SatResult::Unsat, SatResult::Unsat) => {
-                                log::info!(
-                                    "Memory safe with solver!",
-                                );
-                                log::info!("unsat core low: {:?}", self.solver.get_unsat_core());
-                                return Ok(());
+                        let lowerbound_value = to_ast(self.context, region.start.clone()).unwrap();
+                        let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
+                        let upperbound_value = to_ast(self.context, region.end.clone()).unwrap();
+                        let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
+                        let l = abstract_pointer_from_base.lt(&low_access);
+                        let u = abstract_pointer_from_base.gt(&up_access);
+
+                        // println!("constraints: {:?}", self.solver.get_assertions());
+
+                        match self.solver.check_assumptions(&[assignment1, assignment2]) {
+                            SatResult::Sat => {
+                                log::info!("Memory safe with solver's first check!");
+                                match (
+                                    self.solver.check_assumptions(&[l]),
+                                    self.solver.check_assumptions(&[u]),
+                                ) {
+                                    (SatResult::Unsat, SatResult::Unsat) => {
+                                        log::info!("Memory safe with solver's second check!");
+                                        return Ok(());
+                                    }
+                                    (a, b) => {
+                                        println!("impossibility lower bound {:?}, impossibility upper bound {:?}", a, b);
+                                        log::error!("Memory unsafe with solver's second check!");
+                                    }
+                                }
                             }
-                            (_,_) => {
-                                log::error!(
-                                    "Not memory safe with solver."
-                                );
-                            }
+                            _ => log::info!("Memory unsafe with solver first check!"),
                         }
                     }
                 }
