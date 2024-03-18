@@ -11,7 +11,7 @@ An assembly file is checked by instantiating a symbolic execution engine from li
 Example cases are shown in [tests](tests/cli.rs) and the original assembly files are [provided](tests/asm-examples) for the following:
 * sha256 arm v8 from boringssl
 
-** Notes on Z3 **
+## Notes on Z3 checks ##
 
 When a memory region is added, it has start and end which are values (real or abstract).
 Two constraints are generated and added to solver, along with instantiating the abstracts appropriately. There are at least two abstract: the region "base", i.e the initial address given to the program, and the "pointer", which is the address the program would use to index into this array.
@@ -19,8 +19,8 @@ Two constraints are generated and added to solver, along with instantiating the 
 1. base >= 0
 2. start >= 0
 3. end >= 0
-1. pointer >= base + start 
-2. pointer =< base + end 
+4. pointer >= base + start 
+5. pointer =< base + end 
 
 ( where start and end CAN be abstract values. End is not the size of the region since it considers alignment and is the last "safe" address for this region. Alignment is added based on computer defs to calculate the end such that the end is inclusive. )
 These constraints essentially say the pointer can only take specific values based on the region.
