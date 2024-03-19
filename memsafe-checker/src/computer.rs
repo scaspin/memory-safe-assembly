@@ -3,7 +3,7 @@ use std::fmt;
 use z3::*;
 
 use crate::common;
-use crate::common::{AbstractExpression, RegisterKind, RegisterValue};
+use crate::common::{AbstractComparison, AbstractExpression, RegisterKind, RegisterValue};
 
 fn get_register_index(reg_name: String) -> usize {
     let name = reg_name.clone();
@@ -19,41 +19,6 @@ fn get_register_index(reg_name: String) -> usize {
     return r1;
 }
 
-pub fn to_ast(context: &Context, expression: AbstractExpression) -> Option<ast::Int> {
-    match expression {
-        AbstractExpression::Immediate(num) => {
-            return Some(ast::Int::from_i64(context, num));
-        }
-        AbstractExpression::Abstract(a) => {
-            return Some(ast::Int::new_const(context, a));
-        }
-        AbstractExpression::Register(reg) => {
-            let base = to_ast(context, reg.base.clone().unwrap()).unwrap();
-            let offset = ast::Int::from_i64(context, reg.offset);
-            return Some(ast::Int::add(context, &[&base, &offset]));
-        }
-        // this is a solution? don't need ast, can solve, different type
-        // TODO: get rid of solution, make expression just for math, not for constraints
-        // AbstractExpression::Solution(num, old) => {
-        //     let expression = old.to_ast(context);
-        //     let equals = ast::Int::from_i64(num)
-        //     return ast::Int::eq(context, &[&base, &offset]),
-        // }
-        AbstractExpression::Expression(op, old1, old2) => {
-            let new1 = to_ast(context, *old1).unwrap();
-            let new2 = to_ast(context, *old2).unwrap();
-            match op.as_str() {
-                "+" => return Some(ast::Int::add(context, &[&new1, &new2])),
-                "-" => return Some(ast::Int::sub(context, &[&new1, &new2])),
-                "<<" => return Some(ast::Int::sub(context, &[&new1, &new2])),
-                // ">" => return ast::Int::ge(context, &[&old1, &old2]),
-                _ => return None,
-            }
-        }
-        _ => return None,
-    }
-}
-
 pub struct ARMCORTEXA<'ctx> {
     registers: [RegisterValue; 33],
     zero: Option<common::FlagValue>,
@@ -64,7 +29,7 @@ pub struct ARMCORTEXA<'ctx> {
     stack: HashMap<i64, RegisterValue>,
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
-    constraints: Vec<AbstractExpression>,
+    // constraints: Vec<AbstractExpression>,
     tracked_loop_abstracts: Vec<String>,
     rw_queue: Vec<common::MemoryAccess>,
     pub alignment: i64,
@@ -134,7 +99,6 @@ impl<'ctx> ARMCORTEXA<'_> {
             stack_size: 0,
             memory_safe_regions: Vec::new(),
             tracked_loop_abstracts: Vec::new(),
-            constraints: Vec::new(),
             rw_queue: Vec::new(),
             alignment: 4,
             context,
@@ -144,24 +108,6 @@ impl<'ctx> ARMCORTEXA<'_> {
 
     pub fn set_region(&mut self, region: common::MemorySafeRegion) {
         self.memory_safe_regions.push(region.clone());
-        self.add_constraint(AbstractExpression::Expression(
-            "<".to_string(),
-            Box::new(AbstractExpression::Expression(
-                "+".to_string(),
-                Box::new(region.base.clone()),
-                Box::new(region.start.clone()),
-            )),
-            Box::new(AbstractExpression::Expression(
-                "+".to_string(),
-                Box::new(region.base.clone()),
-                Box::new(region.end),
-            )),
-        ));
-        self.add_constraint(AbstractExpression::Expression(
-            "<".to_string(),
-            Box::new(region.start),
-            Box::new(region.base),
-        ));
     }
 
     pub fn set_immediate(&mut self, register: String, value: u64) {
@@ -172,11 +118,11 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.set_register(register, RegisterKind::Abstract, Some(value), 0);
     }
 
-    pub fn add_constraint(&mut self, constraint: AbstractExpression) {
-        if !self.constraints.contains(&constraint.clone()) {
-            self.constraints.push(constraint);
-        }
-    }
+    // pub fn add_constraint(&mut self, constraint: AbstractExpression) {
+    //     if !self.constraints.contains(&constraint.clone()) {
+    //         self.constraints.push(constraint);
+    //     }
+    // }
 
     fn set_register(
         &mut self,
@@ -318,7 +264,7 @@ impl<'ctx> ARMCORTEXA<'_> {
     pub fn execute(
         &mut self,
         instruction: &common::Instruction,
-    ) -> Result<Option<(Option<AbstractExpression>, Option<String>, Option<u128>)>, String> {
+    ) -> Result<Option<(Option<AbstractComparison>, Option<String>, Option<u128>)>, String> {
         if instruction.op == "add" {
             self.arithmetic(
                 "+",
@@ -398,9 +344,10 @@ impl<'ctx> ARMCORTEXA<'_> {
                 return Ok(None);
             } else if register.kind == RegisterKind::Abstract {
                 return Ok(Some((
-                    Some(AbstractExpression::Solution(
-                        0,
-                        Box::new(AbstractExpression::Register(Box::new(register))),
+                    Some(AbstractComparison::new(
+                        "==",
+                        AbstractExpression::Immediate(0),
+                        AbstractExpression::Register(Box::new(register)),
                     )),
                     instruction.r2.clone(),
                     None,
@@ -656,19 +603,18 @@ impl<'ctx> ARMCORTEXA<'_> {
                         Box::new(AbstractExpression::Abstract("?".to_string())),
                     );
                     self.set_register(reg0, r1.kind, Some(new_base), 0);
-                    self.add_constraint(AbstractExpression::Expression(
-                        ">".to_string(),
-                        Box::new(AbstractExpression::Abstract("?".to_string())),
-                        Box::new(AbstractExpression::Immediate(op(r1.offset, r2.offset))),
-                    ));
-                    // FIX: this is a bit brute forcey?
-                    self.add_constraint(AbstractExpression::Expression(
-                        ">".to_string(),
-                        Box::new(AbstractExpression::Abstract("?".to_string())),
-                        Box::new(AbstractExpression::Immediate(0)),
-                    ));
-                    self.untrack_register(reg1);
-                    self.untrack_register(reg2);
+                    // self.add_constraint(AbstractExpression::Expression(
+                    //     ">".to_string(),
+                    //     Box::new(AbstractExpression::Abstract("?".to_string())),
+                    //     Box::new(AbstractExpression::Immediate(op(r1.offset, r2.offset))),
+                    // ));
+                    // self.add_constraint(AbstractExpression::Expression(
+                    //     ">".to_string(),
+                    //     Box::new(AbstractExpression::Abstract("?".to_string())),
+                    //     Box::new(AbstractExpression::Immediate(0)),
+                    // ));
+                    // self.untrack_register(reg1);
+                    // self.untrack_register(reg2);
                 }
                 return;
             }
@@ -798,21 +744,21 @@ impl<'ctx> ARMCORTEXA<'_> {
         // remove constraints on the base of the result
         // since performing arithmetic potentially invalidates these
         let result = self.operand(saved_reg0);
-        if let Some(base) = result.base {
-            let mut new_constraints = Vec::new();
-            for exp in &self.constraints {
-                if exp.contains_expression(&base.clone()) {
-                    let comparison = exp.contradicts(base.clone());
-                    match comparison {
-                        Some(true) => (),
-                        _ => new_constraints.push(exp.clone()),
-                    }
-                } else {
-                    new_constraints.push(exp.clone());
-                }
-            }
-            self.constraints = new_constraints;
-        }
+        // if let Some(base) = result.base {
+        //     let mut new_constraints = Vec::new();
+        //     for exp in &self.constraints {
+        //         if exp.contains_expression(&base.clone()) {
+        //             let comparison = exp.contradicts(base.clone());
+        //             match comparison {
+        //                 Some(true) => (),
+        //                 _ => new_constraints.push(exp.clone()),
+        //             }
+        //         } else {
+        //             new_constraints.push(exp.clone());
+        //         }
+        //     }
+        //     self.constraints = new_constraints;
+        // }
     }
 
     fn shift_reg(&mut self, reg1: String, reg2: String, reg3: String) {
@@ -870,31 +816,27 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Box::new(AbstractExpression::Register(Box::new(r1))),
                             Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
-                        self.neg =
-                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                                "<".to_string(),
-                                Box::new(expression.clone()),
-                                Box::new(AbstractExpression::Immediate(0)),
-                            )));
-                        self.zero =
-                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                                "==".to_string(),
-                                Box::new(expression.clone()),
-                                Box::new(AbstractExpression::Immediate(0)),
-                            )));
+                        self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(0),
+                        )));
+                        self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "==",
+                            expression.clone(),
+                            AbstractExpression::Immediate(0),
+                        )));
                         // FIX carry + overflow
-                        self.carry =
-                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                                "<".to_string(),
-                                Box::new(expression.clone()),
-                                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
-                            )));
-                        self.overflow =
-                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                                "<".to_string(),
-                                Box::new(expression),
-                                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
-                            )));
+                        self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(std::i64::MIN),
+                        )));
+                        self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression,
+                            AbstractExpression::Immediate(std::i64::MIN),
+                        )));
                     }
                 }
                 RegisterKind::Number => {
@@ -975,31 +917,27 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Box::new(AbstractExpression::Register(Box::new(r1))),
                             Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
-                        self.neg =
-                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                                "<".to_string(),
-                                Box::new(expression.clone()),
-                                Box::new(AbstractExpression::Immediate(0)),
-                            )));
-                        self.zero =
-                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                                "==".to_string(),
-                                Box::new(expression.clone()),
-                                Box::new(AbstractExpression::Immediate(0)),
-                            )));
+                        self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(0),
+                        )));
+                        self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "==",
+                            expression.clone(),
+                            AbstractExpression::Immediate(0),
+                        )));
                         // FIX carry + overflow
-                        self.carry =
-                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                                "<".to_string(),
-                                Box::new(expression.clone()),
-                                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
-                            )));
-                        self.overflow =
-                            Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                                "<".to_string(),
-                                Box::new(expression.clone()),
-                                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
-                            )));
+                        self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(std::i64::MIN),
+                        )));
+                        self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(std::i64::MIN),
+                        )));
                     }
                 }
             }
@@ -1009,26 +947,26 @@ impl<'ctx> ARMCORTEXA<'_> {
                 Box::new(AbstractExpression::Register(Box::new(r1))),
                 Box::new(AbstractExpression::Register(Box::new(r2))),
             );
-            self.neg = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                "<".to_string(),
-                Box::new(expression.clone()),
-                Box::new(AbstractExpression::Immediate(0)),
+            self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                "<",
+                expression.clone(),
+                AbstractExpression::Immediate(0),
             )));
-            self.zero = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                "==".to_string(),
-                Box::new(expression.clone()),
-                Box::new(AbstractExpression::Immediate(0)),
+            self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                "==",
+                expression.clone(),
+                AbstractExpression::Immediate(0),
             )));
             // FIX carry + overflow
-            self.carry = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                "<".to_string(),
-                Box::new(expression.clone()),
-                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
+            self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                "<",
+                expression.clone(),
+                AbstractExpression::Immediate(std::i64::MIN),
             )));
-            self.overflow = Some(common::FlagValue::ABSTRACT(AbstractExpression::Expression(
-                "<".to_string(),
-                Box::new(expression),
-                Box::new(AbstractExpression::Immediate(std::i64::MIN)),
+            self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                "<",
+                expression,
+                AbstractExpression::Immediate(std::i64::MIN),
             )));
         }
     }
@@ -1221,9 +1159,11 @@ impl<'ctx> ARMCORTEXA<'_> {
                         let assignment1 = access.ge(&abstract_pointer_from_base);
                         let assignment2 = access.le(&abstract_pointer_from_base);
 
-                        let lowerbound_value = to_ast(self.context, region.start.clone()).unwrap();
+                        let lowerbound_value =
+                            common::expression_to_ast(self.context, region.start.clone()).unwrap();
                         let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
-                        let upperbound_value = to_ast(self.context, region.end.clone()).unwrap();
+                        let upperbound_value =
+                            common::expression_to_ast(self.context, region.end.clone()).unwrap();
                         let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
                         let l = abstract_pointer_from_base.lt(&low_access);
                         let u = abstract_pointer_from_base.gt(&up_access);
@@ -1261,45 +1201,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             }
         } else if let Some(AbstractExpression::Expression(op, left, right)) = base.clone() {
             for region in self.memory_safe_regions.clone() {
-                if region.region_type == common::RegionType::READ
-                    && op == "+"
-                    && region.base == *left.clone()
-                {
-                    let min_constraint = AbstractExpression::Expression(
-                        ">".to_string(),
-                        right.clone(),
-                        Box::new(region.start.clone()),
-                    );
-                    let max_constraint = AbstractExpression::Expression(
-                        "<".to_string(),
-                        right.clone(),
-                        Box::new(region.end.clone()),
-                    );
-                    if self.constraints.contains(&max_constraint)
-                        && self.constraints.contains(&min_constraint)
-                    {
-                        return Ok(());
-                    }
-                } else if region.region_type == common::RegionType::READ
-                    && op == "+"
-                    && region.base == *right.clone()
-                {
-                    let min_constraint = AbstractExpression::Expression(
-                        ">".to_string(),
-                        left.clone(),
-                        Box::new(region.start.clone()),
-                    );
-                    let max_constraint = AbstractExpression::Expression(
-                        "<".to_string(),
-                        left.clone(),
-                        Box::new(region.end.clone()),
-                    );
-                    if self.constraints.contains(&max_constraint)
-                        && self.constraints.contains(&min_constraint)
-                    {
-                        return Ok(());
-                    }
-                }
+                todo!();
             }
         }
         Err(common::MemorySafetyError::new(
@@ -1343,19 +1245,19 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 if min == offset {
                                     return Ok(());
                                 }
-                                for c in &self.constraints {
-                                    if common::simplify_expression(c.clone())
-                                        == common::simplify_expression(
-                                            AbstractExpression::Expression(
-                                                "<".to_string(),
-                                                Box::new(AbstractExpression::Immediate(offset)),
-                                                Box::new(region.end.clone()),
-                                            ),
-                                        )
-                                    {
-                                        return Ok(());
-                                    }
-                                }
+                                // for c in &self.constraints {
+                                //     if common::simplify_expression(c.clone())
+                                //         == common::simplify_expression(
+                                //             AbstractExpression::Expression(
+                                //                 "<".to_string(),
+                                //                 Box::new(AbstractExpression::Immediate(offset)),
+                                //                 Box::new(region.end.clone()),
+                                //             ),
+                                //         )
+                                //     {
+                                //         return Ok(());
+                                //     }
+                                // }
                             }
                             (_, _) => (),
                         }

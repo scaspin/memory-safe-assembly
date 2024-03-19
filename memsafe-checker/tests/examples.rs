@@ -62,7 +62,9 @@ mod tests {
         });
 
         //engine.dont_fail_fast();
-        engine.start(start_label)
+        let res = engine.start(start_label);
+        assert!(res.is_err());
+        res
     }
 
     #[test]
@@ -322,6 +324,32 @@ mod tests {
 
         let res = engine.start("start".to_string());
         assert!(res.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_loop_unsafe() -> std::io::Result<()> {
+        env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        program.push("add x1,#0,#0".to_string());
+        program.push("add x2,#0,#2".to_string());
+        program.push("loop:".to_string());
+        // program.push("ldr x3,[x0,#0]".to_string());
+        program.push("add x1,x1,#1".to_string());
+        program.push("cmp x1,x2".to_string());
+        program.push("b.ne loop".to_string());
+        program.push("ret".to_string());
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        // engine.add_abstract_from(0, "base".to_string());
+
+        let res = engine.start("start".to_string());
+        println!("{:?}", res);
         Ok(())
     }
 }

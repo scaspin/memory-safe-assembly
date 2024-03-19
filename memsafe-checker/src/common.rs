@@ -1,5 +1,6 @@
 use std::fmt;
 use std::str::FromStr;
+use z3::*;
 
 // TODO: find a way to make solving easier? less verbose
 // static OPERATIONS : [(&str, &str); 3] = [("+", "-"), ("-", "+"), ("<", ">")];
@@ -77,7 +78,6 @@ pub enum AbstractExpression {
     Immediate(i64),
     Abstract(String),
     Register(Box<RegisterValue>), // only use to box in expressions for compares
-    Solution(i64, Box<AbstractExpression>),
     Expression(String, Box<AbstractExpression>, Box<AbstractExpression>),
 }
 
@@ -90,13 +90,16 @@ impl fmt::Display for AbstractExpression {
             AbstractExpression::Register(reg) => {
                 write!(f, "({:?})", reg)
             }
-            AbstractExpression::Solution(num, expr) => {
-                write!(f, "{} == {}", num, expr)
-            }
             AbstractExpression::Expression(func, arg1, arg2) => {
                 write!(f, "({} {} {})", arg1, func, arg2)
             }
         }
+    }
+}
+
+impl fmt::Display for AbstractComparison {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({} {} {})", self.op, self.left, self.right)
     }
 }
 
@@ -106,9 +109,6 @@ impl AbstractExpression {
         match self {
             AbstractExpression::Register(reg) => {
                 registers.push(reg.name.clone());
-            }
-            AbstractExpression::Solution(_, expr) => {
-                registers.append(&mut expr.get_register_names());
             }
             AbstractExpression::Expression(_, arg1, arg2) => {
                 registers.append(&mut arg1.get_register_names());
@@ -135,9 +135,6 @@ impl AbstractExpression {
                         .get_abstracts(),
                 );
             }
-            AbstractExpression::Solution(_, expr) => {
-                abstracts.append(&mut expr.get_abstracts());
-            }
             AbstractExpression::Expression(_, arg1, arg2) => {
                 abstracts.append(&mut arg1.get_abstracts());
                 abstracts.append(&mut arg2.get_abstracts());
@@ -160,9 +157,6 @@ impl AbstractExpression {
                 Some(e) => return e.contains(token),
                 None => return false,
             },
-            AbstractExpression::Solution(_, expr) => {
-                return expr.contains(token);
-            }
             AbstractExpression::Expression(_, arg1, arg2) => {
                 return arg1.contains(token) || arg2.contains(token);
             }
@@ -175,9 +169,6 @@ impl AbstractExpression {
             return true;
         }
         match self {
-            AbstractExpression::Solution(_, inner) => {
-                return inner.contains_expression(expr);
-            }
             AbstractExpression::Expression(_, arg1, arg2) => {
                 return arg1.contains_expression(expr) || arg2.contains_expression(expr);
             }
@@ -196,10 +187,6 @@ impl AbstractExpression {
                 return self.clone();
             }
             AbstractExpression::Register(reg) => return AbstractExpression::Register(reg.clone()),
-            AbstractExpression::Solution(num, old) => {
-                let new = old.replace(token, value);
-                return AbstractExpression::Solution(*num, Box::new(new));
-            }
             AbstractExpression::Expression(op, old1, old2) => {
                 let new1 = old1.replace(token, value.clone());
                 let new2 = old2.replace(token, value);
@@ -226,10 +213,6 @@ impl AbstractExpression {
                 }
             }
             AbstractExpression::Register(reg) => return AbstractExpression::Register(reg.clone()),
-            AbstractExpression::Solution(num, old) => {
-                let new = old.remove(token);
-                return AbstractExpression::Solution(*num, Box::new(new));
-            }
             AbstractExpression::Expression(op, old1, old2) => {
                 let new1 = simplify_expression(old1.remove(token));
                 let new2 = simplify_expression(old2.remove(token));
@@ -241,51 +224,6 @@ impl AbstractExpression {
             }
             AbstractExpression::Empty => return AbstractExpression::Empty,
         }
-    }
-
-    pub fn reduce_solution(&self) -> (AbstractExpression, AbstractExpression) {
-        match self {
-            AbstractExpression::Solution(num, old) => {
-                if *num == 0 {
-                    if let AbstractExpression::Expression(op, exp1, exp2) = *old.clone() {
-                        if op == "-" {
-                            if exp1 == exp2 {
-                                return (AbstractExpression::Empty, AbstractExpression::Empty);
-                            }
-                            return simplify_equality(*exp1, *exp2);
-                        }
-                    }
-                }
-            }
-            AbstractExpression::Expression(_, exp1, exp2) => {
-                if *exp1.clone() == AbstractExpression::Immediate(0) {
-                    if let AbstractExpression::Expression(op, left, right) = *exp2.clone() {
-                        if op == "-" {
-                            if left == right {
-                                return (AbstractExpression::Empty, AbstractExpression::Empty);
-                            }
-                            return simplify_equality(*left, *right);
-                        }
-                    }
-                } else if *exp2.clone() == AbstractExpression::Immediate(0) {
-                    if let AbstractExpression::Expression(op, left, right) = *exp1.clone() {
-                        if op == "-" {
-                            if left == right {
-                                return (AbstractExpression::Empty, AbstractExpression::Empty);
-                            }
-                            return simplify_equality(*left, *right);
-                        }
-                    }
-                }
-            }
-            _ => {
-                log::error!(
-                    "Can't reduce solution on an abstract expression that is not a solution"
-                );
-                return (AbstractExpression::Empty, AbstractExpression::Empty);
-            }
-        }
-        (AbstractExpression::Empty, AbstractExpression::Empty)
     }
 
     pub fn simplify(&self) -> AbstractExpression {
@@ -363,12 +301,39 @@ impl AbstractExpression {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AbstractComparison {
+    pub op: String,
+    pub left: Box<AbstractExpression>,
+    pub right: Box<AbstractExpression>,
+}
+
+impl AbstractComparison {
+    pub fn new(op: &str, left: AbstractExpression, right: AbstractExpression) -> Self {
+        Self {
+            op: op.to_string(),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    pub fn get_register_names(&self) -> Vec<String> {
+        let mut registers = Vec::new();
+        registers.append(&mut self.left.get_register_names());
+        registers.append(&mut self.right.get_register_names());
+        registers
+    }
+
+    pub fn reduce_solution(&self) -> (AbstractExpression, AbstractExpression) {
+        todo!()
+    }
+}
+
 fn same_exp_type(left: AbstractExpression, right: AbstractExpression) -> bool {
     match (left, right) {
         (AbstractExpression::Empty, AbstractExpression::Empty) => true,
         (AbstractExpression::Immediate(_), AbstractExpression::Immediate(_)) => true,
         (AbstractExpression::Register(_), AbstractExpression::Register(_)) => true,
-        (AbstractExpression::Solution(_, _), AbstractExpression::Solution(_, _)) => true,
         (AbstractExpression::Expression(_, _, _), AbstractExpression::Expression(_, _, _)) => true,
         (_, _) => false,
     }
@@ -443,8 +408,6 @@ fn simplify_equality(
                     }
                 }
             }
-            // solution needs to be expanded first before we can simplify, see reduce_solution
-            // others don't make much sense
             _ => return (simplify_expression(left), simplify_expression(right)),
         }
     } else if let AbstractExpression::Abstract(value_left) = left.clone() {
@@ -626,7 +589,7 @@ impl Eq for MemoryAccess {}
 
 #[derive(Debug, Clone)]
 pub enum FlagValue {
-    ABSTRACT(AbstractExpression),
+    ABSTRACT(AbstractComparison),
     REAL(bool),
 }
 
@@ -823,5 +786,54 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
             AbstractExpression::Immediate(shift),
         )),
         offset: new_offset,
+    }
+}
+
+pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> Option<ast::Int> {
+    match expression {
+        AbstractExpression::Immediate(num) => {
+            return Some(ast::Int::from_i64(context, num));
+        }
+        AbstractExpression::Abstract(a) => {
+            return Some(ast::Int::new_const(context, a));
+        }
+        AbstractExpression::Register(reg) => {
+            let base = expression_to_ast(context, reg.base.clone().unwrap()).unwrap();
+            let offset = ast::Int::from_i64(context, reg.offset);
+            return Some(ast::Int::add(context, &[&base, &offset]));
+        }
+        AbstractExpression::Expression(op, old1, old2) => {
+            let new1 = expression_to_ast(context, *old1).unwrap();
+            let new2 = expression_to_ast(context, *old2).unwrap();
+            match op.as_str() {
+                "+" => return Some(ast::Int::add(context, &[&new1, &new2])),
+                "-" => return Some(ast::Int::sub(context, &[&new1, &new2])),
+                "*" => return Some(ast::Int::mul(context, &[&new1, &new2])),
+                "/" => return Some(new1.div(&new2)),
+                "<<" => {
+                    let two = ast::Int::from_i64(context, 2);
+                    let multiplier = new2.power(&two).to_int();
+                    return Some(ast::Int::mul(context, &[&new1, &multiplier]));
+                }
+                ">>" => {
+                    let two = ast::Int::from_i64(context, 2);
+                    let divisor = new2.div(&two);
+                    return Some(new1.div(&divisor));
+                }
+                _ => return None,
+            }
+        }
+        _ => return None,
+    }
+}
+
+pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> Option<ast::Bool> {
+    let left = expression_to_ast(context, *expression.left).unwrap();
+    let right = expression_to_ast(context, *expression.right).unwrap();
+    match expression.op.as_str() {
+        "<" => {
+            return Some(left.le(&right));
+        }
+        _ => todo!(),
     }
 }

@@ -15,7 +15,7 @@ pub struct ExecutionEngine<'ctx> {
     program: Program,
     computer: computer::ARMCORTEXA<'ctx>,
     pc: usize,
-    loop_state: Vec<(common::AbstractExpression, Vec<common::MemoryAccess>)>,
+    loop_state: Vec<(common::AbstractComparison, Vec<common::MemoryAccess>)>,
     fail_fast: bool,
 }
 
@@ -129,20 +129,19 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn add_region(&mut self, region: common::MemorySafeRegion) {
-        // self.memory_regions.push(region);
-        self.computer.set_region(region.clone());
-        let zero = ast::Int::from_i64(self.computer.context, 0);
-        let abstract_pointer_from_base = ast::Int::new_const(
-            self.computer.context,
-            "pointer_".to_owned() + &region.base.to_string(),
-        );
-        let bound = ast::Int::new_const(self.computer.context, region.end.to_string());
-        self.computer
-            .solver
-            .assert(&abstract_pointer_from_base.gt(&zero));
-        self.computer
-            .solver
-            .assert(&bound.gt(&abstract_pointer_from_base));
+        // FIX make better so don't have to convert to string
+        match region.end.clone() {
+            common::AbstractExpression::Immediate(i) => self.add_region_from(
+                region.region_type,
+                region.base.to_string(),
+                (Some(i.try_into().unwrap()), None),
+            ),
+            _ => self.add_region_from(
+                region.region_type,
+                region.base.to_string(),
+                (None, Some(region.end.to_string())),
+            ),
+        }
     }
 
     pub fn add_region_from(
@@ -280,9 +279,11 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     Some(jump) => match jump {
                         // (condition, label to jump to, line number to jump to)
                         (Some(condition), Some(label), None) => {
-                            if self
-                                .evaluate_jump_condition(condition, self.computer.read_rw_queue())
-                            {
+                            if self.evaluate_jump_condition(
+                                label.clone(),
+                                condition,
+                                self.computer.read_rw_queue(),
+                            ) {
                                 for l in self.program.labels.iter() {
                                     if l.0.contains(&label.clone()) && label.contains(&l.0.clone())
                                     {
@@ -294,9 +295,11 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             }
                         }
                         (Some(condition), None, Some(address)) => {
-                            if self
-                                .evaluate_jump_condition(condition, self.computer.read_rw_queue())
-                            {
+                            if self.evaluate_jump_condition(
+                                address.to_string(),
+                                condition,
+                                self.computer.read_rw_queue(),
+                            ) {
                                 if address == 0 {
                                     // program is done
                                     break;
@@ -365,7 +368,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
     // BIG TODO
     fn evaluate_jump_condition(
         &mut self,
-        expression: common::AbstractExpression,
+        label: String,
+        expression: common::AbstractComparison,
         rw_list: Vec<common::MemoryAccess>,
     ) -> bool {
         log::info!("jump condition: {}", expression.clone());
@@ -374,36 +378,53 @@ impl<'ctx> ExecutionEngine<'ctx> {
         // figure out relevant registers
         let relevant_registers = expression.get_register_names();
 
-        for e in &self.loop_state {
-            if e.0 == expression && e.1 == rw_list {
-                // TODO replace ? with value
-                let (left, right) = expression.reduce_solution();
-                if left.contains("?") || right.contains("?") {
-                    // FIX: cannot call solve for if it doesn't have key
-                    let solved = common::solve_for("?", left, right);
-                    self.computer.replace_abstract("?", solved);
-                }
-                for reg in relevant_registers {
-                    self.computer.untrack_register(reg);
-                }
+        let condition_to_ast =
+            common::comparison_to_ast(self.computer.context, expression).unwrap();
+        match self.computer.solver.check_assumptions(&[condition_to_ast]) {
+            SatResult::Sat => {
+                println!("SAT");
+                return false;
+            }
+            SatResult::Unsat => {
+                println!("UNSAT");
+                return false;
+            }
+            SatResult::Unknown => {
+                println!("UNKNOWN");
                 return false;
             }
         }
 
-        self.loop_state.push((expression.clone(), rw_list));
-        for r in relevant_registers {
-            self.computer.track_register(r);
-        }
-        self.computer.clear_rw_queue();
+        // TODO: rewrite with z3
 
-        let (left, right) = expression.reduce_solution();
-        self.computer
-            .add_constraint(common::AbstractExpression::Expression(
-                "<".to_string(),
-                Box::new(left),
-                Box::new(right),
-            ));
+        // for e in &self.loop_state {
+        //     if e.0 == expression && e.1 == rw_list {
+        //         // TODO replace ? with value
+        //         let (left, right) = expression.reduce_solution();
+        //         if left.contains("?") || right.contains("?") {
+        //             // FIX: cannot call solve for if it doesn't have key
+        //             let solved = common::solve_for("?", left, right);
+        //             self.computer.replace_abstract("?", solved);
+        //         }
+        //         for reg in relevant_registers {
+        //             self.computer.untrack_register(reg);
+        //         }
+        //         return false;
+        //     }
+        // }
 
-        return true;
+        // self.loop_state.push((expression.clone(), rw_list));
+        // for r in relevant_registers {
+        //     self.computer.track_register(r);
+        // }
+        // self.computer.clear_rw_queue();
+
+        // let (left, right) = expression.reduce_solution();
+        // self.computer
+        //     .add_constraint(common::AbstractExpression::Expression(
+        //         "<".to_string(),
+        //         Box::new(left),
+        //         Box::new(right),
+        //     ));
     }
 }
