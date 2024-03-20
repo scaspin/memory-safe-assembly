@@ -597,6 +597,7 @@ pub enum FlagValue {
 pub enum RegionType {
     READ,
     WRITE,
+    RW,
 }
 
 impl fmt::Display for RegionType {
@@ -604,6 +605,7 @@ impl fmt::Display for RegionType {
         match self {
             RegionType::READ => write!(f, "Read"),
             RegionType::WRITE => write!(f, "Write"),
+            RegionType::RW => write!(f, "Read and Write"),
         }
     }
 }

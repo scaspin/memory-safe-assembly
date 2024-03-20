@@ -395,19 +395,19 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
                     self.in_loop = true;
                     self.computer.solver.assert(&condition_to_ast);
-                    self.jump_history.push((label, expression.clone(), rw_list));
+                    self.jump_history.push((label, expression, rw_list));
                     self.computer.clear_rw_queue();
-                    // TODO: figure out substitution here?
-                    return false;
+                    return true;
                 }
             }
         } else {
+            // TODO: maybe add shortcut out when there are no memory accesses in the loop?
             if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
                 if last_jump_label == &label
                     && last_jump_exp == &expression
                     && last_rw_list == &rw_list
                 {
-                    return true;
+                    return false;
                 }
             }
         }
