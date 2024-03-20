@@ -362,12 +362,34 @@ impl<'ctx> ARMCORTEXA<'_> {
             );
         // TODO: make branch more general
         // https://developer.arm.com/documentation/dui0068/b/ARM-Instruction-Reference/Conditional-execution
+        } else if instruction.op == "b" {
+            return Ok(Some((None, instruction.r1.clone(), None)));
         } else if instruction.op == "b.ne" {
             match &self.zero {
                 // if zero is set to false, then cmp -> not equal and we branch
                 Some(flag) => match flag {
                     common::FlagValue::REAL(b) => {
                         if !b {
+                            return Ok(Some((None, instruction.r1.clone(), None)));
+                        } else {
+                            return Ok(None);
+                        }
+                    }
+                    common::FlagValue::ABSTRACT(s) => {
+                        return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
+                    }
+                },
+                None => return Err(
+                    "Flag cannot be branched on since it has not been set within the program yet"
+                        .to_string(),
+                ),
+            }
+        } else if instruction.op == "b.eq" {
+            match &self.zero {
+                // if zero is set to false, then cmp -> not equal and we branch
+                Some(flag) => match flag {
+                    common::FlagValue::REAL(b) => {
+                        if *b {
                             return Ok(Some((None, instruction.r1.clone(), None)));
                         } else {
                             return Ok(None);
@@ -1128,36 +1150,96 @@ impl<'ctx> ARMCORTEXA<'_> {
         base: Option<AbstractExpression>,
         offset: i64,
     ) -> Result<(), common::MemorySafetyError> {
-        if let Some(AbstractExpression::Abstract(regbase)) = base.clone() {
-            // read from stack
-            if regbase == "sp" || regbase == "x31" {
-                if self.stack.contains_key(&offset) {
-                    return Ok(());
+        match base.clone() {
+            Some(AbstractExpression::Abstract(regbase)) => {
+                // read from stack
+                if regbase == "sp" || regbase == "x31" {
+                    if self.stack.contains_key(&offset) {
+                        return Ok(());
+                    } else {
+                        return Err(common::MemorySafetyError::new(
+                            "Element at this address not in stack",
+                        ));
+                    }
+                // read from static memory
+                } else if regbase == "Memory" {
+                    // read from defs
+                    if self.memory.get(&(offset)).is_some() {
+                        return Ok(());
+                    }
                 } else {
+                    // check if read from memory safe region
+                    for region in self.memory_safe_regions.clone() {
+                        if region.base.contains(&regbase)
+                            && region.region_type == common::RegionType::READ
+                        {
+                            let abs_offset = ast::Int::from_i64(self.context, offset);
+                            let base = ast::Int::new_const(self.context, regbase.clone());
+                            let abstract_pointer_from_base = ast::Int::new_const(
+                                self.context,
+                                &*("pointer_".to_owned() + &regbase),
+                            );
+                            let access = ast::Int::add(self.context, &[&base, &abs_offset]);
+                            // pointer = base + index
+                            let assignment1 = access.ge(&abstract_pointer_from_base);
+                            let assignment2 = access.le(&abstract_pointer_from_base);
+
+                            let lowerbound_value =
+                                common::expression_to_ast(self.context, region.start.clone())
+                                    .unwrap();
+                            let low_access =
+                                ast::Int::add(self.context, &[&base, &lowerbound_value]);
+                            let upperbound_value =
+                                common::expression_to_ast(self.context, region.end.clone())
+                                    .unwrap();
+                            let up_access =
+                                ast::Int::add(self.context, &[&base, &upperbound_value]);
+                            let l = abstract_pointer_from_base.lt(&low_access);
+                            let u = abstract_pointer_from_base.gt(&up_access);
+
+                            match self.solver.check_assumptions(&[assignment1, assignment2]) {
+                                SatResult::Sat => {
+                                    log::info!("Memory safe with solver's first check!");
+                                    match (
+                                        self.solver.check_assumptions(&[l]),
+                                        self.solver.check_assumptions(&[u]),
+                                    ) {
+                                        (SatResult::Unsat, SatResult::Unsat) => {
+                                            log::info!("Memory safe with solver's second check!");
+                                            return Ok(());
+                                        }
+                                        (a, b) => {
+                                            println!("impossibility lower bound {:?}, impossibility upper bound {:?}", a, b);
+                                            log::error!(
+                                                "Memory unsafe with solver's second check!"
+                                            );
+                                        }
+                                    }
+                                }
+                                _ => log::info!("Memory unsafe with solver first check!"),
+                            }
+                        }
+                    }
                     return Err(common::MemorySafetyError::new(
-                        "Element at this address not in stack",
+                        format!(
+                            "Reading at address outside allowable memory regions {:?}, {:?}",
+                            regbase, offset
+                        )
+                        .as_str(),
                     ));
                 }
-            // read from static memory
-            } else if regbase == "Memory" {
-                // read from defs
-                if self.memory.get(&(offset)).is_some() {
-                    return Ok(());
-                }
-            } else {
-                // check if read from memory safe region
+            }
+            Some(AbstractExpression::Expression(_, _, _)) => {
+                let base = base.clone().unwrap();
                 for region in self.memory_safe_regions.clone() {
-                    if region.base.contains(&regbase)
-                        && region.region_type == common::RegionType::READ
+                    if base.contains(&region.base) && region.region_type == common::RegionType::READ
                     {
+                        let regbase = region.base;
                         let abs_offset = ast::Int::from_i64(self.context, offset);
-                        let base = ast::Int::new_const(self.context, regbase.clone());
+                        let base = common::expression_to_ast(self.context, base.clone()).unwrap();
+                        let access = ast::Int::add(self.context, &[&base, &abs_offset]);
                         let abstract_pointer_from_base =
                             ast::Int::new_const(self.context, &*("pointer_".to_owned() + &regbase));
-                        let access = ast::Int::add(self.context, &[&base, &abs_offset]);
-                        // pointer = base + index
-                        let assignment1 = access.ge(&abstract_pointer_from_base);
-                        let assignment2 = access.le(&abstract_pointer_from_base);
 
                         let lowerbound_value =
                             common::expression_to_ast(self.context, region.start.clone()).unwrap();
@@ -1168,41 +1250,30 @@ impl<'ctx> ARMCORTEXA<'_> {
                         let l = abstract_pointer_from_base.lt(&low_access);
                         let u = abstract_pointer_from_base.gt(&up_access);
 
-                        // println!("constraints: {:?}", self.solver.get_assertions());
-
-                        match self.solver.check_assumptions(&[assignment1, assignment2]) {
-                            SatResult::Sat => {
-                                log::info!("Memory safe with solver's first check!");
-                                match (
-                                    self.solver.check_assumptions(&[l]),
-                                    self.solver.check_assumptions(&[u]),
-                                ) {
-                                    (SatResult::Unsat, SatResult::Unsat) => {
-                                        log::info!("Memory safe with solver's second check!");
-                                        return Ok(());
-                                    }
-                                    (a, b) => {
-                                        println!("impossibility lower bound {:?}, impossibility upper bound {:?}", a, b);
-                                        log::error!("Memory unsafe with solver's second check!");
-                                    }
-                                }
+                        match (
+                            self.solver.check_assumptions(&[l]),
+                            self.solver.check_assumptions(&[u]),
+                        ) {
+                            (SatResult::Unsat, SatResult::Unsat) => {
+                                log::info!("Memory safe with solver's second check!");
+                                return Ok(());
                             }
-                            _ => log::info!("Memory unsafe with solver first check!"),
+                            (a, b) => {
+                                println!("impossibility lower bound {:?}, impossibility upper bound {:?}", a, b);
+                                log::error!("Memory unsafe with solver's second check!");
+                            }
                         }
                     }
                 }
                 return Err(common::MemorySafetyError::new(
                     format!(
                         "Reading at address outside allowable memory regions {:?}, {:?}",
-                        regbase, offset
+                        base, offset
                     )
                     .as_str(),
                 ));
             }
-        } else if let Some(AbstractExpression::Expression(op, left, right)) = base.clone() {
-            for region in self.memory_safe_regions.clone() {
-                todo!();
-            }
+            _ => (),
         }
         Err(common::MemorySafetyError::new(
             format!(
@@ -1218,63 +1289,6 @@ impl<'ctx> ARMCORTEXA<'_> {
         base: Option<AbstractExpression>,
         offset: i64,
     ) -> Result<(), common::MemorySafetyError> {
-        if let Some(AbstractExpression::Abstract(regbase)) = base.clone() {
-            // write to stack
-            if regbase == "sp" {
-                return Ok(());
-            } else {
-                // check if read from memory safe region
-                for region in self.memory_safe_regions.clone() {
-                    if region.base == base.clone().unwrap()
-                        && region.region_type == common::RegionType::WRITE
-                    {
-                        match (region.start, region.end.clone()) {
-                            (
-                                common::AbstractExpression::Immediate(start),
-                                common::AbstractExpression::Immediate(end),
-                            ) => {
-                                if offset >= start && offset <= (end - self.alignment) {
-                                    return Ok(());
-                                }
-                            }
-                            (
-                                AbstractExpression::Immediate(min),
-                                AbstractExpression::Abstract(_),
-                            ) => {
-                                //FIX this check
-                                if min == offset {
-                                    return Ok(());
-                                }
-                                // for c in &self.constraints {
-                                //     if common::simplify_expression(c.clone())
-                                //         == common::simplify_expression(
-                                //             AbstractExpression::Expression(
-                                //                 "<".to_string(),
-                                //                 Box::new(AbstractExpression::Immediate(offset)),
-                                //                 Box::new(region.end.clone()),
-                                //             ),
-                                //         )
-                                //     {
-                                //         return Ok(());
-                                //     }
-                                // }
-                            }
-                            (_, _) => (),
-                        }
-                    }
-                }
-            }
-            return Err(common::MemorySafetyError::new(
-                "Cannot write using offsets from not the stack pointer or a safe memory region",
-            ));
-        } else {
-            // overwrite def
-            if self.memory.get(&(offset)).is_some() {
-                return Ok(());
-            }
-            return Err(common::MemorySafetyError::new(
-                "Cannot write to a random memory address",
-            ));
-        };
+        todo!();
     }
 }

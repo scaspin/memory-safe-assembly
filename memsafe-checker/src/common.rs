@@ -611,7 +611,7 @@ impl fmt::Display for RegionType {
 #[derive(Debug, Clone)]
 pub struct MemorySafeRegion {
     pub region_type: RegionType,
-    pub base: AbstractExpression,
+    pub base: String,
     pub start: AbstractExpression,
     pub end: AbstractExpression,
 }
@@ -810,7 +810,7 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                 "-" => return Some(ast::Int::sub(context, &[&new1, &new2])),
                 "*" => return Some(ast::Int::mul(context, &[&new1, &new2])),
                 "/" => return Some(new1.div(&new2)),
-                "<<" => {
+                "lsl" => {
                     let two = ast::Int::from_i64(context, 2);
                     let multiplier = new2.power(&two).to_int();
                     return Some(ast::Int::mul(context, &[&new1, &multiplier]));
@@ -820,10 +820,13 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                     let divisor = new2.div(&two);
                     return Some(new1.div(&divisor));
                 }
-                _ => return None,
+                _ => {
+                    println!("value: {:?} {:?}, {:?}", op, new1, new2);
+                    return None;
+                }
             }
         }
-        _ => return None,
+        _ => return Some(ast::Int::from_i64(context, 0)),
     }
 }
 
@@ -833,6 +836,12 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
     match expression.op.as_str() {
         "<" => {
             return Some(left.le(&right));
+        }
+        "==" => {
+            return Some(ast::Bool::and(
+                context,
+                &[&left.le(&right), &left.ge(&right)],
+            ));
         }
         _ => todo!(),
     }

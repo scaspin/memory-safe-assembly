@@ -41,13 +41,13 @@ mod tests {
         engine.add_abstract(String::from("x1"), base.clone());
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::WRITE,
-            base: base.clone(),
+            base: "Base".to_string(),
             start: common::AbstractExpression::Immediate(0),
             end: common::AbstractExpression::Immediate(256),
         });
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            base: base,
+            base: "Base".to_string(),
             start: common::AbstractExpression::Immediate(0),
             end: length,
         });
@@ -56,7 +56,7 @@ mod tests {
         engine.add_abstract(String::from("x2"), blocks);
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            base: common::AbstractExpression::Abstract("x2".to_string()),
+            base: "x2".to_string(),
             start: common::AbstractExpression::Immediate(0),
             end: common::AbstractExpression::Immediate(64),
         });
@@ -81,11 +81,13 @@ mod tests {
         let cfg = Config::new();
         let ctx = Context::new(&cfg);
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
-        engine.start(start_label)
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
+        res
     }
 
     #[test]
-    fn abstract_loop() -> std::io::Result<()> {
+    fn basic_abstract_loop() -> std::io::Result<()> {
         env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
@@ -114,7 +116,9 @@ mod tests {
         engine.add_abstract(String::from("x2"), length);
 
         engine.change_alignment(1);
-        engine.start(start_label)
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
+        Ok(())
     }
 
     #[test]
@@ -140,7 +144,7 @@ mod tests {
         engine.add_abstract(String::from("x1"), base.clone());
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            base: base,
+            base: "Base".to_string(),
             start: common::AbstractExpression::Immediate(0),
             end: length.clone(),
         });
@@ -180,7 +184,7 @@ mod tests {
         engine.add_abstract(String::from("x1"), base1.clone());
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            base: base1,
+            base: "Base1".to_string(),
             start: common::AbstractExpression::Immediate(0),
             end: length1,
         });
@@ -213,7 +217,7 @@ mod tests {
         engine.add_abstract(String::from("x1"), base.clone());
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
-            base: base,
+            base: "Base".to_string(),
             start: common::AbstractExpression::Immediate(0),
             end: length.clone(),
         });
@@ -253,9 +257,8 @@ mod tests {
     fn z3_abstract_bound_unsafe_zero() -> std::io::Result<()> {
         let mut program = Vec::new();
         program.push("start:".to_string());
-        for _ in 0..5 {
-            program.push("ldr x1,[x0,#0]".to_string());
-        }
+
+        program.push("ldr x1,[x0,#0]".to_string());
 
         let cfg = Config::new();
         let ctx = Context::new(&cfg);
@@ -279,10 +282,9 @@ mod tests {
 
         let mut program = Vec::new();
         program.push("start:".to_string());
-        for _ in 0..5 {
-            program.push("ldr x1,[x0,#0]".to_string());
-            program.push("ldr x1,[x0,#4]".to_string());
-        }
+
+        program.push("ldr x1,[x0,#0]".to_string());
+        program.push("ldr x1,[x0,#4]".to_string());
 
         let cfg = Config::new();
         let ctx = Context::new(&cfg);
@@ -306,10 +308,8 @@ mod tests {
 
         let mut program = Vec::new();
         program.push("start:".to_string());
-        for _ in 0..5 {
-            program.push("ldr x1,[x0,#0]".to_string());
-            program.push("ldr x1,[x0,#8]".to_string());
-        }
+        program.push("ldr x1,[x0,#0]".to_string());
+        program.push("ldr x1,[x0,#8]".to_string());
 
         let cfg = Config::new();
         let ctx = Context::new(&cfg);
@@ -328,15 +328,14 @@ mod tests {
     }
 
     #[test]
-    fn z3_loop_unsafe() -> std::io::Result<()> {
-        env_logger::init();
+    fn z3_simple_loop_no_mem_access() -> std::io::Result<()> {
+        // env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
         program.push("add x1,#0,#0".to_string());
-        program.push("add x2,#0,#2".to_string());
+        program.push("add x2,#0,#4".to_string());
         program.push("loop:".to_string());
-        // program.push("ldr x3,[x0,#0]".to_string());
         program.push("add x1,x1,#1".to_string());
         program.push("cmp x1,x2".to_string());
         program.push("b.ne loop".to_string());
@@ -346,10 +345,136 @@ mod tests {
         let ctx = Context::new(&cfg);
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
-        // engine.add_abstract_from(0, "base".to_string());
+        let res = engine.start("start".to_string());
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
+        env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        program.push("add x1,#0,#0".to_string());
+        program.push("add x2,#0,#4".to_string());
+        program.push("loop:".to_string());
+        program.push("ldr x3,[x0,#0]".to_string());
+        program.push("add x1,x1,#1".to_string());
+        program.push("add x0,x0,#4".to_string());
+        program.push("cmp x1,x2".to_string());
+        program.push("b.ne loop".to_string());
+        program.push("ret".to_string());
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "base".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (Some(4), None),
+        );
 
         let res = engine.start("start".to_string());
-        println!("{:?}", res);
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_complex_loop_with_mem_access_safe() -> std::io::Result<()> {
+        // env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        program.push("add x1,x0,x1,lsl#4".to_string());
+        program.push("loop:".to_string());
+        program.push("cmp x0,x1".to_string());
+        program.push("b.eq end".to_string());
+        program.push("ldr x3,[x0,#0]".to_string());
+        program.push("add x0,x0,#4".to_string());
+        program.push("b loop".to_string());
+        program.push("end:".to_string());
+        program.push("ret".to_string());
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "base".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (None, Some("length+4".to_string())), // TODO: make this abstract
+        );
+
+        let res = engine.start("start".to_string());
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_complex_loop_with_mem_access_unsafe() -> std::io::Result<()> {
+        // env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        program.push("add x1,x0,x1,lsl#4".to_string());
+        program.push("loop:".to_string());
+        program.push("cmp x0,x1".to_string());
+        program.push("b.eq end".to_string());
+        program.push("ldr x3,[x0,#0]".to_string());
+        program.push("add x0,x0,#4".to_string());
+        program.push("b loop".to_string());
+        program.push("end:".to_string());
+        program.push("ret".to_string());
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "base".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (Some(3), None),
+        );
+
+        let res = engine.start("start".to_string());
+        assert!(res.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
+        env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        program.push("add x1,x0,x1,lsl#4".to_string());
+        program.push("loop:".to_string());
+        program.push("cmp x0,x1".to_string());
+        program.push("b.eq end".to_string());
+        program.push("add x0,x0,#4".to_string());
+        program.push("b loop".to_string());
+        program.push("end:".to_string());
+        program.push("ret".to_string());
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "base".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (None, Some("length".to_string())),
+        );
+        engine.add_abstract_from(1, "length".to_string());
+
+        let res = engine.start("start".to_string());
+        assert!(res.is_ok());
         Ok(())
     }
 }

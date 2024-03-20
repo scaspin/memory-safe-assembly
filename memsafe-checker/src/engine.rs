@@ -15,7 +15,12 @@ pub struct ExecutionEngine<'ctx> {
     program: Program,
     computer: computer::ARMCORTEXA<'ctx>,
     pc: usize,
-    loop_state: Vec<(common::AbstractComparison, Vec<common::MemoryAccess>)>,
+    in_loop: bool,
+    jump_history: Vec<(
+        String,
+        common::AbstractComparison,
+        Vec<common::MemoryAccess>,
+    )>,
     fail_fast: bool,
 }
 
@@ -123,7 +128,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
             },
             computer,
             pc: 0,
-            loop_state: Vec::new(),
+            jump_history: Vec::new(),
+            in_loop: false,
             fail_fast: true,
         };
     }
@@ -157,7 +163,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 self.computer.set_region(common::MemorySafeRegion {
                     region_type: ty,
-                    base: common::AbstractExpression::Abstract(base.clone()),
+                    base: base.clone(),
                     start: common::AbstractExpression::Immediate(0),
                     end: common::AbstractExpression::Immediate(region_size.clone()),
                 });
@@ -200,7 +206,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 self.computer.set_region(common::MemorySafeRegion {
                     region_type: ty,
-                    base: common::AbstractExpression::Abstract(base.clone()),
+                    base: base.clone(),
                     start: common::AbstractExpression::Immediate(0),
                     end: common::AbstractExpression::Expression(
                         "-".to_string(),
@@ -373,31 +379,48 @@ impl<'ctx> ExecutionEngine<'ctx> {
         rw_list: Vec<common::MemoryAccess>,
     ) -> bool {
         log::info!("jump condition: {}", expression.clone());
-        // log::info!("memory accesses: {:?}", rw_list.clone());
+        log::info!("memory accesses: {:?}", rw_list.clone());
 
         // figure out relevant registers
-        let relevant_registers = expression.get_register_names();
-
+        let relevant_registers = expression.clone().get_register_names();
         let condition_to_ast =
-            common::comparison_to_ast(self.computer.context, expression).unwrap();
-        match self.computer.solver.check_assumptions(&[condition_to_ast]) {
-            SatResult::Sat => {
-                println!("SAT");
-                return false;
+            common::comparison_to_ast(self.computer.context, expression.clone()).unwrap();
+
+        if !self.in_loop {
+            if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
+                // LOOP has repeated twice
+                if last_jump_label == &label && last_rw_list.len() == rw_list.len() {
+                    for r in relevant_registers {
+                        self.computer.track_register(r);
+                    }
+                    self.in_loop = true;
+                    self.computer.solver.assert(&condition_to_ast);
+                    self.jump_history.push((label, expression.clone(), rw_list));
+                    self.computer.clear_rw_queue();
+                    // TODO: figure out substitution here?
+                    return false;
+                }
             }
-            SatResult::Unsat => {
-                println!("UNSAT");
-                return false;
-            }
-            SatResult::Unknown => {
-                println!("UNKNOWN");
-                return false;
+        } else {
+            if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
+                if last_jump_label == &label
+                    && last_jump_exp == &expression
+                    && last_rw_list == &rw_list
+                {
+                    return true;
+                }
             }
         }
 
+        self.jump_history.push((label, expression.clone(), rw_list));
+        self.computer.clear_rw_queue();
+        return false;
+
+        // return false;
+
         // TODO: rewrite with z3
 
-        // for e in &self.loop_state {
+        // for e in &self.jump_history {
         //     if e.0 == expression && e.1 == rw_list {
         //         // TODO replace ? with value
         //         let (left, right) = expression.reduce_solution();
@@ -412,12 +435,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
         //         return false;
         //     }
         // }
-
-        // self.loop_state.push((expression.clone(), rw_list));
-        // for r in relevant_registers {
-        //     self.computer.track_register(r);
-        // }
-        // self.computer.clear_rw_queue();
 
         // let (left, right) = expression.reduce_solution();
         // self.computer
