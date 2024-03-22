@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn basic_abstract_loop() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
         let reader = BufReader::new(file);
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn z3_complex_loop_with_mem_access_safe() -> std::io::Result<()> {
-        // env_logger::init();
+        env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
@@ -472,6 +472,33 @@ mod tests {
             (None, Some("length".to_string())),
         );
         engine.add_abstract_from(1, "length".to_string());
+
+        let res = engine.start("start".to_string());
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn z3_example_branch() -> std::io::Result<()> {
+        env_logger::init();
+
+        let mut program = Vec::new();
+        program.push("start:".to_string());
+        program.push("cmp x1,x2".to_string());
+        program.push("b.ne branch".to_string());
+        program.push("add x0,x0,#4".to_string());
+        program.push("b end".to_string());
+        program.push("branch:".to_string());
+        program.push("add x0,x0,#2".to_string());
+        program.push("end:".to_string());
+        program.push("ret".to_string());
+
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "left".to_string());
+        engine.add_abstract_from(1, "right".to_string());
 
         let res = engine.start("start".to_string());
         assert!(res.is_ok());

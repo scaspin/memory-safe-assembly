@@ -17,7 +17,8 @@ pub struct ExecutionEngine<'ctx> {
     pc: usize,
     in_loop: bool,
     jump_history: Vec<(
-        String,
+        usize,
+        bool,
         common::AbstractComparison,
         Vec<common::MemoryAccess>,
     )>,
@@ -134,6 +135,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
         };
     }
 
+    pub fn clone(&self) -> Self {
+        return self.clone();
+    }
+
     pub fn add_region(&mut self, region: common::MemorySafeRegion) {
         // FIX make better so don't have to convert to string
         match region.end.clone() {
@@ -247,7 +252,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let name = ("x".to_owned() + &register.to_string()).to_string();
         self.computer
             .set_abstract(name.clone(), common::AbstractExpression::Abstract(value));
-        // ast::Int::new_const(self.computer.context, name);
     }
 
     pub fn dont_fail_fast(&mut self) {
@@ -261,107 +265,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let program_length = self.program.code.len();
         let mut pc = 0;
-
-        for label in self.program.labels.clone() {
-            if label.0 == start {
-                pc = label.1;
-            }
+        match self.get_linenumber_of_label(start) {
+            Some(n) => pc = n,
+            _ => todo!(),
         }
 
-        while pc < program_length {
-            let mut instruction = self.program.code[pc].clone();
-
-            // skip instruction if it is a label
-            if instruction.op.contains(":") {
-                pc = pc + 1;
-                instruction = self.program.code[pc].clone();
-            }
-
-            log::info!("{:?}", instruction);
-
-            let execute_result = self.computer.execute(&instruction);
-            match execute_result {
-                Ok(some) => match some {
-                    Some(jump) => match jump {
-                        // (condition, label to jump to, line number to jump to)
-                        (Some(condition), Some(label), None) => {
-                            if self.evaluate_jump_condition(
-                                label.clone(),
-                                condition,
-                                self.computer.read_rw_queue(),
-                            ) {
-                                for l in self.program.labels.iter() {
-                                    if l.0.contains(&label.clone()) && label.contains(&l.0.clone())
-                                    {
-                                        pc = l.1;
-                                    }
-                                }
-                            } else {
-                                pc = pc + 1;
-                            }
-                        }
-                        (Some(condition), None, Some(address)) => {
-                            if self.evaluate_jump_condition(
-                                address.to_string(),
-                                condition,
-                                self.computer.read_rw_queue(),
-                            ) {
-                                if address == 0 {
-                                    // program is done
-                                    break;
-                                }
-                                pc = address as usize;
-                            } else {
-                                pc = pc + 1;
-                            }
-                        }
-                        (None, Some(label), None) => {
-                            if label == "Return".to_string() {
-                                break;
-                            }
-                            for l in self.program.labels.iter() {
-                                if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
-                                    pc = l.1;
-                                }
-                            }
-                        }
-                        (None, None, Some(address)) => {
-                            if address == 0 {
-                                // program is done
-                                break;
-                            }
-                            pc = address as usize;
-                        }
-                        (Some(condition), None, None) => {
-                            log::error!("No jump target for jump condition {}", condition)
-                        }
-                        (None, None, None)
-                        | (None, Some(_), Some(_))
-                        | (Some(_), Some(_), Some(_)) => {
-                            log::error!(
-                                "Execute did not return valid response for jump or continue"
-                            )
-                        }
-                    },
-                    None => {
-                        pc = pc + 1;
-                    }
-                },
-                Err(err) => {
-                    log::error!(
-                        "At line {:?} instruction {:?} error {:?}",
-                        pc,
-                        instruction,
-                        err
-                    );
-                    if self.fail_fast {
-                        return Err(Error::new(ErrorKind::Other, err));
-                    }
-                    pc = pc + 1;
-                }
-            }
-
-            self.pc = pc;
+        // run is recursive
+        let res = self.run(pc);
+        match res {
+            Ok(_) => (),
+            Err(err) => return Err(Error::new(ErrorKind::Other, err)),
         }
 
         self.computer.check_stack_pointer_restored();
@@ -369,15 +282,160 @@ impl<'ctx> ExecutionEngine<'ctx> {
         Ok(())
     }
 
+    fn run(&mut self, pc: usize) -> std::io::Result<()> {
+        let mut instruction = self.program.code[pc].clone();
+        
+        // skip instruction if it is a label
+        if instruction.op.contains(":") {
+            return self.run(pc + 1);
+        }
+
+        log::info!("{:?}: {:?}", pc, instruction);
+
+        let execute_result = self.computer.execute(&instruction);
+        log::info!("result: {:?}", execute_result);
+        match execute_result {
+            Ok(some) => {
+                match some {
+                    Some(jump) => match jump {
+                        // (condition, label to jump to, line number to jump to)
+                        (Some(condition), Some(label), None) => {
+                            let mut jump_dest = 0;
+                            match self.get_linenumber_of_label(label.clone()) {
+                                Some(i) => jump_dest = i,
+                                None => return Err(Error::new(ErrorKind::Other, "No label")),
+                            }
+                            match self.evaluate_branch_condition(
+                                label.clone(),
+                                condition.clone(),
+                                self.computer.read_rw_queue(),
+                            ) {
+                                None => {
+                                    // let mut clone1 = self.clone().run(jump_dest);
+                                    // log::info!("exploring line: {}", jump_dest);
+                                    // let res1 = clone1.run(jump_dest);
+                                    // res1
+                                    Ok(())
+                                    // log::info!("exploring line: {}", jump_dest.clone());
+                                    // let res2 = clone2.run(jump_dest);
+                                    // match (res1, res2) {
+                                    //     (Ok(_), Ok(_)) => return Ok(()),
+                                    //     (Err(err), Ok(_)) => {
+                                    //         return Err(Error::new(ErrorKind::Other, err))
+                                    //     }
+                                    //     (Ok(_), Err(err)) => {
+                                    //         return Err(Error::new(ErrorKind::Other, err))
+                                    //     }
+                                    //     (Err(e1), Err(e2)) => {
+                                    //         //TODO: reflect 2nd error
+                                    //         return Err(Error::new(ErrorKind::Other, e1));
+                                    //     }
+                                    // }
+                                }
+                                Some(true) => {
+                                    let linenum = self.get_linenumber_of_label(label.clone());
+                                    match linenum {
+                                        Some(n) => {
+                                            self.jump_history.push((
+                                                pc,
+                                                true,
+                                                condition,
+                                                self.computer.read_rw_queue(),
+                                            ));
+                                            return self.run(n+1);
+                                        }
+                                        None => {
+                                            log::error!("No label line for label {}", label);
+                                            return Err(Error::new(ErrorKind::Other, "No label"));
+                                        }
+                                    }
+                                }
+                                Some(false) => { 
+                                    self.jump_history.push((
+                                        pc,
+                                        false,
+                                        condition,
+                                        self.computer.read_rw_queue(),
+                                    ));
+                                    log::info!("exploring line: {}", pc + 1);
+                                    return self.run(pc + 1);
+                                }
+                            }
+                        }
+                        (Some(condition), None, Some(address)) => {
+                            todo!();
+                        }
+                        (None, Some(label), None) => {
+                            log::info!("returning: {}", pc);
+                            if &label == "Return" {
+                                return Ok(());
+                            }
+                            let newline = self.get_linenumber_of_label(label.clone());
+                            match newline {
+                                Some(n) => {
+                                    log::info!("jumping to: {}", n);
+                                    return self.run(n+1);
+                                }
+                                None => {
+                                    log::error!("No label line for label {}", label);
+                                    return Err(Error::new(ErrorKind::Other, "No label"));
+                                }
+                            }
+                        }
+                        (None, None, Some(address)) => {
+
+                            return self.run(address as usize);
+                        }
+                        (Some(_), None, None)
+                        | (None, None, None)
+                        | (None, Some(_), Some(_))
+                        | (Some(_), Some(_), Some(_)) => {
+                            log::error!(
+                                "Execute did not return valid response for jump or continue"
+                            );
+                            return Err(Error::new(
+                                ErrorKind::Other,
+                                "Execute did not return valid response for jump or continue",
+                            ));
+                        }
+                    },
+                    None => return self.run(pc + 1),
+                }
+            }
+            Err(err) => {
+                log::error!(
+                    "At line {:?} instruction {:?} error {:?}",
+                    pc,
+                    instruction,
+                    err
+                );
+                if self.fail_fast {
+                    return Err(Error::new(ErrorKind::Other, err));
+                }
+                return self.run(pc + 1);
+            }
+        }
+    }
+
+    fn get_linenumber_of_label(&self, label: String) -> Option<usize> {
+        for l in self.program.labels.iter() {
+            if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
+                return Some(l.1);
+            }
+        }
+        None
+    }
+
     // if true, we jump
     // if false, we continue
+    // if None, we explore both
     // BIG TODO
-    fn evaluate_jump_condition(
+    fn evaluate_branch_condition(
         &mut self,
         label: String,
         expression: common::AbstractComparison,
         rw_list: Vec<common::MemoryAccess>,
-    ) -> bool {
+    ) -> Option<bool> {
         log::info!("jump condition: {}", expression.clone());
         log::info!("memory accesses: {:?}", rw_list.clone());
 
@@ -386,35 +444,35 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let condition_to_ast =
             common::comparison_to_ast(self.computer.context, expression.clone()).unwrap();
 
-        if !self.in_loop {
-            if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
-                // LOOP has repeated twice
-                if last_jump_label == &label && last_rw_list.len() == rw_list.len() {
-                    for r in relevant_registers {
-                        self.computer.track_register(r);
-                    }
-                    self.in_loop = true;
-                    self.computer.solver.assert(&condition_to_ast);
-                    self.jump_history.push((label, expression, rw_list));
-                    self.computer.clear_rw_queue();
-                    return true;
-                }
-            }
-        } else {
-            // TODO: maybe add shortcut out when there are no memory accesses in the loop?
-            if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
-                if last_jump_label == &label
-                    && last_jump_exp == &expression
-                    && last_rw_list == &rw_list
-                {
-                    return false;
-                }
-            }
-        }
+        // if !self.in_loop {
+        //     if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
+        //         // LOOP has repeated twice
+        //         if last_jump_label == &label && last_rw_list.len() == rw_list.len() {
+        //             for r in relevant_registers {
+        //                 self.computer.track_register(r);
+        //             }
+        //             self.in_loop = true;
+        //             self.computer.solver.assert(&condition_to_ast);
+        //             // self.jump_history.push((label, expression, rw_list));
+        //             self.computer.clear_rw_queue();
+        //             return None;
+        //         }
+        //     }
+        // } else {
+        //     // TODO: maybe add shortcut out when there are no memory accesses in the loop?
+        //     if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
+        //         if last_jump_label == &label
+        //             && last_jump_exp == &expression
+        //             && last_rw_list == &rw_list
+        //         {
+        //             return Some(true);
+        //         }
+        //     }
+        // }
 
-        self.jump_history.push((label, expression.clone(), rw_list));
+        // self.jump_history.push((label, expression.clone(), rw_list));
         self.computer.clear_rw_queue();
-        return false;
+        return Some(false);
 
         // return false;
 

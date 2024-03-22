@@ -410,7 +410,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 if x30.kind == RegisterKind::Address {
                     if let Some(AbstractExpression::Abstract(address)) = x30.base {
                         if address == "Return" && x30.offset == 0 {
-                            return Ok(Some((None, None, Some(0))));
+                            return Ok(Some((None, Some("Return".to_string()),None)));
                         }
                     }
                     return Ok(Some((None, None, Some(x30.offset.try_into().unwrap()))));
