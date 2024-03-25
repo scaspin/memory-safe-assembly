@@ -4,6 +4,7 @@ use z3::*;
 use crate::common;
 use crate::computer;
 
+#[derive(Clone)]
 struct Program {
     defs: Vec<String>,
     code: Vec<common::Instruction>,
@@ -136,7 +137,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn clone(&self) -> Self {
-        return self.clone();
+        return Self {
+            program: self.program.clone(),
+            computer: self.computer.clone(),
+            pc: self.pc,
+            in_loop: self.in_loop,
+            jump_history: self.jump_history.clone(),
+            fail_fast: self.fail_fast,
+        };
     }
 
     pub fn add_region(&mut self, region: common::MemorySafeRegion) {
@@ -284,7 +292,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     fn run(&mut self, pc: usize) -> std::io::Result<()> {
         let mut instruction = self.program.code[pc].clone();
-        
+
         // skip instruction if it is a label
         if instruction.op.contains(":") {
             return self.run(pc + 1);
@@ -301,6 +309,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         // (condition, label to jump to, line number to jump to)
                         (Some(condition), Some(label), None) => {
                             let mut jump_dest = 0;
+                            let rw_list = self.computer.read_rw_queue();
                             match self.get_linenumber_of_label(label.clone()) {
                                 Some(i) => jump_dest = i,
                                 None => return Err(Error::new(ErrorKind::Other, "No label")),
@@ -308,29 +317,48 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             match self.evaluate_branch_condition(
                                 label.clone(),
                                 condition.clone(),
-                                self.computer.read_rw_queue(),
+                                rw_list.clone(),
                             ) {
                                 None => {
-                                    // let mut clone1 = self.clone().run(jump_dest);
-                                    // log::info!("exploring line: {}", jump_dest);
-                                    // let res1 = clone1.run(jump_dest);
-                                    // res1
-                                    Ok(())
-                                    // log::info!("exploring line: {}", jump_dest.clone());
-                                    // let res2 = clone2.run(jump_dest);
-                                    // match (res1, res2) {
-                                    //     (Ok(_), Ok(_)) => return Ok(()),
-                                    //     (Err(err), Ok(_)) => {
-                                    //         return Err(Error::new(ErrorKind::Other, err))
-                                    //     }
-                                    //     (Ok(_), Err(err)) => {
-                                    //         return Err(Error::new(ErrorKind::Other, err))
-                                    //     }
-                                    //     (Err(e1), Err(e2)) => {
-                                    //         //TODO: reflect 2nd error
-                                    //         return Err(Error::new(ErrorKind::Other, e1));
-                                    //     }
-                                    // }
+                                    // let mut clone1 = self.clone();
+                                    let mut clone = self.clone();
+                                    self.jump_history.push((
+                                        pc,
+                                        true,
+                                        condition.clone(),
+                                        rw_list.clone(),
+                                    ));
+                                    log::info!(
+                                        "exploring jump branch starting line: {:?}",
+                                        jump_dest
+                                    );
+                                    let res1 = self.run(jump_dest);
+
+                                    clone.jump_history.push((
+                                        pc,
+                                        false,
+                                        condition.clone(),
+                                        rw_list,
+                                    ));
+                                    log::info!(
+                                        "exploring non-jump branch starting line: {:?}",
+                                        pc + 1
+                                    );
+                                    let res2 = clone.run(pc + 1);
+
+                                    match (res1, res2) {
+                                        (Ok(_), Ok(_)) => return Ok(()),
+                                        (Err(err), Ok(_)) => {
+                                            return Err(Error::new(ErrorKind::Other, err))
+                                        }
+                                        (Ok(_), Err(err)) => {
+                                            return Err(Error::new(ErrorKind::Other, err))
+                                        }
+                                        (Err(e1), Err(e2)) => {
+                                            //TODO: reflect 2nd error
+                                            return Err(Error::new(ErrorKind::Other, e1));
+                                        }
+                                    }
                                 }
                                 Some(true) => {
                                     let linenum = self.get_linenumber_of_label(label.clone());
@@ -342,7 +370,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                                 condition,
                                                 self.computer.read_rw_queue(),
                                             ));
-                                            return self.run(n+1);
+                                            return self.run(n + 1);
                                         }
                                         None => {
                                             log::error!("No label line for label {}", label);
@@ -350,7 +378,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         }
                                     }
                                 }
-                                Some(false) => { 
+                                Some(false) => {
                                     self.jump_history.push((
                                         pc,
                                         false,
@@ -374,7 +402,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             match newline {
                                 Some(n) => {
                                     log::info!("jumping to: {}", n);
-                                    return self.run(n+1);
+                                    return self.run(n + 1);
                                 }
                                 None => {
                                     log::error!("No label line for label {}", label);
@@ -383,7 +411,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             }
                         }
                         (None, None, Some(address)) => {
-
                             return self.run(address as usize);
                         }
                         (Some(_), None, None)
@@ -444,35 +471,48 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let condition_to_ast =
             common::comparison_to_ast(self.computer.context, expression.clone()).unwrap();
 
-        // if !self.in_loop {
-        //     if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
-        //         // LOOP has repeated twice
-        //         if last_jump_label == &label && last_rw_list.len() == rw_list.len() {
-        //             for r in relevant_registers {
-        //                 self.computer.track_register(r);
-        //             }
-        //             self.in_loop = true;
-        //             self.computer.solver.assert(&condition_to_ast);
-        //             // self.jump_history.push((label, expression, rw_list));
-        //             self.computer.clear_rw_queue();
-        //             return None;
-        //         }
-        //     }
-        // } else {
-        //     // TODO: maybe add shortcut out when there are no memory accesses in the loop?
-        //     if let Some((last_jump_label, last_jump_exp, last_rw_list)) = self.jump_history.last() {
-        //         if last_jump_label == &label
-        //             && last_jump_exp == &expression
-        //             && last_rw_list == &rw_list
-        //         {
-        //             return Some(true);
-        //         }
-        //     }
-        // }
+        if !self.in_loop {
+            if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
+                self.jump_history.last()
+            {
+                // LOOP has repeated twice
+                if last_jump_label == &self.get_linenumber_of_label(label).unwrap()
+                    && last_rw_list.len() == rw_list.len()
+                {
+                    for r in relevant_registers {
+                        self.computer.track_register(r);
+                    }
+                    self.in_loop = true;
+                    self.computer.solver.assert(&condition_to_ast);
+                    self.computer.clear_rw_queue();
+                    return Some(true);
+                } else {
+                    return Some(*branch_decision);
+                }
+            } else {
+                return None;
+            }
+        } else {
+            // TODO: maybe add shortcut out when there are no memory accesses in the loop?
+            if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
+                self.jump_history.last()
+            {
+                if last_jump_label == &self.get_linenumber_of_label(label).unwrap()
+                    && last_jump_exp == &expression
+                    && last_rw_list == &rw_list
+                {
+                    return Some(!branch_decision);
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
 
         // self.jump_history.push((label, expression.clone(), rw_list));
-        self.computer.clear_rw_queue();
-        return Some(false);
+        // self.computer.clear_rw_queue();
+        // return None;
 
         // return false;
 
