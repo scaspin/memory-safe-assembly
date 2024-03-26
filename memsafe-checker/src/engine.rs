@@ -90,8 +90,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
             }
         }
 
-        // create z3 context
-
         let mut computer = computer::ARMCORTEXA::new(context);
 
         // load computer static memory
@@ -281,7 +279,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             Err(err) => return Err(Error::new(ErrorKind::Other, err)),
         }
 
-        Ok(self.computer.check_stack_pointer_restored())
+        Ok(())
     }
 
     fn run(&mut self, pc: usize) -> std::io::Result<()> {
@@ -299,7 +297,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
         log::info!("{:?}: {:?}", pc, instruction);
 
         let execute_result = self.computer.execute(&instruction);
-        log::info!("result: {:?}", execute_result);
         match execute_result {
             Ok(some) => {
                 match some {
@@ -313,14 +310,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 None => return Err(Error::new(ErrorKind::Other, "No label")),
                             }
                             match self.evaluate_branch_condition(
-                                label.clone(),
+                                pc.clone(),
                                 condition.clone(),
                                 rw_list.clone(),
                             ) {
                                 None => {
                                     let mut clone = self.clone();
                                     self.jump_history.push((
-                                        pc,
+                                        jump_dest,
                                         true,
                                         condition.clone(),
                                         rw_list.clone(),
@@ -330,6 +327,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         jump_dest
                                     );
                                     // TODO: add jump condition as assertion
+                                    self.add_constraint(condition.clone(), true);
                                     let res1 = self.run(jump_dest);
 
                                     clone.jump_history.push((
@@ -343,6 +341,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         pc + 1
                                     );
                                     // TODO: add false condition as assertion
+                                    clone.add_constraint(condition, false);
                                     let res2 = clone.run(pc + 1);
 
                                     match (res1, res2) {
@@ -454,13 +453,22 @@ impl<'ctx> ExecutionEngine<'ctx> {
         None
     }
 
+    fn add_constraint(&self, constraint: common::AbstractComparison, decision: bool) {
+        let c = common::comparison_to_ast(self.computer.context, constraint).unwrap();
+        if decision {
+            self.computer.solver.assert(&c);
+        } else {
+            self.computer.solver.assert(&c.not());
+        }
+    }
+
     // if true, we jump
     // if false, we continue
     // if None, we explore both
     // BIG TODO
     fn evaluate_branch_condition(
         &mut self,
-        label: String,
+        pc: usize,
         expression: common::AbstractComparison,
         rw_list: Vec<common::MemoryAccess>,
     ) -> Option<bool> {
@@ -476,15 +484,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
             if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
                 self.jump_history.last()
             {
-                // LOOP has repeated twice
-                if last_jump_label == &self.get_linenumber_of_label(label).unwrap()
-                    && last_rw_list.len() == rw_list.len()
-                {
-                    if last_rw_list == &rw_list {
-                        // branch out
-                        return Some(*branch_decision);
-                    }
-
+                // LOOP has repeated at least twice
+                if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
                     // TODO: figure out step function from rw_list and expression
                     for r in relevant_registers {
                         self.computer.track_register(r);
@@ -492,7 +493,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     self.in_loop = true;
                     self.computer.solver.assert(&condition_to_ast);
                     self.computer.clear_rw_queue();
-                    return Some(true);
+                    return None;
                 } else {
                     return Some(*branch_decision);
                 }
@@ -504,7 +505,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
                 self.jump_history.last()
             {
-                if last_jump_label == &self.get_linenumber_of_label(label).unwrap()
+                if last_jump_label == &pc
                     && last_jump_exp == &expression
                     && last_rw_list == &rw_list
                 {

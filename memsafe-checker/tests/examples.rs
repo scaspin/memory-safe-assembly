@@ -328,8 +328,8 @@ mod tests {
     }
 
     #[test]
-    fn z3_simple_loop_no_mem_access() -> std::io::Result<()> {
-        // env_logger::init();
+    fn z3_simple_loop_with_no_mem_access() -> std::io::Result<()> {
+        env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
-        // env_logger::init();
+        //env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn z3_example_branch() -> std::io::Result<()> {
-        env_logger::init();
+        //env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
