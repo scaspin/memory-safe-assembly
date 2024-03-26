@@ -15,7 +15,6 @@ struct Program {
 pub struct ExecutionEngine<'ctx> {
     program: Program,
     computer: computer::ARMCORTEXA<'ctx>,
-    pc: usize,
     in_loop: bool,
     jump_history: Vec<(
         usize,
@@ -129,7 +128,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 ifdefs,
             },
             computer,
-            pc: 0,
             jump_history: Vec::new(),
             in_loop: false,
             fail_fast: true,
@@ -140,7 +138,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
         return Self {
             program: self.program.clone(),
             computer: self.computer.clone(),
-            pc: self.pc,
             in_loop: self.in_loop,
             jump_history: self.jump_history.clone(),
             fail_fast: self.fail_fast,
@@ -271,7 +268,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
-        let program_length = self.program.code.len();
         let mut pc = 0;
         match self.get_linenumber_of_label(start) {
             Some(n) => pc = n,
@@ -285,13 +281,15 @@ impl<'ctx> ExecutionEngine<'ctx> {
             Err(err) => return Err(Error::new(ErrorKind::Other, err)),
         }
 
-        self.computer.check_stack_pointer_restored();
-
-        Ok(())
+        Ok(self.computer.check_stack_pointer_restored())
     }
 
     fn run(&mut self, pc: usize) -> std::io::Result<()> {
-        let mut instruction = self.program.code[pc].clone();
+        if pc == self.program.code.len() {
+            return Ok(self.computer.check_stack_pointer_restored());
+        }
+
+        let instruction = self.program.code[pc].clone();
 
         // skip instruction if it is a label
         if instruction.op.contains(":") {
@@ -320,7 +318,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 rw_list.clone(),
                             ) {
                                 None => {
-                                    // let mut clone1 = self.clone();
                                     let mut clone = self.clone();
                                     self.jump_history.push((
                                         pc,
@@ -332,6 +329,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         "exploring jump branch starting line: {:?}",
                                         jump_dest
                                     );
+                                    // TODO: add jump condition as assertion
                                     let res1 = self.run(jump_dest);
 
                                     clone.jump_history.push((
@@ -344,15 +342,18 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         "exploring non-jump branch starting line: {:?}",
                                         pc + 1
                                     );
+                                    // TODO: add false condition as assertion
                                     let res2 = clone.run(pc + 1);
 
                                     match (res1, res2) {
                                         (Ok(_), Ok(_)) => return Ok(()),
                                         (Err(err), Ok(_)) => {
-                                            return Err(Error::new(ErrorKind::Other, err))
+                                            log::error!("{:?}: {:?}", pc, err);
+                                            return Err(Error::new(ErrorKind::Other, err));
                                         }
                                         (Ok(_), Err(err)) => {
-                                            return Err(Error::new(ErrorKind::Other, err))
+                                            log::error!("{:?}: {:?}", pc, err);
+                                            return Err(Error::new(ErrorKind::Other, err));
                                         }
                                         (Err(e1), Err(e2)) => {
                                             //TODO: reflect 2nd error
@@ -396,7 +397,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         (None, Some(label), None) => {
                             log::info!("returning: {}", pc);
                             if &label == "Return" {
-                                return Ok(());
+                                return Ok(self.computer.check_stack_pointer_restored());
                             }
                             let newline = self.get_linenumber_of_label(label.clone());
                             match newline {
@@ -479,6 +480,12 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 if last_jump_label == &self.get_linenumber_of_label(label).unwrap()
                     && last_rw_list.len() == rw_list.len()
                 {
+                    if last_rw_list == &rw_list {
+                        // branch out
+                        return Some(*branch_decision);
+                    }
+
+                    // TODO: figure out step function from rw_list and expression
                     for r in relevant_registers {
                         self.computer.track_register(r);
                     }
