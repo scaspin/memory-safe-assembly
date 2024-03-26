@@ -150,6 +150,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 region.base.to_string(),
                 (Some(i.try_into().unwrap()), None),
             ),
+            common::AbstractExpression::Expression(..) => todo!(),
             _ => self.add_region_from(
                 region.region_type,
                 region.base.to_string(),

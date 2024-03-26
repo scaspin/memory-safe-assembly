@@ -403,11 +403,19 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "base".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
-            "base".to_string(),
-            (None, Some("length+4".to_string())), // TODO: make this abstract
+        engine.add_abstract_from(1, "blocks".to_string());
+
+        let length = common::AbstractExpression::Expression(
+            "lsl".to_string(),
+            Box::new(common::AbstractExpression::Abstract("blocks".to_string())),
+            Box::new(common::AbstractExpression::Immediate(4)),
         );
+        engine.add_region(common::MemorySafeRegion {
+            region_type: common::RegionType::READ,
+            base: "base".to_string(),
+            start: common::AbstractExpression::Immediate(0),
+            end: length,
+        });
 
         let res = engine.start("start".to_string());
         assert!(res.is_ok());
