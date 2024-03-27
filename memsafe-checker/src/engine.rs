@@ -1,8 +1,10 @@
 use std::io::{Error, ErrorKind};
+use z3::*;
 
 use crate::common;
 use crate::computer;
 
+#[derive(Clone)]
 struct Program {
     defs: Vec<String>,
     code: Vec<common::Instruction>,
@@ -10,16 +12,21 @@ struct Program {
     ifdefs: Vec<((String, usize), usize)>,
 }
 
-pub struct ExecutionEngine {
+pub struct ExecutionEngine<'ctx> {
     program: Program,
-    computer: computer::ARMCORTEXA,
-    pc: usize,
-    loop_state: Vec<(common::AbstractExpression, Vec<common::MemoryAccess>)>,
+    computer: computer::ARMCORTEXA<'ctx>,
+    in_loop: bool,
+    jump_history: Vec<(
+        usize,
+        bool,
+        common::AbstractComparison,
+        Vec<common::MemoryAccess>,
+    )>,
     fail_fast: bool,
 }
 
-impl ExecutionEngine {
-    pub fn new(lines: Vec<String>) -> ExecutionEngine {
+impl<'ctx> ExecutionEngine<'ctx> {
+    pub fn new(lines: Vec<String>, context: &'ctx Context) -> ExecutionEngine<'ctx> {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
         let mut code: Vec<common::Instruction> = Vec::new();
@@ -83,7 +90,7 @@ impl ExecutionEngine {
             }
         }
 
-        let mut computer = computer::ARMCORTEXA::new();
+        let mut computer = computer::ARMCORTEXA::new(context);
 
         // load computer static memory
         let mut address = 4;
@@ -119,15 +126,37 @@ impl ExecutionEngine {
                 ifdefs,
             },
             computer,
-            pc: 0,
-            loop_state: Vec::new(),
+            jump_history: Vec::new(),
+            in_loop: false,
             fail_fast: true,
         };
     }
 
+    pub fn clone(&self) -> Self {
+        return Self {
+            program: self.program.clone(),
+            computer: self.computer.clone(),
+            in_loop: self.in_loop,
+            jump_history: self.jump_history.clone(),
+            fail_fast: self.fail_fast,
+        };
+    }
+
     pub fn add_region(&mut self, region: common::MemorySafeRegion) {
-        // self.memory_regions.push(region);
-        self.computer.set_region(region);
+        // FIX make better so don't have to convert to string
+        match region.end.clone() {
+            common::AbstractExpression::Immediate(i) => self.add_region_from(
+                region.region_type,
+                region.base.to_string(),
+                (Some(i.try_into().unwrap()), None),
+            ),
+            common::AbstractExpression::Expression(..) => todo!(),
+            _ => self.add_region_from(
+                region.region_type,
+                region.base.to_string(),
+                (None, Some(region.end.to_string())),
+            ),
+        }
     }
 
     pub fn add_region_from(
@@ -138,27 +167,85 @@ impl ExecutionEngine {
     ) {
         match length {
             (Some(num), _) => {
+                // FIX: decide whether to include alignment or not
+                let region_size = ((num.clone() as i64) - 1) * self.computer.alignment;
+
                 self.computer.set_region(common::MemorySafeRegion {
                     region_type: ty,
-                    base: common::AbstractExpression::Abstract(base.clone()),
+                    base: base.clone(),
                     start: common::AbstractExpression::Immediate(0),
-                    end: common::AbstractExpression::Immediate((num.clone() as i64) * 8),
+                    end: common::AbstractExpression::Immediate(region_size.clone()),
                 });
+
+                let zero = ast::Int::from_i64(self.computer.context, 0);
+                // define bound of region with respect to the pointer
+                let bound = ast::Int::from_i64(self.computer.context, region_size);
+                let abs_base = ast::Int::new_const(self.computer.context, base.clone());
+                let lower_bound = ast::Int::add(self.computer.context, &[&abs_base, &zero]);
+                let upper_bound = ast::Int::add(self.computer.context, &[&abs_base, &bound]);
+
+                let pointer =
+                    ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
+
+                // basics are positive
+                self.computer.solver.assert(&lower_bound.ge(&zero));
+                self.computer.solver.assert(&upper_bound.ge(&zero));
+                self.computer.solver.assert(&abs_base.ge(&zero));
+
+                // address is positive
+                self.computer.solver.assert(&pointer.ge(&zero));
+                // can access this region starting with 0
+                self.computer.solver.assert(&pointer.ge(&lower_bound));
+                // can access this region up to and including address of upper bound
+                self.computer.solver.assert(&pointer.le(&upper_bound));
             }
             (None, Some(abs)) => {
+                let zero = ast::Int::from_i64(self.computer.context, 0);
+                let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
+                let bound = ast::Int::new_const(self.computer.context, abs.clone());
+                let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
+                let abstract_pointer_from_base =
+                    ast::Int::new_const(self.computer.context, base.clone());
+
+                // upper bound is the base pointer + bound value - alignment
+                let upper_bound = ast::Int::add(
+                    self.computer.context,
+                    &[&abstract_pointer_from_base, &bound_aligned],
+                );
+
                 self.computer.set_region(common::MemorySafeRegion {
                     region_type: ty,
-                    base: common::AbstractExpression::Abstract(base.clone()),
+                    base: base.clone(),
                     start: common::AbstractExpression::Immediate(0),
-                    end: common::AbstractExpression::Abstract(abs.clone()),
+                    end: common::AbstractExpression::Expression(
+                        "-".to_string(),
+                        Box::new(common::AbstractExpression::Abstract(abs.clone())),
+                        Box::new(common::AbstractExpression::Immediate(
+                            self.computer.alignment,
+                        )),
+                    ),
                 });
+
+                let pointer =
+                    ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
+
+                // can access this region starting with 0
+                self.computer
+                    .solver
+                    .assert(&abstract_pointer_from_base.ge(&zero));
+
+                // can access this region up to and including address of upper bound
+                self.computer.solver.assert(&pointer.le(&upper_bound));
             }
             (_, _) => (), // should never happen! just to be safe
         }
+
+        // println!("constraints: {:?}", self.computer.solver.get_assertions());
     }
 
     pub fn add_immediate(&mut self, register: String, value: usize) {
         self.computer.set_immediate(register, value as u64);
+        // ast::Int::from_i64(self.computer.context, value as i64);
     }
 
     pub fn add_abstract(&mut self, register: String, value: common::AbstractExpression) {
@@ -166,10 +253,9 @@ impl ExecutionEngine {
     }
 
     pub fn add_abstract_from(&mut self, register: usize, value: String) {
-        self.computer.set_abstract(
-            ("x".to_owned() + &register.to_string()).to_string(),
-            common::AbstractExpression::Abstract(value),
-        );
+        let name = ("x".to_owned() + &register.to_string()).to_string();
+        self.computer
+            .set_abstract(name.clone(), common::AbstractExpression::Abstract(value));
     }
 
     pub fn dont_fail_fast(&mut self) {
@@ -181,156 +267,288 @@ impl ExecutionEngine {
     }
 
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
-        let program_length = self.program.code.len();
         let mut pc = 0;
-
-        for label in self.program.labels.clone() {
-            if label.0 == start {
-                pc = label.1;
-            }
+        match self.get_linenumber_of_label(start) {
+            Some(n) => pc = n,
+            _ => todo!(),
         }
 
-        while pc < program_length {
-            let mut instruction = self.program.code[pc].clone();
-
-            // skip instruction if it is a label
-            if instruction.op.contains(":") {
-                pc = pc + 1;
-                instruction = self.program.code[pc].clone();
-            }
-
-            log::info!("{:?}", instruction);
-
-            let execute_result = self.computer.execute(&instruction);
-            match execute_result {
-                Ok(some) => match some {
-                    Some(jump) => match jump {
-                        // (condition, label to jump to, line number to jump to)
-                        (Some(condition), Some(label), None) => {
-                            if self
-                                .evaluate_jump_condition(condition, self.computer.read_rw_queue())
-                            {
-                                for l in self.program.labels.iter() {
-                                    if l.0.contains(&label.clone()) && label.contains(&l.0.clone())
-                                    {
-                                        pc = l.1;
-                                    }
-                                }
-                            } else {
-                                pc = pc + 1;
-                            }
-                        }
-                        (Some(condition), None, Some(address)) => {
-                            if self
-                                .evaluate_jump_condition(condition, self.computer.read_rw_queue())
-                            {
-                                if address == 0 {
-                                    // program is done
-                                    break;
-                                }
-                                pc = address as usize;
-                            } else {
-                                pc = pc + 1;
-                            }
-                        }
-                        (None, Some(label), None) => {
-                            if label == "Return".to_string() {
-                                break;
-                            }
-                            for l in self.program.labels.iter() {
-                                if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
-                                    pc = l.1;
-                                }
-                            }
-                        }
-                        (None, None, Some(address)) => {
-                            if address == 0 {
-                                // program is done
-                                break;
-                            }
-                            pc = address as usize;
-                        }
-                        (Some(condition), None, None) => {
-                            log::error!("No jump target for jump condition {}", condition)
-                        }
-                        (None, None, None)
-                        | (None, Some(_), Some(_))
-                        | (Some(_), Some(_), Some(_)) => {
-                            log::error!(
-                                "Execute did not return valid response for jump or continue"
-                            )
-                        }
-                    },
-                    None => {
-                        pc = pc + 1;
-                    }
-                },
-                Err(err) => {
-                    log::error!(
-                        "At line {:?} instruction {:?} error {:?}",
-                        pc,
-                        instruction,
-                        err
-                    );
-                    if self.fail_fast {
-                        return Err(Error::new(ErrorKind::Other, err));
-                    }
-                    pc = pc + 1;
-                }
-            }
-
-            self.pc = pc;
+        // run is recursive
+        let res = self.run(pc);
+        match res {
+            Ok(_) => (),
+            Err(err) => return Err(Error::new(ErrorKind::Other, err)),
         }
-
-        self.computer.check_stack_pointer_restored();
 
         Ok(())
     }
 
+    fn run(&mut self, pc: usize) -> std::io::Result<()> {
+        if pc == self.program.code.len() {
+            return Ok(self.computer.check_stack_pointer_restored());
+        }
+
+        let instruction = self.program.code[pc].clone();
+
+        // skip instruction if it is a label
+        if instruction.op.contains(":") {
+            return self.run(pc + 1);
+        }
+
+        log::info!("{:?}: {:?}", pc, instruction);
+
+        let execute_result = self.computer.execute(&instruction);
+        match execute_result {
+            Ok(some) => {
+                match some {
+                    Some(jump) => match jump {
+                        // (condition, label to jump to, line number to jump to)
+                        (Some(condition), Some(label), None) => {
+                            let mut jump_dest = 0;
+                            let rw_list = self.computer.read_rw_queue();
+                            match self.get_linenumber_of_label(label.clone()) {
+                                Some(i) => jump_dest = i,
+                                None => return Err(Error::new(ErrorKind::Other, "No label")),
+                            }
+                            match self.evaluate_branch_condition(
+                                pc.clone(),
+                                condition.clone(),
+                                rw_list.clone(),
+                            ) {
+                                None => {
+                                    let mut clone = self.clone();
+                                    self.jump_history.push((
+                                        jump_dest,
+                                        true,
+                                        condition.clone(),
+                                        rw_list.clone(),
+                                    ));
+                                    log::info!(
+                                        "exploring jump branch starting line: {:?}",
+                                        jump_dest
+                                    );
+                                    // TODO: add jump condition as assertion
+                                    self.add_constraint(condition.clone(), true);
+                                    let res1 = self.run(jump_dest);
+
+                                    clone.jump_history.push((
+                                        pc,
+                                        false,
+                                        condition.clone(),
+                                        rw_list,
+                                    ));
+                                    log::info!(
+                                        "exploring non-jump branch starting line: {:?}",
+                                        pc + 1
+                                    );
+                                    // TODO: add false condition as assertion
+                                    clone.add_constraint(condition, false);
+                                    let res2 = clone.run(pc + 1);
+
+                                    match (res1, res2) {
+                                        (Ok(_), Ok(_)) => return Ok(()),
+                                        (Err(err), Ok(_)) => {
+                                            log::error!("{:?}: {:?}", pc, err);
+                                            return Err(Error::new(ErrorKind::Other, err));
+                                        }
+                                        (Ok(_), Err(err)) => {
+                                            log::error!("{:?}: {:?}", pc, err);
+                                            return Err(Error::new(ErrorKind::Other, err));
+                                        }
+                                        (Err(e1), Err(e2)) => {
+                                            //TODO: reflect 2nd error
+                                            return Err(Error::new(ErrorKind::Other, e1));
+                                        }
+                                    }
+                                }
+                                Some(true) => {
+                                    let linenum = self.get_linenumber_of_label(label.clone());
+                                    match linenum {
+                                        Some(n) => {
+                                            self.jump_history.push((
+                                                pc,
+                                                true,
+                                                condition,
+                                                self.computer.read_rw_queue(),
+                                            ));
+                                            return self.run(n + 1);
+                                        }
+                                        None => {
+                                            log::error!("No label line for label {}", label);
+                                            return Err(Error::new(ErrorKind::Other, "No label"));
+                                        }
+                                    }
+                                }
+                                Some(false) => {
+                                    self.jump_history.push((
+                                        pc,
+                                        false,
+                                        condition,
+                                        self.computer.read_rw_queue(),
+                                    ));
+                                    log::info!("exploring line: {}", pc + 1);
+                                    return self.run(pc + 1);
+                                }
+                            }
+                        }
+                        (Some(condition), None, Some(address)) => {
+                            todo!();
+                        }
+                        (None, Some(label), None) => {
+                            log::info!("returning: {}", pc);
+                            if &label == "Return" {
+                                return Ok(self.computer.check_stack_pointer_restored());
+                            }
+                            let newline = self.get_linenumber_of_label(label.clone());
+                            match newline {
+                                Some(n) => {
+                                    log::info!("jumping to: {}", n);
+                                    return self.run(n + 1);
+                                }
+                                None => {
+                                    log::error!("No label line for label {}", label);
+                                    return Err(Error::new(ErrorKind::Other, "No label"));
+                                }
+                            }
+                        }
+                        (None, None, Some(address)) => {
+                            return self.run(address as usize);
+                        }
+                        (Some(_), None, None)
+                        | (None, None, None)
+                        | (None, Some(_), Some(_))
+                        | (Some(_), Some(_), Some(_)) => {
+                            log::error!(
+                                "Execute did not return valid response for jump or continue"
+                            );
+                            return Err(Error::new(
+                                ErrorKind::Other,
+                                "Execute did not return valid response for jump or continue",
+                            ));
+                        }
+                    },
+                    None => return self.run(pc + 1),
+                }
+            }
+            Err(err) => {
+                log::error!(
+                    "At line {:?} instruction {:?} error {:?}",
+                    pc,
+                    instruction,
+                    err
+                );
+                if self.fail_fast {
+                    return Err(Error::new(ErrorKind::Other, err));
+                }
+                return self.run(pc + 1);
+            }
+        }
+    }
+
+    fn get_linenumber_of_label(&self, label: String) -> Option<usize> {
+        for l in self.program.labels.iter() {
+            if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
+                return Some(l.1);
+            }
+        }
+        None
+    }
+
+    fn add_constraint(&self, constraint: common::AbstractComparison, decision: bool) {
+        let c = common::comparison_to_ast(self.computer.context, constraint).unwrap();
+        if decision {
+            self.computer.solver.assert(&c);
+        } else {
+            self.computer.solver.assert(&c.not());
+        }
+    }
+
     // if true, we jump
     // if false, we continue
+    // if None, we explore both
     // BIG TODO
-    fn evaluate_jump_condition(
+    fn evaluate_branch_condition(
         &mut self,
-        expression: common::AbstractExpression,
+        pc: usize,
+        expression: common::AbstractComparison,
         rw_list: Vec<common::MemoryAccess>,
-    ) -> bool {
+    ) -> Option<bool> {
         log::info!("jump condition: {}", expression.clone());
-        // log::info!("memory accesses: {:?}", rw_list.clone());
+        log::info!("memory accesses: {:?}", rw_list.clone());
 
         // figure out relevant registers
-        let relevant_registers = expression.get_register_names();
+        let relevant_registers = expression.clone().get_register_names();
+        let condition_to_ast =
+            common::comparison_to_ast(self.computer.context, expression.clone()).unwrap();
 
-        for e in &self.loop_state {
-            if e.0 == expression && e.1 == rw_list {
-                // TODO replace ? with value
-                let (left, right) = expression.reduce_solution();
-                if left.contains("?") || right.contains("?") {
-                    // FIX: cannot call solve for if it doesn't have key
-                    let solved = common::solve_for("?", left, right);
-                    self.computer.replace_abstract("?", solved);
+        if !self.in_loop {
+            if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
+                self.jump_history.last()
+            {
+                // LOOP has repeated at least twice
+                if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
+                    // TODO: figure out step function from rw_list and expression
+                    for r in relevant_registers {
+                        self.computer.track_register(r);
+                    }
+                    self.in_loop = true;
+                    self.computer.solver.assert(&condition_to_ast);
+                    self.computer.clear_rw_queue();
+                    return None;
+                } else {
+                    return Some(*branch_decision);
                 }
-                for reg in relevant_registers {
-                    self.computer.untrack_register(reg);
+            } else {
+                return None;
+            }
+        } else {
+            // TODO: maybe add shortcut out when there are no memory accesses in the loop?
+            if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
+                self.jump_history.last()
+            {
+                if last_jump_label == &pc
+                    && last_jump_exp == &expression
+                    && last_rw_list == &rw_list
+                {
+                    return Some(!branch_decision);
+                } else {
+                    return None;
                 }
-                return false;
+            } else {
+                return None;
             }
         }
 
-        self.loop_state.push((expression.clone(), rw_list));
-        for r in relevant_registers {
-            self.computer.track_register(r);
-        }
-        self.computer.clear_rw_queue();
+        // self.jump_history.push((label, expression.clone(), rw_list));
+        // self.computer.clear_rw_queue();
+        // return None;
 
-        let (left, right) = expression.reduce_solution();
-        self.computer
-            .add_constraint(common::AbstractExpression::Expression(
-                "<".to_string(),
-                Box::new(left),
-                Box::new(right),
-            ));
+        // return false;
 
-        return true;
+        // TODO: rewrite with z3
+
+        // for e in &self.jump_history {
+        //     if e.0 == expression && e.1 == rw_list {
+        //         // TODO replace ? with value
+        //         let (left, right) = expression.reduce_solution();
+        //         if left.contains("?") || right.contains("?") {
+        //             // FIX: cannot call solve for if it doesn't have key
+        //             let solved = common::solve_for("?", left, right);
+        //             self.computer.replace_abstract("?", solved);
+        //         }
+        //         for reg in relevant_registers {
+        //             self.computer.untrack_register(reg);
+        //         }
+        //         return false;
+        //     }
+        // }
+
+        // let (left, right) = expression.reduce_solution();
+        // self.computer
+        //     .add_constraint(common::AbstractExpression::Expression(
+        //         "<".to_string(),
+        //         Box::new(left),
+        //         Box::new(right),
+        //     ));
     }
 }
