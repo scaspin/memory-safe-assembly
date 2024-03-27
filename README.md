@@ -8,8 +8,8 @@ Bottom-up memory-safety for assembly language using symbolic execution
 
 ### Framework Goals
 - [x] Quick
-- [x] Static (do not need access to hardware)
-- [ ] Derive semantics with no programmer intervention (no need for someone to specify where input is, may need to derive from larger program?)
+- [x] Static
+- [x] Derive semantics with little programmer help
 - [x] Responsive, i.e. indicating line numbers for "bad" behavior so code can be rewritten
 - [ ] Derive assembly semantics directly from specification
 
