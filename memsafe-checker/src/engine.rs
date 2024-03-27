@@ -148,13 +148,17 @@ impl<'ctx> ExecutionEngine<'ctx> {
             common::AbstractExpression::Immediate(i) => self.add_region_from(
                 region.region_type,
                 region.base.to_string(),
-                (Some(i.try_into().unwrap()), None),
+                (Some(i.try_into().unwrap()), None, None),
             ),
-            common::AbstractExpression::Expression(..) => todo!(),
+            common::AbstractExpression::Expression(..) => self.add_region_from(
+                region.region_type,
+                region.base.to_string(),
+                (None, None, Some(region.end.clone())),
+            ),
             _ => self.add_region_from(
                 region.region_type,
                 region.base.to_string(),
-                (None, Some(region.end.to_string())),
+                (None, Some(region.end.to_string()), None),
             ),
         }
     }
@@ -163,10 +167,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
         &mut self,
         ty: common::RegionType,
         base: String,
-        length: (Option<usize>, Option<String>),
+        length: (
+            Option<usize>,
+            Option<String>,
+            Option<common::AbstractExpression>,
+        ),
     ) {
         match length {
-            (Some(num), _) => {
+            (Some(num), None, None) => {
                 // FIX: decide whether to include alignment or not
                 let region_size = ((num.clone() as i64) - 1) * self.computer.alignment;
 
@@ -199,7 +207,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 // can access this region up to and including address of upper bound
                 self.computer.solver.assert(&pointer.le(&upper_bound));
             }
-            (None, Some(abs)) => {
+            (None, Some(abs), None) => {
                 let zero = ast::Int::from_i64(self.computer.context, 0);
                 let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
                 let bound = ast::Int::new_const(self.computer.context, abs.clone());
@@ -237,7 +245,44 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 // can access this region up to and including address of upper bound
                 self.computer.solver.assert(&pointer.le(&upper_bound));
             }
-            (_, _) => (), // should never happen! just to be safe
+            (None, None, Some(expr)) => {
+                let zero = ast::Int::from_i64(self.computer.context, 0);
+                let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
+                let bound = common::expression_to_ast(self.computer.context, expr.clone()).unwrap();
+                let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
+                let abstract_pointer_from_base =
+                    ast::Int::new_const(self.computer.context, base.clone());
+                for a in expr.get_abstracts() {
+                    println!("a: {:?}", a);
+                    let temp = ast::Int::new_const(self.computer.context, a.clone());
+                    self.computer.solver.assert(&temp.ge(&zero));
+                }
+
+                // upper bound is the base pointer + bound value - alignment
+                let upper_bound = ast::Int::add(
+                    self.computer.context,
+                    &[&abstract_pointer_from_base, &bound_aligned],
+                );
+
+                self.computer.set_region(common::MemorySafeRegion {
+                    region_type: ty,
+                    base: base.clone(),
+                    start: common::AbstractExpression::Immediate(0),
+                    end: expr,
+                });
+
+                let pointer =
+                    ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
+
+                // can access this region starting with 0
+                self.computer
+                    .solver
+                    .assert(&abstract_pointer_from_base.ge(&zero));
+
+                // can access this region up to and including address of upper bound
+                self.computer.solver.assert(&pointer.le(&upper_bound));
+            }
+            (_, _, _) => (), // should never happen! just to be safe
         }
 
         // println!("constraints: {:?}", self.computer.solver.get_assertions());
@@ -323,13 +368,17 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         condition.clone(),
                                         rw_list.clone(),
                                     ));
+                                    self.computer.clear_rw_queue();
                                     log::info!(
                                         "exploring jump branch starting line: {:?}",
                                         jump_dest
                                     );
+
                                     // TODO: add jump condition as assertion
+                                    self.computer.solver.push();
                                     self.add_constraint(condition.clone(), true);
                                     let res1 = self.run(jump_dest);
+                                    self.computer.solver.pop(1);
 
                                     clone.jump_history.push((
                                         pc,
@@ -337,13 +386,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         condition.clone(),
                                         rw_list,
                                     ));
+                                    clone.computer.clear_rw_queue();
                                     log::info!(
                                         "exploring non-jump branch starting line: {:?}",
                                         pc + 1
                                     );
                                     // TODO: add false condition as assertion
+                                    self.computer.solver.push();
                                     clone.add_constraint(condition, false);
                                     let res2 = clone.run(pc + 1);
+                                    self.computer.solver.pop(1);
 
                                     match (res1, res2) {
                                         (Ok(_), Ok(_)) => return Ok(()),
@@ -371,6 +423,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                                 condition,
                                                 self.computer.read_rw_queue(),
                                             ));
+                                            self.computer.clear_rw_queue();
                                             return self.run(n + 1);
                                         }
                                         None => {
@@ -383,10 +436,13 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                     self.jump_history.push((
                                         pc,
                                         false,
-                                        condition,
+                                        condition.clone(),
                                         self.computer.read_rw_queue(),
                                     ));
+                                    self.computer.clear_rw_queue();
                                     log::info!("exploring line: {}", pc + 1);
+                                    self.add_constraint(condition, false);
+                                    println!("stuff: {:#?}", self.computer.solver.get_assertions());
                                     return self.run(pc + 1);
                                 }
                             }
@@ -492,13 +548,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         self.computer.track_register(r);
                     }
                     self.in_loop = true;
-                    self.computer.solver.assert(&condition_to_ast);
-                    self.computer.clear_rw_queue();
-                    return None;
-                } else {
+                    // self.computer.solver.assert(&condition_to_ast);
+                    // continue to explore both branches
                     return Some(*branch_decision);
+                } else {
+                    return None;
                 }
             } else {
+                println!("here2");
                 return None;
             }
         } else {
@@ -506,13 +563,15 @@ impl<'ctx> ExecutionEngine<'ctx> {
             if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
                 self.jump_history.last()
             {
+                println!("here here");
                 if last_jump_label == &pc
                     && last_jump_exp == &expression
                     && last_rw_list == &rw_list
                 {
                     return Some(!branch_decision);
                 } else {
-                    return None;
+                    println!("here");
+                    return Some(*branch_decision);
                 }
             } else {
                 return None;

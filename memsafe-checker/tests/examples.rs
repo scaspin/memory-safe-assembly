@@ -22,11 +22,15 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         // x0 -- context
-        engine.add_region_from(common::RegionType::READ, "x0".to_string(), (Some(64), None));
+        engine.add_region_from(
+            common::RegionType::READ,
+            "x0".to_string(),
+            (Some(64), None, None),
+        );
         engine.add_region_from(
             common::RegionType::WRITE,
             "x0".to_string(),
-            (Some(64), None),
+            (Some(64), None, None),
         );
 
         let blocks = common::AbstractExpression::Abstract("Blocks".to_string());
@@ -110,7 +114,7 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "base".to_string(),
-            (None, Some("length".to_string())),
+            (None, Some("length".to_string()), None),
         );
 
         engine.add_abstract(String::from("x2"), length);
@@ -245,7 +249,7 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "base".to_string(),
-            (None, Some("length".to_string())),
+            (None, Some("length".to_string()), None),
         );
 
         let res = engine.start("start".to_string());
@@ -268,7 +272,7 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "base".to_string(),
-            (None, Some("length".to_string())),
+            (None, Some("length".to_string()), None),
         );
 
         let res = engine.start("start".to_string());
@@ -294,7 +298,7 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "base".to_string(),
-            (Some(2), None),
+            (Some(2), None, None),
         );
 
         let res = engine.start("start".to_string());
@@ -319,7 +323,7 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "base".to_string(),
-            (Some(2), None),
+            (Some(2), None, None),
         );
 
         let res = engine.start("start".to_string());
@@ -329,7 +333,7 @@ mod tests {
 
     #[test]
     fn z3_simple_loop_with_no_mem_access() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
@@ -374,7 +378,7 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "base".to_string(),
-            (Some(4), None),
+            (Some(4), None, None),
         );
 
         let res = engine.start("start".to_string());
@@ -398,7 +402,8 @@ mod tests {
         program.push("end:".to_string());
         program.push("ret".to_string());
 
-        let cfg = Config::new();
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
         let ctx = Context::new(&cfg);
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
@@ -410,12 +415,11 @@ mod tests {
             Box::new(common::AbstractExpression::Abstract("blocks".to_string())),
             Box::new(common::AbstractExpression::Immediate(4)),
         );
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "base".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: length,
-        });
+        engine.add_region_from(
+            common::RegionType::READ,
+            "base".to_string(),
+            (None, None, Some(length)),
+        );
 
         let res = engine.start("start".to_string());
         assert!(res.is_ok());
@@ -446,7 +450,7 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "base".to_string(),
-            (Some(3), None),
+            (Some(3), None, None),
         );
 
         let res = engine.start("start".to_string());
@@ -477,7 +481,7 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "base".to_string(),
-            (None, Some("length".to_string())),
+            (None, Some("length".to_string()), None),
         );
         engine.add_abstract_from(1, "length".to_string());
 

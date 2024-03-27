@@ -1211,14 +1211,20 @@ impl<'ctx> ARMCORTEXA<'_> {
                                             return Ok(());
                                         }
                                         (a, b) => {
-                                            println!("impossibility lower bound {:?}, impossibility upper bound {:?}", a, b);
+                                            println!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
                                             log::error!(
                                                 "Memory unsafe with solver's second check!"
                                             );
                                         }
                                     }
                                 }
-                                _ => log::info!("Memory unsafe with solver first check!"),
+                                SatResult::Unsat => {
+                                    log::info!("Memory unsafe with solver first check!");
+                                    println!("unsat core: {:#?}", self.solver.get_proof());
+                                }
+                                SatResult::Unknown => log::info!(
+                                    "Memory unsafe with solver first check due to unknown result!"
+                                ),
                             }
                         }
                     }
@@ -1239,7 +1245,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             || region.region_type == common::RegionType::RW)
                     {
                         // the name of the base of the region
-                        let regbase = ast::Int::from_str(self.context, &region.base).unwrap();
+                        let regbase = ast::Int::new_const(self.context, region.base);
                         let abs_offset = ast::Int::from_i64(self.context, offset);
 
                         //the base of the access (which is a complex expression) and the access itself
@@ -1265,7 +1271,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 return Ok(());
                             }
                             (a, b) => {
-                                println!("impossibility lower bound {:?}, impossibility upper bound {:?}", a, b);
+                                println!("impossibility lower bound {:?}, impossibility upper bound {:?}, {:?}", a, b, self.solver.get_model());
                                 log::error!("Memory unsafe with solver's only check!");
                             }
                         }
