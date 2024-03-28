@@ -1263,14 +1263,20 @@ impl<'ctx> ARMCORTEXA<'_> {
                         let u = access.gt(&up_access);
 
                         match (
-                            self.solver.check_assumptions(&[l]),
-                            self.solver.check_assumptions(&[u]),
+                            self.solver.check_assumptions(&[l.clone()]),
+                            self.solver.check_assumptions(&[u.clone()]),
                         ) {
                             (SatResult::Unsat, SatResult::Unsat) => {
                                 log::info!("Memory safe with solver's only check!");
                                 return Ok(());
                             }
                             (a, b) => {
+                                println!(
+                                    "l: {:#?}, u: {:#?} assertions: {:#?}",
+                                    l,
+                                    u,
+                                    self.solver.get_assertions()
+                                );
                                 println!("impossibility lower bound {:?}, impossibility upper bound {:?}, {:?}", a, b, self.solver.get_model());
                                 log::error!("Memory unsafe with solver's only check!");
                             }

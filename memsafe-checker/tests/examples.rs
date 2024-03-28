@@ -388,11 +388,11 @@ mod tests {
 
     #[test]
     fn z3_complex_loop_with_mem_access_safe() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());
-        program.push("add x1,x0,x1,lsl#4".to_string());
+        program.push("add x1,x0,x1,lsl#2".to_string());
         program.push("loop:".to_string());
         program.push("cmp x0,x1".to_string());
         program.push("b.eq end".to_string());
@@ -413,7 +413,7 @@ mod tests {
         let length = common::AbstractExpression::Expression(
             "lsl".to_string(),
             Box::new(common::AbstractExpression::Abstract("blocks".to_string())),
-            Box::new(common::AbstractExpression::Immediate(4)),
+            Box::new(common::AbstractExpression::Immediate(2)),
         );
         engine.add_region_from(
             common::RegionType::READ,
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
-        //env_logger::init();
+        // env_logger::init();
 
         let mut program = Vec::new();
         program.push("start:".to_string());

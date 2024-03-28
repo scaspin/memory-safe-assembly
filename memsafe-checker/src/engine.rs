@@ -1,4 +1,5 @@
 use std::io::{Error, ErrorKind};
+use z3::ast::Ast;
 use z3::*;
 
 use crate::common;
@@ -238,6 +239,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
 
                 // can access this region starting with 0
+                self.computer.solver.assert(&bound.ge(&zero));
                 self.computer
                     .solver
                     .assert(&abstract_pointer_from_base.ge(&zero));
@@ -253,7 +255,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 let abstract_pointer_from_base =
                     ast::Int::new_const(self.computer.context, base.clone());
                 for a in expr.get_abstracts() {
-                    println!("a: {:?}", a);
                     let temp = ast::Int::new_const(self.computer.context, a.clone());
                     self.computer.solver.assert(&temp.ge(&zero));
                 }
@@ -420,10 +421,11 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             self.jump_history.push((
                                                 pc,
                                                 true,
-                                                condition,
+                                                condition.clone(),
                                                 self.computer.read_rw_queue(),
                                             ));
                                             self.computer.clear_rw_queue();
+                                            self.add_constraint(condition, true);
                                             return self.run(n + 1);
                                         }
                                         None => {
@@ -442,7 +444,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                     self.computer.clear_rw_queue();
                                     log::info!("exploring line: {}", pc + 1);
                                     self.add_constraint(condition, false);
-                                    println!("stuff: {:#?}", self.computer.solver.get_assertions());
                                     return self.run(pc + 1);
                                 }
                             }
@@ -532,11 +533,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
         log::info!("jump condition: {}", expression.clone());
         log::info!("memory accesses: {:?}", rw_list.clone());
 
-        // figure out relevant registers
-        let relevant_registers = expression.clone().get_register_names();
-        let condition_to_ast =
-            common::comparison_to_ast(self.computer.context, expression.clone()).unwrap();
-
         if !self.in_loop {
             if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
                 self.jump_history.last()
@@ -544,18 +540,41 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 // LOOP has repeated at least twice
                 if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
                     // TODO: figure out step function from rw_list and expression
-                    for r in relevant_registers {
+
+                    for r in expression.clone().get_register_names() {
                         self.computer.track_register(r);
                     }
+                    let mut max_step = 0;
+                    for i in 0..last_rw_list.len() {
+                        let diff = rw_list[i].offset - last_rw_list[i].offset;
+                        if diff > max_step {
+                            max_step = diff;
+                        };
+                    }
+                    let q = ast::Int::new_const(self.computer.context, "?");
+                    let step = ast::Int::from_i64(self.computer.context, max_step as i64);
+                    let blocks = ast::Int::new_const(self.computer.context, "blocks");
+                    let zero = ast::Int::from_i64(self.computer.context, 0);
+                    let simplified = common::comparison_to_ast(self.computer.context, expression)
+                        .unwrap()
+                        .simplify();
+                    let substituted = simplified.substitute(&[(&blocks, &q)]);
+
+                    self.computer.solver.push();
+                    self.computer.solver.assert(&q.ge(&zero));
+                    self.computer.solver.assert(&q.modulo(&step).ge(&zero));
+                    self.computer.solver.assert(&q.modulo(&step).le(&zero));
+
+                    // TODO: do we want to define this upper bound? or is that not sound?
+                    let steps = ast::Int::mul(self.computer.context, &[&q, &step]);
+                    self.computer.solver.assert(&steps.ge(&blocks));
+                    self.computer.solver.assert(&steps.le(&blocks));
+
                     self.in_loop = true;
-                    // self.computer.solver.assert(&condition_to_ast);
-                    // continue to explore both branches
                     return Some(*branch_decision);
-                } else {
-                    return None;
                 }
+                return None;
             } else {
-                println!("here2");
                 return None;
             }
         } else {
@@ -563,51 +582,43 @@ impl<'ctx> ExecutionEngine<'ctx> {
             if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
                 self.jump_history.last()
             {
-                println!("here here");
                 if last_jump_label == &pc
                     && last_jump_exp == &expression
                     && last_rw_list == &rw_list
                 {
-                    return Some(!branch_decision);
-                } else {
-                    println!("here");
-                    return Some(*branch_decision);
+                    self.computer.solver.pop(1);
+                    let condition =
+                        common::comparison_to_ast(self.computer.context, expression).unwrap();
+                    let res = self.computer.solver.check_assumptions(&[condition.clone()]);
+                    log::info!(
+                        "conditions to branch out of loop protocol: {:?}",
+                        condition.simplify()
+                    );
+                    match res {
+                        SatResult::Sat => {
+                            log::info!(
+                                "satisfiable with model: {:?}",
+                                self.computer.solver.get_model()
+                            );
+                            // TODO: do substitution
+                            return Some(!branch_decision);
+                        }
+                        SatResult::Unsat => {
+                            log::info!(
+                                "unsatisfiable with unsat core: {:?}",
+                                self.computer.solver.get_unsat_core()
+                            );
+                        }
+                        z3::SatResult::Unknown => log::info!(
+                            "unknown with reason: {:?}",
+                            self.computer.solver.get_reason_unknown()
+                        ),
+                    }
                 }
+                return Some(*branch_decision);
             } else {
                 return None;
             }
         }
-
-        // self.jump_history.push((label, expression.clone(), rw_list));
-        // self.computer.clear_rw_queue();
-        // return None;
-
-        // return false;
-
-        // TODO: rewrite with z3
-
-        // for e in &self.jump_history {
-        //     if e.0 == expression && e.1 == rw_list {
-        //         // TODO replace ? with value
-        //         let (left, right) = expression.reduce_solution();
-        //         if left.contains("?") || right.contains("?") {
-        //             // FIX: cannot call solve for if it doesn't have key
-        //             let solved = common::solve_for("?", left, right);
-        //             self.computer.replace_abstract("?", solved);
-        //         }
-        //         for reg in relevant_registers {
-        //             self.computer.untrack_register(reg);
-        //         }
-        //         return false;
-        //     }
-        // }
-
-        // let (left, right) = expression.reduce_solution();
-        // self.computer
-        //     .add_constraint(common::AbstractExpression::Expression(
-        //         "<".to_string(),
-        //         Box::new(left),
-        //         Box::new(right),
-        //     ));
     }
 }
