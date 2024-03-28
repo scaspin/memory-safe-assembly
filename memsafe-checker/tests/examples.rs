@@ -68,7 +68,7 @@ mod tests {
         //engine.dont_fail_fast();
         let res = engine.start(start_label);
         assert!(res.is_err());
-        res
+        Ok(())
     }
 
     #[test]
@@ -91,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn basic_abstract_loop() -> std::io::Result<()> {
+    fn basic_abstract_loop_no_constraints() -> std::io::Result<()> {
         // env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
@@ -121,7 +121,7 @@ mod tests {
 
         engine.change_alignment(1);
         let res = engine.start(start_label);
-        assert!(res.is_ok());
+        assert!(res.is_err());
         Ok(())
     }
 
@@ -202,6 +202,8 @@ mod tests {
 
     #[test]
     fn double_loop() -> std::io::Result<()> {
+        // env_logger::init();
+        
         let file = File::open("tests/asm-examples/double-abstract-loop.S")?;
         let reader = BufReader::new(file);
         let start_label = String::from("start");
@@ -228,7 +230,9 @@ mod tests {
 
         engine.add_abstract(String::from("x2"), length);
         engine.change_alignment(1);
-        engine.start(start_label)
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
+        Ok(())
     }
 
     #[test]

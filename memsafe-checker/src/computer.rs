@@ -1211,7 +1211,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                             return Ok(());
                                         }
                                         (a, b) => {
-                                            println!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
+                                            log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
                                             log::error!(
                                                 "Memory unsafe with solver's second check!"
                                             );
@@ -1219,8 +1219,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     }
                                 }
                                 SatResult::Unsat => {
-                                    log::info!("Memory unsafe with solver first check!");
-                                    println!("unsat core: {:#?}", self.solver.get_proof());
+                                    log::error!("Memory unsafe with solver first check!");
+                                    log::info!("unsat core: {:#?}", self.solver.get_proof());
                                 }
                                 SatResult::Unknown => log::info!(
                                     "Memory unsafe with solver first check due to unknown result!"

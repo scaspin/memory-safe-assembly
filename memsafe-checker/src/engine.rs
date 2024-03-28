@@ -589,18 +589,13 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     self.computer.solver.pop(1);
                     let condition =
                         common::comparison_to_ast(self.computer.context, expression).unwrap();
-                    let res = self.computer.solver.check_assumptions(&[condition.clone()]);
-                    log::info!(
-                        "conditions to branch out of loop protocol: {:?}",
-                        condition.simplify()
-                    );
-                    match res {
+                    self.computer.solver.assert(&condition);
+                    match self.computer.solver.check() {
                         SatResult::Sat => {
                             log::info!(
                                 "satisfiable with model: {:?}",
-                                self.computer.solver.get_model()
+                                self.computer.solver.get_model().unwrap()
                             );
-                            // TODO: do substitution
                             return Some(!branch_decision);
                         }
                         SatResult::Unsat => {
