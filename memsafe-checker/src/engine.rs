@@ -7,15 +7,17 @@ use crate::computer;
 
 #[derive(Clone)]
 struct Program {
-    defs: Vec<String>,
+    // defs: Vec<String>,
     code: Vec<common::Instruction>,
     labels: Vec<(String, usize)>,
-    ifdefs: Vec<((String, usize), usize)>,
+    // ifdefs: Vec<((String, usize), usize)>,
 }
 
+#[derive(Clone)]
 pub struct ExecutionEngine<'ctx> {
     program: Program,
     computer: computer::ARMCORTEXA<'ctx>,
+    abstracts: Vec<String>,
     in_loop: bool,
     jump_history: Vec<(
         usize,
@@ -121,25 +123,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
         return ExecutionEngine {
             program: Program {
-                defs,
+                // defs,
                 code,
                 labels,
-                ifdefs,
+                // ifdefs,
             },
             computer,
             jump_history: Vec::new(),
             in_loop: false,
+            abstracts: Vec::new(),
             fail_fast: true,
-        };
-    }
-
-    pub fn clone(&self) -> Self {
-        return Self {
-            program: self.program.clone(),
-            computer: self.computer.clone(),
-            in_loop: self.in_loop,
-            jump_history: self.jump_history.clone(),
-            fail_fast: self.fail_fast,
         };
     }
 
@@ -209,6 +202,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 self.computer.solver.assert(&pointer.le(&upper_bound));
             }
             (None, Some(abs), None) => {
+                self.abstracts.push(abs.clone());
+
                 let zero = ast::Int::from_i64(self.computer.context, 0);
                 let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
                 let bound = ast::Int::new_const(self.computer.context, abs.clone());
@@ -228,7 +223,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     start: common::AbstractExpression::Immediate(0),
                     end: common::AbstractExpression::Expression(
                         "-".to_string(),
-                        Box::new(common::AbstractExpression::Abstract(abs.clone())),
+                        Box::new(common::AbstractExpression::Abstract(abs)),
                         Box::new(common::AbstractExpression::Immediate(
                             self.computer.alignment,
                         )),
@@ -255,7 +250,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 let abstract_pointer_from_base =
                     ast::Int::new_const(self.computer.context, base.clone());
                 for a in expr.get_abstracts() {
-                    let temp = ast::Int::new_const(self.computer.context, a.clone());
+                    self.abstracts.push(a.clone());
+                    let temp = ast::Int::new_const(self.computer.context, a);
                     self.computer.solver.assert(&temp.ge(&zero));
                 }
 
@@ -313,10 +309,15 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
-        let mut pc = 0;
+        let pc;
         match self.get_linenumber_of_label(start) {
             Some(n) => pc = n,
-            _ => todo!(),
+            None => {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Start label not found in program",
+                ))
+            }
         }
 
         // run is recursive
@@ -350,7 +351,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     Some(jump) => match jump {
                         // (condition, label to jump to, line number to jump to)
                         (Some(condition), Some(label), None) => {
-                            let mut jump_dest = 0;
+                            let jump_dest;
                             let rw_list = self.computer.read_rw_queue();
                             match self.get_linenumber_of_label(label.clone()) {
                                 Some(i) => jump_dest = i,
@@ -375,7 +376,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         jump_dest
                                     );
 
-                                    // TODO: add jump condition as assertion
                                     self.computer.solver.push();
                                     self.add_constraint(condition.clone(), true);
                                     let res1 = self.run(jump_dest);
@@ -392,7 +392,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         "exploring non-jump branch starting line: {:?}",
                                         pc + 1
                                     );
-                                    // TODO: add false condition as assertion
+
                                     self.computer.solver.push();
                                     clone.add_constraint(condition, false);
                                     let res2 = clone.run(pc + 1);
@@ -409,8 +409,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             return Err(Error::new(ErrorKind::Other, err));
                                         }
                                         (Err(e1), Err(e2)) => {
-                                            //TODO: reflect 2nd error
-                                            return Err(Error::new(ErrorKind::Other, e1));
+                                            return Err(Error::new(
+                                                ErrorKind::Other,
+                                                e1.to_string() + &e2.to_string(),
+                                            ));
                                         }
                                     }
                                 }
@@ -449,7 +451,90 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             }
                         }
                         (Some(condition), None, Some(address)) => {
-                            todo!();
+                            let jump_dest = address.try_into().unwrap();
+                            let rw_list = self.computer.read_rw_queue();
+                            match self.evaluate_branch_condition(
+                                pc.clone(),
+                                condition.clone(),
+                                rw_list.clone(),
+                            ) {
+                                None => {
+                                    let mut clone = self.clone();
+                                    self.jump_history.push((
+                                        jump_dest,
+                                        true,
+                                        condition.clone(),
+                                        rw_list.clone(),
+                                    ));
+                                    self.computer.clear_rw_queue();
+                                    log::info!(
+                                        "exploring jump branch starting line: {:?}",
+                                        jump_dest
+                                    );
+
+                                    self.computer.solver.push();
+                                    self.add_constraint(condition.clone(), true);
+                                    let res1 = self.run(jump_dest);
+                                    self.computer.solver.pop(1);
+
+                                    clone.jump_history.push((
+                                        pc,
+                                        false,
+                                        condition.clone(),
+                                        rw_list,
+                                    ));
+                                    clone.computer.clear_rw_queue();
+                                    log::info!(
+                                        "exploring non-jump branch starting line: {:?}",
+                                        pc + 1
+                                    );
+                                    self.computer.solver.push();
+                                    clone.add_constraint(condition, false);
+                                    let res2 = clone.run(pc + 1);
+                                    self.computer.solver.pop(1);
+
+                                    match (res1, res2) {
+                                        (Ok(_), Ok(_)) => return Ok(()),
+                                        (Err(err), Ok(_)) => {
+                                            log::error!("{:?}: {:?}", pc, err);
+                                            return Err(Error::new(ErrorKind::Other, err));
+                                        }
+                                        (Ok(_), Err(err)) => {
+                                            log::error!("{:?}: {:?}", pc, err);
+                                            return Err(Error::new(ErrorKind::Other, err));
+                                        }
+                                        (Err(e1), Err(e2)) => {
+                                            return Err(Error::new(
+                                                ErrorKind::Other,
+                                                e1.to_string() + &e2.to_string(),
+                                            ));
+                                        }
+                                    }
+                                }
+                                Some(true) => {
+                                    self.jump_history.push((
+                                        pc,
+                                        true,
+                                        condition.clone(),
+                                        self.computer.read_rw_queue(),
+                                    ));
+                                    self.computer.clear_rw_queue();
+                                    self.add_constraint(condition, true);
+                                    return self.run(jump_dest);
+                                }
+                                Some(false) => {
+                                    self.jump_history.push((
+                                        pc,
+                                        false,
+                                        condition.clone(),
+                                        self.computer.read_rw_queue(),
+                                    ));
+                                    self.computer.clear_rw_queue();
+                                    log::info!("exploring line: {}", pc + 1);
+                                    self.add_constraint(condition, false);
+                                    return self.run(pc + 1);
+                                }
+                            }
                         }
                         (None, Some(label), None) => {
                             log::info!("returning: {}", pc);
@@ -522,8 +607,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     // if true, we jump
     // if false, we continue
-    // if None, we explore both
-    // BIG TODO
+    // if None, we explore both paths
     fn evaluate_branch_condition(
         &mut self,
         pc: usize,
@@ -534,13 +618,11 @@ impl<'ctx> ExecutionEngine<'ctx> {
         log::info!("memory accesses: {:?}", rw_list.clone());
 
         if !self.in_loop {
-            if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
+            if let Some((last_jump_label, branch_decision, _, last_rw_list)) =
                 self.jump_history.last()
             {
                 // LOOP has repeated at least twice
                 if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
-                    // TODO: figure out step function from rw_list and expression
-
                     for r in expression.clone().get_register_names() {
                         self.computer.track_register(r);
                     }
@@ -551,24 +633,37 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             max_step = diff;
                         };
                     }
+
+                    self.computer.solver.push();
                     let q = ast::Int::new_const(self.computer.context, "?");
                     let step = ast::Int::from_i64(self.computer.context, max_step as i64);
-                    let blocks = ast::Int::new_const(self.computer.context, "blocks");
                     let zero = ast::Int::from_i64(self.computer.context, 0);
+
+                    // TODO: make sure ? is greater than current counter
+                    // get the minimal abstracts we depend on
                     let simplified = common::comparison_to_ast(self.computer.context, expression)
                         .unwrap()
                         .simplify();
-                    let substituted = simplified.substitute(&[(&blocks, &q)]);
 
-                    self.computer.solver.push();
+                    for a in &self.abstracts {
+                        if simplified.to_string().contains(a) {
+                            let abstract_name = a.to_string();
+                            let relaxed_abstract =
+                                ast::Int::new_const(self.computer.context, abstract_name);
+
+                            // TODO: do we want to define this since it implies an upper bound on ? or is that not sound?
+                            // do the equalities need to change for a different type of condition
+                            let steps = ast::Int::mul(self.computer.context, &[&q, &step]);
+                            self.computer.solver.assert(&steps.ge(&relaxed_abstract));
+                            self.computer.solver.assert(&steps.le(&relaxed_abstract));
+
+                            break;
+                        }
+                    }
+
                     self.computer.solver.assert(&q.ge(&zero));
                     self.computer.solver.assert(&q.modulo(&step).ge(&zero));
                     self.computer.solver.assert(&q.modulo(&step).le(&zero));
-
-                    // TODO: do we want to define this upper bound? or is that not sound?
-                    let steps = ast::Int::mul(self.computer.context, &[&q, &step]);
-                    self.computer.solver.assert(&steps.ge(&blocks));
-                    self.computer.solver.assert(&steps.le(&blocks));
 
                     self.in_loop = true;
                     return Some(*branch_decision);
