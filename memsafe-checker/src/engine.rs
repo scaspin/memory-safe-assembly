@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 use z3::ast::Ast;
 use z3::*;
@@ -17,7 +18,7 @@ struct Program {
 pub struct ExecutionEngine<'ctx> {
     program: Program,
     computer: computer::ARMCORTEXA<'ctx>,
-    abstracts: Vec<String>,
+    abstracts: HashMap<String, String>,
     in_loop: bool,
     jump_history: Vec<(
         usize,
@@ -131,7 +132,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             computer,
             jump_history: Vec::new(),
             in_loop: false,
-            abstracts: Vec::new(),
+            abstracts: HashMap::new(),
             fail_fast: true,
         };
     }
@@ -202,7 +203,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 self.computer.solver.assert(&pointer.le(&upper_bound));
             }
             (None, Some(abs), None) => {
-                self.abstracts.push(abs.clone());
+                self.abstracts
+                    .insert(abs.clone(), ("?_".to_owned() + &abs.clone()).to_string());
 
                 let zero = ast::Int::from_i64(self.computer.context, 0);
                 let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
@@ -250,7 +252,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 let abstract_pointer_from_base =
                     ast::Int::new_const(self.computer.context, base.clone());
                 for a in expr.get_abstracts() {
-                    self.abstracts.push(a.clone());
+                    self.abstracts
+                        .insert(a.clone(), ("?_".to_owned() + &a.clone()).to_string());
                     let temp = ast::Int::new_const(self.computer.context, a);
                     self.computer.solver.assert(&temp.ge(&zero));
                 }
@@ -623,9 +626,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
             {
                 // LOOP has repeated at least twice
                 if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
-                    for r in expression.clone().get_register_names() {
-                        self.computer.track_register(r);
-                    }
                     let mut max_step = 0;
                     for i in 0..last_rw_list.len() {
                         let diff = rw_list[i].offset - last_rw_list[i].offset;
@@ -635,38 +635,43 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
 
                     self.computer.solver.push();
-                    let q = ast::Int::new_const(self.computer.context, "?");
                     let step = ast::Int::from_i64(self.computer.context, max_step as i64);
                     let zero = ast::Int::from_i64(self.computer.context, 0);
 
                     // TODO: make sure ? is greater than current counter
                     // get the minimal abstracts we depend on
-                    let simplified = common::comparison_to_ast(self.computer.context, expression)
-                        .unwrap()
-                        .simplify();
+                    let simplified =
+                        common::comparison_to_ast(self.computer.context, expression.clone())
+                            .unwrap()
+                            .simplify();
 
-                    for a in &self.abstracts {
+                    for a in self.abstracts.keys() {
                         if simplified.to_string().contains(a) {
-                            let abstract_name = a.to_string();
-                            let relaxed_abstract =
-                                ast::Int::new_const(self.computer.context, abstract_name);
+                            let new_abstract_name =
+                                self.abstracts.get(&a.to_string()).unwrap().to_string();
+
+                            for r in expression.get_register_names() {
+                                self.computer.track_register(r, new_abstract_name.clone());
+                            }
+
+                            let q = ast::Int::new_const(self.computer.context, new_abstract_name);
+                            let original_abstract =
+                                ast::Int::new_const(self.computer.context, a.to_string());
 
                             // TODO: do we want to define this since it implies an upper bound on ? or is that not sound?
                             // do the equalities need to change for a different type of condition
                             let steps = ast::Int::mul(self.computer.context, &[&q, &step]);
-                            self.computer.solver.assert(&steps.ge(&relaxed_abstract));
-                            self.computer.solver.assert(&steps.le(&relaxed_abstract));
+                            self.computer.solver.assert(&steps.ge(&original_abstract));
+                            self.computer.solver.assert(&steps.le(&original_abstract));
 
-                            break;
+                            self.computer.solver.assert(&q.ge(&zero));
+                            self.computer.solver.assert(&q.modulo(&step).ge(&zero));
+                            self.computer.solver.assert(&q.modulo(&step).le(&zero));
+
+                            self.in_loop = true;
+                            return Some(*branch_decision);
                         }
                     }
-
-                    self.computer.solver.assert(&q.ge(&zero));
-                    self.computer.solver.assert(&q.modulo(&step).ge(&zero));
-                    self.computer.solver.assert(&q.modulo(&step).le(&zero));
-
-                    self.in_loop = true;
-                    return Some(*branch_decision);
                 }
                 return None;
             } else {

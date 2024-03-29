@@ -31,7 +31,7 @@ pub struct ARMCORTEXA<'ctx> {
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
     // constraints: Vec<AbstractExpression>,
-    tracked_loop_abstracts: Vec<String>,
+    tracked_loop_abstracts: HashMap<String, String>,
     rw_queue: Vec<common::MemoryAccess>,
     pub alignment: i64,
     pub context: &'ctx Context,
@@ -99,7 +99,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             stack: HashMap::new(),
             stack_size: 0,
             memory_safe_regions: Vec::new(),
-            tracked_loop_abstracts: Vec::new(),
+            tracked_loop_abstracts: HashMap::new(),
             rw_queue: Vec::new(),
             alignment: 4,
             context,
@@ -172,19 +172,12 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.rw_queue.clone()
     }
 
-    pub fn track_register(&mut self, register: String) {
-        self.tracked_loop_abstracts.push(register);
+    pub fn track_register(&mut self, register: String, expr: String) {
+        self.tracked_loop_abstracts.insert(register, expr);
     }
 
     pub fn untrack_register(&mut self, register: String) {
-        let index = self
-            .tracked_loop_abstracts
-            .iter()
-            .position(|n| n == &register);
-        match index {
-            Some(i) => self.tracked_loop_abstracts.remove(i),
-            None => return,
-        };
+        self.tracked_loop_abstracts.remove(&register);
     }
 
     // FIX: better name for what this is? make tokens not just ?
@@ -485,7 +478,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r4.is_some() {
-                if self.tracked_loop_abstracts.contains(&reg3base)
+                if self.tracked_loop_abstracts.contains_key(&reg3base)
                     || reg3base.contains(&"?".to_string())
                 {
                     return Ok(None);
@@ -533,7 +526,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r3.is_some() {
-                if self.tracked_loop_abstracts.contains(&reg2base)
+                if self.tracked_loop_abstracts.contains_key(&reg2base)
                     || reg2base.contains(&"?".to_string())
                 {
                     return Ok(None);
@@ -579,7 +572,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r4.is_some() {
-                if self.tracked_loop_abstracts.contains(&reg3base)
+                if self.tracked_loop_abstracts.contains_key(&reg3base)
                     || reg3base.contains(&"?".to_string())
                 {
                     return Ok(None);
@@ -614,40 +607,30 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         // if we're tracking r1 or r2 for abstract looping, we're just gonna operate
         // some abstract
-        if self.tracked_loop_abstracts.contains(&reg1)
-            || self.tracked_loop_abstracts.contains(&reg2)
+        if self.tracked_loop_abstracts.contains_key(&reg1)
+            || self.tracked_loop_abstracts.contains_key(&reg2)
         {
             // need to make sure this works if r2 isn't immediate
             if let Some(b) = r1.base.clone() {
                 if !b.contains("?") {
+                    let new_abstract = self.tracked_loop_abstracts.get(&reg1.clone()).unwrap();
                     let new_base = AbstractExpression::Expression(
                         op_string.to_string(),
-                        Box::new(b),
-                        Box::new(AbstractExpression::Abstract("?".to_string())),
+                        Box::new(b.clone()),
+                        Box::new(AbstractExpression::Abstract(new_abstract.to_string())),
                     );
                     self.set_register(reg0, r1.kind, Some(new_base), 0);
-                    // self.add_constraint(AbstractExpression::Expression(
-                    //     ">".to_string(),
-                    //     Box::new(AbstractExpression::Abstract("?".to_string())),
-                    //     Box::new(AbstractExpression::Immediate(op(r1.offset, r2.offset))),
-                    // ));
-                    // self.add_constraint(AbstractExpression::Expression(
-                    //     ">".to_string(),
-                    //     Box::new(AbstractExpression::Abstract("?".to_string())),
-                    //     Box::new(AbstractExpression::Immediate(0)),
-                    // ));
-                    // self.untrack_register(reg1);
-                    // self.untrack_register(reg2);
                 }
                 return;
             }
 
             if let Some(b) = r2.base.clone() {
                 if !b.contains("?") {
+                    let new_abstract = self.tracked_loop_abstracts.get(&reg1.clone()).unwrap();
                     let new_base = AbstractExpression::Expression(
                         op_string.to_string(),
                         Box::new(b),
-                        Box::new(AbstractExpression::Abstract("?".to_string())),
+                        Box::new(AbstractExpression::Abstract(new_abstract.to_string())),
                     );
                     self.set_register(reg0, r2.kind, Some(new_base), op(r1.offset, r2.offset));
                     self.untrack_register(reg1);
