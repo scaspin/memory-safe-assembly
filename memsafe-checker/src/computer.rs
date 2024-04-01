@@ -620,6 +620,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         Box::new(AbstractExpression::Abstract(new_abstract.to_string())),
                     );
                     self.set_register(reg0, r1.kind, Some(new_base), 0);
+                    // self.untrack_register(reg1);
                 }
                 return;
             }
@@ -633,8 +634,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         Box::new(AbstractExpression::Abstract(new_abstract.to_string())),
                     );
                     self.set_register(reg0, r2.kind, Some(new_base), op(r1.offset, r2.offset));
-                    self.untrack_register(reg1);
-                    self.untrack_register(reg2);
+                    // self.untrack_register(reg2);
                 }
                 return;
             }
@@ -746,25 +746,6 @@ impl<'ctx> ARMCORTEXA<'_> {
             // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string, r1, r2 );
             log::error!("Cannot perform arithmetic on these two registers")
         }
-
-        // remove constraints on the base of the result
-        // since performing arithmetic potentially invalidates these
-        // let result = self.operand(saved_reg0);
-        // if let Some(base) = result.base {
-        //     let mut new_constraints = Vec::new();
-        //     for exp in &self.constraints {
-        //         if exp.contains_expression(&base.clone()) {
-        //             let comparison = exp.contradicts(base.clone());
-        //             match comparison {
-        //                 Some(true) => (),
-        //                 _ => new_constraints.push(exp.clone()),
-        //             }
-        //         } else {
-        //             new_constraints.push(exp.clone());
-        //         }
-        //     }
-        //     self.constraints = new_constraints;
-        // }
     }
 
     fn shift_reg(&mut self, reg1: String, reg2: String, reg3: String) {

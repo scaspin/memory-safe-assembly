@@ -1,3 +1,4 @@
+use recursive::recursive;
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 use z3::ast::Ast;
@@ -333,7 +334,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
         Ok(())
     }
 
+    #[recursive]
     fn run(&mut self, pc: usize) -> std::io::Result<()> {
+        // TODO: save to not recompute
         if pc == self.program.code.len() {
             return Ok(self.computer.check_stack_pointer_restored());
         }
@@ -351,6 +354,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
         match execute_result {
             Ok(some) => {
                 match some {
+                    None => return self.run(pc + 1),
                     Some(jump) => match jump {
                         // (condition, label to jump to, line number to jump to)
                         (Some(condition), Some(label), None) => {
@@ -572,7 +576,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             ));
                         }
                     },
-                    None => return self.run(pc + 1),
                 }
             }
             Err(err) => {
@@ -600,7 +603,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     fn add_constraint(&self, constraint: common::AbstractComparison, decision: bool) {
-        let c = common::comparison_to_ast(self.computer.context, constraint).unwrap();
+        let c = common::comparison_to_ast(self.computer.context, constraint)
+            .unwrap()
+            .simplify();
         if decision {
             self.computer.solver.assert(&c);
         } else {
@@ -689,7 +694,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     self.computer.solver.pop(1);
                     let condition =
                         common::comparison_to_ast(self.computer.context, expression).unwrap();
-                    self.computer.solver.assert(&condition);
+                    self.computer.solver.assert(&condition.simplify());
+                    println!("conditions: {:#?}", self.computer.solver.get_assertions());
                     match self.computer.solver.check() {
                         SatResult::Sat => {
                             log::info!(
