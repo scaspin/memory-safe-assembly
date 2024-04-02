@@ -284,8 +284,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
             }
             (_, _, _) => (), // should never happen! just to be safe
         }
-
-        // println!("constraints: {:?}", self.computer.solver.get_assertions());
     }
 
     pub fn add_immediate(&mut self, register: String, value: usize) {
@@ -701,9 +699,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 {
                     self.computer.solver.pop(1);
                     let condition =
-                        common::comparison_to_ast(self.computer.context, expression).unwrap();
+                        common::comparison_to_ast(self.computer.context, expression.clone())
+                            .unwrap();
                     self.computer.solver.assert(&condition.simplify());
-                    println!("conditions: {:#?}", self.computer.solver.get_assertions());
                     match self.computer.solver.check() {
                         SatResult::Sat => {
                             log::info!(
@@ -722,6 +720,22 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             "unknown with reason: {:?}",
                             self.computer.solver.get_reason_unknown()
                         ),
+                    }
+                }
+
+                // unwind loop to run next one
+                if expression.contains("?") {
+                    let mut old_abstract_name = "?".to_string();
+                    for a in expression.get_abstracts() {
+                        if a.contains("?") {
+                            old_abstract_name = a;
+                        }
+                    }
+                    if !(old_abstract_name == "?") {
+                        for r in expression.get_register_names() {
+                            self.computer
+                                .track_register(r, old_abstract_name.to_string());
+                        }
                     }
                 }
                 return Some(*branch_decision);

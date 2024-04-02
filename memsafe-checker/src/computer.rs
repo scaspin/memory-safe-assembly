@@ -180,16 +180,28 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.tracked_loop_abstracts.remove(&register);
     }
 
-    // FIX: better name for what this is? make tokens not just ?
-    pub fn replace_abstract(&mut self, token: &str, value: AbstractExpression) {
-        for i in 0..self.registers.len() {
-            if let Some(b) = &self.registers[i].base {
-                if b.contains(&token) {
-                    self.registers[i].base = Some(b.replace(token, value.clone()));
+    fn update_abstract(&mut self, register: String, op_string: &str) {
+        let r = self.operand(register.clone());
+
+        if self.tracked_loop_abstracts.contains_key(&register) {
+            // need to make sure this works if r2 isn't immediate
+            if let Some(b) = r.base.clone() {
+                if !b.contains("?") {
+                    let new_abstract = self.tracked_loop_abstracts.get(&register.clone()).unwrap();
+                    let new_base = AbstractExpression::Expression(
+                        op_string.to_string(),
+                        Box::new(b.clone()),
+                        Box::new(AbstractExpression::Abstract(new_abstract.to_string())),
+                    );
+                    self.set_register(register.clone(), r.kind.clone(), Some(new_base), 0);
+                    self.untrack_register(register.clone());
+                } else {
+                    // resetting for loop iteration
+                    self.set_register(register.clone(), r.kind.clone(), r.base.clone(), 0);
+                    self.untrack_register(register.clone());
                 }
             }
         }
-        // TODO: update flags and stack as well?
     }
 
     pub fn change_alignment(&mut self, value: i64) {
@@ -478,10 +490,8 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r4.is_some() {
-                if self.tracked_loop_abstracts.contains_key(&reg3base)
-                    || reg3base.contains(&"?".to_string())
-                {
-                    return Ok(None);
+                if self.tracked_loop_abstracts.contains_key(&reg3base) {
+                    self.update_abstract(reg3base.clone(), "+");
                 }
                 let new_imm = self.operand(instruction.r4.clone().unwrap());
                 self.set_register(
@@ -526,10 +536,8 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r3.is_some() {
-                if self.tracked_loop_abstracts.contains_key(&reg2base)
-                    || reg2base.contains(&"?".to_string())
-                {
-                    return Ok(None);
+                if self.tracked_loop_abstracts.contains_key(&reg2base) {
+                    self.update_abstract(reg2base.clone(), "+");
                 }
                 let new_imm = self.operand(instruction.r3.clone().unwrap());
                 self.set_register(
@@ -572,10 +580,8 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r4.is_some() {
-                if self.tracked_loop_abstracts.contains_key(&reg3base)
-                    || reg3base.contains(&"?".to_string())
-                {
-                    return Ok(None);
+                if self.tracked_loop_abstracts.contains_key(&reg3base) {
+                    self.update_abstract(reg3base.clone(), "+");
                 }
                 let new_imm = self.operand(instruction.r4.clone().unwrap());
                 self.set_register(
@@ -601,44 +607,11 @@ impl<'ctx> ARMCORTEXA<'_> {
         reg2: String,
         reg3: Option<String>,
     ) {
-        // let saved_reg0 = reg0.clone();
+        self.update_abstract(reg1.clone(), op_string);
+        self.update_abstract(reg2.clone(), op_string);
+
         let r1 = self.operand(reg1.clone());
         let mut r2 = self.operand(reg2.clone());
-
-        // if we're tracking r1 or r2 for abstract looping, we're just gonna operate
-        // some abstract
-        if self.tracked_loop_abstracts.contains_key(&reg1)
-            || self.tracked_loop_abstracts.contains_key(&reg2)
-        {
-            // need to make sure this works if r2 isn't immediate
-            if let Some(b) = r1.base.clone() {
-                if !b.contains("?") {
-                    let new_abstract = self.tracked_loop_abstracts.get(&reg1.clone()).unwrap();
-                    let new_base = AbstractExpression::Expression(
-                        op_string.to_string(),
-                        Box::new(b.clone()),
-                        Box::new(AbstractExpression::Abstract(new_abstract.to_string())),
-                    );
-                    self.set_register(reg0, r1.kind, Some(new_base), 0);
-                    // self.untrack_register(reg1);
-                }
-                return;
-            }
-
-            if let Some(b) = r2.base.clone() {
-                if !b.contains("?") {
-                    let new_abstract = self.tracked_loop_abstracts.get(&reg1.clone()).unwrap();
-                    let new_base = AbstractExpression::Expression(
-                        op_string.to_string(),
-                        Box::new(b),
-                        Box::new(AbstractExpression::Abstract(new_abstract.to_string())),
-                    );
-                    self.set_register(reg0, r2.kind, Some(new_base), op(r1.offset, r2.offset));
-                    // self.untrack_register(reg2);
-                }
-                return;
-            }
-        }
 
         if reg3.is_some() {
             if let Some(expr) = reg3 {
