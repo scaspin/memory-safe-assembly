@@ -10,6 +10,7 @@ use syn::{
     parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result, Signature,
     Stmt, Token,
 };
+use z3::{Config, Context};
 
 use bums;
 use bums::common::RegionType;
@@ -215,7 +216,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     for line in reader.lines() {
         program.push(line.unwrap_or(String::from("")));
     }
-    let mut engine = bums::engine::ExecutionEngine::new(program);
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
     // TODO: make sure to handle overflows into Stack
     // add memory safe regions
@@ -361,7 +365,9 @@ pub fn safe_asm(input: TokenStream) -> TokenStream {
         program.push(line.trim().to_string());
     }
 
-    let mut engine = bums::engine::ExecutionEngine::new(program);
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
     // TODO add regions
 
@@ -420,7 +426,9 @@ pub fn safe_global_asm(input: TokenStream) -> TokenStream {
     for line in reader.lines() {
         program.push(line.unwrap_or(String::from("")));
     }
-    let mut engine = bums::engine::ExecutionEngine::new(program);
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
     // TODO add regions
 

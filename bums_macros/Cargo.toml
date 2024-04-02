@@ -14,3 +14,4 @@ syn = {version = "2.0.49", features = ["full", "extra-traits", "parsing", "deriv
 bums = { path = "../memsafe-checker" }
 proc-macro-error = "1.0.4"
 proc-macro2 = {version="1.0.78", features=["proc-macro"]}
+z3 = {version = "0.12.1", features = ["static-link-z3"]}
