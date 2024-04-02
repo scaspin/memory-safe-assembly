@@ -265,8 +265,16 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                         let size = calculate_size_of(elem) * len;
                         engine.add_abstract_from(i, name.clone());
-                        engine.add_region_from(RegionType::WRITE, name.clone(), (Some(size), None));
-                        engine.add_region_from(RegionType::READ, name.clone(), (Some(size), None));
+                        engine.add_region_from(
+                            RegionType::WRITE,
+                            name.clone(),
+                            (Some(size), None, None),
+                        );
+                        engine.add_region_from(
+                            RegionType::READ,
+                            name.clone(),
+                            (Some(size), None, None),
+                        );
                     }
                     syn::Type::Ptr(a) => {
                         // load pointer into register
@@ -279,13 +287,13 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         engine.add_region_from(
                             RegionType::READ,
                             name.clone(),
-                            (None, Some(bound.clone())),
+                            (None, Some(bound.clone()), None),
                         );
                         if a.mutability.is_some() {
                             engine.add_region_from(
                                 RegionType::WRITE,
                                 name.clone(),
-                                (None, Some(bound)),
+                                (None, Some(bound), None),
                             );
                         }
                     }
