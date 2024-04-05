@@ -723,6 +723,22 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
                 }
 
+                // end recursion for a branch/loop past a specific depth
+                if self.jump_history.len() > 10 {
+                    let mut loop_count = 0;
+                    for h in self.jump_history.clone() {
+                        let (last_jump, _, _, _) = h;
+
+                        if last_jump == pc {
+                            loop_count = loop_count + 1;
+                        }
+                    }
+                    if loop_count > 7 {
+                        log::error!("Loop iterations do not converge");
+                        todo!();
+                    }
+                }
+
                 // unwind loop to run next one
                 if expression.contains("?") {
                     let mut old_abstract_name = "?".to_string();
