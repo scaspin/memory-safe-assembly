@@ -8,7 +8,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
     parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result, Signature,
-    Stmt, Token,
+    Stmt, Token, TypeArray,
 };
 use z3::{Config, Context};
 
@@ -61,6 +61,28 @@ fn calculate_size_of(ty: String) -> usize {
     }
 }
 
+fn calculate_size_of_array(a: &TypeArray) -> usize {
+    let mut elem: String = String::new();
+    let mut len: usize = 0;
+    match &*a.elem {
+        syn::Type::Path(b) => {
+            elem = b.path.segments[0].ident.to_string();
+        }
+        _ => (),
+    }
+    match &a.len {
+        Expr::Lit(b) => match &b.lit {
+            Lit::Int(i) => {
+                len = i.token().to_string().parse::<usize>().unwrap();
+            }
+            _ => (),
+        },
+        _ => (),
+    }
+
+    return calculate_size_of(elem) * len;
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -71,7 +93,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     //get args from function call to pass to invocation
     let mut arguments_to_memory_safe_regions = Vec::new();
+    let mut input_sizes = Vec::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
+    // if caller did not specify arguments in macro, grab names from function call
     if attributes.argument_list.is_empty() {
         for i in &vars.item_fn.inputs {
             arguments_to_memory_safe_regions.push(i.clone());
@@ -100,6 +124,29 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     } else {
+        for i in &vars.item_fn.inputs {
+            //input_sizes.push(i.clone());
+            match i {
+                FnArg::Typed(pat_type) => {
+                    // get name
+                    let mut name = String::new();
+                    match &*pat_type.pat {
+                        Pat::Ident(b) => {
+                            name = b.ident.clone().to_string();
+                        }
+                        _ => (),
+                    }
+                    match &*pat_type.ty {
+                        syn::Type::Array(a) => {
+                            let size = calculate_size_of_array(a);
+                            input_sizes.push((name, size));
+                        }
+                        _ => (),
+                    }
+                }
+                _ => (),
+            }
+        }
         for i in &attributes.argument_list {
             arguments_to_pass.push(i.clone());
         }
@@ -129,7 +176,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut extern_fn = vars.item_fn.clone();
     extern_fn.ident = fn_name.clone();
     if !attributes.argument_list.is_empty() {
-        // println!("extern: {:?}", extern_fn);
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
         for i in attributes.argument_list {
             match i {
@@ -189,17 +235,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // compile file
     // make this path
     let filename = attributes.filename.value();
-    // Command::new("gcc")
-    //     .args(&[
-    //         "-s",
-    //         &(filename.clone() + ".s"),
-    //         "-o",
-    //         &(filename.clone() + ".o"),
-    //     ])
-    //     .output()
-    //     .expect("Failed to compile assembly code");
-
-    let res = File::open(filename.clone() + ".s");
+    let res = File::open(filename.clone());
     let file: File;
     match res {
         Ok(opened) => {
@@ -246,24 +282,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         engine.add_abstract_from(i, name.clone());
                     }
                     syn::Type::Array(a) => {
-                        let mut elem: String = String::new();
-                        let mut len: usize = 0;
-                        match &*a.elem {
-                            syn::Type::Path(b) => {
-                                elem = b.path.segments[0].ident.to_string();
-                            }
-                            _ => (),
-                        }
-                        match &a.len {
-                            Expr::Lit(b) => match &b.lit {
-                                Lit::Int(i) => {
-                                    len = i.token().to_string().parse::<usize>().unwrap();
-                                }
-                                _ => (),
-                            },
-                            _ => (),
-                        }
-                        let size = calculate_size_of(elem) * len;
+                        let size = calculate_size_of_array(a);
                         engine.add_abstract_from(i, name.clone());
                         engine.add_region_from(
                             RegionType::WRITE,
@@ -283,6 +302,26 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         //derive memory safe region based on length
                         let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
                         let no_suffix = no_mut_name.strip_suffix("_as_ptr").unwrap_or(no_mut_name);
+
+                        // if pointing to an array defined as a function param, no abstract length
+                        for i in &input_sizes {
+                            if i.0 == no_suffix {
+                                let bound = i.1;
+                                engine.add_region_from(
+                                    RegionType::READ,
+                                    name.clone(),
+                                    (Some(bound), None, None),
+                                );
+                                if a.mutability.is_some() {
+                                    engine.add_region_from(
+                                        RegionType::WRITE,
+                                        name.clone(),
+                                        (Some(bound), None, None),
+                                    );
+                                }
+                            }
+                        }
+
                         let bound = no_suffix.to_owned() + "_len";
                         engine.add_region_from(
                             RegionType::READ,
