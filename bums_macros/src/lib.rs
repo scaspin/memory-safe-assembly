@@ -1,7 +1,8 @@
 extern crate proc_macro;
 use proc_macro::{Span, TokenStream};
-use proc_macro_error::{abort_call_site, proc_macro_error};
+use proc_macro_error::{abort_call_site, emit_call_site_warning, proc_macro_error};
 use quote::quote;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use syn::parse::{Parse, ParseStream};
@@ -93,7 +94,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     //get args from function call to pass to invocation
     let mut arguments_to_memory_safe_regions = Vec::new();
-    let mut input_sizes = Vec::new();
+    let mut input_sizes = HashMap::new();
+    let mut pointer_sizes = HashMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
     // if caller did not specify arguments in macro, grab names from function call
     if attributes.argument_list.is_empty() {
@@ -125,7 +127,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     } else {
         for i in &vars.item_fn.inputs {
-            //input_sizes.push(i.clone());
             match i {
                 FnArg::Typed(pat_type) => {
                     // get name
@@ -136,12 +137,16 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                         _ => (),
                     }
-                    match &*pat_type.ty {
+                    let ty = &*pat_type.ty;
+                    match ty {
                         syn::Type::Array(a) => {
                             let size = calculate_size_of_array(a);
-                            input_sizes.push((name, size));
+                            input_sizes.insert(name.clone(), size);
+                            pointer_sizes.insert(name, quote! {u32});
                         }
-                        _ => (),
+                        _ => {
+                            pointer_sizes.insert(name, quote! {u8});
+                        }
                     }
                 }
                 _ => (),
@@ -195,12 +200,20 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             new_args.push(parse_quote! {#n: usize});
                         }
                         "as_ptr" => {
-                            let n = Ident::new(&(var_name + "_as_ptr"), span.into());
-                            new_args.push(parse_quote! {#n: *const u8});
+                            let n = Ident::new(&(var_name.clone() + "_as_ptr"), span.into());
+                            if let Some(size) = pointer_sizes.get(&var_name) {
+                                new_args.push(parse_quote! {#n: *const #size});
+                            } else {
+                                new_args.push(parse_quote! {#n: *const u32});
+                            }
                         }
                         "as_mut_ptr" => {
-                            let n = Ident::new(&(var_name + "_as_mut_ptr"), span.into());
-                            new_args.push(parse_quote! {#n: *mut u8});
+                            let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span.into());
+                            if let Some(size) = pointer_sizes.get(&var_name) {
+                                new_args.push(parse_quote! {#n: *mut #size});
+                            } else {
+                                new_args.push(parse_quote! {#n: *mut u32});
+                            }
                         }
                         _ => (),
                     };
@@ -304,22 +317,20 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         let no_suffix = no_mut_name.strip_suffix("_as_ptr").unwrap_or(no_mut_name);
 
                         // if pointing to an array defined as a function param, no abstract length
-                        for i in &input_sizes {
-                            if i.0 == no_suffix {
-                                let bound = i.1;
+                        if let Some(bound) = input_sizes.get(no_suffix) {
+                            engine.add_region_from(
+                                RegionType::READ,
+                                name.clone(),
+                                (Some(*bound), None, None),
+                            );
+                            if a.mutability.is_some() {
                                 engine.add_region_from(
-                                    RegionType::READ,
+                                    RegionType::WRITE,
                                     name.clone(),
-                                    (Some(bound), None, None),
+                                    (Some(*bound), None, None),
                                 );
-                                if a.mutability.is_some() {
-                                    engine.add_region_from(
-                                        RegionType::WRITE,
-                                        name.clone(),
-                                        (Some(bound), None, None),
-                                    );
-                                }
                             }
+                            continue;
                         }
 
                         let bound = no_suffix.to_owned() + "_len";
@@ -348,7 +359,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     match res {
         Ok(_) => return token_stream,
-        Err(error) => abort_call_site!(error),
+        Err(error) => {
+            emit_call_site_warning!(error);
+            return token_stream;
+        }
     };
 }
 
