@@ -1,0 +1,3 @@
+.globl	start
+start: 
+    nop
