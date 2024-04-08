@@ -196,37 +196,53 @@ fn sha256_digest(msg: &[u8], output: &mut [u8]) {
     SHA256(msg.as_ptr(), msg.len(), output.as_mut_ptr());
 }
 
-fn wrong_sha256_digest(msg: &[u8], output: &mut [u8]) {
-    let context = [
+fn incomplete_sha256_digest(msg: &[u8], output: &mut [u8]) {
+    let mut context = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,
     ];
 
     let init_value: u8 = 0;
+
     let mut init_vec = vec![init_value; msg.len()];
-    let mut in_place_slice: &mut [u8] = init_vec.as_mut_slice();
+    let in_place_slice: &mut [u8] = init_vec.as_mut_slice();
     in_place_slice.copy_from_slice(msg);
+
     sha256_block_data_order(context, in_place_slice);
-    output.copy_from_slice(&in_place_slice[0..32]);
+
+    let mut length = in_place_slice.len();
+    if output.len() < length {
+        length = output.len();
+    }
+    let subset_output = &in_place_slice[0..length];
+    output.copy_from_slice(&subset_output);
 }
 
-#[bums_macros::check_mem_safe("sha256_asm.S", context.as_mut_ptr(), input.as_mut_ptr(), input.len())]
+#[bums_macros::check_mem_safe("assembly/sha256_asm.S", context.as_mut_ptr(), input.as_mut_ptr(), input.len())]
 fn sha256_block_data_order(mut context: [u32; 8], input: &mut [u8]);
+
+#[bums_macros::check_mem_safe("assembly/sha256_asm.S", context.as_mut_ptr(), input.as_mut_ptr(), input.len())]
+fn sha1_block_data_order(mut context: [u32; 8], input: &mut [u8]);
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_sha256_assembly() {
-        let message: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8, 9];
+    fn test_sha256_basic_assembly_call() {
+        let message: &[u8] = &[
+            1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 5, 6, 7, 8, 9, 10,
+        ];
         let mut output: &mut [u8] = &mut [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
         ];
-        wrong_sha256_digest(&message, &mut output);
-        println!("message: {:?}", message);
-        assert!(message != [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+        incomplete_sha256_digest(&message, &mut output);
+        println!("output: {:?}", output);
+        assert!(output != message);
     }
 
     #[test]
@@ -234,10 +250,11 @@ mod tests {
         let message: &[u8] = &[1, 2, 3, 4, 5, 6, 7, 8, 9];
         let mut output: &mut [u8] = &mut [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
         ];
         sha256_digest(&message, &mut output);
         println!("output:{:?}", output);
-        assert!(message != [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+        assert!(output != message);
     }
 }

@@ -1,5 +1,6 @@
 .text
 
+
 .private_extern	_OPENSSL_armcap_P
 .globl	_sha256_block_data_order
 .private_extern	_sha256_block_data_order
@@ -30,6 +31,9 @@ Loop:
 	ldr	w19,[x30],#4			// *K++
 	eor	w28,w21,w22				// magic seed
 	str	x1,[x29,#112]
+#ifndef	__AARCH64EB__
+	rev	w3,w3			// 0
+#endif
 	ror	w16,w24,#6
 	add	w27,w27,w19			// h+=K[i]
 	eor	w6,w24,w24,ror#14
@@ -50,6 +54,9 @@ Loop:
 	add	w27,w27,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w27,w27,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w4,w4			// 1
+#endif
 	ldp	w5,w6,[x1],#2*4
 	add	w27,w27,w17			// h+=Sigma0(a)
 	ror	w16,w23,#6
@@ -72,6 +79,9 @@ Loop:
 	add	w26,w26,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w26,w26,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w5,w5			// 2
+#endif
 	add	w26,w26,w17			// h+=Sigma0(a)
 	ror	w16,w22,#6
 	add	w25,w25,w19			// h+=K[i]
@@ -93,6 +103,9 @@ Loop:
 	add	w25,w25,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w25,w25,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w6,w6			// 3
+#endif
 	ldp	w7,w8,[x1],#2*4
 	add	w25,w25,w17			// h+=Sigma0(a)
 	ror	w16,w21,#6
@@ -115,6 +128,9 @@ Loop:
 	add	w24,w24,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w24,w24,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w7,w7			// 4
+#endif
 	add	w24,w24,w17			// h+=Sigma0(a)
 	ror	w16,w20,#6
 	add	w23,w23,w19			// h+=K[i]
@@ -136,6 +152,9 @@ Loop:
 	add	w23,w23,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w23,w23,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w8,w8			// 5
+#endif
 	ldp	w9,w10,[x1],#2*4
 	add	w23,w23,w17			// h+=Sigma0(a)
 	ror	w16,w27,#6
@@ -158,6 +177,9 @@ Loop:
 	add	w22,w22,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w22,w22,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w9,w9			// 6
+#endif
 	add	w22,w22,w17			// h+=Sigma0(a)
 	ror	w16,w26,#6
 	add	w21,w21,w19			// h+=K[i]
@@ -179,6 +201,9 @@ Loop:
 	add	w21,w21,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w21,w21,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w10,w10			// 7
+#endif
 	ldp	w11,w12,[x1],#2*4
 	add	w21,w21,w17			// h+=Sigma0(a)
 	ror	w16,w25,#6
@@ -201,6 +226,9 @@ Loop:
 	add	w20,w20,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w20,w20,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w11,w11			// 8
+#endif
 	add	w20,w20,w17			// h+=Sigma0(a)
 	ror	w16,w24,#6
 	add	w27,w27,w19			// h+=K[i]
@@ -222,6 +250,9 @@ Loop:
 	add	w27,w27,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w27,w27,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w12,w12			// 9
+#endif
 	ldp	w13,w14,[x1],#2*4
 	add	w27,w27,w17			// h+=Sigma0(a)
 	ror	w16,w23,#6
@@ -244,6 +275,9 @@ Loop:
 	add	w26,w26,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w26,w26,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w13,w13			// 10
+#endif
 	add	w26,w26,w17			// h+=Sigma0(a)
 	ror	w16,w22,#6
 	add	w25,w25,w19			// h+=K[i]
@@ -265,6 +299,9 @@ Loop:
 	add	w25,w25,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w25,w25,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w14,w14			// 11
+#endif
 	ldp	w15,w0,[x1],#2*4
 	add	w25,w25,w17			// h+=Sigma0(a)
 	str	w6,[sp,#12]
@@ -288,6 +325,9 @@ Loop:
 	add	w24,w24,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w24,w24,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w15,w15			// 12
+#endif
 	add	w24,w24,w17			// h+=Sigma0(a)
 	str	w7,[sp,#0]
 	ror	w16,w20,#6
@@ -310,6 +350,9 @@ Loop:
 	add	w23,w23,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w23,w23,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w0,w0			// 13
+#endif
 	ldp	w1,w2,[x1]
 	add	w23,w23,w17			// h+=Sigma0(a)
 	str	w8,[sp,#4]
@@ -333,6 +376,9 @@ Loop:
 	add	w22,w22,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w22,w22,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w1,w1			// 14
+#endif
 	ldr	w6,[sp,#12]
 	add	w22,w22,w17			// h+=Sigma0(a)
 	str	w9,[sp,#8]
@@ -356,6 +402,9 @@ Loop:
 	add	w21,w21,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w21,w21,w17			// h+=Sigma0(a)
+#ifndef	__AARCH64EB__
+	rev	w2,w2			// 15
+#endif
 	ldr	w7,[sp,#0]
 	add	w21,w21,w17			// h+=Sigma0(a)
 	str	w10,[sp,#12]
@@ -918,7 +967,6 @@ Loop_16_xx:
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#128
-	AARCH64_VALIDATE_LINK_REGISTER
 	ret
 
 
@@ -945,4 +993,148 @@ LK256:
 .long	0	//terminator
 
 .byte	83,72,65,50,53,54,32,98,108,111,99,107,32,116,114,97,110,115,102,111,114,109,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
+.align	2
+.align	2
+.text
+#ifndef	__KERNEL__
 
+.align	6
+sha256_block_armv8:
+Lv8_entry:
+	// Armv8.3-A PAuth: even though x30 is pushed to stack it is not popped later.
+	stp	x29,x30,[sp,#-16]!
+	add	x29,sp,#0
+
+	ld1	{v0.4s,v1.4s},[x0]
+	adrp	x3,LK256@PAGE
+	add	x3,x3,LK256@PAGEOFF
+
+Loop_hw:
+	ld1	{v4.16b,v5.16b,v6.16b,v7.16b},[x1],#64
+	sub	x2,x2,#1
+	ld1	{v16.4s},[x3],#16
+	rev32	v4.16b,v4.16b
+	rev32	v5.16b,v5.16b
+	rev32	v6.16b,v6.16b
+	rev32	v7.16b,v7.16b
+	orr	v18.16b,v0.16b,v0.16b		// offload
+	orr	v19.16b,v1.16b,v1.16b
+	ld1	{v17.4s},[x3],#16
+	add	v16.4s,v16.4s,v4.4s
+.long	0x5e2828a4	//sha256su0 v4.16b,v5.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
+.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+.long	0x5e0760c4	//sha256su1 v4.16b,v6.16b,v7.16b
+	ld1	{v16.4s},[x3],#16
+	add	v17.4s,v17.4s,v5.4s
+.long	0x5e2828c5	//sha256su0 v5.16b,v6.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
+.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+.long	0x5e0460e5	//sha256su1 v5.16b,v7.16b,v4.16b
+	ld1	{v17.4s},[x3],#16
+	add	v16.4s,v16.4s,v6.4s
+.long	0x5e2828e6	//sha256su0 v6.16b,v7.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
+.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+.long	0x5e056086	//sha256su1 v6.16b,v4.16b,v5.16b
+	ld1	{v16.4s},[x3],#16
+	add	v17.4s,v17.4s,v7.4s
+.long	0x5e282887	//sha256su0 v7.16b,v4.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
+.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+.long	0x5e0660a7	//sha256su1 v7.16b,v5.16b,v6.16b
+	ld1	{v17.4s},[x3],#16
+	add	v16.4s,v16.4s,v4.4s
+.long	0x5e2828a4	//sha256su0 v4.16b,v5.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
+.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+.long	0x5e0760c4	//sha256su1 v4.16b,v6.16b,v7.16b
+	ld1	{v16.4s},[x3],#16
+	add	v17.4s,v17.4s,v5.4s
+.long	0x5e2828c5	//sha256su0 v5.16b,v6.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
+.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+.long	0x5e0460e5	//sha256su1 v5.16b,v7.16b,v4.16b
+	ld1	{v17.4s},[x3],#16
+	add	v16.4s,v16.4s,v6.4s
+.long	0x5e2828e6	//sha256su0 v6.16b,v7.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
+.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+.long	0x5e056086	//sha256su1 v6.16b,v4.16b,v5.16b
+	ld1	{v16.4s},[x3],#16
+	add	v17.4s,v17.4s,v7.4s
+.long	0x5e282887	//sha256su0 v7.16b,v4.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
+.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+.long	0x5e0660a7	//sha256su1 v7.16b,v5.16b,v6.16b
+	ld1	{v17.4s},[x3],#16
+	add	v16.4s,v16.4s,v4.4s
+.long	0x5e2828a4	//sha256su0 v4.16b,v5.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
+.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+.long	0x5e0760c4	//sha256su1 v4.16b,v6.16b,v7.16b
+	ld1	{v16.4s},[x3],#16
+	add	v17.4s,v17.4s,v5.4s
+.long	0x5e2828c5	//sha256su0 v5.16b,v6.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
+.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+.long	0x5e0460e5	//sha256su1 v5.16b,v7.16b,v4.16b
+	ld1	{v17.4s},[x3],#16
+	add	v16.4s,v16.4s,v6.4s
+.long	0x5e2828e6	//sha256su0 v6.16b,v7.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
+.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+.long	0x5e056086	//sha256su1 v6.16b,v4.16b,v5.16b
+	ld1	{v16.4s},[x3],#16
+	add	v17.4s,v17.4s,v7.4s
+.long	0x5e282887	//sha256su0 v7.16b,v4.16b
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
+.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+.long	0x5e0660a7	//sha256su1 v7.16b,v5.16b,v6.16b
+	ld1	{v17.4s},[x3],#16
+	add	v16.4s,v16.4s,v4.4s
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
+.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+
+	ld1	{v16.4s},[x3],#16
+	add	v17.4s,v17.4s,v5.4s
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
+.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+
+	ld1	{v17.4s},[x3]
+	add	v16.4s,v16.4s,v6.4s
+	sub	x3,x3,#64*4-16	// rewind
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
+.long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s
+
+	add	v17.4s,v17.4s,v7.4s
+	orr	v2.16b,v0.16b,v0.16b
+.long	0x5e114020	//sha256h v0.16b,v1.16b,v17.4s
+.long	0x5e115041	//sha256h2 v1.16b,v2.16b,v17.4s
+
+	add	v0.4s,v0.4s,v18.4s
+	add	v1.4s,v1.4s,v19.4s
+
+	cbnz	x2,Loop_hw
+
+	st1	{v0.4s,v1.4s},[x0]
+
+	ldr	x29,[sp],#16
+	ret
+
+#endif
