@@ -1,6 +1,9 @@
 extern crate proc_macro;
 use proc_macro::{Span, TokenStream};
-use proc_macro_error::{abort_call_site, emit_call_site_warning, proc_macro_error};
+#[allow(unused_imports)]
+use proc_macro_error::{
+    abort_call_site, emit_call_site_error, emit_call_site_warning, emit_error, proc_macro_error,
+};
 use quote::quote;
 use std::collections::HashMap;
 use std::fs::File;
@@ -180,7 +183,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                             _ => (),
                         },
-                        _ => todo!(),
+                        _ => println!("{:?}", ty),
                     }
                 }
                 _ => (),
@@ -236,7 +239,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         "as_ptr" => {
                             let n = Ident::new(&(var_name.clone() + "_as_ptr"), span.into());
                             if let Some(size) = pointer_sizes.get(&var_name) {
-                                new_args.push(parse_quote! {#n: *const #size});
+                                match size.as_str() {
+                                    "u8" => new_args.push(parse_quote! {#n: *const u8}),
+                                    "u32" => new_args.push(parse_quote! {#n: *const u32}),
+                                    _ => (),
+                                }
                             } else {
                                 new_args.push(parse_quote! {#n: *const u8});
                             }
@@ -258,7 +265,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 Expr::Reference(_) => {
                     // TODO include a name in var name for uniqueness
-                    new_args.push(parse_quote! {reference:u32});
+                    new_args.push(parse_quote! {_ : u32});
                 }
                 Expr::Path(ref a) => {
                     let var_name = a.path.segments[0].ident.to_string();
@@ -266,6 +273,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         new_args.push(parse_quote! {#i: #ty});
                     }
                 }
+                Expr::Binary(_) => {
+                    new_args.push(parse_quote! {_: usize});
+                }
+                Expr::Lit(_) => new_args.push(parse_quote! {_: usize}),
                 _ => (),
             }
         }
@@ -398,12 +409,16 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    let label = vars.item_fn.ident.to_string();
+    let label = "_".to_owned() + &vars.item_fn.ident.to_string();
     let res = engine.start(label.clone());
 
     match res {
         Ok(_) => return token_stream,
         Err(error) => {
+            #[cfg(not(debug_assertions))]
+            emit_call_site_error!(error);
+
+            #[cfg(debug_assertions)]
             emit_call_site_warning!(error);
             return token_stream;
         }
