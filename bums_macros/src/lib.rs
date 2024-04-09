@@ -80,7 +80,6 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
         },
         _ => (),
     }
-
     return calculate_size_of(elem) * len;
 }
 
@@ -91,11 +90,13 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
     let attributes = parse_macro_input!(attr as AttributeList);
     let fn_name = &vars.item_fn.ident;
+    let output = &vars.item_fn.output;
 
     //get args from function call to pass to invocation
     let mut arguments_to_memory_safe_regions = Vec::new();
     let mut input_sizes = HashMap::new();
     let mut pointer_sizes = HashMap::new();
+    let mut input_types = HashMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
     // if caller did not specify arguments in macro, grab names from function call
     if attributes.argument_list.is_empty() {
@@ -138,6 +139,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         _ => (),
                     }
                     let ty = &*pat_type.ty;
+                    input_types.insert(name.clone(), ty);
                     match ty {
                         syn::Type::Array(a) => {
                             let size = calculate_size_of_array(a);
@@ -204,7 +206,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             if let Some(size) = pointer_sizes.get(&var_name) {
                                 new_args.push(parse_quote! {#n: *const #size});
                             } else {
-                                new_args.push(parse_quote! {#n: *const u32});
+                                new_args.push(parse_quote! {#n: *const u8});
                             }
                         }
                         "as_mut_ptr" => {
@@ -222,6 +224,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // TODO include a name in var name for uniqueness
                     new_args.push(parse_quote! {reference:u32});
                 }
+                Expr::Path(ref a) => {
+                    let var_name = a.path.segments[0].ident.to_string();
+                    if let Some(ty) = input_types.get(&var_name) {
+                        new_args.push(parse_quote! {#i: #ty});
+                    }
+                }
                 _ => (),
             }
         }
@@ -235,7 +243,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let unsafe_block: Stmt = parse_quote! {
         #original_fn_call {
             extern "C" {
-                #extern_fn;
+                #extern_fn #output;
             }
             unsafe {
                 return #invocation;
