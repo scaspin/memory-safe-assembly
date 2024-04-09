@@ -9,7 +9,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
     parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result, Signature,
-    Stmt, Token, TypeArray,
+    Stmt, Token, TypeArray, TypeSlice,
 };
 use z3::{Config, Context};
 
@@ -83,6 +83,28 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
     return calculate_size_of(elem) * len;
 }
 
+fn calculate_type_of_array_ptr(a: &TypeArray) -> String {
+    let mut elem: String = String::new();
+    match &*a.elem {
+        syn::Type::Path(b) => {
+            elem = b.path.segments[0].ident.to_string();
+        }
+        _ => (),
+    }
+    return elem;
+}
+
+fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
+    let mut elem: String = String::new();
+    match &*a.elem {
+        syn::Type::Path(b) => {
+            elem = b.path.segments[0].ident.to_string();
+        }
+        _ => (),
+    }
+    return elem;
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -142,13 +164,23 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     input_types.insert(name.clone(), ty);
                     match ty {
                         syn::Type::Array(a) => {
+                            let ty = calculate_type_of_array_ptr(a);
                             let size = calculate_size_of_array(a);
                             input_sizes.insert(name.clone(), size);
-                            pointer_sizes.insert(name, quote! {u32});
+                            pointer_sizes.insert(name, ty);
                         }
-                        _ => {
-                            pointer_sizes.insert(name, quote! {u8});
-                        }
+                        syn::Type::Reference(a) => match &*a.elem {
+                            syn::Type::Array(b) => {
+                                let ty = calculate_type_of_array_ptr(b);
+                                pointer_sizes.insert(name, ty);
+                            }
+                            syn::Type::Slice(b) => {
+                                let ty = calculate_type_of_slice_ptr(b);
+                                pointer_sizes.insert(name, ty);
+                            }
+                            _ => (),
+                        },
+                        _ => todo!(),
                     }
                 }
                 _ => (),
@@ -212,9 +244,13 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         "as_mut_ptr" => {
                             let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span.into());
                             if let Some(size) = pointer_sizes.get(&var_name) {
-                                new_args.push(parse_quote! {#n: *mut #size});
+                                match size.as_str() {
+                                    "u8" => new_args.push(parse_quote! {#n: *mut u8}),
+                                    "u32" => new_args.push(parse_quote! {#n: *mut u32}),
+                                    _ => (),
+                                }
                             } else {
-                                new_args.push(parse_quote! {#n: *mut u32});
+                                new_args.push(parse_quote! {#n: *mut u8});
                             }
                         }
                         _ => (),
