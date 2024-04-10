@@ -3,12 +3,14 @@ name = "crypto-playground"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-bums_macros = {path = "../bums_macros"}
-round = "0.1.2"
+bums_macros = { path = "../bums_macros" }
+byteorder = "*"
+
+[dev-dependencies]
+aws-lc-rs = "*"
+aws-lc-sys = "*"
 
 [build-dependencies]
-bums_macros = {path = "../bums_macros"}
+bums_macros = { path = "../bums_macros" }
 cc = "1.0.90"
-
