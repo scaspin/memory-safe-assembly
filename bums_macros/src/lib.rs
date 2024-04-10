@@ -183,7 +183,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                             _ => (),
                         },
-                        _ => println!("{:?}", ty),
+                        _ => (),
                     }
                 }
                 _ => (),
