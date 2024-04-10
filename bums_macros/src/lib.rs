@@ -410,7 +410,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let label = "_".to_owned() + &vars.item_fn.ident.to_string();
-    let res = engine.start(label.clone());
+    let res = engine.start(&label);
 
     match res {
         Ok(_) => return token_stream,
@@ -499,7 +499,7 @@ pub fn safe_asm(input: TokenStream) -> TokenStream {
         _ => todo!(),
     };
 
-    let res = engine.start(label.clone());
+    let res = engine.start(&label);
 
     match res {
         Ok(_) => {
@@ -560,7 +560,7 @@ pub fn safe_global_asm(input: TokenStream) -> TokenStream {
         _ => todo!(),
     };
 
-    let res = engine.start(label.clone());
+    let res = engine.start(&label);
 
     match res {
         Ok(_) => {

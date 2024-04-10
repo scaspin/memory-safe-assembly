@@ -309,14 +309,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
         self.computer.change_alignment(value);
     }
 
-    pub fn start(&mut self, start: String) -> std::io::Result<()> {
+    pub fn start(&mut self, start: &String) -> std::io::Result<()> {
         let pc;
         match self.get_linenumber_of_label(start) {
             Some(n) => pc = n,
             None => {
                 return Err(Error::new(
                     ErrorKind::Other,
-                    "Start label not found in program",
+                    format!("Start label not found in program: {}", start),
                 ))
             }
         }
@@ -359,7 +359,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             (Some(condition), Some(label), None) => {
                                 let jump_dest;
                                 let rw_list = self.computer.read_rw_queue();
-                                match self.get_linenumber_of_label(label.clone()) {
+                                match self.get_linenumber_of_label(&label) {
                                     Some(i) => jump_dest = i,
                                     None => return Err(Error::new(ErrorKind::Other, "No label")),
                                 }
@@ -423,7 +423,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         }
                                     }
                                     Some(true) => {
-                                        let linenum = self.get_linenumber_of_label(label.clone());
+                                        let linenum = self.get_linenumber_of_label(&label);
                                         match linenum {
                                             Some(n) => {
                                                 self.jump_history.push((
@@ -552,7 +552,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 if &label == "Return" {
                                     break;
                                 }
-                                let newline = self.get_linenumber_of_label(label.clone());
+                                let newline = self.get_linenumber_of_label(&label);
                                 match newline {
                                     Some(n) => {
                                         log::info!("jumping to: {}", n);
@@ -599,9 +599,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
         Ok(self.computer.check_stack_pointer_restored())
     }
 
-    fn get_linenumber_of_label(&self, label: String) -> Option<usize> {
+    fn get_linenumber_of_label(&self, label: &String) -> Option<usize> {
         for l in self.program.labels.iter() {
-            if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
+            if l.0.contains(label) && label.contains(&l.0.clone()) {
                 return Some(l.1);
             }
         }
