@@ -70,7 +70,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 // code.push(text.clone());
 
-                if text.contains(":") {
+                if text.contains(":") && !text.contains("."){
                     let label = text.strip_suffix(":").unwrap();
                     labels.push((label.to_string(), line_number));
                     // if text == start {

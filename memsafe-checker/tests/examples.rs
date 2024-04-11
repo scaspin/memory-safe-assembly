@@ -27,12 +27,12 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "x0".to_string(),
-            (Some(64), None, None),
+            (Some(32), None, None),
         );
         engine.add_region_from(
             common::RegionType::WRITE,
             "x0".to_string(),
-            (Some(64), None, None),
+            (Some(32), None, None),
         );
 
         let blocks = common::AbstractExpression::Abstract("Blocks".to_string());
@@ -46,12 +46,6 @@ mod tests {
         // x1 -- input blocks
         engine.add_abstract(String::from("x1"), base.clone());
         engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::WRITE,
-            base: "Base".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: common::AbstractExpression::Immediate(256),
-        });
-        engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
             base: "Base".to_string(),
             start: common::AbstractExpression::Immediate(0),
@@ -60,12 +54,6 @@ mod tests {
 
         // x2 -- number of blocks
         engine.add_abstract(String::from("x2"), blocks);
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "x2".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: common::AbstractExpression::Immediate(64),
-        });
 
         //engine.dont_fail_fast();
         let res = engine.start(start_label);
@@ -75,7 +63,7 @@ mod tests {
 
     #[test]
     fn test_sha256_armv8_linux() -> std::io::Result<()> {
-        env_logger::init();
+        //env_logger::init();
 
         let file = File::open("tests/asm-examples/processed-sha256-armv8-linux.S")?;
         let reader = BufReader::new(file);
@@ -95,12 +83,12 @@ mod tests {
         engine.add_region_from(
             common::RegionType::READ,
             "x0".to_string(),
-            (Some(64), None, None),
+            (Some(32), None, None),
         );
         engine.add_region_from(
             common::RegionType::WRITE,
             "x0".to_string(),
-            (Some(64), None, None),
+            (Some(32), None, None),
         );
 
         let blocks = common::AbstractExpression::Abstract("Blocks".to_string());
@@ -114,12 +102,6 @@ mod tests {
         // x1 -- input blocks
         engine.add_abstract(String::from("x1"), base.clone());
         engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::WRITE,
-            base: "Base".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: common::AbstractExpression::Immediate(256),
-        });
-        engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
             base: "Base".to_string(),
             start: common::AbstractExpression::Immediate(0),
@@ -128,15 +110,10 @@ mod tests {
 
         // x2 -- number of blocks
         engine.add_abstract(String::from("x2"), blocks);
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "x2".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: common::AbstractExpression::Immediate(64),
-        });
-        println!("{:?}", start_label);
-        engine.dont_fail_fast();
+        
+        //engine.dont_fail_fast();
         let res = engine.start(start_label);
+        assert!(res.is_err());
         Ok(())
     }
 

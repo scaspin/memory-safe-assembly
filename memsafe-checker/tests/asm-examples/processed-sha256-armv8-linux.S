@@ -22,8 +22,9 @@ sha256_block_data_order:
 	ldp	w24,w25,[x0,#4*4]
 	add	x2,x1,x2,lsl#6	// end of input
 	ldp	w26,w27,[x0,#6*4]
-	adrp	x30,.LK256
-	add	x30,x30,:lo12:.LK256
+
+	adrp	x30,LK256@PAGE
+	add	x30,x30,LK256@PAGEOFF
 	stp	x0,x2,[x29,#96]
 
 .Loop:
@@ -923,10 +924,10 @@ sha256_block_data_order:
 	ret
 .size	sha256_block_data_order,.-sha256_block_data_order
 
-.section	.rodata
-.align	6
-.type	.LK256,%object
-.LK256:
+//.section	.rodata
+//.align	6
+//.type	LK256,%object
+LK256:
 .long	0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5
 .long	0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5
 .long	0xd807aa98,0x12835b01,0x243185be,0x550c7dc3
@@ -944,7 +945,5 @@ sha256_block_data_order:
 .long	0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208
 .long	0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
 .long	0	//terminator
-.size	.LK256,.-.LK256
+
 .byte	83,72,65,50,53,54,32,98,108,111,99,107,32,116,114,97,110,115,102,111,114,109,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
-.align	2
-.align	2
