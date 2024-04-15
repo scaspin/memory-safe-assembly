@@ -96,13 +96,12 @@ fn sha256_update(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Result<(), ()>
     Ok(())
 }
 
-
 fn sha256_final(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), ()> {
     // call to crypto_md32_final
     let mut n = ctx.num as usize;
     assert!(n < SHA256_CBLOCK);
     ctx.data[n] = 0x80;
-    n = n+1;
+    n = n + 1;
 
     if n > (SHA256_CBLOCK - 8) {
         ms_memset(&mut ctx.data[n..], 0, SHA256_CBLOCK - n);
@@ -114,7 +113,7 @@ fn sha256_final(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), ()> {
     // is big endian = true
     byteorder::BE::write_u32(&mut ctx.data[(SHA256_CBLOCK - 8)..], ctx.nh);
     byteorder::BE::write_u32(&mut ctx.data[(SHA256_CBLOCK - 4)..], ctx.nl);
-    
+
     sha256_block_data_order(&mut ctx.h, &ctx.data[0..64]);
     ms_memset(&mut ctx.data, 0, SHA256_CBLOCK);
 
@@ -155,36 +154,36 @@ mod tests {
     use super::*;
     use aws_lc_rs::digest::{digest, SHA256};
 
-    // extern "C" {
-    //    #[link_name = "\u{1}aws_lc_0_14_1_sha256_block_data_order"]
-    //    fn aws_sha256_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
-    // }
+    extern "C" {
+        #[link_name = "aws_lc_0_14_1_sha256_block_data_order"]
+        fn aws_sha256_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
+    }
 
-    // #[test]
-    // fn test_sha256_impls() {
-    //     let ours = {
-    //         let mut context = [
-    //             0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
-    //             0x5be0cd19,
-    //         ];
-    //         let input = [0xee; 64];
-    //         sha256_block_data_order(&mut context, &input);
-    //         context
-    //     };
+    #[test]
+    fn test_sha256_asm_impls() {
+        let ours = {
+            let mut context = [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
+            ];
+            let input = [0xee; 64];
+            sha256_block_data_order(&mut context, &input);
+            context
+        };
 
-    //     let theirs = {
-    //         let mut context = [
-    //             0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
-    //             0x5be0cd19,
-    //         ];
-    //         let input = [0xee; 64];
-    //         unsafe {
-    //             aws_sha256_block_data_order(context.as_mut_ptr(), input.as_ptr(), input.len() / 64);
-    //         }
-    //         context
-    //     };
-    //     assert_eq!(ours, theirs);
-    // }
+        let theirs = {
+            let mut context = [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
+            ];
+            let input = [0xee; 64];
+            unsafe {
+                aws_sha256_block_data_order(context.as_mut_ptr(), input.as_ptr(), input.len() / 64);
+            }
+            context
+        };
+        assert_eq!(ours, theirs);
+    }
 
     #[test]
     fn test_sha256_steps() {
