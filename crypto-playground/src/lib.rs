@@ -47,6 +47,14 @@ fn ms_memset(dst: &mut [u8], c: u8, n: usize) {
     dst[0..n].fill(c);
 }
 
+fn convert(data: &[u32; 8]) -> [u8; 32] {
+    let mut res = [0; 32];
+    for i in 0..8 {
+        res[4 * i..][..4].copy_from_slice(&data[i].to_be_bytes());
+    }
+    res
+}
+
 fn sha256_update(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Result<(), ()> {
     //call to crypt_md32_update
     let mut len = len;
@@ -138,14 +146,6 @@ pub fn sha256_digest(msg: &[u8], output: &mut [u8]) {
     sha256(msg, msg.len(), output);
 }
 
-fn convert(data: &[u32; 8]) -> [u8; 32] {
-    let mut res = [0; 32];
-    for i in 0..8 {
-        res[4 * i..][..4].copy_from_slice(&data[i].to_be_bytes());
-    }
-    res
-}
-
 #[bums_macros::check_mem_safe("assembly/processed-sha256-armv8-apple.S", context.as_mut_ptr(), input.as_ptr(), input.len() / SHA256_CBLOCK)]
 fn sha256_block_data_order(context: &mut [u32; 8], input: &[u8]);
 
@@ -186,6 +186,31 @@ mod tests {
     }
 
     #[test]
+    fn test_final_step() {
+        let mut ctx = aws_lc_sys::SHA256_CTX::default();
+        let mut my_ctx = SHA256_CTX::init();
+
+        unsafe {
+            aws_lc_sys::SHA256_Init(&mut ctx);
+        }
+
+        let ours = {
+            let mut out: [u8; 32] = [0; 32];
+            sha256_final(&mut out, &mut my_ctx).unwrap();
+            out
+        };
+
+        let theirs = {
+            let mut out: [u8; 32] = [0; 32];
+            unsafe {
+                aws_lc_sys::SHA256_Final(out.as_mut_ptr(), &mut ctx);
+            }
+            out
+        };
+        assert_eq!(ours, theirs);
+    }
+
+    #[test]
     fn test_sha256_steps() {
         let mut ctx = aws_lc_sys::SHA256_CTX::default();
         let mut my_ctx = SHA256_CTX::init();
@@ -200,7 +225,7 @@ mod tests {
         assert_eq!(ctx.num, my_ctx.num);
         assert_eq!(ctx.md_len, my_ctx.md_len);
 
-        let msg = [123; 240];
+        let msg = [123; 100];
         unsafe {
             aws_lc_sys::SHA256_Update(&mut ctx, msg.as_ptr() as *const _, msg.len());
         }
