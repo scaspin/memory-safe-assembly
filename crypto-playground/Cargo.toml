@@ -1,0 +1,16 @@
+[package]
+name = "crypto-playground"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bums_macros = { path = "../bums_macros" }
+byteorder = "*"
+
+[dev-dependencies]
+aws-lc-rs = "*"
+aws-lc-sys = "*"
+
+[build-dependencies]
+bums_macros = { path = "../bums_macros" }
+cc = "1.0.90"

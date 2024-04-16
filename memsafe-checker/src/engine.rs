@@ -70,7 +70,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 // code.push(text.clone());
 
-                if text.contains(":") {
+                if text.contains(":") && !text.contains("."){
                     let label = text.strip_suffix(":").unwrap();
                     labels.push((label.to_string(), line_number));
                     // if text == start {
@@ -720,6 +720,22 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             "unknown with reason: {:?}",
                             self.computer.solver.get_reason_unknown()
                         ),
+                    }
+                }
+
+                // end recursion for a branch/loop past a specific depth
+                if self.jump_history.len() > 10 {
+                    let mut loop_count = 0;
+                    for h in self.jump_history.clone() {
+                        let (last_jump, _, _, _) = h;
+
+                        if last_jump == pc {
+                            loop_count = loop_count + 1;
+                        }
+                    }
+                    if loop_count > 7 {
+                        log::error!("Loop iterations do not converge");
+                        todo!();
                     }
                 }
 

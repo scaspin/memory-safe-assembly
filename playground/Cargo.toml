@@ -7,3 +7,7 @@ edition = "2021"
 
 [dependencies]
 bums_macros = {path = "../bums_macros"}
+
+[build-dependencies]
+bums_macros = {path = "../bums_macros"}
+cc = "1.0.90"

@@ -1,14 +1,18 @@
 extern crate proc_macro;
 use proc_macro::{Span, TokenStream};
-use proc_macro_error::{abort_call_site, proc_macro_error};
+#[allow(unused_imports)]
+use proc_macro_error::{
+    abort_call_site, emit_call_site_error, emit_call_site_warning, emit_error, proc_macro_error,
+};
 use quote::quote;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
     parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result, Signature,
-    Stmt, Token,
+    Stmt, Token, TypeArray, TypeSlice,
 };
 use z3::{Config, Context};
 
@@ -61,6 +65,49 @@ fn calculate_size_of(ty: String) -> usize {
     }
 }
 
+fn calculate_size_of_array(a: &TypeArray) -> usize {
+    let mut elem: String = String::new();
+    let mut len: usize = 0;
+    match &*a.elem {
+        syn::Type::Path(b) => {
+            elem = b.path.segments[0].ident.to_string();
+        }
+        _ => (),
+    }
+    match &a.len {
+        Expr::Lit(b) => match &b.lit {
+            Lit::Int(i) => {
+                len = i.token().to_string().parse::<usize>().unwrap();
+            }
+            _ => (),
+        },
+        _ => (),
+    }
+    return calculate_size_of(elem) * len;
+}
+
+fn calculate_type_of_array_ptr(a: &TypeArray) -> String {
+    let mut elem: String = String::new();
+    match &*a.elem {
+        syn::Type::Path(b) => {
+            elem = b.path.segments[0].ident.to_string();
+        }
+        _ => (),
+    }
+    return elem;
+}
+
+fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
+    let mut elem: String = String::new();
+    match &*a.elem {
+        syn::Type::Path(b) => {
+            elem = b.path.segments[0].ident.to_string();
+        }
+        _ => (),
+    }
+    return elem;
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -68,10 +115,15 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
     let attributes = parse_macro_input!(attr as AttributeList);
     let fn_name = &vars.item_fn.ident;
+    let output = &vars.item_fn.output;
 
     //get args from function call to pass to invocation
     let mut arguments_to_memory_safe_regions = Vec::new();
+    let mut input_sizes = HashMap::new();
+    let mut pointer_sizes = HashMap::new();
+    let mut input_types = HashMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
+    // if caller did not specify arguments in macro, grab names from function call
     if attributes.argument_list.is_empty() {
         for i in &vars.item_fn.inputs {
             arguments_to_memory_safe_regions.push(i.clone());
@@ -100,6 +152,43 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     } else {
+        for i in &vars.item_fn.inputs {
+            match i {
+                FnArg::Typed(pat_type) => {
+                    // get name
+                    let mut name = String::new();
+                    match &*pat_type.pat {
+                        Pat::Ident(b) => {
+                            name = b.ident.clone().to_string();
+                        }
+                        _ => (),
+                    }
+                    let ty = &*pat_type.ty;
+                    input_types.insert(name.clone(), ty);
+                    match ty {
+                        syn::Type::Array(a) => {
+                            let ty = calculate_type_of_array_ptr(a);
+                            let size = calculate_size_of_array(a);
+                            input_sizes.insert(name.clone(), size);
+                            pointer_sizes.insert(name, ty);
+                        }
+                        syn::Type::Reference(a) => match &*a.elem {
+                            syn::Type::Array(b) => {
+                                let ty = calculate_type_of_array_ptr(b);
+                                pointer_sizes.insert(name, ty);
+                            }
+                            syn::Type::Slice(b) => {
+                                let ty = calculate_type_of_slice_ptr(b);
+                                pointer_sizes.insert(name, ty);
+                            }
+                            _ => (),
+                        },
+                        _ => (),
+                    }
+                }
+                _ => (),
+            }
+        }
         for i in &attributes.argument_list {
             arguments_to_pass.push(i.clone());
         }
@@ -129,7 +218,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut extern_fn = vars.item_fn.clone();
     extern_fn.ident = fn_name.clone();
     if !attributes.argument_list.is_empty() {
-        // println!("extern: {:?}", extern_fn);
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
         for i in attributes.argument_list {
             match i {
@@ -149,20 +237,46 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             new_args.push(parse_quote! {#n: usize});
                         }
                         "as_ptr" => {
-                            let n = Ident::new(&(var_name + "_as_ptr"), span.into());
-                            new_args.push(parse_quote! {#n: *const u8});
+                            let n = Ident::new(&(var_name.clone() + "_as_ptr"), span.into());
+                            if let Some(size) = pointer_sizes.get(&var_name) {
+                                match size.as_str() {
+                                    "u8" => new_args.push(parse_quote! {#n: *const u8}),
+                                    "u32" => new_args.push(parse_quote! {#n: *const u32}),
+                                    _ => (),
+                                }
+                            } else {
+                                new_args.push(parse_quote! {#n: *const u8});
+                            }
                         }
                         "as_mut_ptr" => {
-                            let n = Ident::new(&(var_name + "_as_mut_ptr"), span.into());
-                            new_args.push(parse_quote! {#n: *mut u8});
+                            let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span.into());
+                            if let Some(size) = pointer_sizes.get(&var_name) {
+                                match size.as_str() {
+                                    "u8" => new_args.push(parse_quote! {#n: *mut u8}),
+                                    "u32" => new_args.push(parse_quote! {#n: *mut u32}),
+                                    _ => (),
+                                }
+                            } else {
+                                new_args.push(parse_quote! {#n: *mut u8});
+                            }
                         }
                         _ => (),
                     };
                 }
                 Expr::Reference(_) => {
                     // TODO include a name in var name for uniqueness
-                    new_args.push(parse_quote! {reference:u32});
+                    new_args.push(parse_quote! {_ : u32});
                 }
+                Expr::Path(ref a) => {
+                    let var_name = a.path.segments[0].ident.to_string();
+                    if let Some(ty) = input_types.get(&var_name) {
+                        new_args.push(parse_quote! {#i: #ty});
+                    }
+                }
+                Expr::Binary(_) => {
+                    new_args.push(parse_quote! {_: usize});
+                }
+                Expr::Lit(_) => new_args.push(parse_quote! {_: usize}),
                 _ => (),
             }
         }
@@ -176,7 +290,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let unsafe_block: Stmt = parse_quote! {
         #original_fn_call {
             extern "C" {
-                #extern_fn;
+                #extern_fn #output;
             }
             unsafe {
                 return #invocation;
@@ -189,17 +303,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // compile file
     // make this path
     let filename = attributes.filename.value();
-    // Command::new("gcc")
-    //     .args(&[
-    //         "-s",
-    //         &(filename.clone() + ".s"),
-    //         "-o",
-    //         &(filename.clone() + ".o"),
-    //     ])
-    //     .output()
-    //     .expect("Failed to compile assembly code");
-
-    let res = File::open(filename.clone() + ".s");
+    let res = File::open(filename.clone());
     let file: File;
     match res {
         Ok(opened) => {
@@ -246,27 +350,18 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         engine.add_abstract_from(i, name.clone());
                     }
                     syn::Type::Array(a) => {
-                        let mut elem: String = String::new();
-                        let mut len: usize = 0;
-                        match &*a.elem {
-                            syn::Type::Path(b) => {
-                                elem = b.path.segments[0].ident.to_string();
-                            }
-                            _ => (),
-                        }
-                        match &a.len {
-                            Expr::Lit(b) => match &b.lit {
-                                Lit::Int(i) => {
-                                    len = i.token().to_string().parse::<usize>().unwrap();
-                                }
-                                _ => (),
-                            },
-                            _ => (),
-                        }
-                        let size = calculate_size_of(elem) * len;
+                        let size = calculate_size_of_array(a);
                         engine.add_abstract_from(i, name.clone());
-                        engine.add_region_from(RegionType::WRITE, name.clone(), (Some(size), None));
-                        engine.add_region_from(RegionType::READ, name.clone(), (Some(size), None));
+                        engine.add_region_from(
+                            RegionType::WRITE,
+                            name.clone(),
+                            (Some(size), None, None),
+                        );
+                        engine.add_region_from(
+                            RegionType::READ,
+                            name.clone(),
+                            (Some(size), None, None),
+                        );
                     }
                     syn::Type::Ptr(a) => {
                         // load pointer into register
@@ -275,17 +370,35 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         //derive memory safe region based on length
                         let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
                         let no_suffix = no_mut_name.strip_suffix("_as_ptr").unwrap_or(no_mut_name);
+
+                        // if pointing to an array defined as a function param, no abstract length
+                        if let Some(bound) = input_sizes.get(no_suffix) {
+                            engine.add_region_from(
+                                RegionType::READ,
+                                name.clone(),
+                                (Some(*bound), None, None),
+                            );
+                            if a.mutability.is_some() {
+                                engine.add_region_from(
+                                    RegionType::WRITE,
+                                    name.clone(),
+                                    (Some(*bound), None, None),
+                                );
+                            }
+                            continue;
+                        }
+
                         let bound = no_suffix.to_owned() + "_len";
                         engine.add_region_from(
                             RegionType::READ,
                             name.clone(),
-                            (None, Some(bound.clone())),
+                            (None, Some(bound.clone()), None),
                         );
                         if a.mutability.is_some() {
                             engine.add_region_from(
                                 RegionType::WRITE,
                                 name.clone(),
-                                (None, Some(bound)),
+                                (None, Some(bound), None),
                             );
                         }
                     }
@@ -296,12 +409,19 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    let label = vars.item_fn.ident.to_string();
+    let label = "_".to_owned() + &vars.item_fn.ident.to_string();
     let res = engine.start(label.clone());
 
     match res {
         Ok(_) => return token_stream,
-        Err(error) => abort_call_site!(error),
+        Err(error) => {
+            #[cfg(not(debug_assertions))]
+            emit_call_site_error!(error);
+
+            #[cfg(debug_assertions)]
+            emit_call_site_warning!(error);
+            return token_stream;
+        }
     };
 }
 

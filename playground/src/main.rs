@@ -1,42 +1,50 @@
 use bums_macros;
 
-#[bums_macros::check_mem_safe("example")]
+#[bums_macros::check_mem_safe("assembly/example.S")]
 fn somefunc(a: i32, b: i32) -> i32;
 
-#[bums_macros::check_mem_safe("example")]
-fn somefuncwitharray(a: [u8; 4]);
-
-#[bums_macros::check_mem_safe("example")]
+#[bums_macros::check_mem_safe("assembly/example.S", a.as_ptr())]
 fn somefuncwithslice(a: &[u8]);
 
-#[bums_macros::check_mem_safe("example", a.as_mut_ptr(), a.len())]
+#[bums_macros::check_mem_safe("assembly/example.S", a.as_mut_ptr(), a.len())]
 fn somefuncwithweirdcallingconventionwrite(a: &mut [u8]);
 
-#[bums_macros::check_mem_safe("example", a.as_ptr(), a.len())]
+#[bums_macros::check_mem_safe("assembly/example.S", a.as_ptr(), a.len())]
 fn somefuncwithweirdcallingconventionread(a: &[u8]);
 
-bums_macros::safe_global_asm!("example.S", "start");
+#[bums_macros::check_mem_safe("assembly/store.S")]
+fn store(a: i32, b: i32, vec: *mut u32);
+
+#[bums_macros::check_mem_safe("assembly/store.S", vec.as_mut_ptr())]
+fn store_slice(vec: &mut [u8]);
+
+#[bums_macros::check_mem_safe("assembly/add.S")]
+fn add(a: i32, b: i32) -> i32;
 
 fn main() {
-    somefunc(1, 2);
-    somefuncwitharray([1, 2, 3, 4]);
-    let slice = vec![1, 2, 3];
-    somefuncwithslice(&slice);
-    somefuncwithweirdcallingconventionread(&slice);
+    println!("Hello, World");
+}
 
-    let mut funslice = vec![1, 2, 3];
-    somefuncwithweirdcallingconventionwrite(&mut funslice);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // wip: inline asm
-    bums_macros::safe_asm!(
-        "begin:
-            nop",
-        "begin"
-    );
+    #[test]
+    fn test_addition() {
+        assert_eq!(3, add(1, 2));
+    }
 
-    // wip: global asm
-    // FIX: uses different locations of example.S, give global address
-    unsafe {
-        start();
+    #[test]
+    fn test_store() {
+        let vec = &mut [0];
+        store(2, 3, vec.as_mut_ptr());
+        assert_eq!(5, vec[0])
+    }
+
+    #[test]
+    fn test_store_slice() {
+        let vec = &mut [0];
+        store_slice(vec);
+        assert!(vec[0] != 0)
     }
 }
