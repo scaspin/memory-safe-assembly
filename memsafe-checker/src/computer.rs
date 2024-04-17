@@ -21,7 +21,7 @@ fn get_register_index(reg_name: String) -> usize {
 
 #[derive(Clone)]
 pub struct ARMCORTEXA<'ctx> {
-    registers: [RegisterValue; 33],
+    pub registers: [RegisterValue; 33],
     zero: Option<common::FlagValue>,
     neg: Option<common::FlagValue>,
     carry: Option<common::FlagValue>,
@@ -107,6 +107,24 @@ impl<'ctx> ARMCORTEXA<'_> {
         }
     }
 
+    pub fn get_state(
+        &self,
+    ) -> (
+        [RegisterValue; 33],
+        Option<common::FlagValue>,
+        Option<common::FlagValue>,
+        Option<common::FlagValue>,
+        Option<common::FlagValue>,
+    ) {
+        return (
+            self.registers.clone(),
+            self.zero.clone(),
+            self.neg.clone(),
+            self.carry.clone(),
+            self.overflow.clone(),
+        );
+    }
+
     pub fn set_region(&mut self, region: common::MemorySafeRegion) {
         self.memory_safe_regions.push(region.clone());
     }
@@ -118,12 +136,6 @@ impl<'ctx> ARMCORTEXA<'_> {
     pub fn set_abstract(&mut self, register: String, value: AbstractExpression) {
         self.set_register(register, RegisterKind::Abstract, Some(value), 0);
     }
-
-    // pub fn add_constraint(&mut self, constraint: AbstractExpression) {
-    //     if !self.constraints.contains(&constraint.clone()) {
-    //         self.constraints.push(constraint);
-    //     }
-    // }
 
     fn set_register(
         &mut self,
