@@ -364,6 +364,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                     Some(i) => jump_dest = i,
                                     None => return Err(Error::new(ErrorKind::Other, "No label")),
                                 }
+
+                                if self.looping_too_deep() {
+                                    return Err(Error::new(
+                                        ErrorKind::Other,
+                                        "could not resolve loop",
+                                    ));
+                                }
+
                                 match self.evaluate_branch_condition(
                                     pc.clone(),
                                     condition.clone(),
@@ -628,6 +636,26 @@ impl<'ctx> ExecutionEngine<'ctx> {
         }
     }
 
+    fn looping_too_deep(&self) -> bool {
+        // jump out if too deep in tree
+
+        if self.jump_history.len() > 10 {
+            let mut loop_count = 0;
+            let pc = self.jump_history.last().unwrap().0;
+            for h in self.jump_history.clone() {
+                let (last_jump, _, _, _, _) = h;
+
+                if last_jump == pc {
+                    loop_count = loop_count + 1;
+                }
+            }
+            if loop_count > 7 {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // if true, we jump
     // if false, we continue
     // if None, we explore both paths
@@ -646,21 +674,35 @@ impl<'ctx> ExecutionEngine<'ctx> {
             {
                 let current_state = self.computer.get_state();
                 // LOOP has repeated at least twice
-                if last_jump_label == &pc
-                    && last_rw_list.len() == rw_list.len()
-                    && last_state.0 == current_state.0
-                {
+                if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
+                    // JUMP TO Kth ITERATION
+
+                    self.computer.solver.push();
                     let loop_var_name = (pc.to_string()) + "_loop_?";
-                    ast::Int::new_const(self.computer.context, loop_var_name.clone());
+                    let zero = ast::Int::from_i64(self.computer.context, 0);
+                    let q = ast::Int::new_const(self.computer.context, loop_var_name.clone());
+                    self.computer.solver.assert(&q.ge(&zero));
 
-                    //self.computer.solver.push();
+                    // find the variable that the loop estimates
+                    let simplified = comparison_to_ast(self.computer.context, expression.clone())
+                        .unwrap()
+                        .simplify();
+                    for a in self.abstracts.keys() {
+                        if simplified.to_string().contains(a) {
+                            let original_abstract =
+                                ast::Int::new_const(self.computer.context, a.to_string());
+                            self.computer.solver.assert(&q.ge(&original_abstract));
+                            self.computer.solver.assert(&q.le(&original_abstract));
+                        }
+                    }
 
-                    //iterate over all registers
                     for i in 0..(last_state.0.len()) {
                         let last = &last_state.0[i];
                         let cur = &current_state.0[i];
-                        let diff = match cur.kind {
-                            RegisterKind::RegisterBase => {
+                        let diff: i64 = match cur.kind {
+                            RegisterKind::RegisterBase
+                            | RegisterKind::Abstract
+                            | RegisterKind::Address => {
                                 if last.base == cur.base {
                                     cur.offset - last.offset
                                 } else {
@@ -671,68 +713,39 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             _ => 0,
                         };
 
-                        let new_base = AbstractExpression::Expression(
-                            "+".to_string(),
-                            Box::new(cur.base.clone()?),
-                            Box::new(AbstractExpression::Expression(
-                                "*".to_string(),
-                                Box::new(AbstractExpression::Abstract(loop_var_name.clone())),
-                                Box::new(AbstractExpression::Immediate(diff)),
-                            )),
-                        );
+                        if diff > 0 {
+                            let new_base = AbstractExpression::Expression(
+                                "+".to_string(),
+                                Box::new(cur.base.clone()?),
+                                Box::new(AbstractExpression::Expression(
+                                    "*".to_string(),
+                                    Box::new(AbstractExpression::Abstract(loop_var_name.clone())),
+                                    Box::new(AbstractExpression::Immediate(diff)),
+                                )),
+                            );
 
-                        let new_reg = RegisterValue {
-                            name: cur.name.clone(),
-                            kind: cur.kind.clone(),
-                            base: Some(new_base),
-                            offset: 0,
-                        };
+                            let new_reg = RegisterValue {
+                                name: cur.name.clone(),
+                                kind: cur.kind.clone(),
+                                base: Some(new_base),
+                                offset: 0,
+                            };
 
-                        self.computer.registers[i] = new_reg;
-
-                        println!("diff: {:?}", diff);
+                            self.computer.registers[i] = new_reg;
+                        }
                     }
-
-                    // TODO: make sure ? is greater than current counter
-                    // get the minimal abstracts we depend on
-                    let simplified = comparison_to_ast(self.computer.context, expression.clone())
-                        .unwrap()
-                        .simplify();
-
-                    // for a in self.abstracts.keys() {
-                    // if simplified.to_string().contains(a) {
-                    //     let new_abstract_name =
-                    //         self.abstracts.get(&a.to_string()).unwrap().to_string();
-
-                    //     for cr in expression.get_register_names() {
-                    //         self.computer.track_register(r, new_abstract_name.clone());
-                    //     }
-
-                    // let q = ast::Int::new_const(self.computer.context, new_abstract_name);
-                    // let original_abstract =
-                    //     ast::Int::new_const(self.computer.context, a.to_string());
-
-                    // // TODO: do we want to define this since it implies an upper bound on ? or is that not sound?
-                    // // do the equalities need to change for a different type of condition
-                    // let steps = ast::Int::mul(self.computer.context, &[&q, &step]);
-                    // self.computer.solver.assert(&steps.ge(&original_abstract));
-                    // self.computer.solver.assert(&steps.le(&original_abstract));
-
-                    // self.computer.solver.assert(&q.ge(&zero));
-                    // self.computer.solver.assert(&q.modulo(&step).ge(&zero));
-                    // self.computer.solver.assert(&q.modulo(&step).le(&zero));
 
                     self.in_loop = true;
                     return Some(*branch_decision);
-                    // }
-                    // }
+                } else {
+                    return None;
                 }
-                return None;
             } else {
                 return None;
             }
+        // in loop protocol
         } else {
-            // TODO: maybe add shortcut out when there are no memory accesses in the loop?
+            // K+1 loop is a repeat of K loop!
             if let Some((
                 last_jump_label,
                 branch_decision,
@@ -744,6 +757,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 if last_jump_label == &pc
                     && last_jump_exp == &expression
                     && last_rw_list == &rw_list
+                // && last_state == &self.computer.get_state()
                 {
                     self.computer.solver.pop(1);
                     let condition =
@@ -755,6 +769,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 "satisfiable with model: {:?}",
                                 self.computer.solver.get_model().unwrap()
                             );
+                            self.in_loop = false;
                             return Some(!branch_decision);
                         }
                         SatResult::Unsat => {
@@ -768,36 +783,46 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             self.computer.solver.get_reason_unknown()
                         ),
                     }
-                }
+                } else {
+                    // JUMP after Kth STEP -- need to check loop advanced ok for first iteration
+                    let last_state = last_state;
+                    let current_state = self.computer.get_state();
+                    let loop_var_name = (pc.to_string()) + "_loop_?";
+                    for i in 0..(last_state.0.len()) {
+                        let last = &last_state.0[i];
+                        let cur = &current_state.0[i];
+                        let diff: i64 = match cur.kind {
+                            RegisterKind::RegisterBase
+                            | RegisterKind::Abstract
+                            | RegisterKind::Address => {
+                                if last.base == cur.base {
+                                    cur.offset - last.offset
+                                } else {
+                                    0
+                                }
+                            }
+                            RegisterKind::Immediate => cur.offset - last.offset,
+                            _ => 0,
+                        };
 
-                // end recursion for a branch/loop past a specific depth
-                if self.jump_history.len() > 10 {
-                    let mut loop_count = 0;
-                    for h in self.jump_history.clone() {
-                        let (last_jump, _, _, _, _) = h;
-
-                        if last_jump == pc {
-                            loop_count = loop_count + 1;
-                        }
-                    }
-                    if loop_count > 7 {
-                        log::error!("Loop iterations do not converge");
-                        todo!();
-                    }
-                }
-
-                // unwind loop to run next one
-                if expression.contains("?") {
-                    let mut old_abstract_name = "?".to_string();
-                    for a in expression.get_abstracts() {
-                        if a.contains("?") {
-                            old_abstract_name = a;
-                        }
-                    }
-                    if !(old_abstract_name == "?") {
-                        for r in expression.get_register_names() {
-                            self.computer
-                                .track_register(r, old_abstract_name.to_string());
+                        // check diff matches, if not BAD
+                        // if does, reset for k+1
+                        let base_step = AbstractExpression::Expression(
+                            "*".to_string(),
+                            Box::new(AbstractExpression::Abstract(loop_var_name.clone())),
+                            Box::new(AbstractExpression::Immediate(diff)),
+                        );
+                        if let Some(base) = &cur.base {
+                            if base.contains(&loop_var_name) && base.contains_expression(&base_step)
+                            {
+                                let new_reg = RegisterValue {
+                                    name: cur.name.clone(),
+                                    kind: cur.kind.clone(),
+                                    base: cur.base.clone(),
+                                    offset: 0,
+                                };
+                                self.computer.registers[i] = new_reg;
+                            }
                         }
                     }
                 }
