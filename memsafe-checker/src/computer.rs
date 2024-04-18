@@ -10,6 +10,9 @@ fn get_register_index(reg_name: String) -> usize {
     if reg_name == "sp" {
         return 31;
     }
+    if reg_name == "xzr" {
+        return 32;
+    }
     let r0 = name.strip_prefix("x").unwrap_or(&name);
     let r1: usize = r0
         .strip_prefix("w")
@@ -346,6 +349,11 @@ impl<'ctx> ARMCORTEXA<'_> {
             );
         // TODO: make branch more general
         // https://developer.arm.com/documentation/dui0068/b/ARM-Instruction-Reference/Conditional-execution
+        } else if instruction.op == "cmn" {
+            self.cmn(
+                instruction.r1.clone().expect("need register to compare"),
+                instruction.r2.clone().expect("need register to compare"),
+            );
         } else if instruction.op == "b" {
             return Ok(Some((None, instruction.r1.clone(), None)));
         } else if instruction.op == "b.ne" {
@@ -709,8 +717,6 @@ impl<'ctx> ARMCORTEXA<'_> {
         let r1 = self.registers[get_register_index(reg1.clone())].clone();
         let r2 = self.registers[get_register_index(reg2.clone())].clone();
 
-        // println!("Comparing r1: {:?}, r2: {:?}", r1, r2);
-
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
@@ -870,6 +876,171 @@ impl<'ctx> ARMCORTEXA<'_> {
         } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
             let expression = AbstractExpression::Expression(
                 "-".to_string(),
+                Box::new(AbstractExpression::Register(Box::new(r1))),
+                Box::new(AbstractExpression::Register(Box::new(r2))),
+            );
+            self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                "<",
+                expression.clone(),
+                AbstractExpression::Immediate(0),
+            )));
+            self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                "==",
+                expression.clone(),
+                AbstractExpression::Immediate(0),
+            )));
+            // FIX carry + overflow
+            self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                "<",
+                expression.clone(),
+                AbstractExpression::Immediate(std::i64::MIN),
+            )));
+            self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                "<",
+                expression,
+                AbstractExpression::Immediate(std::i64::MIN),
+            )));
+        }
+    }
+
+    fn cmn(&mut self, reg1: String, reg2: String) {
+        let r1 = self.registers[get_register_index(reg1.clone())].clone();
+        let r2 = self.registers[get_register_index(reg2.clone())].clone();
+
+        if r1.kind == r2.kind {
+            match r1.kind {
+                RegisterKind::RegisterBase => {
+                    if r1.base.eq(&r2.base) {
+                        self.neg = if r1.offset + r2.offset < 0 {
+                            Some(common::FlagValue::REAL(true))
+                        } else {
+                            Some(common::FlagValue::REAL(false))
+                        };
+                        self.zero = if r1.offset + r2.offset == 0 {
+                            Some(common::FlagValue::REAL(true))
+                        } else {
+                            Some(common::FlagValue::REAL(false))
+                        };
+                        self.carry = if r2.offset + r1.offset > std::i64::MAX {
+                            Some(common::FlagValue::REAL(true))
+                        } else {
+                            Some(common::FlagValue::REAL(false))
+                        };
+                        self.overflow = if r2.offset + r1.offset > std::i64::MAX {
+                            Some(common::FlagValue::REAL(true))
+                        } else {
+                            Some(common::FlagValue::REAL(false))
+                        };
+                    } else {
+                        let expression = AbstractExpression::Expression(
+                            "+".to_string(),
+                            Box::new(AbstractExpression::Register(Box::new(r1))),
+                            Box::new(AbstractExpression::Register(Box::new(r2))),
+                        );
+                        self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(0),
+                        )));
+                        self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "==",
+                            expression.clone(),
+                            AbstractExpression::Immediate(0),
+                        )));
+                        // FIX carry + overflow
+                        self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(std::i64::MAX),
+                        )));
+                        self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression,
+                            AbstractExpression::Immediate(std::i64::MAX),
+                        )));
+                    }
+                }
+                RegisterKind::Number => {
+                    log::error!("Cannot compare these two registers")
+                }
+                RegisterKind::Immediate | RegisterKind::Address => {
+                    self.neg = if r1.offset + r2.offset < 0 {
+                        Some(common::FlagValue::REAL(true))
+                    } else {
+                        Some(common::FlagValue::REAL(false))
+                    };
+                    self.zero = if r1.offset + r2.offset == 0 {
+                        Some(common::FlagValue::REAL(true))
+                    } else {
+                        Some(common::FlagValue::REAL(false))
+                    };
+                    // signed vs signed distinction, maybe make offset generic to handle both?
+                    self.carry = if r2.offset + r1.offset > std::i64::MAX {
+                        Some(common::FlagValue::REAL(true))
+                    } else {
+                        Some(common::FlagValue::REAL(false))
+                    };
+                    self.overflow = if r2.offset + r1.offset > std::i64::MAX {
+                        Some(common::FlagValue::REAL(true))
+                    } else {
+                        Some(common::FlagValue::REAL(false))
+                    };
+                }
+                RegisterKind::Abstract => {
+                    if r1.base.eq(&r2.base) {
+                        self.neg = if r1.offset + r2.offset < 0 {
+                            Some(common::FlagValue::REAL(true))
+                        } else {
+                            Some(common::FlagValue::REAL(false))
+                        };
+                        self.zero = if r1.offset + r2.offset == 0 {
+                            Some(common::FlagValue::REAL(true))
+                        } else {
+                            Some(common::FlagValue::REAL(false))
+                        };
+                        self.carry = if r1.offset + r2.offset > std::i64::MAX {
+                            Some(common::FlagValue::REAL(true))
+                        } else {
+                            Some(common::FlagValue::REAL(false))
+                        };
+                        self.overflow = if r1.offset + r2.offset > std::i64::MAX {
+                            Some(common::FlagValue::REAL(true))
+                        } else {
+                            Some(common::FlagValue::REAL(false))
+                        };
+                    } else {
+                        let expression = AbstractExpression::Expression(
+                            "+".to_string(),
+                            Box::new(AbstractExpression::Register(Box::new(r1))),
+                            Box::new(AbstractExpression::Register(Box::new(r2))),
+                        );
+                        self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(0),
+                        )));
+                        self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "==",
+                            expression.clone(),
+                            AbstractExpression::Immediate(0),
+                        )));
+                        // FIX carry + overflow
+                        self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(std::i64::MIN),
+                        )));
+                        self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                            "<",
+                            expression.clone(),
+                            AbstractExpression::Immediate(std::i64::MIN),
+                        )));
+                    }
+                }
+            }
+        } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
+            let expression = AbstractExpression::Expression(
+                "+".to_string(),
                 Box::new(AbstractExpression::Register(Box::new(r1))),
                 Box::new(AbstractExpression::Register(Box::new(r2))),
             );

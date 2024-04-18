@@ -32,12 +32,18 @@ impl RegisterValue {
                 base: Some(AbstractExpression::Abstract("sp".to_string())),
                 offset: 0,
             };
-        }
-        if name == "x30" {
+        } else if name == "x30" {
             return RegisterValue {
                 name: string_name,
                 kind: RegisterKind::Address,
                 base: Some(AbstractExpression::Abstract("Return".to_string())),
+                offset: 0,
+            };
+        } else if name == "xzr" {
+            return RegisterValue {
+                name: string_name,
+                kind: RegisterKind::Immediate,
+                base: None,
                 offset: 0,
             };
         }
@@ -331,7 +337,14 @@ impl FromStr for Instruction {
             }
         }
 
-        let v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
+        let parsed_v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
+
+        let mut v: Vec<&str> = vec![];
+        for e in parsed_v {
+            if e != "" {
+                v.push(e);
+            }
+        }
 
         let v0 = v[0].to_string();
         let v1: Option<String>;
