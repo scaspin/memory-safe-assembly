@@ -6,6 +6,60 @@ mod tests {
     use z3::*;
 
     #[test]
+    fn bn_add() -> std::io::Result<()> {
+        env_logger::init();
+
+        let file = File::open("tests/asm-examples/bn-armv8-apple.S")?;
+        let reader = BufReader::new(file);
+        let start_label = String::from("_bn_add_words");
+
+        let mut program = Vec::new();
+        for line in reader.lines() {
+            program.push(line.unwrap_or(String::from("")));
+        }
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        // size is number of words!
+        let size = common::AbstractExpression::Abstract("size".to_string());
+
+        engine.add_region(common::MemorySafeRegion {
+            region_type: common::RegionType::READ,
+            base: "x0".to_string(),
+            start: common::AbstractExpression::Immediate(0),
+            end: size.clone(),
+        });
+        engine.add_region(common::MemorySafeRegion {
+            region_type: common::RegionType::WRITE,
+            base: "x0".to_string(),
+            start: common::AbstractExpression::Immediate(0),
+            end: size.clone(),
+        });
+
+        engine.add_region(common::MemorySafeRegion {
+            region_type: common::RegionType::READ,
+            base: "x1".to_string(),
+            start: common::AbstractExpression::Immediate(0),
+            end: size.clone(),
+        });
+        engine.add_region(common::MemorySafeRegion {
+            region_type: common::RegionType::READ,
+            base: "x2".to_string(),
+            start: common::AbstractExpression::Immediate(0),
+            end: size.clone(),
+        });
+
+        engine.add_abstract(String::from("x3"), size);
+
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
     fn sha256_armv8_ios64() -> std::io::Result<()> {
         //env_logger::init();
 
@@ -110,7 +164,7 @@ mod tests {
 
         // x2 -- number of blocks
         engine.add_abstract(String::from("x2"), blocks);
-        
+
         //engine.dont_fail_fast();
         let res = engine.start(start_label);
         assert!(res.is_err());
