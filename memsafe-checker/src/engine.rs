@@ -3,13 +3,13 @@ use std::io::{Error, ErrorKind};
 use z3::ast::Ast;
 use z3::*;
 
-use crate::common;
-use crate::computer;
+use crate::common::*;
+use crate::computer::*;
 
 #[derive(Clone)]
 struct Program {
     // defs: Vec<String>,
-    code: Vec<common::Instruction>,
+    code: Vec<Instruction>,
     labels: Vec<(String, usize)>,
     // ifdefs: Vec<((String, usize), usize)>,
 }
@@ -17,14 +17,21 @@ struct Program {
 #[derive(Clone)]
 pub struct ExecutionEngine<'ctx> {
     program: Program,
-    computer: computer::ARMCORTEXA<'ctx>,
+    computer: ARMCORTEXA<'ctx>,
     abstracts: HashMap<String, String>,
     in_loop: bool,
     jump_history: Vec<(
         usize,
         bool,
-        common::AbstractComparison,
-        Vec<common::MemoryAccess>,
+        AbstractComparison,
+        Vec<MemoryAccess>,
+        (
+            [RegisterValue; 33],
+            Option<FlagValue>,
+            Option<FlagValue>,
+            Option<FlagValue>,
+            Option<FlagValue>,
+        ),
     )>,
     fail_fast: bool,
 }
@@ -33,7 +40,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
     pub fn new(lines: Vec<String>, context: &'ctx Context) -> ExecutionEngine<'ctx> {
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
-        let mut code: Vec<common::Instruction> = Vec::new();
+        let mut code: Vec<Instruction> = Vec::new();
         let mut labels: Vec<(String, usize)> = Vec::new();
         let mut ifdefs: Vec<((String, usize), usize)> = Vec::new();
 
@@ -70,15 +77,15 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 // code.push(text.clone());
 
-                if text.contains(":") && !text.contains("."){
+                if text.contains(":") && !text.contains(".") {
                     let label = text.strip_suffix(":").unwrap();
                     labels.push((label.to_string(), line_number));
                     // if text == start {
                     //     pc = line_number;
                     // }
-                    code.push(common::Instruction::new(text))
+                    code.push(Instruction::new(text))
                 } else {
-                    let parsed = text.parse::<common::Instruction>();
+                    let parsed = text.parse::<Instruction>();
                     match parsed {
                         Ok(i) => code.push(i),
                         Err(_) => todo!(),
@@ -94,7 +101,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             }
         }
 
-        let mut computer = computer::ARMCORTEXA::new(context);
+        let mut computer = ARMCORTEXA::new(context);
 
         // load computer static memory
         let mut address = 4;
@@ -137,15 +144,15 @@ impl<'ctx> ExecutionEngine<'ctx> {
         };
     }
 
-    pub fn add_region(&mut self, region: common::MemorySafeRegion) {
+    pub fn add_region(&mut self, region: MemorySafeRegion) {
         // FIX make better so don't have to convert to string
         match region.end.clone() {
-            common::AbstractExpression::Immediate(i) => self.add_region_from(
+            AbstractExpression::Immediate(i) => self.add_region_from(
                 region.region_type,
                 region.base.to_string(),
                 (Some(i.try_into().unwrap()), None, None),
             ),
-            common::AbstractExpression::Expression(..) => self.add_region_from(
+            AbstractExpression::Expression(..) => self.add_region_from(
                 region.region_type,
                 region.base.to_string(),
                 (None, None, Some(region.end.clone())),
@@ -160,24 +167,20 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     pub fn add_region_from(
         &mut self,
-        ty: common::RegionType,
+        ty: RegionType,
         base: String,
-        length: (
-            Option<usize>,
-            Option<String>,
-            Option<common::AbstractExpression>,
-        ),
+        length: (Option<usize>, Option<String>, Option<AbstractExpression>),
     ) {
         match length {
             (Some(num), None, None) => {
                 // FIX: decide whether to include alignment or not
                 let region_size = ((num.clone() as i64) - 1) * self.computer.alignment;
 
-                self.computer.set_region(common::MemorySafeRegion {
+                self.computer.set_region(MemorySafeRegion {
                     region_type: ty,
                     base: base.clone(),
-                    start: common::AbstractExpression::Immediate(0),
-                    end: common::AbstractExpression::Immediate(region_size.clone()),
+                    start: AbstractExpression::Immediate(0),
+                    end: AbstractExpression::Immediate(region_size.clone()),
                 });
 
                 let zero = ast::Int::from_i64(self.computer.context, 0);
@@ -219,16 +222,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     &[&abstract_pointer_from_base, &bound_aligned],
                 );
 
-                self.computer.set_region(common::MemorySafeRegion {
+                self.computer.set_region(MemorySafeRegion {
                     region_type: ty,
                     base: base.clone(),
-                    start: common::AbstractExpression::Immediate(0),
-                    end: common::AbstractExpression::Expression(
+                    start: AbstractExpression::Immediate(0),
+                    end: AbstractExpression::Expression(
                         "-".to_string(),
-                        Box::new(common::AbstractExpression::Abstract(abs)),
-                        Box::new(common::AbstractExpression::Immediate(
-                            self.computer.alignment,
-                        )),
+                        Box::new(AbstractExpression::Abstract(abs)),
+                        Box::new(AbstractExpression::Immediate(self.computer.alignment)),
                     ),
                 });
 
@@ -247,7 +248,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             (None, None, Some(expr)) => {
                 let zero = ast::Int::from_i64(self.computer.context, 0);
                 let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
-                let bound = common::expression_to_ast(self.computer.context, expr.clone()).unwrap();
+                let bound = expression_to_ast(self.computer.context, expr.clone()).unwrap();
                 let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
                 let abstract_pointer_from_base =
                     ast::Int::new_const(self.computer.context, base.clone());
@@ -264,10 +265,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     &[&abstract_pointer_from_base, &bound_aligned],
                 );
 
-                self.computer.set_region(common::MemorySafeRegion {
+                self.computer.set_region(MemorySafeRegion {
                     region_type: ty,
                     base: base.clone(),
-                    start: common::AbstractExpression::Immediate(0),
+                    start: AbstractExpression::Immediate(0),
                     end: expr,
                 });
 
@@ -291,14 +292,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
         // ast::Int::from_i64(self.computer.context, value as i64);
     }
 
-    pub fn add_abstract(&mut self, register: String, value: common::AbstractExpression) {
+    pub fn add_abstract(&mut self, register: String, value: AbstractExpression) {
         self.computer.set_abstract(register, value);
     }
 
     pub fn add_abstract_from(&mut self, register: usize, value: String) {
         let name = ("x".to_owned() + &register.to_string()).to_string();
         self.computer
-            .set_abstract(name.clone(), common::AbstractExpression::Abstract(value));
+            .set_abstract(name.clone(), AbstractExpression::Abstract(value));
     }
 
     pub fn dont_fail_fast(&mut self) {
@@ -363,6 +364,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                     Some(i) => jump_dest = i,
                                     None => return Err(Error::new(ErrorKind::Other, "No label")),
                                 }
+
+                                if self.looping_too_deep() {
+                                    return Err(Error::new(
+                                        ErrorKind::Other,
+                                        "could not resolve loop",
+                                    ));
+                                }
+
                                 match self.evaluate_branch_condition(
                                     pc.clone(),
                                     condition.clone(),
@@ -375,6 +384,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             true,
                                             condition.clone(),
                                             rw_list.clone(),
+                                            self.computer.get_state(),
                                         ));
                                         self.computer.clear_rw_queue();
                                         log::info!(
@@ -392,6 +402,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             false,
                                             condition.clone(),
                                             rw_list,
+                                            self.computer.get_state(),
                                         ));
                                         clone.computer.clear_rw_queue();
                                         log::info!(
@@ -431,6 +442,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                                     true,
                                                     condition.clone(),
                                                     self.computer.read_rw_queue(),
+                                                    self.computer.get_state(),
                                                 ));
                                                 self.computer.clear_rw_queue();
                                                 self.add_constraint(condition, true);
@@ -451,6 +463,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             false,
                                             condition.clone(),
                                             self.computer.read_rw_queue(),
+                                            self.computer.get_state(),
                                         ));
                                         self.computer.clear_rw_queue();
                                         log::info!("exploring line: {}", pc + 1);
@@ -474,6 +487,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             true,
                                             condition.clone(),
                                             rw_list.clone(),
+                                            self.computer.get_state(),
                                         ));
                                         self.computer.clear_rw_queue();
                                         log::info!(
@@ -491,6 +505,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             false,
                                             condition.clone(),
                                             rw_list,
+                                            self.computer.get_state(),
                                         ));
                                         clone.computer.clear_rw_queue();
                                         log::info!(
@@ -526,6 +541,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             true,
                                             condition.clone(),
                                             self.computer.read_rw_queue(),
+                                            self.computer.get_state(),
                                         ));
                                         self.computer.clear_rw_queue();
                                         self.add_constraint(condition, true);
@@ -538,6 +554,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                             false,
                                             condition.clone(),
                                             self.computer.read_rw_queue(),
+                                            self.computer.get_state(),
                                         ));
                                         self.computer.clear_rw_queue();
                                         log::info!("exploring line: {}", pc + 1);
@@ -608,8 +625,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
         None
     }
 
-    fn add_constraint(&self, constraint: common::AbstractComparison, decision: bool) {
-        let c = common::comparison_to_ast(self.computer.context, constraint)
+    fn add_constraint(&self, constraint: AbstractComparison, decision: bool) {
+        let c = comparison_to_ast(self.computer.context, constraint)
             .unwrap()
             .simplify();
         if decision {
@@ -619,88 +636,132 @@ impl<'ctx> ExecutionEngine<'ctx> {
         }
     }
 
+    fn looping_too_deep(&self) -> bool {
+        // jump out if too deep in tree
+
+        if self.jump_history.len() > 10 {
+            let mut loop_count = 0;
+            let pc = self.jump_history.last().unwrap().0;
+            for h in self.jump_history.clone() {
+                let (last_jump, _, _, _, _) = h;
+
+                if last_jump == pc {
+                    loop_count = loop_count + 1;
+                }
+            }
+            if loop_count > 7 {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // if true, we jump
     // if false, we continue
     // if None, we explore both paths
     fn evaluate_branch_condition(
         &mut self,
         pc: usize,
-        expression: common::AbstractComparison,
-        rw_list: Vec<common::MemoryAccess>,
+        expression: AbstractComparison,
+        rw_list: Vec<MemoryAccess>,
     ) -> Option<bool> {
         log::info!("jump condition: {}", expression.clone());
         log::info!("memory accesses: {:?}", rw_list.clone());
 
         if !self.in_loop {
-            if let Some((last_jump_label, branch_decision, _, last_rw_list)) =
+            if let Some((last_jump_label, branch_decision, _, last_rw_list, last_state)) =
                 self.jump_history.last()
             {
+                let current_state = self.computer.get_state();
                 // LOOP has repeated at least twice
                 if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
-                    let mut max_step = 0;
-                    for i in 0..last_rw_list.len() {
-                        let diff = rw_list[i].offset - last_rw_list[i].offset;
-                        if diff > max_step {
-                            max_step = diff;
-                        };
-                    }
+                    // JUMP TO Kth ITERATION
 
                     self.computer.solver.push();
-                    let step = ast::Int::from_i64(self.computer.context, max_step as i64);
+                    let loop_var_name = (pc.to_string()) + "_loop_?";
                     let zero = ast::Int::from_i64(self.computer.context, 0);
+                    let q = ast::Int::new_const(self.computer.context, loop_var_name.clone());
+                    self.computer.solver.assert(&q.ge(&zero));
 
-                    // TODO: make sure ? is greater than current counter
-                    // get the minimal abstracts we depend on
-                    let simplified =
-                        common::comparison_to_ast(self.computer.context, expression.clone())
-                            .unwrap()
-                            .simplify();
-
+                    // find the variable that the loop estimates
+                    let simplified = comparison_to_ast(self.computer.context, expression.clone())
+                        .unwrap()
+                        .simplify();
                     for a in self.abstracts.keys() {
                         if simplified.to_string().contains(a) {
-                            let new_abstract_name =
-                                self.abstracts.get(&a.to_string()).unwrap().to_string();
-
-                            for r in expression.get_register_names() {
-                                self.computer.track_register(r, new_abstract_name.clone());
-                            }
-
-                            let q = ast::Int::new_const(self.computer.context, new_abstract_name);
                             let original_abstract =
                                 ast::Int::new_const(self.computer.context, a.to_string());
-
-                            // TODO: do we want to define this since it implies an upper bound on ? or is that not sound?
-                            // do the equalities need to change for a different type of condition
-                            let steps = ast::Int::mul(self.computer.context, &[&q, &step]);
-                            self.computer.solver.assert(&steps.ge(&original_abstract));
-                            self.computer.solver.assert(&steps.le(&original_abstract));
-
-                            self.computer.solver.assert(&q.ge(&zero));
-                            self.computer.solver.assert(&q.modulo(&step).ge(&zero));
-                            self.computer.solver.assert(&q.modulo(&step).le(&zero));
-
-                            self.in_loop = true;
-                            return Some(*branch_decision);
+                            self.computer.solver.assert(&q.ge(&original_abstract));
+                            self.computer.solver.assert(&q.le(&original_abstract));
                         }
                     }
+
+                    for i in 0..(last_state.0.len()) {
+                        let last = &last_state.0[i];
+                        let cur = &current_state.0[i];
+                        let diff: i64 = match cur.kind {
+                            RegisterKind::RegisterBase
+                            | RegisterKind::Abstract
+                            | RegisterKind::Address => {
+                                if last.base == cur.base {
+                                    cur.offset - last.offset
+                                } else {
+                                    0
+                                }
+                            }
+                            RegisterKind::Immediate => cur.offset - last.offset,
+                            _ => 0,
+                        };
+
+                        if diff > 0 {
+                            let new_base = AbstractExpression::Expression(
+                                "+".to_string(),
+                                Box::new(cur.base.clone()?),
+                                Box::new(AbstractExpression::Expression(
+                                    "*".to_string(),
+                                    Box::new(AbstractExpression::Abstract(loop_var_name.clone())),
+                                    Box::new(AbstractExpression::Immediate(diff)),
+                                )),
+                            );
+
+                            let new_reg = RegisterValue {
+                                name: cur.name.clone(),
+                                kind: cur.kind.clone(),
+                                base: Some(new_base),
+                                offset: 0,
+                            };
+
+                            self.computer.registers[i] = new_reg;
+                        }
+                    }
+
+                    self.in_loop = true;
+                    return Some(*branch_decision);
+                } else {
+                    return None;
                 }
-                return None;
             } else {
                 return None;
             }
+        // in loop protocol
         } else {
-            // TODO: maybe add shortcut out when there are no memory accesses in the loop?
-            if let Some((last_jump_label, branch_decision, last_jump_exp, last_rw_list)) =
-                self.jump_history.last()
+            // K+1 loop is a repeat of K loop!
+            if let Some((
+                last_jump_label,
+                branch_decision,
+                last_jump_exp,
+                last_rw_list,
+                last_state,
+            )) = self.jump_history.last()
             {
                 if last_jump_label == &pc
                     && last_jump_exp == &expression
                     && last_rw_list == &rw_list
+                // && last_state == &self.computer.get_state()
                 {
                     self.computer.solver.pop(1);
                     let condition =
-                        common::comparison_to_ast(self.computer.context, expression.clone())
-                            .unwrap();
+                        comparison_to_ast(self.computer.context, expression.clone()).unwrap();
                     self.computer.solver.assert(&condition.simplify());
                     match self.computer.solver.check() {
                         SatResult::Sat => {
@@ -708,6 +769,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 "satisfiable with model: {:?}",
                                 self.computer.solver.get_model().unwrap()
                             );
+                            self.in_loop = false;
                             return Some(!branch_decision);
                         }
                         SatResult::Unsat => {
@@ -721,36 +783,46 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             self.computer.solver.get_reason_unknown()
                         ),
                     }
-                }
+                } else {
+                    // JUMP after Kth STEP -- need to check loop advanced ok for first iteration
+                    let last_state = last_state;
+                    let current_state = self.computer.get_state();
+                    let loop_var_name = (pc.to_string()) + "_loop_?";
+                    for i in 0..(last_state.0.len()) {
+                        let last = &last_state.0[i];
+                        let cur = &current_state.0[i];
+                        let diff: i64 = match cur.kind {
+                            RegisterKind::RegisterBase
+                            | RegisterKind::Abstract
+                            | RegisterKind::Address => {
+                                if last.base == cur.base {
+                                    cur.offset - last.offset
+                                } else {
+                                    0
+                                }
+                            }
+                            RegisterKind::Immediate => cur.offset - last.offset,
+                            _ => 0,
+                        };
 
-                // end recursion for a branch/loop past a specific depth
-                if self.jump_history.len() > 10 {
-                    let mut loop_count = 0;
-                    for h in self.jump_history.clone() {
-                        let (last_jump, _, _, _) = h;
-
-                        if last_jump == pc {
-                            loop_count = loop_count + 1;
-                        }
-                    }
-                    if loop_count > 7 {
-                        log::error!("Loop iterations do not converge");
-                        todo!();
-                    }
-                }
-
-                // unwind loop to run next one
-                if expression.contains("?") {
-                    let mut old_abstract_name = "?".to_string();
-                    for a in expression.get_abstracts() {
-                        if a.contains("?") {
-                            old_abstract_name = a;
-                        }
-                    }
-                    if !(old_abstract_name == "?") {
-                        for r in expression.get_register_names() {
-                            self.computer
-                                .track_register(r, old_abstract_name.to_string());
+                        // check diff matches, if not BAD
+                        // if does, reset for k+1
+                        let base_step = AbstractExpression::Expression(
+                            "*".to_string(),
+                            Box::new(AbstractExpression::Abstract(loop_var_name.clone())),
+                            Box::new(AbstractExpression::Immediate(diff)),
+                        );
+                        if let Some(base) = &cur.base {
+                            if base.contains(&loop_var_name) && base.contains_expression(&base_step)
+                            {
+                                let new_reg = RegisterValue {
+                                    name: cur.name.clone(),
+                                    kind: cur.kind.clone(),
+                                    base: cur.base.clone(),
+                                    offset: 0,
+                                };
+                                self.computer.registers[i] = new_reg;
+                            }
                         }
                     }
                 }

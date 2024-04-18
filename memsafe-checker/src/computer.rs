@@ -21,7 +21,7 @@ fn get_register_index(reg_name: String) -> usize {
 
 #[derive(Clone)]
 pub struct ARMCORTEXA<'ctx> {
-    registers: [RegisterValue; 33],
+    pub registers: [RegisterValue; 33],
     zero: Option<common::FlagValue>,
     neg: Option<common::FlagValue>,
     carry: Option<common::FlagValue>,
@@ -31,7 +31,6 @@ pub struct ARMCORTEXA<'ctx> {
     stack_size: i64,
     memory_safe_regions: Vec<common::MemorySafeRegion>,
     // constraints: Vec<AbstractExpression>,
-    tracked_loop_abstracts: HashMap<String, String>,
     rw_queue: Vec<common::MemoryAccess>,
     pub alignment: i64,
     pub context: &'ctx Context,
@@ -99,12 +98,29 @@ impl<'ctx> ARMCORTEXA<'_> {
             stack: HashMap::new(),
             stack_size: 0,
             memory_safe_regions: Vec::new(),
-            tracked_loop_abstracts: HashMap::new(),
             rw_queue: Vec::new(),
             alignment: 4,
             context,
             solver,
         }
+    }
+
+    pub fn get_state(
+        &self,
+    ) -> (
+        [RegisterValue; 33],
+        Option<common::FlagValue>,
+        Option<common::FlagValue>,
+        Option<common::FlagValue>,
+        Option<common::FlagValue>,
+    ) {
+        return (
+            self.registers.clone(),
+            self.zero.clone(),
+            self.neg.clone(),
+            self.carry.clone(),
+            self.overflow.clone(),
+        );
     }
 
     pub fn set_region(&mut self, region: common::MemorySafeRegion) {
@@ -118,12 +134,6 @@ impl<'ctx> ARMCORTEXA<'_> {
     pub fn set_abstract(&mut self, register: String, value: AbstractExpression) {
         self.set_register(register, RegisterKind::Abstract, Some(value), 0);
     }
-
-    // pub fn add_constraint(&mut self, constraint: AbstractExpression) {
-    //     if !self.constraints.contains(&constraint.clone()) {
-    //         self.constraints.push(constraint);
-    //     }
-    // }
 
     fn set_register(
         &mut self,
@@ -170,38 +180,6 @@ impl<'ctx> ARMCORTEXA<'_> {
 
     pub fn read_rw_queue(&self) -> Vec<common::MemoryAccess> {
         self.rw_queue.clone()
-    }
-
-    pub fn track_register(&mut self, register: String, expr: String) {
-        self.tracked_loop_abstracts.insert(register, expr);
-    }
-
-    pub fn untrack_register(&mut self, register: String) {
-        self.tracked_loop_abstracts.remove(&register);
-    }
-
-    fn update_abstract(&mut self, register: String, op_string: &str) {
-        let r = self.operand(register.clone());
-
-        if self.tracked_loop_abstracts.contains_key(&register) {
-            // need to make sure this works if r2 isn't immediate
-            if let Some(b) = r.base.clone() {
-                if !b.contains("?") {
-                    let new_abstract = self.tracked_loop_abstracts.get(&register.clone()).unwrap();
-                    let new_base = AbstractExpression::Expression(
-                        op_string.to_string(),
-                        Box::new(b.clone()),
-                        Box::new(AbstractExpression::Abstract(new_abstract.to_string())),
-                    );
-                    self.set_register(register.clone(), r.kind.clone(), Some(new_base), 0);
-                    self.untrack_register(register.clone());
-                } else {
-                    // resetting for loop iteration
-                    self.set_register(register.clone(), r.kind.clone(), r.base.clone(), 0);
-                    self.untrack_register(register.clone());
-                }
-            }
-        }
     }
 
     pub fn change_alignment(&mut self, value: i64) {
@@ -490,9 +468,6 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r4.is_some() {
-                if self.tracked_loop_abstracts.contains_key(&reg3base) {
-                    self.update_abstract(reg3base.clone(), "+");
-                }
                 let new_imm = self.operand(instruction.r4.clone().unwrap());
                 self.set_register(
                     reg3base,
@@ -536,9 +511,6 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r3.is_some() {
-                if self.tracked_loop_abstracts.contains_key(&reg2base) {
-                    self.update_abstract(reg2base.clone(), "+");
-                }
                 let new_imm = self.operand(instruction.r3.clone().unwrap());
                 self.set_register(
                     reg2base,
@@ -580,9 +552,6 @@ impl<'ctx> ARMCORTEXA<'_> {
 
             // post-index
             if instruction.r4.is_some() {
-                if self.tracked_loop_abstracts.contains_key(&reg3base) {
-                    self.update_abstract(reg3base.clone(), "+");
-                }
                 let new_imm = self.operand(instruction.r4.clone().unwrap());
                 self.set_register(
                     reg3base,
@@ -607,9 +576,6 @@ impl<'ctx> ARMCORTEXA<'_> {
         reg2: String,
         reg3: Option<String>,
     ) {
-        self.update_abstract(reg1.clone(), op_string);
-        self.update_abstract(reg2.clone(), op_string);
-
         let r1 = self.operand(reg1.clone());
         let mut r2 = self.operand(reg2.clone());
 
