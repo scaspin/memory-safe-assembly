@@ -480,7 +480,7 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                     let multiplier = new2.power(&two).to_int();
                     return Some(ast::Int::mul(context, &[&new1, &multiplier]));
                 }
-                ">>" => {
+                ">>" | "lsr" => {
                     let two = ast::Int::from_i64(context, 2);
                     let divisor = new2.div(&two);
                     return Some(new1.div(&divisor));
@@ -506,6 +506,12 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
             return Some(ast::Bool::and(
                 context,
                 &[&left.le(&right), &left.ge(&right)],
+            ));
+        }
+        "!=" => {
+            return Some(ast::Bool::or(
+                context,
+                &[&left.lt(&right), &left.gt(&right)],
             ));
         }
         _ => todo!(),
