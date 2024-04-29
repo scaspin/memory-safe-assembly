@@ -429,7 +429,6 @@ pub fn string_to_int(s: &str) -> i64 {
         for part in parts {
             let m = part.parse::<i64>().unwrap();
             value = value * m;
-            // println!("value: {:?}", value);
         }
     } else if v.contains("x") {
         value = i64::from_str_radix(v.strip_prefix("0x").unwrap(), 16).unwrap();
@@ -486,7 +485,6 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                     return Some(new1.div(&divisor));
                 }
                 _ => {
-                    println!("value: {:?} {:?}, {:?}", op, new1, new2);
                     return None;
                 }
             }

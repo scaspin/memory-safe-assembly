@@ -633,6 +633,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let c = comparison_to_ast(self.computer.context, constraint)
             .unwrap()
             .simplify();
+
+        println!("c: {:?}", c.clone());
         if decision {
             self.computer.solver.assert(&c);
         } else {

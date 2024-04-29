@@ -322,16 +322,25 @@ impl<'ctx> ARMCORTEXA<'_> {
                     .operand(instruction.r3.clone().expect("Need shift amt"))
                     .offset;
                 let new_offset = r2.offset >> shift;
-                self.set_register(
-                    instruction.r1.clone().expect("Need destination register"),
-                    r2.clone().kind,
-                    Some(common::generate_expression(
-                        "lsr",
-                        r2.base.unwrap_or(AbstractExpression::Empty),
-                        AbstractExpression::Immediate(new_offset),
-                    )),
-                    new_offset,
-                );
+                if new_offset == 0 {
+                    self.set_register(
+                        instruction.r1.clone().expect("Need destination register"),
+                        r2.clone().kind,
+                        None,
+                        new_offset,
+                    );
+                } else {
+                    self.set_register(
+                        instruction.r1.clone().expect("Need destination register"),
+                        r2.clone().kind,
+                        Some(common::generate_expression(
+                            "lsr",
+                            r2.base.unwrap_or(AbstractExpression::Empty),
+                            AbstractExpression::Immediate(new_offset),
+                        )),
+                        new_offset,
+                    );
+                }
             }
             "ror" => {
                 self.shift_reg(
@@ -1489,13 +1498,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 return Ok(());
                             }
                             (a, b) => {
-                                println!(
-                                    "l: {:#?}, u: {:#?} assertions: {:#?}",
-                                    l,
-                                    u,
-                                    self.solver.get_assertions()
-                                );
-                                println!("impossibility lower bound {:?}, impossibility upper bound {:?}, {:?}", a, b, self.solver.get_model());
+                                log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
                                 log::error!("Memory unsafe with solver's only check!");
                             }
                         }
@@ -1579,7 +1582,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                             return Ok(());
                                         }
                                         (a, b) => {
-                                            println!("impossibility lower bound {:?}, impossibility upper bound {:?}", a, b);
+                                            log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
                                             log::error!(
                                                 "Memory unsafe with solver's second check!"
                                             );
@@ -1633,7 +1636,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 return Ok(());
                             }
                             (a, b) => {
-                                println!("impossibility lower bound {:?}, impossibility upper bound {:?}", a, b);
+                                log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
                                 log::error!("Memory unsafe with solver's only check!");
                             }
                         }
