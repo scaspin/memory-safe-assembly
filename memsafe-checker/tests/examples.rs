@@ -24,7 +24,11 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         // size is number of words!
-        let size = common::AbstractExpression::Abstract("size".to_string());
+        let size = common::AbstractExpression::Expression(
+            "*".to_string(),
+            Box::new(common::AbstractExpression::Abstract("size".to_string())),
+            Box::new(common::AbstractExpression::Immediate(4)),
+        );
 
         engine.add_region(common::MemorySafeRegion {
             region_type: common::RegionType::READ,
