@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 bums_macros = { path = "../bums_macros" }
 byteorder = "*"
+num-traits = "0.2.18"
 
 [dev-dependencies]
 aws-lc-rs = "*"
