@@ -32,12 +32,18 @@ impl RegisterValue {
                 base: Some(AbstractExpression::Abstract("sp".to_string())),
                 offset: 0,
             };
-        }
-        if name == "x30" {
+        } else if name == "x30" {
             return RegisterValue {
                 name: string_name,
                 kind: RegisterKind::Address,
                 base: Some(AbstractExpression::Abstract("Return".to_string())),
+                offset: 0,
+            };
+        } else if name == "xzr" {
+            return RegisterValue {
+                name: string_name,
+                kind: RegisterKind::Immediate,
+                base: None,
                 offset: 0,
             };
         }
@@ -331,7 +337,14 @@ impl FromStr for Instruction {
             }
         }
 
-        let v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
+        let parsed_v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
+
+        let mut v: Vec<&str> = vec![];
+        for e in parsed_v {
+            if e != "" {
+                v.push(e);
+            }
+        }
 
         let v0 = v[0].to_string();
         let v1: Option<String>;
@@ -416,7 +429,6 @@ pub fn string_to_int(s: &str) -> i64 {
         for part in parts {
             let m = part.parse::<i64>().unwrap();
             value = value * m;
-            // println!("value: {:?}", value);
         }
     } else if v.contains("x") {
         value = i64::from_str_radix(v.strip_prefix("0x").unwrap(), 16).unwrap();
@@ -467,13 +479,12 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                     let multiplier = new2.power(&two).to_int();
                     return Some(ast::Int::mul(context, &[&new1, &multiplier]));
                 }
-                ">>" => {
+                ">>" | "lsr" => {
                     let two = ast::Int::from_i64(context, 2);
                     let divisor = new2.div(&two);
                     return Some(new1.div(&divisor));
                 }
                 _ => {
-                    println!("value: {:?} {:?}, {:?}", op, new1, new2);
                     return None;
                 }
             }
@@ -493,6 +504,12 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
             return Some(ast::Bool::and(
                 context,
                 &[&left.le(&right), &left.ge(&right)],
+            ));
+        }
+        "!=" => {
+            return Some(ast::Bool::or(
+                context,
+                &[&left.lt(&right), &left.gt(&right)],
             ));
         }
         _ => todo!(),

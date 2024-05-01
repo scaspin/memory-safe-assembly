@@ -242,10 +242,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 match size.as_str() {
                                     "u8" => new_args.push(parse_quote! {#n: *const u8}),
                                     "u32" => new_args.push(parse_quote! {#n: *const u32}),
+                                    "u64" => new_args.push(parse_quote! {#n: *const u64}),
                                     _ => (),
                                 }
                             } else {
-                                new_args.push(parse_quote! {#n: *const u8});
+                                new_args.push(parse_quote! {#n: *const usize});
                             }
                         }
                         "as_mut_ptr" => {
@@ -254,10 +255,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 match size.as_str() {
                                     "u8" => new_args.push(parse_quote! {#n: *mut u8}),
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
+                                    "u64" => new_args.push(parse_quote! {#n: *mut u64}),
                                     _ => (),
                                 }
                             } else {
-                                new_args.push(parse_quote! {#n: *mut u8});
+                                new_args.push(parse_quote! {#n: *mut usize});
                             }
                         }
                         _ => (),
@@ -274,7 +276,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 }
                 Expr::Binary(_) => {
-                    new_args.push(parse_quote! {_: usize});
+                    //FIX: find a better name for this
+                    let n = Ident::new("expr", proc_macro2::Span::call_site().into());
+                    new_args.push(parse_quote! {#n : usize});
                 }
                 Expr::Lit(_) => new_args.push(parse_quote! {_: usize}),
                 _ => (),

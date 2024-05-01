@@ -21,11 +21,12 @@ pub struct ExecutionEngine<'ctx> {
     abstracts: HashMap<String, String>,
     in_loop: bool,
     jump_history: Vec<(
-        usize,
-        bool,
-        AbstractComparison,
+        usize,              // pc
+        bool,               // jump decision (true = took, false = continue)
+        AbstractComparison, // comparison used
         Vec<MemoryAccess>,
         (
+            // relevent state
             [RegisterValue; 33],
             Option<FlagValue>,
             Option<FlagValue>,
@@ -215,6 +216,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
                 let abstract_pointer_from_base =
                     ast::Int::new_const(self.computer.context, base.clone());
+                self.computer
+                    .solver
+                    .assert(&abstract_pointer_from_base.ge(&zero));
 
                 // upper bound is the base pointer + bound value - alignment
                 let upper_bound = ast::Int::add(
@@ -237,6 +241,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
 
                 // can access this region starting with 0
+                self.computer.solver.assert(&pointer.ge(&zero));
                 self.computer.solver.assert(&bound.ge(&zero));
                 self.computer
                     .solver
@@ -629,6 +634,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let c = comparison_to_ast(self.computer.context, constraint)
             .unwrap()
             .simplify();
+
         if decision {
             self.computer.solver.assert(&c);
         } else {
