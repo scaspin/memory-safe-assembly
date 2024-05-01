@@ -50,21 +50,21 @@ where
 }
 
 #[inline]
-pub fn constant_time_msb(a: u64) -> u64 {
-    0 - (a >> ((core::mem::size_of::<u64>() as u64) * 8 - 1))
+pub fn constant_time_msb(a: i64) -> i64 {
+    0 - (a >> ((core::mem::size_of::<i64>() as i64) * 8 - 1))
 }
 
 #[inline]
-pub fn constant_time_is_zero(a: u64) -> u64 {
+pub fn constant_time_is_zero(a: i64) -> i64 {
     constant_time_msb(!a & (a - 1))
 }
 
 #[inline]
-pub fn constant_time_eq(a: u64, b: u64) -> u64 {
+pub fn constant_time_eq(a: i64, b: i64) -> i64 {
     constant_time_is_zero(a ^ b)
 }
 
 #[inline]
-pub fn constant_time_lt(a: u64, b: u64) -> u64 {
+pub fn constant_time_lt(a: i64, b: i64) -> i64 {
     constant_time_msb(a ^ ((a ^ b) | ((a - b) ^ a)))
 }

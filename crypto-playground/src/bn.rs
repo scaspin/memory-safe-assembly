@@ -139,7 +139,7 @@ fn bn_usub_consttime(r: &mut BIGNUM, a: &BIGNUM, b: &BIGNUM) -> Result<(), Strin
         _ => (),
     }
 
-    let mut borrow = unsafe { bn_sub_words(r.d.as_mut_ptr(), a.d.as_ptr(), b.d.as_ptr(), b_width) };
+    let mut borrow = bn_sub_words(&mut r.d[0..b_width], &a.d[0..b_width], &b.d[0..b_width]);
     for i in b_width..a.width {
         (r.d[i], borrow) = ms_subc_u64(a.d[i], 0, borrow);
     }
@@ -154,7 +154,7 @@ fn bn_usub_consttime(r: &mut BIGNUM, a: &BIGNUM, b: &BIGNUM) -> Result<(), Strin
 }
 
 // FIX TO INTEGERS
-fn bn_cmp_words_consttime(a: &[BN_ULONG], a_len: usize, b: &[BN_ULONG], b_len: usize) -> u64 {
+fn bn_cmp_words_consttime(a: &[BN_ULONG], a_len: usize, b: &[BN_ULONG], b_len: usize) -> i64 {
     //OPENSSL_STATIC_ASSERT(sizeof(BN_ULONG) <= sizeof(crypto_word_t),
     //                    crypto_word_t_is_too_small)
 
@@ -168,9 +168,9 @@ fn bn_cmp_words_consttime(a: &[BN_ULONG], a_len: usize, b: &[BN_ULONG], b_len: u
     };
 
     for i in 0..min {
-        let eq = constant_time_eq(a[i], b[i]);
-        let lt = constant_time_lt(a[i], b[i]);
-        ret = constant_time_select(eq, ret, constant_time_select(lt, u64::MAX, 1));
+        let eq = constant_time_eq(a[i] as i64, b[i] as i64);
+        let lt = constant_time_lt(a[i] as i64, b[i] as i64);
+        ret = constant_time_select(eq, ret, constant_time_select(lt, -1, 1));
     }
 
     if a_len < b_len {
@@ -178,13 +178,13 @@ fn bn_cmp_words_consttime(a: &[BN_ULONG], a_len: usize, b: &[BN_ULONG], b_len: u
         for i in a_len..b_len {
             mask = mask | b[i];
         }
-        ret = constant_time_select(constant_time_is_zero(mask), ret, u64::MAX);
+        ret = constant_time_select(constant_time_is_zero(mask as i64), ret, -1);
     } else if b_len < a_len {
         let mut mask = 0;
         for i in b_len..a_len {
             mask = a[i];
         }
-        ret = constant_time_select(constant_time_is_zero(mask), ret, 1);
+        ret = constant_time_select(constant_time_is_zero(mask as i64), ret, 1);
     }
 
     return ret;
@@ -304,10 +304,8 @@ pub fn bn_sub(r: &mut BIGNUM, a: &BIGNUM, b: &BIGNUM) -> Result<(), String> {
 #[bums_macros::check_mem_safe("assembly/bn-armv8-apple.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len())]
 fn bn_add_words(output: &mut [u64], a: &[u64], b: &[u64]) -> bool;
 
-//#[bums_macros::check_mem_safe("assembly/bn-armv8-apple.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len())]
-extern "C" {
-    fn bn_sub_words(out: *mut u64, a: *const u64, b: *const u64, size: usize) -> bool;
-}
+#[bums_macros::check_mem_safe("assembly/bn-armv8-apple.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len())]
+fn bn_sub_words(output: &mut [u64], a: &[u64], b: &[u64]) -> bool;
 
 #[cfg(test)]
 mod tests {
@@ -317,6 +315,9 @@ mod tests {
     extern "C" {
         #[link_name = "aws_lc_0_14_1_bn_add_words"]
         fn aws_bn_add_words(output: *mut u8, a: *const u8, b: *const u8, len: usize);
+
+        #[link_name = "aws_lc_0_14_1_bn_sub_words"]
+        fn aws_bn_sub_words(output: *mut u8, a: *const u8, b: *const u8, len: usize);
     }
 
     #[test]
@@ -344,7 +345,32 @@ mod tests {
     }
 
     #[test]
-    fn test_add_works() {
+    fn test_bn_sub_asm_impls() {
+        let ours = {
+            let out = &mut [0; 3];
+            let a = [2, 2, 2];
+            let b = [0, 1, 2];
+            bn_sub_words(out, &a, &b);
+            out.clone()
+        };
+
+        let theirs = {
+            let out = &mut [0; 3];
+            let a = [2, 2, 2];
+            let b = [0, 1, 2];
+            unsafe {
+                aws_bn_sub_words(out.as_mut_ptr(), a.as_ptr(), b.as_ptr(), out.len());
+            }
+            out.clone()
+        };
+
+        assert_eq!(ours[0], theirs[0].into());
+        assert_eq!(ours[1], theirs[1].into());
+        assert_eq!(ours[2], theirs[2].into());
+    }
+
+    #[test]
+    fn test_add_asm_works() {
         let out = &mut [0; 3];
         let a = &[0, 1, 2];
         let b = &[0, 1, 2];
@@ -353,7 +379,16 @@ mod tests {
     }
 
     #[test]
-    fn test_impl_steps() {
+    fn test_sub_asm_works() {
+        let out = &mut [0; 3];
+        let a = &[5, 5, 5];
+        let b = &[0, 1, 2];
+        bn_sub_words(out, a, b);
+        assert_eq!(out, &mut [5, 4, 3]);
+    }
+
+    #[test]
+    fn test_add_impl() {
         let them = unsafe {
             let out = aws_lc_sys::BN_new();
             aws_lc_sys::BN_init(out);
@@ -373,6 +408,36 @@ mod tests {
             a.set_u64(123);
             b.set_u64(321);
             let res = bn_add(out, a, b);
+            assert!(res.is_ok());
+            out.clone()
+        };
+
+        assert_eq!(unsafe { *them.d }, ours.d[0]);
+        assert_eq!(them.width, ours.width.try_into().unwrap());
+        assert_eq!(them.dmax, ours.dmax.try_into().unwrap());
+    }
+
+    #[test]
+    fn test_sub_impl() {
+        let them = unsafe {
+            let out = aws_lc_sys::BN_new();
+            aws_lc_sys::BN_init(out);
+            let a = aws_lc_sys::BN_new();
+            aws_lc_sys::BN_set_u64(a, 321);
+            let b = aws_lc_sys::BN_new();
+            aws_lc_sys::BN_set_u64(b, 123);
+            aws_lc_sys::BN_sub(out, a, b);
+            *out
+        };
+
+        let ours = {
+            let out = &mut BIGNUM::new();
+            let a = &mut BIGNUM::new();
+            let b = &mut BIGNUM::new();
+
+            a.set_u64(321);
+            b.set_u64(123);
+            let res = bn_sub(out, a, b);
             assert!(res.is_ok());
             out.clone()
         };
