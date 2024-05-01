@@ -21,11 +21,12 @@ pub struct ExecutionEngine<'ctx> {
     abstracts: HashMap<String, String>,
     in_loop: bool,
     jump_history: Vec<(
-        usize,
-        bool,
-        AbstractComparison,
+        usize,              // pc
+        bool,               // jump decision (true = took, false = continue)
+        AbstractComparison, // comparison used
         Vec<MemoryAccess>,
         (
+            // relevent state
             [RegisterValue; 33],
             Option<FlagValue>,
             Option<FlagValue>,
@@ -634,7 +635,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
             .unwrap()
             .simplify();
 
-        println!("c: {:?}", c.clone());
         if decision {
             self.computer.solver.assert(&c);
         } else {

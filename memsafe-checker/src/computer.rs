@@ -376,6 +376,33 @@ impl<'ctx> ARMCORTEXA<'_> {
                     todo!();
                 }
             },
+            "sbcs" => match self.carry.clone().expect("Need carry flag set") {
+                common::FlagValue::REAL(b) => {
+                    if b == true {
+                        self.arithmetic(
+                            "-",
+                            &|x, y| x - y,
+                            instruction.r1.clone().expect("Need dst register"),
+                            instruction.r2.clone().expect("Need one operand"),
+                            instruction.r2.clone().expect("Need one operand"),
+                            Some("#1".to_string()),
+                        );
+                    } else {
+                        self.arithmetic(
+                            "-",
+                            &|x, y| x - y,
+                            instruction.r1.clone().expect("Need dst register"),
+                            instruction.r2.clone().expect("Need one operand"),
+                            instruction.r2.clone().expect("Need one operand"),
+                            Some("#0".to_string()),
+                        );
+                    }
+                }
+                common::FlagValue::ABSTRACT(_) => {
+                    log::error!("Can't support this yet :)");
+                    todo!();
+                }
+            },
             "adrp" => {
                 let address = self.operand(instruction.r2.clone().expect("Need address label"));
                 self.set_register(
@@ -455,6 +482,29 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     RegisterKind::Immediate,
                                     None,
                                     0,
+                                );
+                            }
+                        }
+                        common::FlagValue::ABSTRACT(_) => {
+                            log::error!("Can't support this yet :)");
+                            todo!();
+                        }
+                    },
+                    "cc" => match self.carry.clone().expect("Need carry flag set") {
+                        common::FlagValue::REAL(b) => {
+                            if b == false {
+                                self.set_register(
+                                    instruction.r1.clone().expect("need dst register"),
+                                    RegisterKind::Immediate,
+                                    None,
+                                    0,
+                                );
+                            } else {
+                                self.set_register(
+                                    instruction.r1.clone().expect("need dst register"),
+                                    RegisterKind::Immediate,
+                                    None,
+                                    1,
                                 );
                             }
                         }
