@@ -1,9 +1,7 @@
+use crate::common::*;
 use std::collections::HashMap;
 use std::fmt;
 use z3::*;
-
-use crate::common;
-use crate::common::{AbstractComparison, AbstractExpression, RegisterKind, RegisterValue};
 
 fn get_register_index(reg_name: String) -> usize {
     let name = reg_name.clone();
@@ -25,16 +23,12 @@ fn get_register_index(reg_name: String) -> usize {
 #[derive(Clone)]
 pub struct ARMCORTEXA<'ctx> {
     pub registers: [RegisterValue; 33],
-    zero: Option<common::FlagValue>,
-    neg: Option<common::FlagValue>,
-    carry: Option<common::FlagValue>,
-    overflow: Option<common::FlagValue>,
-    memory: HashMap<i64, i64>,
-    stack: HashMap<i64, RegisterValue>,
-    stack_size: i64,
-    memory_safe_regions: Vec<common::MemorySafeRegion>,
-    // constraints: Vec<AbstractExpression>,
-    rw_queue: Vec<common::MemoryAccess>,
+    zero: Option<FlagValue>,
+    neg: Option<FlagValue>,
+    carry: Option<FlagValue>,
+    overflow: Option<FlagValue>,
+    memory: HashMap<String, MemorySafeRegion>,
+    rw_queue: Vec<MemoryAccess>,
     pub alignment: i64,
     pub context: &'ctx Context,
     pub solver: Solver<'ctx>,
@@ -42,10 +36,6 @@ pub struct ARMCORTEXA<'ctx> {
 
 impl<'ctx> fmt::Debug for ARMCORTEXA<'ctx> {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // write!(f, "stack: {:?}", &self.stack);
-        // for i in [0..31] {
-        //     println!("register {:?}", &self.registers[i]);
-        // }
         println!("registers {:?}", &self.registers);
         Ok(())
     }
@@ -54,42 +44,59 @@ impl<'ctx> fmt::Debug for ARMCORTEXA<'ctx> {
 impl<'ctx> ARMCORTEXA<'_> {
     pub fn new(context: &'ctx Context) -> ARMCORTEXA<'ctx> {
         let registers = [
-            RegisterValue::new("x0"),
-            RegisterValue::new("x1"),
-            RegisterValue::new("x2"),
-            RegisterValue::new("x3"),
-            RegisterValue::new("x4"),
-            RegisterValue::new("x5"),
-            RegisterValue::new("x6"),
-            RegisterValue::new("x7"),
-            RegisterValue::new("x8"),
-            RegisterValue::new("x9"),
-            RegisterValue::new("x10"),
-            RegisterValue::new("x11"),
-            RegisterValue::new("x12"),
-            RegisterValue::new("x13"),
-            RegisterValue::new("x14"),
-            RegisterValue::new("x15"),
-            RegisterValue::new("x16"),
-            RegisterValue::new("x17"),
-            RegisterValue::new("x18"),
-            RegisterValue::new("x19"),
-            RegisterValue::new("x20"),
-            RegisterValue::new("x21"),
-            RegisterValue::new("x22"),
-            RegisterValue::new("x23"),
-            RegisterValue::new("x24"),
-            RegisterValue::new("x25"),
-            RegisterValue::new("x26"),
-            RegisterValue::new("x27"),
-            RegisterValue::new("x28"),
-            RegisterValue::new("x29"), // frame pointer
-            RegisterValue::new("x30"), // link
-            RegisterValue::new("sp"),  // stack pointer
-            RegisterValue::new("xzr"), // 64-bit zero
+            RegisterValue::new_empty("x0"),
+            RegisterValue::new_empty("x1"),
+            RegisterValue::new_empty("x2"),
+            RegisterValue::new_empty("x3"),
+            RegisterValue::new_empty("x4"),
+            RegisterValue::new_empty("x5"),
+            RegisterValue::new_empty("x6"),
+            RegisterValue::new_empty("x7"),
+            RegisterValue::new_empty("x8"),
+            RegisterValue::new_empty("x9"),
+            RegisterValue::new_empty("x10"),
+            RegisterValue::new_empty("x11"),
+            RegisterValue::new_empty("x12"),
+            RegisterValue::new_empty("x13"),
+            RegisterValue::new_empty("x14"),
+            RegisterValue::new_empty("x15"),
+            RegisterValue::new_empty("x16"),
+            RegisterValue::new_empty("x17"),
+            RegisterValue::new_empty("x18"),
+            RegisterValue::new_empty("x19"),
+            RegisterValue::new_empty("x20"),
+            RegisterValue::new_empty("x21"),
+            RegisterValue::new_empty("x22"),
+            RegisterValue::new_empty("x23"),
+            RegisterValue::new_empty("x24"),
+            RegisterValue::new_empty("x25"),
+            RegisterValue::new_empty("x26"),
+            RegisterValue::new_empty("x27"),
+            RegisterValue::new_empty("x28"),
+            RegisterValue::new_empty("x29"), // frame pointer
+            RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract("return".to_string())),
+                0,
+            ), // link
+            RegisterValue::new_empty("sp"),  // stack pointer
+            RegisterValue::new(RegisterKind::Immediate, None, 0), // 64-bit zero
         ];
 
         let solver = Solver::new(&context);
+        let mut memory = HashMap::new();
+
+        let max = ast::Int::from_i64(context, i64::MAX);
+        let stack_max = ast::Int::new_const(context, "MAX");
+        solver.assert(&stack_max.ge(&max));
+
+        memory.insert(
+            "sp".to_string(),
+            MemorySafeRegion::new(
+                AbstractExpression::Abstract("MAX".to_string()),
+                RegionType::RW,
+            ),
+        );
 
         ARMCORTEXA {
             registers,
@@ -97,10 +104,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             neg: None,
             carry: None,
             overflow: None,
-            memory: HashMap::new(),
-            stack: HashMap::new(),
-            stack_size: 0,
-            memory_safe_regions: Vec::new(),
+            memory,
             rw_queue: Vec::new(),
             alignment: 4,
             context,
@@ -112,10 +116,10 @@ impl<'ctx> ARMCORTEXA<'_> {
         &self,
     ) -> (
         [RegisterValue; 33],
-        Option<common::FlagValue>,
-        Option<common::FlagValue>,
-        Option<common::FlagValue>,
-        Option<common::FlagValue>,
+        Option<FlagValue>,
+        Option<FlagValue>,
+        Option<FlagValue>,
+        Option<FlagValue>,
     ) {
         return (
             self.registers.clone(),
@@ -126,16 +130,12 @@ impl<'ctx> ARMCORTEXA<'_> {
         );
     }
 
-    pub fn set_region(&mut self, region: common::MemorySafeRegion) {
-        self.memory_safe_regions.push(region.clone());
-    }
-
     pub fn set_immediate(&mut self, register: String, value: u64) {
         self.set_register(register, RegisterKind::Immediate, None, value as i64);
     }
 
     pub fn set_abstract(&mut self, register: String, value: AbstractExpression) {
-        self.set_register(register, RegisterKind::Abstract, Some(value), 0);
+        self.set_register(register, RegisterKind::RegisterBase, Some(value), 0);
     }
 
     fn set_register(
@@ -146,19 +146,30 @@ impl<'ctx> ARMCORTEXA<'_> {
         offset: i64,
     ) {
         if name.contains("w") {
-            self.registers[get_register_index(name.clone())].set(
-                name,
-                kind,
-                base,
-                (offset as i32) as i64,
-            )
+            self.registers[get_register_index(name.clone())].set(kind, base, (offset as i32) as i64)
         } else {
-            self.registers[get_register_index(name.clone())].set(name, kind, base, offset as i64)
+            self.registers[get_register_index(name.clone())].set(kind, base, offset as i64)
         }
     }
 
-    pub fn add_memory(&mut self, address: i64, value: i64) {
-        self.memory.insert(address, value);
+    pub fn add_memory_value(&mut self, region: String, address: i64, value: i64) {
+        let reg_value = RegisterValue::new(RegisterKind::Immediate, None, value);
+        match self.memory.get_mut(&region) {
+            Some(r) => {
+                r.insert(address, reg_value);
+            }
+            None => {
+                let mut region_map =
+                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW);
+                region_map.insert(address, reg_value);
+                self.memory.insert(region, region_map);
+            }
+        }
+    }
+
+    pub fn add_memory_region(&mut self, name: String, ty: RegionType, length: AbstractExpression) {
+        let new_region = MemorySafeRegion::new(length, ty);
+        self.memory.insert(name, new_region);
     }
 
     pub fn check_stack_pointer_restored(&self) {
@@ -181,12 +192,16 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.rw_queue = Vec::new();
     }
 
-    pub fn read_rw_queue(&self) -> Vec<common::MemoryAccess> {
+    pub fn read_rw_queue(&self) -> Vec<MemoryAccess> {
         self.rw_queue.clone()
     }
 
     pub fn change_alignment(&mut self, value: i64) {
         self.alignment = value;
+    }
+
+    pub fn get_alignment(&mut self) -> i64 {
+        self.alignment
     }
 
     // handle different addressing modes
@@ -201,18 +216,16 @@ impl<'ctx> ARMCORTEXA<'_> {
             }
 
             return RegisterValue {
-                name: "IntermediateRegister".to_string(),
                 kind: RegisterKind::Immediate,
                 base: base,
-                offset: common::string_to_int(&offset),
+                offset: string_to_int(&offset),
             };
 
         // address within register
         } else if v.contains('[') && !v.contains(',') {
             let reg = self.registers[get_register_index(v.trim_matches('[').to_string())].clone();
             return RegisterValue {
-                name: "IntermediateRegister".to_string(),
-                kind: RegisterKind::Address,
+                kind: RegisterKind::RegisterBase,
                 base: reg.base,
                 offset: reg.offset,
             };
@@ -220,24 +233,21 @@ impl<'ctx> ARMCORTEXA<'_> {
             let a = v.split_once(',').unwrap();
             let reg = self.registers[get_register_index(a.0.trim_matches('[').to_string())].clone();
             return RegisterValue {
-                name: "IntermediateRegister".to_string(),
-                kind: RegisterKind::Address,
+                kind: RegisterKind::RegisterBase,
                 base: reg.base,
-                offset: reg.offset + common::string_to_int(a.1.trim_matches(']')),
+                offset: reg.offset + string_to_int(a.1.trim_matches(']')),
             };
         } else if v.contains("@") {
             // TODO : expand functionality
             if v.contains("OFF") {
                 return RegisterValue {
-                    name: "IntermediateRegister".to_string(),
                     kind: RegisterKind::Immediate,
                     base: None,
                     offset: self.alignment,
                 };
             } else {
                 return RegisterValue {
-                    name: "IntermediateRegister".to_string(),
-                    kind: RegisterKind::Address,
+                    kind: RegisterKind::RegisterBase,
                     base: None,
                     offset: 0,
                 };
@@ -250,7 +260,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
     pub fn execute(
         &mut self,
-        instruction: &common::Instruction,
+        instruction: &Instruction,
     ) -> Result<Option<(Option<AbstractComparison>, Option<String>, Option<u128>)>, String> {
         match instruction.op.as_str() {
             "add" => {
@@ -333,7 +343,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     self.set_register(
                         instruction.r1.clone().expect("Need destination register"),
                         r2.clone().kind,
-                        Some(common::generate_expression(
+                        Some(generate_expression(
                             "lsr",
                             r2.base.unwrap_or(AbstractExpression::Empty),
                             AbstractExpression::Immediate(new_offset),
@@ -350,7 +360,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 );
             }
             "adcs" => match self.carry.clone().expect("Need carry flag set") {
-                common::FlagValue::REAL(b) => {
+                FlagValue::REAL(b) => {
                     if b == true {
                         self.arithmetic(
                             "+",
@@ -371,13 +381,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                         );
                     }
                 }
-                common::FlagValue::ABSTRACT(_) => {
+                FlagValue::ABSTRACT(_) => {
                     log::error!("Can't support this yet :)");
                     todo!();
                 }
             },
             "sbcs" => match self.carry.clone().expect("Need carry flag set") {
-                common::FlagValue::REAL(b) => {
+                FlagValue::REAL(b) => {
                     if b == true {
                         self.arithmetic(
                             "-",
@@ -398,7 +408,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         );
                     }
                 }
-                common::FlagValue::ABSTRACT(_) => {
+                FlagValue::ABSTRACT(_) => {
                     log::error!("Can't support this yet :)");
                     todo!();
                 }
@@ -407,8 +417,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let address = self.operand(instruction.r2.clone().expect("Need address label"));
                 self.set_register(
                     instruction.r1.clone().expect("need dst register"),
-                    RegisterKind::Address,
-                    Some(AbstractExpression::Abstract("Memory".to_string())), // FIX: needs to be more general
+                    RegisterKind::RegisterBase,
+                    address.base,
                     address.offset,
                 );
             }
@@ -421,7 +431,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     && register.offset == 0
                 {
                     return Ok(None);
-                } else if register.kind == RegisterKind::Abstract {
+                } else if register.kind == RegisterKind::RegisterBase {
                     return Ok(Some((
                         Some(AbstractComparison::new(
                             "!=",
@@ -445,7 +455,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     && register.offset == 0
                 {
                     return Ok(Some((None, instruction.r2.clone(), None)));
-                } else if register.kind == RegisterKind::Abstract {
+                } else if register.kind == RegisterKind::RegisterBase {
                     return Ok(Some((
                         Some(AbstractComparison::new(
                             "==",
@@ -468,7 +478,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     .as_str()
                 {
                     "cs" => match self.carry.clone().expect("Need carry flag set") {
-                        common::FlagValue::REAL(b) => {
+                        FlagValue::REAL(b) => {
                             if b == true {
                                 self.set_register(
                                     instruction.r1.clone().expect("need dst register"),
@@ -485,13 +495,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 );
                             }
                         }
-                        common::FlagValue::ABSTRACT(_) => {
+                        FlagValue::ABSTRACT(_) => {
                             log::error!("Can't support this yet :)");
                             todo!();
                         }
                     },
                     "cc" => match self.carry.clone().expect("Need carry flag set") {
-                        common::FlagValue::REAL(b) => {
+                        FlagValue::REAL(b) => {
                             if b == false {
                                 self.set_register(
                                     instruction.r1.clone().expect("need dst register"),
@@ -508,7 +518,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 );
                             }
                         }
-                        common::FlagValue::ABSTRACT(_) => {
+                        FlagValue::ABSTRACT(_) => {
                             log::error!("Can't support this yet :)");
                             todo!();
                         }
@@ -537,14 +547,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                 match &self.zero {
                 // if zero is set to false, then cmp -> not equal and we branch
                 Some(flag) => match flag {
-                    common::FlagValue::REAL(b) => {
+                    FlagValue::REAL(b) => {
                         if !b {
                             return Ok(Some((None, instruction.r1.clone(), None)));
                         } else {
                             return Ok(None);
                         }
                     }
-                    common::FlagValue::ABSTRACT(s) => {
+                    FlagValue::ABSTRACT(s) => {
                         return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
                     }
                 },
@@ -558,14 +568,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                 match &self.zero {
                 // if zero is set to false, then cmp -> not equal and we branch
                 Some(flag) => match flag {
-                    common::FlagValue::REAL(b) => {
+                    FlagValue::REAL(b) => {
                         if *b {
                             return Ok(Some((None, instruction.r1.clone(), None)));
                         } else {
                             return Ok(None);
                         }
                     }
-                    common::FlagValue::ABSTRACT(s) => {
+                    FlagValue::ABSTRACT(s) => {
                         return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
                     }
                 },
@@ -578,7 +588,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             "ret" => {
                 if instruction.r1.is_none() {
                     let x30 = self.registers[30].clone();
-                    if x30.kind == RegisterKind::Address {
+                    if x30.kind == RegisterKind::RegisterBase {
                         if let Some(AbstractExpression::Abstract(address)) = x30.base {
                             if address == "Return" && x30.offset == 0 {
                                 return Ok(Some((None, Some("Return".to_string()), None)));
@@ -601,7 +611,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let reg1 = instruction.r1.clone().unwrap();
                 let reg2 = instruction.r2.clone().unwrap();
 
-                let reg2base = common::get_register_name_string(reg2.clone());
+                let reg2base = get_register_name_string(reg2.clone());
                 let mut base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
 
                 // pre-index increment
@@ -641,7 +651,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let reg2 = instruction.r2.clone().unwrap();
                 let reg3 = instruction.r3.clone().unwrap();
 
-                let reg3base = common::get_register_name_string(reg3.clone());
+                let reg3base = get_register_name_string(reg3.clone());
                 let mut base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
 
                 // pre-index increment
@@ -689,7 +699,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let reg1 = instruction.r1.clone().unwrap();
                 let reg2 = instruction.r2.clone().unwrap();
 
-                let reg2base = common::get_register_name_string(reg2.clone());
+                let reg2base = get_register_name_string(reg2.clone());
                 let mut base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
 
                 // pre-index increment
@@ -707,7 +717,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
 
-                let reg2base = common::get_register_name_string(reg2.clone());
+                let reg2base = get_register_name_string(reg2.clone());
                 let res = self.store(reg1, base_add_reg.clone());
                 match res {
                     Err(e) => return Err(e.to_string()),
@@ -730,7 +740,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let reg2 = instruction.r2.clone().unwrap();
                 let reg3 = instruction.r3.clone().unwrap();
 
-                let reg3base = common::get_register_name_string(reg3.clone());
+                let reg3base = get_register_name_string(reg3.clone());
                 let mut base_add_reg = self.registers[get_register_index(reg3base.clone())].clone();
 
                 // pre-index increment
@@ -795,11 +805,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             if let Some(expr) = reg3 {
                 let parts = expr.split_once('#').unwrap();
 
-                r2 = common::shift_imm(
-                    parts.0.to_string(),
-                    r2.clone(),
-                    common::string_to_int(parts.1),
-                );
+                r2 = shift_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
             }
         }
 
@@ -809,8 +815,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let base = match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
                             Some(reg2base) => {
-                                let concat =
-                                    common::generate_expression(op_string, reg1base, reg2base);
+                                let concat = generate_expression(op_string, reg1base, reg2base);
                                 Some(concat)
                             }
                             None => Some(reg1base),
@@ -831,12 +836,11 @@ impl<'ctx> ARMCORTEXA<'_> {
                     // abstract numbers, value doesn't matter
                     self.set_register(reg0, RegisterKind::Number, None, 0)
                 }
-                RegisterKind::Abstract => {
+                RegisterKind::RegisterBase => {
                     let base = match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
                             Some(reg2base) => {
-                                let concat =
-                                    common::generate_expression(op_string, reg1base, reg2base);
+                                let concat = generate_expression(op_string, reg1base, reg2base);
                                 Some(concat)
                             }
                             None => Some(reg1base),
@@ -846,7 +850,12 @@ impl<'ctx> ARMCORTEXA<'_> {
                             None => None,
                         },
                     };
-                    self.set_register(reg0, RegisterKind::Abstract, base, op(r1.offset, r2.offset))
+                    self.set_register(
+                        reg0,
+                        RegisterKind::RegisterBase,
+                        base,
+                        op(r1.offset, r2.offset),
+                    )
                 }
                 RegisterKind::Immediate => self.set_register(
                     reg0,
@@ -854,11 +863,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                     None,
                     op(r1.offset, r2.offset),
                 ),
-                RegisterKind::Address => {
+                RegisterKind::RegisterBase => {
                     // why would someone add two addresses? bad
                     // I guess ok as long as we don't use as address
                     log::warn!("Not advisable to add two addresses");
-                    self.set_register(reg0, RegisterKind::Address, None, op(r1.offset, r2.offset))
+                    self.set_register(
+                        reg0,
+                        RegisterKind::RegisterBase,
+                        None,
+                        op(r1.offset, r2.offset),
+                    )
                 }
             }
         } else if r1.kind == RegisterKind::Immediate {
@@ -878,11 +892,11 @@ impl<'ctx> ARMCORTEXA<'_> {
         } else if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
             // abstract numbers, value doesn't matter
             self.set_register(reg0, RegisterKind::Number, None, 0)
-        } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
+        } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
             let base = match r2.clone().base {
                 Some(reg1base) => match r1.clone().base {
                     Some(reg2base) => {
-                        let concat = common::generate_expression(op_string, reg1base, reg2base);
+                        let concat = generate_expression(op_string, reg1base, reg2base);
                         Some(concat)
                     }
                     None => Some(reg1base),
@@ -892,7 +906,12 @@ impl<'ctx> ARMCORTEXA<'_> {
                     None => None,
                 },
             };
-            self.set_register(reg0, RegisterKind::Abstract, base, op(r1.offset, r2.offset))
+            self.set_register(
+                reg0,
+                RegisterKind::RegisterBase,
+                base,
+                op(r1.offset, r2.offset),
+            )
         } else {
             // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string, r1, r2 );
             log::error!("Cannot perform arithmetic on these two registers")
@@ -907,7 +926,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.set_register(
             reg1,
             r2.clone().kind,
-            Some(common::generate_expression(
+            Some(generate_expression(
                 "ror",
                 r2.base.unwrap_or(AbstractExpression::Empty),
                 AbstractExpression::Immediate(new_offset),
@@ -925,25 +944,25 @@ impl<'ctx> ARMCORTEXA<'_> {
                 RegisterKind::RegisterBase => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset < r2.offset {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.zero = if r1.offset == r2.offset {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         // signed vs signed distinction, maybe make offset generic to handle both?
                         self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                     } else {
                         let expression = AbstractExpression::Expression(
@@ -951,23 +970,23 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Box::new(AbstractExpression::Register(Box::new(r1))),
                             Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
-                        self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
-                        self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "==",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
                         // FIX carry + overflow
-                        self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MIN),
                         )));
-                        self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression,
                             AbstractExpression::Immediate(std::i64::MIN),
@@ -979,72 +998,72 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     self.zero = if r1.offset == r2.offset {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                 }
-                RegisterKind::Address => {
+                RegisterKind::RegisterBase => {
                     self.neg = if r1.offset < r2.offset {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     self.zero = if r1.offset == r2.offset {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                 }
-                RegisterKind::Abstract => {
+                RegisterKind::RegisterBase => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset < r2.offset {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.zero = if r1.offset == r2.offset {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         // signed vs signed distinction, maybe make offset generic to handle both?
                         self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                     } else {
                         let expression = AbstractExpression::Expression(
@@ -1052,23 +1071,23 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Box::new(AbstractExpression::Register(Box::new(r1))),
                             Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
-                        self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
-                        self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "==",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
                         // FIX carry + overflow
-                        self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MIN),
                         )));
-                        self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MIN),
@@ -1076,29 +1095,29 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
             }
-        } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
+        } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
             let expression = AbstractExpression::Expression(
                 "-".to_string(),
                 Box::new(AbstractExpression::Register(Box::new(r1))),
                 Box::new(AbstractExpression::Register(Box::new(r2))),
             );
-            self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+            self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                 "<",
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+            self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                 "==",
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
             // FIX carry + overflow
-            self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+            self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                 "<",
                 expression.clone(),
                 AbstractExpression::Immediate(std::i64::MIN),
             )));
-            self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+            self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                 "<",
                 expression,
                 AbstractExpression::Immediate(std::i64::MIN),
@@ -1115,24 +1134,24 @@ impl<'ctx> ARMCORTEXA<'_> {
                 RegisterKind::RegisterBase => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset + r2.offset < 0 {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.zero = if r1.offset + r2.offset == 0 {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.carry = if r2.offset + r1.offset > std::i64::MAX {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.overflow = if r2.offset + r1.offset > std::i64::MAX {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                     } else {
                         let expression = AbstractExpression::Expression(
@@ -1140,23 +1159,23 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Box::new(AbstractExpression::Register(Box::new(r1))),
                             Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
-                        self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
-                        self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "==",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
                         // FIX carry + overflow
-                        self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MAX),
                         )));
-                        self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression,
                             AbstractExpression::Immediate(std::i64::MAX),
@@ -1166,50 +1185,50 @@ impl<'ctx> ARMCORTEXA<'_> {
                 RegisterKind::Number => {
                     log::error!("Cannot compare these two registers")
                 }
-                RegisterKind::Immediate | RegisterKind::Address => {
+                RegisterKind::Immediate | RegisterKind::RegisterBase => {
                     self.neg = if r1.offset + r2.offset < 0 {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     self.zero = if r1.offset + r2.offset == 0 {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset + r1.offset > std::i64::MAX {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                     self.overflow = if r2.offset + r1.offset > std::i64::MAX {
-                        Some(common::FlagValue::REAL(true))
+                        Some(FlagValue::REAL(true))
                     } else {
-                        Some(common::FlagValue::REAL(false))
+                        Some(FlagValue::REAL(false))
                     };
                 }
-                RegisterKind::Abstract => {
+                RegisterKind::RegisterBase => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset + r2.offset < 0 {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.zero = if r1.offset + r2.offset == 0 {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.carry = if r1.offset + r2.offset > std::i64::MAX {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                         self.overflow = if r1.offset + r2.offset > std::i64::MAX {
-                            Some(common::FlagValue::REAL(true))
+                            Some(FlagValue::REAL(true))
                         } else {
-                            Some(common::FlagValue::REAL(false))
+                            Some(FlagValue::REAL(false))
                         };
                     } else {
                         let expression = AbstractExpression::Expression(
@@ -1217,23 +1236,23 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Box::new(AbstractExpression::Register(Box::new(r1))),
                             Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
-                        self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
-                        self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "==",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
                         // FIX carry + overflow
-                        self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MIN),
                         )));
-                        self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MIN),
@@ -1241,29 +1260,29 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
             }
-        } else if r1.kind == RegisterKind::Abstract || r2.kind == RegisterKind::Abstract {
+        } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
             let expression = AbstractExpression::Expression(
                 "+".to_string(),
                 Box::new(AbstractExpression::Register(Box::new(r1))),
                 Box::new(AbstractExpression::Register(Box::new(r2))),
             );
-            self.neg = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+            self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                 "<",
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            self.zero = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+            self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                 "==",
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
             // FIX carry + overflow
-            self.carry = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+            self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                 "<",
                 expression.clone(),
                 AbstractExpression::Immediate(std::i64::MIN),
             )));
-            self.overflow = Some(common::FlagValue::ABSTRACT(AbstractComparison::new(
+            self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
                 "<",
                 expression,
                 AbstractExpression::Immediate(std::i64::MIN),
@@ -1275,69 +1294,46 @@ impl<'ctx> ARMCORTEXA<'_> {
      * t: register name to load into
      * address: register with address as value
      */
-    fn load(&mut self, t: String, address: RegisterValue) -> Result<(), common::MemorySafetyError> {
-        let res = self.mem_safe_read(address.base.clone(), address.offset);
+    fn load(&mut self, t: String, address: RegisterValue) -> Result<(), MemorySafetyError> {
+        let res = self.mem_safe_access(
+            address.base.clone().expect("Need a name for region"),
+            address.offset,
+            RegionType::READ,
+        );
 
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = address.base {
-                if base == "sp" {
-                    let val = self.stack.get(&address.offset);
-                    match val {
-                        Some(v) => {
-                            self.set_register(t, v.kind.clone(), v.base.clone(), v.offset);
-                            Ok(())
-                        }
-                        None => {
-                            log::error!("No element at this address in stack");
-                            return Err(common::MemorySafetyError::new(
-                                "Cannot read element at this address from the stack",
-                            ));
-                        }
-                    }
-                } else if base == "Memory" {
-                    let num = &self.memory.get(&(address.offset)).unwrap();
-                    self.set_register(t, RegisterKind::Immediate, None, **num);
-                    Ok(())
-                } else {
-                    let mut exists = false;
-                    for r in &self.memory_safe_regions {
-                        if r.base.contains(&base) {
-                            exists = true;
-                        }
-                    }
-                    if exists {
-                        log::info!("Load from base {:?} + offset {}", base, address.offset);
-                        self.set_register(t, RegisterKind::Number, None, 0);
-                        self.rw_queue.push(common::MemoryAccess {
-                            kind: common::RegionType::READ,
-                            base: base,
+                let region = self
+                    .memory
+                    .get(&base)
+                    .expect("Need memory region to load from");
+                match region.get(address.offset) {
+                    Some(v) => {
+                        self.set_register(t, v.kind.clone(), v.base.clone(), v.offset);
+                        self.rw_queue.push(MemoryAccess {
+                            kind: RegionType::READ,
+                            base: base.clone(),
                             offset: address.offset,
                         });
-                        Ok(())
-                    } else {
-                        log::error!("Cannot read from base {:?}", base);
-                        return Err(common::MemorySafetyError::new(
-                            "Cannot read from address with this base",
+                        log::info!(
+                            "Load from address {:?} + {}",
+                            base.clone(),
+                            address.offset.clone()
+                        );
+                        return Ok(());
+                    }
+                    None => {
+                        log::error!("No element at this address in region {:?}", region);
+                        return Err(MemorySafetyError::new(
+                            "Cannot read element at this address from region",
                         ));
                     }
                 }
             } else {
-                let base = address
-                    .base
-                    .unwrap_or(AbstractExpression::Empty)
-                    .to_string();
-                log::info!(
-                    "Load from base {:?} + offset {}",
-                    base,
-                    address.offset.clone()
-                );
-                self.rw_queue.push(common::MemoryAccess {
-                    kind: common::RegionType::READ,
-                    base: base,
-                    offset: address.offset,
-                });
-                self.set_register(t, RegisterKind::Number, None, 0);
-                Ok(())
+                log::error!("No element at this address in region");
+                return Err(MemorySafetyError::new(
+                    "Cannot read element at this address from region",
+                ));
             }
         } else {
             return res;
@@ -1348,73 +1344,36 @@ impl<'ctx> ARMCORTEXA<'_> {
      * t: register to be stored
      * address: where to store it
      */
-    fn store(
-        &mut self,
-        reg: String,
-        address: RegisterValue,
-    ) -> Result<(), common::MemorySafetyError> {
-        let res = self.mem_safe_write(address.base.clone(), address.offset);
+    fn store(&mut self, register: String, address: RegisterValue) -> Result<(), MemorySafetyError> {
+        let region = address.base.clone();
+        let res = self.mem_safe_access(
+            region.clone().expect("Need region base"),
+            address.offset,
+            RegionType::WRITE,
+        );
 
         if res.is_ok() {
-            let reg = self.registers[get_register_index(reg)].clone();
-            if let Some(AbstractExpression::Abstract(base)) = address.base {
-                if base == "sp" {
-                    // FIX: stack addressing
-                    let index = address.offset;
-                    if self.stack.get(&index).is_some() {
-                        self.stack.remove(&index);
-                        self.stack.insert(index, reg.clone());
-                    } else {
-                        self.stack.insert(address.offset, reg.clone());
-                    }
+            if let Some(AbstractExpression::Abstract(base)) = region.clone() {
+                let region = self.memory.get_mut(&base.clone()).expect("No region");
+                let register = &self.registers[get_register_index(register)];
+                region.insert(address.offset.clone(), register.clone());
 
-                    // check stack sizing
-                    if index > self.stack_size {
-                        self.stack_size = self.stack_size + self.alignment;
-                    }
-                    Ok(())
-                } else {
-                    let mut exists = false;
-                    for r in &self.memory_safe_regions {
-                        if r.base.contains(&base) {
-                            exists = true;
-                        }
-                    }
-                    if exists {
-                        log::info!(
-                            "Store to address {:?} + {}",
-                            base.clone(),
-                            address.offset.clone()
-                        );
-                        self.rw_queue.push(common::MemoryAccess {
-                            kind: common::RegionType::WRITE,
-                            base,
-                            offset: address.offset,
-                        });
-                        Ok(())
-                    } else {
-                        log::error!("Could not write to base {:?}", base);
-                        return Err(common::MemorySafetyError::new(
-                            "Cannot store to address with this base",
-                        ));
-                    }
-                }
-            } else {
-                let base = address
-                    .base
-                    .unwrap_or(AbstractExpression::Empty)
-                    .to_string();
                 log::info!(
-                    "Store to base {:?} + offset {}",
-                    base,
+                    "Store to address {:?} + {}",
+                    base.clone(),
                     address.offset.clone()
                 );
-                self.rw_queue.push(common::MemoryAccess {
-                    kind: common::RegionType::READ,
-                    base: base,
+                self.rw_queue.push(MemoryAccess {
+                    kind: RegionType::WRITE,
+                    base,
                     offset: address.offset,
                 });
-                Ok(())
+                return Ok(());
+            } else {
+                log::error!("No element at this address in region");
+                return Err(MemorySafetyError::new(
+                    "Cannot read element at this address from region",
+                ));
             }
         } else {
             return res;
@@ -1422,292 +1381,112 @@ impl<'ctx> ARMCORTEXA<'_> {
     }
 
     // SAFETY CHECKS
-
-    fn mem_safe_read(
+    fn mem_safe_access(
         &self,
-        base: Option<AbstractExpression>,
+        base: AbstractExpression,
         offset: i64,
-    ) -> Result<(), common::MemorySafetyError> {
-        match base.clone() {
-            Some(AbstractExpression::Abstract(regbase)) => {
-                // read from stack
-                if regbase == "sp" || regbase == "x31" {
-                    if self.stack.contains_key(&offset) {
-                        return Ok(());
-                    } else {
-                        return Err(common::MemorySafetyError::new(
-                            "Element at this address not in stack",
-                        ));
-                    }
-                // read from static memory
-                } else if regbase == "Memory" {
-                    // read from defs
-                    if self.memory.get(&(offset)).is_some() {
-                        return Ok(());
-                    }
-                } else {
-                    // check if read from memory safe region
-                    for region in self.memory_safe_regions.clone() {
-                        if region.base.contains(&regbase)
-                            && (region.region_type == common::RegionType::READ
-                                || region.region_type == common::RegionType::RW)
-                        {
-                            let abs_offset = ast::Int::from_i64(self.context, offset);
-                            let base = ast::Int::new_const(self.context, regbase.clone());
-                            let abstract_pointer_from_base = ast::Int::new_const(
-                                self.context,
-                                &*("pointer_".to_owned() + &regbase),
-                            );
-                            let access = ast::Int::add(self.context, &[&base, &abs_offset]);
-                            // pointer = base + index
-                            let assignment1 = access.ge(&abstract_pointer_from_base);
-                            let assignment2 = access.le(&abstract_pointer_from_base);
-
-                            let lowerbound_value =
-                                common::expression_to_ast(self.context, region.start.clone())
-                                    .unwrap();
-                            let low_access =
-                                ast::Int::add(self.context, &[&base, &lowerbound_value]);
-                            let upperbound_value =
-                                common::expression_to_ast(self.context, region.end.clone())
-                                    .unwrap();
-                            let up_access =
-                                ast::Int::add(self.context, &[&base, &upperbound_value]);
-                            let l = access.lt(&low_access);
-                            let u = access.gt(&up_access);
-
-                            match self.solver.check_assumptions(&[assignment1, assignment2]) {
-                                SatResult::Sat => {
-                                    log::info!("Memory safe with solver's first check!");
-                                    match (
-                                        self.solver.check_assumptions(&[l]),
-                                        self.solver.check_assumptions(&[u]),
-                                    ) {
-                                        (SatResult::Unsat, SatResult::Unsat) => {
-                                            log::info!("Memory safe with solver's second check!");
-                                            return Ok(());
-                                        }
-                                        (a, b) => {
-                                            log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
-                                            log::error!(
-                                                "Memory unsafe with solver's second check!"
-                                            );
-                                        }
-                                    }
-                                }
-                                SatResult::Unsat => {
-                                    log::error!("Memory unsafe with solver first check!");
-                                    log::info!("unsat core: {:#?}", self.solver.get_proof());
-                                }
-                                SatResult::Unknown => log::info!(
-                                    "Memory unsafe with solver first check due to unknown result!"
-                                ),
-                            }
-                        }
-                    }
-                    return Err(common::MemorySafetyError::new(
-                        format!(
-                            "Reading at address outside allowable memory regions {:?}, {:?}",
-                            regbase, offset
-                        )
-                        .as_str(),
-                    ));
+        ty: RegionType,
+    ) -> Result<(), MemorySafetyError> {
+        match base {
+            AbstractExpression::Abstract(regbase) => {
+                let region = self.memory.get(&regbase).expect("Region not in memory");
+                if region.kind != ty && region.kind != RegionType::RW {
+                    return Err(MemorySafetyError::new("Access does not match region type"));
                 }
-            }
-            Some(AbstractExpression::Expression(_, _, _)) => {
-                let base = base.clone().unwrap();
-                for region in self.memory_safe_regions.clone() {
-                    if base.contains(&region.base)
-                        && (region.region_type == common::RegionType::READ
-                            || region.region_type == common::RegionType::RW)
-                    {
-                        // the name of the base of the region
-                        let regbase = ast::Int::new_const(self.context, region.base);
-                        let abs_offset = ast::Int::from_i64(self.context, offset);
 
-                        //the base of the access (which is a complex expression) and the access itself
-                        let base = common::expression_to_ast(self.context, base.clone()).unwrap();
-                        let access = ast::Int::add(self.context, &[&base, &abs_offset]);
+                let abs_offset = ast::Int::from_i64(self.context, offset);
+                let base = ast::Int::new_const(self.context, regbase.clone());
+                let access = ast::Int::add(self.context, &[&base, &abs_offset]);
 
-                        let lowerbound_value =
-                            common::expression_to_ast(self.context, region.start.clone()).unwrap();
-                        let low_access =
-                            ast::Int::add(self.context, &[&regbase, &lowerbound_value]);
-                        let upperbound_value =
-                            common::expression_to_ast(self.context, region.end.clone()).unwrap();
-                        let up_access = ast::Int::add(self.context, &[&regbase, &upperbound_value]);
-                        let l = access.lt(&low_access);
-                        let u = access.gt(&up_access);
-
-                        match (
-                            self.solver.check_assumptions(&[l.clone()]),
-                            self.solver.check_assumptions(&[u.clone()]),
-                        ) {
-                            (SatResult::Unsat, SatResult::Unsat) => {
-                                log::info!("Memory safe with solver's only check!");
-                                return Ok(());
-                            }
-                            (a, b) => {
-                                log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
-                                log::error!("Memory unsafe with solver's only check!");
-                            }
-                        }
-                    }
-                }
-                return Err(common::MemorySafetyError::new(
-                    format!(
-                        "Reading at address outside allowable memory regions {:?}, {:?}",
-                        base, offset
-                    )
-                    .as_str(),
-                ));
-            }
-            _ => (),
-        }
-        Err(common::MemorySafetyError::new(
-            format!(
-                "Cannot read safely from address with base {:?} offset {:?}",
-                base, offset
-            )
-            .as_str(),
-        ))
-    }
-
-    fn mem_safe_write(
-        &self,
-        base: Option<AbstractExpression>,
-        offset: i64,
-    ) -> Result<(), common::MemorySafetyError> {
-        match base.clone() {
-            Some(AbstractExpression::Abstract(regbase)) => {
-                // write to stack
-                if regbase == "sp" {
-                    return Ok(());
-                // Write from static memory
-                } else if regbase == "Memory" {
-                    //address has to exist
-                    if self.memory.get(&(offset)).is_some() {
+                // let width = ast::Int::from_i64(self.context, 2);    // how wide is memory access, two bytes
+                let lowerbound_value = ast::Int::from_i64(self.context, 0);
+                let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
+                let upperbound_value =
+                    expression_to_ast(self.context, region.get_length()).unwrap();
+                let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
+                let l = access.lt(&low_access);
+                let u = access.ge(&up_access);
+                
+                println!("ass {:?}", self.solver.get_assertions());
+                println!("l {:?}", l);
+                println!("u {:?}", u);
+                match (
+                    self.solver.check_assumptions(&[l]),
+                    self.solver.check_assumptions(&[u]),
+                ) {
+                    (SatResult::Unsat, SatResult::Unsat) => {
+                        log::info!("Memory safe with solver's check!");
+                        log::info!("Unsat core {:?}", self.solver.get_unsat_core());
+                        println!("ass {:?}", self.solver.get_assertions());
+                        // panic!();
                         return Ok(());
                     }
-                } else {
-                    // check if write from memory safe region
-                    for region in self.memory_safe_regions.clone() {
-                        if region.base.contains(&regbase)
-                            && (region.region_type == common::RegionType::WRITE
-                                || region.region_type == common::RegionType::RW)
-                        {
-                            let abs_offset = ast::Int::from_i64(self.context, offset);
-                            let base = ast::Int::new_const(self.context, regbase.clone());
-                            let abstract_pointer_from_base = ast::Int::new_const(
-                                self.context,
-                                &*("pointer_".to_owned() + &regbase),
-                            );
-                            let access = ast::Int::add(self.context, &[&base, &abs_offset]);
-                            // pointer = base + index
-                            let assignment1 = access.ge(&abstract_pointer_from_base);
-                            let assignment2 = access.le(&abstract_pointer_from_base);
-
-                            let lowerbound_value =
-                                common::expression_to_ast(self.context, region.start.clone())
-                                    .unwrap();
-                            let low_access =
-                                ast::Int::add(self.context, &[&base, &lowerbound_value]);
-                            let upperbound_value =
-                                common::expression_to_ast(self.context, region.end.clone())
-                                    .unwrap();
-                            let up_access =
-                                ast::Int::add(self.context, &[&base, &upperbound_value]);
-                            let l = access.lt(&low_access);
-                            let u = access.gt(&up_access);
-
-                            match self.solver.check_assumptions(&[assignment1, assignment2]) {
-                                SatResult::Sat => {
-                                    log::info!("Memory safe with solver's first check!");
-                                    match (
-                                        self.solver.check_assumptions(&[l]),
-                                        self.solver.check_assumptions(&[u]),
-                                    ) {
-                                        (SatResult::Unsat, SatResult::Unsat) => {
-                                            log::info!("Memory safe with solver's second check!");
-                                            return Ok(());
-                                        }
-                                        (a, b) => {
-                                            log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
-                                            log::error!(
-                                                "Memory unsafe with solver's second check!"
-                                            );
-                                        }
-                                    }
-                                }
-                                _ => log::info!("Memory unsafe with solver first check!"),
-                            }
-                        }
-                    }
-                    return Err(common::MemorySafetyError::new(
-                        format!(
-                            "Writing to address outside allowable memory regions {:?}, {:?}",
-                            regbase, offset
-                        )
-                        .as_str(),
-                    ));
-                }
-            }
-            Some(AbstractExpression::Expression(_, _, _)) => {
-                let base = base.clone().unwrap();
-                for region in self.memory_safe_regions.clone() {
-                    if base.contains(&region.base)
-                        && (region.region_type == common::RegionType::WRITE
-                            || region.region_type == common::RegionType::RW)
-                    {
-                        // the name of the base of the region
-                        let regbase = ast::Int::from_str(self.context, &region.base).unwrap();
-                        let abs_offset = ast::Int::from_i64(self.context, offset);
-
-                        //the base of the access (which is a complex expression) and the access itself
-                        let base = common::expression_to_ast(self.context, base.clone()).unwrap();
-                        let access = ast::Int::add(self.context, &[&base, &abs_offset]);
-
-                        let lowerbound_value =
-                            common::expression_to_ast(self.context, region.start.clone()).unwrap();
-                        let low_access =
-                            ast::Int::add(self.context, &[&regbase, &lowerbound_value]);
-                        let upperbound_value =
-                            common::expression_to_ast(self.context, region.end.clone()).unwrap();
-                        let up_access = ast::Int::add(self.context, &[&regbase, &upperbound_value]);
-                        let l = access.lt(&low_access);
-                        let u = access.gt(&up_access);
-
-                        match (
-                            self.solver.check_assumptions(&[l]),
-                            self.solver.check_assumptions(&[u]),
-                        ) {
-                            (SatResult::Unsat, SatResult::Unsat) => {
-                                log::info!("Memory safe with solver's only check!");
-                                return Ok(());
-                            }
-                            (a, b) => {
-                                log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
-                                log::error!("Memory unsafe with solver's only check!");
-                            }
-                        }
+                    (a, b) => {
+                        log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
+                        log::error!("Memory unsafe with solver's check!");
                     }
                 }
-                return Err(common::MemorySafetyError::new(
+
+                return Err(MemorySafetyError::new(
                     format!(
                         "Writing to address outside allowable memory regions {:?}, {:?}",
-                        base, offset
+                        regbase, offset
                     )
                     .as_str(),
                 ));
             }
-            _ => (),
+            _ => todo!(),
         }
-        Err(common::MemorySafetyError::new(
-            format!(
-                "Cannot write safely to address with base {:?} offset {:?}",
-                base, offset
-            )
-            .as_str(),
-        ))
+
+        //     Some(AbstractExpression::Expression(_, _, _)) => {
+        //         let base = base.clone().unwrap();
+        //         for region in self.memory_safe_regions.clone() {
+        //             if base.contains(&region.base)
+        //                 && (region.region_type == RegionType::WRITE
+        //                     || region.region_type == RegionType::RW)
+        //             {
+        //                 // the name of the base of the region
+        //                 let regbase = ast::Int::from_str(self.context, &region.base).unwrap();
+        //                 let abs_offset = ast::Int::from_i64(self.context, offset);
+
+        //                 //the base of the access (which is a complex expression) and the access itself
+        //                 let base = expression_to_ast(self.context, base.clone()).unwrap();
+        //                 let access = ast::Int::add(self.context, &[&base, &abs_offset]);
+
+        //                 let lowerbound_value =
+        //                     expression_to_ast(self.context, region.start.clone()).unwrap();
+        //                 let low_access =
+        //                     ast::Int::add(self.context, &[&regbase, &lowerbound_value]);
+        //                 let upperbound_value =
+        //                     expression_to_ast(self.context, region.end.clone()).unwrap();
+        //                 let up_access = ast::Int::add(self.context, &[&regbase, &upperbound_value]);
+        //                 let l = access.lt(&low_access);
+        //                 let u = access.gt(&up_access);
+
+        //                 match (
+        //                     self.solver.check_assumptions(&[l]),
+        //                     self.solver.check_assumptions(&[u]),
+        //                 ) {
+        //                     (SatResult::Unsat, SatResult::Unsat) => {
+        //                         log::info!("Memory safe with solver's only check!");
+        //                         return Ok(());
+        //                     }
+        //                     (a, b) => {
+        //                         log::error!("impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}", a, b, self.solver.get_model());
+        //                         log::error!("Memory unsafe with solver's only check!");
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //         return Err(MemorySafetyError::new(
+        //             format!(
+        //                 "Writing to address outside allowable memory regions {:?}, {:?}",
+        //                 base, offset
+        //             )
+        //             .as_str(),
+        //         ));
+        //     }
+        //     _ => (),
+        // }
     }
 }
