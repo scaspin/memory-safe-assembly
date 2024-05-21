@@ -3,9 +3,9 @@
 
 // #include <openssl/asm_base.h>
 
-#if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
-#include <openssl/arm_arch.h>
-#if __ARM_MAX_ARCH__ >= 8
+// #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #include <openssl/arm_arch.h>
+// #if __ARM_MAX_ARCH__ >= 8
 
 
 .text
@@ -21,7 +21,7 @@ _aes_gcm_enc_kernel:
 	mov	w10, #1
 	strb	w10, [x9,#2] // kFlag_aes_gcm_enc_kernel
 #endif
-	AARCH64_SIGN_LINK_REGISTER
+	// AARCH64_SIGN_LINK_REGISTER
 	stp	x29, x30, [sp, #-128]!
 	mov	x29, sp
 	stp	x19, x20, [sp, #16]
@@ -781,7 +781,7 @@ Lenc_blocks_less_than_1:	//	blocks left <= 1
 	ldp	d12, d13, [sp, #96]
 	ldp	d14, d15, [sp, #112]
 	ldp	x29, x30, [sp], #128
-	AARCH64_VALIDATE_LINK_REGISTER
+	// AARCH64_VALIDATE_LINK_REGISTER
 	ret
 
 .globl	_aes_gcm_dec_kernel
@@ -789,7 +789,7 @@ Lenc_blocks_less_than_1:	//	blocks left <= 1
 
 .align	4
 _aes_gcm_dec_kernel:
-	AARCH64_SIGN_LINK_REGISTER
+	// AARCH64_SIGN_LINK_REGISTER
 	stp	x29, x30, [sp, #-128]!
 	mov	x29, sp
 	stp	x19, x20, [sp, #16]
@@ -1555,8 +1555,8 @@ Ldec_blocks_less_than_1:	//	blocks left <= 1
 	ldp	d12, d13, [sp, #96]
 	ldp	d14, d15, [sp, #112]
 	ldp	x29, x30, [sp], #128
-	AARCH64_VALIDATE_LINK_REGISTER
+	// AARCH64_VALIDATE_LINK_REGISTER
 	ret
 
-#endif
-#endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #endif
+// #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
