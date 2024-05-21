@@ -1,10 +1,10 @@
 // This file is generated from a similarly-named Perl script in the BoringSSL
 // source tree. Do not edit by hand.
 
-#include <openssl/asm_base.h>
+// #include <openssl/asm_base.h>
 
-#if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
-#include <openssl/arm_arch.h>
+// #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #include <openssl/arm_arch.h>
 
 .text
 
@@ -15,7 +15,7 @@
 .private_extern	_bn_add_words
 .align	4
 _bn_add_words:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	# Clear the carry flag.
 	cmn	xzr, xzr
 
@@ -54,7 +54,7 @@ Ladd_exit:
 .private_extern	_bn_sub_words
 .align	4
 _bn_sub_words:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	# Set the carry flag. Arm's borrow bit is flipped from the carry flag,
 	# so we want C = 1 here.
 	cmp	xzr, xzr
@@ -86,4 +86,4 @@ Lsub_exit:
 	cset	x0, cc
 	ret
 
-#endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)

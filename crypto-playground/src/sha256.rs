@@ -124,7 +124,7 @@ pub fn sha256_digest(msg: &[u8], output: &mut [u8]) {
     sha256(msg, msg.len(), output);
 }
 
-#[bums_macros::check_mem_safe("assembly/processed-sha256-armv8-apple.S", context.as_mut_ptr(), input.as_ptr(), input.len() / SHA256_CBLOCK)]
+#[bums_macros::check_mem_safe("assembly/aws-fips/sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / SHA256_CBLOCK)]
 fn sha256_block_data_order(context: &mut [u32; 8], input: &[u8]);
 
 #[cfg(test)]

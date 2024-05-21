@@ -1,9 +1,9 @@
 // This file is generated from a similarly-named Perl script in the BoringSSL
 // source tree. Do not edit by hand.
 
-#include <openssl/asm_base.h>
+// #include <openssl/asm_base.h>
 
-#if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
 // Copyright 2014-2020 The OpenSSL Project Authors. All Rights Reserved.
 //
 // Licensed under the OpenSSL license (the "License").  You may not use
@@ -44,10 +44,6 @@
 //	generated with -mgeneral-regs-only is significantly faster
 //	and the gap is only 40-90%.
 
-#ifndef	__KERNEL__
-# include <openssl/arm_arch.h>
-#endif
-
 .text
 
 
@@ -57,18 +53,8 @@
 
 .align	6
 _sha256_block_data_order:
-	AARCH64_VALID_CALL_TARGET
-#ifndef	__KERNEL__
-#if defined(OPENSSL_HWASAN) && __clang_major__ >= 10
-	adrp	x16,:pg_hi21_nc:_OPENSSL_armcap_P
-#else
-	adrp	x16,_OPENSSL_armcap_P@PAGE
-#endif
-	ldr	w16,[x16,_OPENSSL_armcap_P@PAGEOFF]
-	tst	w16,#ARMV8_SHA256
-	b.ne	Lv8_entry
-#endif
-	AARCH64_SIGN_LINK_REGISTER
+	// AARCH64_VALID_CALL_TARGET
+	// AARCH64_SIGN_LINK_REGISTER
 	stp	x29,x30,[sp,#-128]!
 	add	x29,sp,#0
 
@@ -1029,7 +1015,7 @@ Loop_16_xx:
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#128
-	AARCH64_VALIDATE_LINK_REGISTER
+	// AARCH64_VALIDATE_LINK_REGISTER
 	ret
 
 
@@ -1064,13 +1050,6 @@ LK256:
 .align	6
 sha256_block_armv8:
 Lv8_entry:
-#ifdef BORINGSSL_DISPATCH_TEST
-
-	adrp	x9,_BORINGSSL_function_hit@PAGE
-	add	x9, x9, _BORINGSSL_function_hit@PAGEOFF
-	mov	w10, #1
-	strb	w10, [x9,#6] // kFlag_sha256_hw
-#endif
 	// Armv8.3-A PAuth: even though x30 is pushed to stack it is not popped later.
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
@@ -1208,4 +1187,4 @@ Loop_hw:
 	ret
 
 #endif
-#endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)

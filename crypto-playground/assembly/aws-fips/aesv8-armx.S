@@ -1,12 +1,12 @@
 // This file is generated from a similarly-named Perl script in the BoringSSL
 // source tree. Do not edit by hand.
 
-#include <openssl/asm_base.h>
+// #include <openssl/asm_base.h>
 
-#if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
-#include <openssl/arm_arch.h>
+// #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #include <openssl/arm_arch.h>
 
-#if __ARM_MAX_ARCH__>=7
+// #if __ARM_MAX_ARCH__>=7
 .text
 
 .section	__TEXT,__const
@@ -24,15 +24,8 @@ Lrcon:
 .align	5
 _aes_hw_set_encrypt_key:
 Lenc_key:
-#ifdef BORINGSSL_DISPATCH_TEST
-
-	adrp	x9,_BORINGSSL_function_hit@PAGE
-	add	x9, x9, _BORINGSSL_function_hit@PAGEOFF
-	mov	w10, #1
-	strb	w10, [x9,#3] // kFlag_aes_hw_set_encrypt_key
-#endif
 	// Armv8.3-A PAuth: even though x30 is pushed to stack it is not popped later.
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
 	mov	x3,#-1
@@ -201,7 +194,7 @@ Lenc_key_abort:
 
 .align	5
 _aes_hw_set_decrypt_key:
-	AARCH64_SIGN_LINK_REGISTER
+	// AARCH64_SIGN_LINK_REGISTER
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
 	bl	Lenc_key
@@ -235,7 +228,7 @@ Loop_imc:
 	eor	x0,x0,x0		// return value
 Ldec_key_abort:
 	ldp	x29,x30,[sp],#16
-	AARCH64_VALIDATE_LINK_REGISTER
+	// AARCH64_VALIDATE_LINK_REGISTER
 	ret
 
 .globl	_aes_hw_encrypt
@@ -243,14 +236,7 @@ Ldec_key_abort:
 
 .align	5
 _aes_hw_encrypt:
-#ifdef BORINGSSL_DISPATCH_TEST
-
-	adrp	x9,_BORINGSSL_function_hit@PAGE
-	add	x9, x9, _BORINGSSL_function_hit@PAGEOFF
-	mov	w10, #1
-	strb	w10, [x9,#1] // kFlag_aes_hw_encrypt
-#endif
-	AARCH64_VALID_CALL_TARGET
+	// 64_VALID_CALL_TARGET
 	ldr	w3,[x2,#240]
 	ld1	{v0.4s},[x2],#16
 	ld1	{v2.16b},[x0]
@@ -281,14 +267,7 @@ Loop_enc:
 
 .align	5
 _aes_hw_decrypt:
-#ifdef BORINGSSL_DISPATCH_TEST
-
-	adrp	x9,_BORINGSSL_function_hit@PAGE
-	add	x9, x9, _BORINGSSL_function_hit@PAGEOFF
-	mov	w10, #1
-	strb	w10, [x9,#1] // kFlag_aes_hw_encrypt
-#endif
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	ldr	w3,[x2,#240]
 	ld1	{v0.4s},[x2],#16
 	ld1	{v2.16b},[x0]
@@ -320,7 +299,7 @@ Loop_dec:
 .align	5
 _aes_hw_cbc_encrypt:
 	// Armv8.3-A PAuth: even though x30 is pushed to stack it is not popped later.
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
 	subs	x2,x2,#16
@@ -612,15 +591,8 @@ Lcbc_abort:
 
 .align	5
 _aes_hw_ctr32_encrypt_blocks:
-#ifdef BORINGSSL_DISPATCH_TEST
-
-	adrp	x9,_BORINGSSL_function_hit@PAGE
-	add	x9, x9, _BORINGSSL_function_hit@PAGEOFF
-	mov	w10, #1
-	strb	w10, [x9] // kFlag_aes_hw_ctr32_encrypt_blocks
-#endif
 	// Armv8.3-A PAuth: even though x30 is pushed to stack it is not popped later.
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
 	ldr	w5,[x3,#240]
@@ -820,7 +792,7 @@ Lctr32_done:
 
 .align	5
 _aes_hw_xts_encrypt:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	cmp	x2,#16
     // Original input data size bigger than 16, jump to big size processing.
 	b.ne	Lxts_enc_big_size
@@ -1472,7 +1444,7 @@ Lxts_enc_final_abort:
 
 .align	5
 _aes_hw_xts_decrypt:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	cmp	x2,#16
     // Original input data size bigger than 16, jump to big size processing.
 	b.ne	Lxts_dec_big_size
@@ -2155,5 +2127,5 @@ Lxts_dec_abort:
 Lxts_dec_final_abort:
 	ret
 
-#endif
-#endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #endif
+// #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
