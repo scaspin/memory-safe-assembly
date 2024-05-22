@@ -23,7 +23,7 @@ pub struct RegisterValue {
 }
 
 impl RegisterValue {
-    pub fn new(name: &str) -> RegisterValue {
+    pub fn new(name: &str) -> Self {
         let string_name = name.to_string();
         if name == "sp" || name == "x29" {
             return RegisterValue {
@@ -33,7 +33,7 @@ impl RegisterValue {
                 offset: 0,
             };
         } else if name == "x30" {
-            return RegisterValue {
+            return Self {
                 name: string_name,
                 kind: RegisterKind::Address,
                 base: Some(AbstractExpression::Abstract("Return".to_string())),
@@ -47,7 +47,7 @@ impl RegisterValue {
                 offset: 0,
             };
         }
-        RegisterValue {
+        Self {
             name: string_name.clone(),
             kind: RegisterKind::RegisterBase,
             base: Some(AbstractExpression::Abstract(string_name.to_string())),
@@ -61,6 +61,84 @@ impl RegisterValue {
         kind: RegisterKind,
         base: Option<AbstractExpression>,
         offset: i64,
+    ) {
+        self.name = name;
+        self.kind = kind;
+        self.base = base;
+        self.offset = offset;
+    }
+}
+
+// TODO: add way to mark endianess if necessary
+#[derive(Debug, Clone, PartialEq)]
+pub struct SimdRegister {
+    pub name: String,
+    pub kind: RegisterKind,
+    pub base: [Option<AbstractExpression>; 16],
+    pub offset: [u8; 16],
+}
+
+const ARRAY_REPEAT_VALUE: Option<AbstractExpression> = None;
+
+impl SimdRegister {
+    pub fn new(name: &str) -> Self {
+        let string_name = name.to_string();
+        let mut bases = [ARRAY_REPEAT_VALUE; 16];
+        for i in 0..1 {
+            bases[i] = Some(AbstractExpression::Abstract(
+                string_name.to_string() + &i.to_string(),
+            ));
+        }
+        Self {
+            name: string_name.clone(),
+            kind: RegisterKind::RegisterBase,
+            base: bases,
+            offset: [0; 16],
+        }
+    }
+
+    //https://developer.arm.com/documentation/102474/0100/Fundamentals-of-Armv8-Neon-technology/Registers--vectors--lanes-and-elements
+    // TODO: unclear whether we need to use these getters and setters in this way when actually doing SIMD,
+    // to be fixed once implement interpreter and instructions,
+    // at least useful for setting/getting scalars from vectors if necessary
+    // i.e. V3.S[2]  -> get_word(2)
+    pub fn get_byte(&self, index: usize) -> (Option<AbstractExpression>, u8) {
+        assert!(index < 16);
+        return (self.base[index].clone(), self.offset[index]);
+    }
+    pub fn get_halfword(&self, index: usize) -> (Option<AbstractExpression>, u16) {
+        assert!(index <= 8);
+        let index = index * 2;
+        let half_base = generate_expression(
+            "bytes to halfword",
+            self.base[index + 1].clone().unwrap(),
+            self.base[index].clone().unwrap(),
+        );
+        let half_index = ((self.offset[index + 1] as u16) << 8) | self.offset[index] as u16;
+        return (Some(half_base), half_index);
+    }
+    pub fn set_byte(&self, index: usize, base: Option<AbstractExpression>, offset: u8) {
+        assert!(index < 16);
+        self.base[index] = base;
+        self.offset[index] = offset;
+    }
+    pub fn set_halfword(&self, index: usize, base: Option<AbstractExpression>, offset: u16) {
+        assert!(index < 8);
+        let index = index * 2;
+        self.base[index + 1] =
+            generate_expression("&", base, AbstractExpression::Immediate(0b11111111));
+        self.base[index] =
+            generate_expression("&", base, AbstractExpression::Immediate(0b1111111100000000));
+        self.offset[index] = (offset << 8) as u8;
+        self.offset[index + 1] = offset as u8;
+    }
+
+    pub fn set(
+        &mut self,
+        name: String,
+        kind: RegisterKind,
+        base: [Option<AbstractExpression>; 16],
+        offset: [u8; 16],
     ) {
         self.name = name;
         self.kind = kind;
