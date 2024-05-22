@@ -682,4 +682,41 @@ mod tests {
         assert!(res.is_ok());
         Ok(())
     }
+
+    #[test]
+    fn simd_init_neon() -> std::io::Result<()> {
+        //env_logger::init();
+
+        let file = File::open("tests/asm-examples/ghash-neon-armv8.S")?;
+        let reader = BufReader::new(file);
+        let start_label = String::from("_gcm_init_neon");
+
+        let mut program = Vec::new();
+        for line in reader.lines() {
+            program.push(line.unwrap_or(String::from("")));
+        }
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract_from(0, "htable".to_string());
+        engine.add_region_from(
+            common::RegionType::RW,
+            "htable".to_string(),
+            (Some(128 / 8 * 16), None, None),
+        );
+
+        engine.add_abstract_from(0, "h".to_string());
+        engine.add_region_from(
+            common::RegionType::READ,
+            "h".to_string(),
+            (Some(64 / 8 * 16), None, None),
+        );
+
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
+        Ok(())
+    }
 }
