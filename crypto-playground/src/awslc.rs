@@ -1,11 +1,11 @@
 #![allow(improper_ctypes)]
 extern "C" {
     // AES
-    // aes_hw_set_encrypt_key
-    // aes_hw_set_decrypt_key
-    // aes_hw_encrypt
-    // aes_hw_decrypt
-    // aes_hw_cbc_encrypt
+    // fn aes_hw_set_encrypt_key();
+    // fn aes_hw_set_decrypt_key();
+    // fn aes_hw_encrypt();
+    // fn aes_hw_decrypt();
+    // fn aes_hw_cbc_encrypt();
 
     pub fn aes_hw_ctr32_encrypt_blocks(
         input: *const u8,
@@ -14,15 +14,15 @@ extern "C" {
         key: *const u32,
         ivec: *const u8,
     );
-    // aes_hw_xts_encrypt
-    // aes_hw_xts_decrypt
+    // fn aes_hw_xts_encrypt();
+    // fn aes_hw_xts_decrypt();
 
-    // aesv8_gcm_8x_enc_128
-    // aesv8_gcm_8x_dec_128
-    // aesv8_gcm_8x_enc_192
-    // aesv8_gcm_8x_dec_192
-    // aesv8_gcm_8x_enc_256
-    // aesv8_gcm_8x_dec_256
+    // fn aesv8_gcm_8x_enc_128();
+    // fn aesv8_gcm_8x_dec_128();
+    // fn aesv8_gcm_8x_enc_192();
+    // fn aesv8_gcm_8x_dec_192();
+    // fn aesv8_gcm_8x_enc_256();
+    // fn aesv8_gcm_8x_dec_256();
 
     pub fn aes_gcm_enc_kernel(
         input: *const u8,
