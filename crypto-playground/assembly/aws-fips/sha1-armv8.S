@@ -3,8 +3,8 @@
 
 // #include <openssl/asm_base.h>
 
-#if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
-#include <openssl/arm_arch.h>
+// #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #include <openssl/arm_arch.h>
 
 .text
 
@@ -16,14 +16,17 @@
 .align	6
 _sha1_block_data_order:
 	// Armv8.3-A PAuth: even though x30 is pushed to stack it is not popped later.
-	AARCH64_VALID_CALL_TARGET
-#if defined(OPENSSL_HWASAN) && __clang_major__ >= 10
-	adrp	x16,:pg_hi21_nc:_OPENSSL_armcap_P
-#else
+	// AARCH64_VALID_CALL_TARGET
+	// #if defined(OPENSSL_HWASAN) && __clang_major__ >= 10
+	// 	adrp	x16,:pg_hi21_nc:_OPENSSL_armcap_P
+	// #else
 	adrp	x16,_OPENSSL_armcap_P@PAGE
-#endif
+	// #endif
 	ldr	w16,[x16,_OPENSSL_armcap_P@PAGEOFF]
-	tst	w16,#ARMV8_SHA1
+	// ARMV8_SHA1 indicates support for hardware SHA-1 instructions.
+	// #define ARMV8_SHA1 (1 << 3)
+	// tst	w16,#ARMV8_SHA1
+	tst	w16, #4
 	b.ne	Lv8_entry
 
 	stp	x29,x30,[sp,#-96]!
@@ -1085,7 +1088,7 @@ Loop:
 .align	6
 sha1_block_armv8:
 	// Armv8.3-A PAuth: even though x30 is pushed to stack it is not popped later.
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 Lv8_entry:
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
@@ -1224,4 +1227,4 @@ Lconst:
 .byte	83,72,65,49,32,98,108,111,99,107,32,116,114,97,110,115,102,111,114,109,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .align	2
 .align	2
-#endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)

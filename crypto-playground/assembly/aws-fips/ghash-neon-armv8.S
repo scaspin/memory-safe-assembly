@@ -3,8 +3,8 @@
 
 // #include <openssl/asm_base.h>
 
-#if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
-#include <openssl/arm_arch.h>
+// #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #include <openssl/arm_arch.h>
 
 .text
 
@@ -13,7 +13,7 @@
 
 .align	4
 _gcm_init_neon:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	// This function is adapted from gcm_init_v8. xC2 is t3.
 	ld1	{v17.2d}, [x1]			// load H
 	movi	v19.16b, #0xe1
@@ -39,7 +39,7 @@ _gcm_init_neon:
 
 .align	4
 _gcm_gmult_neon:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	ld1	{v3.16b}, [x0]		// load Xi
 	ld1	{v5.1d}, [x1], #8		// load twisted H
 	ld1	{v6.1d}, [x1]
@@ -59,7 +59,7 @@ _gcm_gmult_neon:
 
 .align	4
 _gcm_ghash_neon:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	ld1	{v0.16b}, [x0]		// load Xi
 	ld1	{v5.1d}, [x1], #8		// load twisted H
 	ld1	{v6.1d}, [x1]
@@ -332,4 +332,4 @@ Lmasks:
 .byte	71,72,65,83,72,32,102,111,114,32,65,82,77,118,56,44,32,100,101,114,105,118,101,100,32,102,114,111,109,32,65,82,77,118,52,32,118,101,114,115,105,111,110,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .align	2
 .align	2
-#endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)

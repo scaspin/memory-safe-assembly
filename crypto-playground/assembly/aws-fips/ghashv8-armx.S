@@ -3,10 +3,10 @@
 
 // #include <openssl/asm_base.h>
 
-#if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
-#include <openssl/arm_arch.h>
+// #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #include <openssl/arm_arch.h>
 
-#if __ARM_MAX_ARCH__>=7
+// #if __ARM_MAX_ARCH__>=7
 .text
 
 .globl	_gcm_init_v8
@@ -14,7 +14,7 @@
 
 .align	4
 _gcm_init_v8:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	ld1	{v17.2d},[x1]		//load input H
 	movi	v19.16b,#0xe1
 	shl	v19.2d,v19.2d,#57		//0xc2.0
@@ -195,7 +195,7 @@ _gcm_init_v8:
 
 .align	4
 _gcm_gmult_v8:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	ld1	{v17.2d},[x0]		//load Xi
 	movi	v19.16b,#0xe1
 	ld1	{v20.2d,v21.2d},[x1]	//load twisted H, ...
@@ -238,7 +238,7 @@ _gcm_gmult_v8:
 
 .align	4
 _gcm_ghash_v8:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	cmp	x3,#64
 	b.hs	Lgcm_ghash_v8_4x
 	ld1	{v0.2d},[x0]		//load [rotated] Xi
@@ -650,5 +650,5 @@ Ldone4x:
 .byte	71,72,65,83,72,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .align	2
 .align	2
-#endif
-#endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #endif
+// #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)

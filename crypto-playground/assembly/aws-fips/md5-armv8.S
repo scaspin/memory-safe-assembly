@@ -3,7 +3,7 @@
 
 // #include <openssl/asm_base.h>
 
-#if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
 
 .text
 .globl	_md5_block_asm_data_order
@@ -660,4 +660,4 @@ md5_blocks_loop:
 	ldp	x19,x20,[sp],#80
 	ret
 
-#endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
+// #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
