@@ -117,18 +117,24 @@ impl SimdRegister {
         let half_index = ((self.offset[index + 1] as u16) << 8) | self.offset[index] as u16;
         return (Some(half_base), half_index);
     }
-    pub fn set_byte(&self, index: usize, base: Option<AbstractExpression>, offset: u8) {
+    pub fn set_byte(&mut self, index: usize, base: Option<AbstractExpression>, offset: u8) {
         assert!(index < 16);
         self.base[index] = base;
         self.offset[index] = offset;
     }
-    pub fn set_halfword(&self, index: usize, base: Option<AbstractExpression>, offset: u16) {
+    pub fn set_halfword(&mut self, index: usize, base: Option<AbstractExpression>, offset: u16) {
         assert!(index < 8);
         let index = index * 2;
-        self.base[index + 1] =
-            generate_expression("&", base, AbstractExpression::Immediate(0b11111111));
-        self.base[index] =
-            generate_expression("&", base, AbstractExpression::Immediate(0b1111111100000000));
+        self.base[index + 1] = Some(generate_expression(
+            "&",
+            base.clone().unwrap(),
+            AbstractExpression::Immediate(0b11111111),
+        ));
+        self.base[index] = Some(generate_expression(
+            "&",
+            base.unwrap(),
+            AbstractExpression::Immediate(0b1111111100000000),
+        ));
         self.offset[index] = (offset << 8) as u8;
         self.offset[index + 1] = offset as u8;
     }
