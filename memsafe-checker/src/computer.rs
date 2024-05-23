@@ -23,6 +23,7 @@ fn get_register_index(reg_name: String) -> usize {
 #[derive(Clone)]
 pub struct ARMCORTEXA<'ctx> {
     pub registers: [RegisterValue; 33],
+    pub simd_registers: [SimdRegister; 32],
     zero: Option<FlagValue>,
     neg: Option<FlagValue>,
     carry: Option<FlagValue>,
@@ -83,6 +84,41 @@ impl<'ctx> ARMCORTEXA<'_> {
             RegisterValue::new(RegisterKind::Immediate, None, 0), // 64-bit zero
         ];
 
+        let simd_registers = [
+            SimdRegister::new("v0"),
+            SimdRegister::new("v1"),
+            SimdRegister::new("v2"),
+            SimdRegister::new("v3"),
+            SimdRegister::new("v4"),
+            SimdRegister::new("v5"),
+            SimdRegister::new("v6"),
+            SimdRegister::new("v7"),
+            SimdRegister::new("v8"),
+            SimdRegister::new("v9"),
+            SimdRegister::new("v10"),
+            SimdRegister::new("v11"),
+            SimdRegister::new("v12"),
+            SimdRegister::new("v13"),
+            SimdRegister::new("v14"),
+            SimdRegister::new("v15"),
+            SimdRegister::new("v16"),
+            SimdRegister::new("v17"),
+            SimdRegister::new("v18"),
+            SimdRegister::new("v19"),
+            SimdRegister::new("v20"),
+            SimdRegister::new("v21"),
+            SimdRegister::new("v22"),
+            SimdRegister::new("v23"),
+            SimdRegister::new("v24"),
+            SimdRegister::new("v25"),
+            SimdRegister::new("v26"),
+            SimdRegister::new("v27"),
+            SimdRegister::new("v28"),
+            SimdRegister::new("v29"),
+            SimdRegister::new("v30"),
+            SimdRegister::new("v31"),
+        ];
+
         let solver = Solver::new(&context);
         let mut memory = HashMap::new();
 
@@ -100,6 +136,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         ARMCORTEXA {
             registers,
+            simd_registers,
             zero: None,
             neg: None,
             carry: None,
@@ -129,7 +166,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             self.overflow.clone(),
         );
     }
-
+  
     pub fn set_immediate(&mut self, register: String, value: u64) {
         self.set_register(register, RegisterKind::Immediate, None, value as i64);
     }
@@ -1176,6 +1213,12 @@ impl<'ctx> ARMCORTEXA<'_> {
                     "Loading from an abstract but safe region of memory {:?}",
                     address
                 );
+                self.rw_queue.push(MemoryAccess {
+                    kind: RegionType::READ,
+                    base: base,
+                    offset: address.offset,
+                });
+                self.set_register(t, RegisterKind::Number, None, 0);
                 Ok(())
             }
         } else {
@@ -1200,7 +1243,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let region = self.memory.get_mut(&base.clone()).expect("No region");
                 let register = &self.registers[get_register_index(register)];
                 region.insert(address.offset.clone(), register.clone());
-
+              
                 log::info!(
                     "Store to address {:?} + {}",
                     base.clone(),
@@ -1297,7 +1340,6 @@ impl<'ctx> ARMCORTEXA<'_> {
                 log::error!("Memory unsafe with solver's check!");
             }
         }
-
         return Err(MemorySafetyError::new(
             format!(
                 "Writing to address outside allowable memory regions {:?}, {:?}",

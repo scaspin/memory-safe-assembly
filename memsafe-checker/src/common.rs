@@ -18,12 +18,12 @@ pub struct RegisterValue {
 }
 
 impl RegisterValue {
-    pub fn new(kind: RegisterKind, base: Option<AbstractExpression>, offset: i64) -> RegisterValue {
-        RegisterValue { kind, base, offset }
+    pub fn new(kind: RegisterKind, base: Option<AbstractExpression>, offset: i64) -> Self {
+        Self { kind, base, offset }
     }
 
-    pub fn new_empty(name: &str) -> RegisterValue {
-        RegisterValue {
+    pub fn new_empty(name: &str) -> Self {
+        Self {
             kind: RegisterKind::RegisterBase,
             base: Some(AbstractExpression::Abstract(name.to_string())),
             offset: 0,
@@ -31,6 +31,90 @@ impl RegisterValue {
     }
 
     pub fn set(&mut self, kind: RegisterKind, base: Option<AbstractExpression>, offset: i64) {
+        self.kind = kind;
+        self.base = base;
+        self.offset = offset;
+    }
+}
+
+// TODO: add way to mark endianess if necessary
+#[derive(Debug, Clone, PartialEq)]
+pub struct SimdRegister {
+    pub name: String,
+    pub kind: RegisterKind,
+    pub base: [Option<AbstractExpression>; 16],
+    pub offset: [u8; 16],
+}
+
+const ARRAY_REPEAT_VALUE: Option<AbstractExpression> = None;
+
+impl SimdRegister {
+    pub fn new(name: &str) -> Self {
+        let string_name = name.to_string();
+        let mut bases = [ARRAY_REPEAT_VALUE; 16];
+        for i in 0..1 {
+            bases[i] = Some(AbstractExpression::Abstract(
+                string_name.to_string() + &i.to_string(),
+            ));
+        }
+        Self {
+            name: string_name.clone(),
+            kind: RegisterKind::RegisterBase,
+            base: bases,
+            offset: [0; 16],
+        }
+    }
+
+    //https://developer.arm.com/documentation/102474/0100/Fundamentals-of-Armv8-Neon-technology/Registers--vectors--lanes-and-elements
+    // TODO: unclear whether we need to use these getters and setters in this way when actually doing SIMD,
+    // to be fixed once implement interpreter and instructions,
+    // at least useful for setting/getting scalars from vectors if necessary
+    // i.e. V3.S[2]  -> get_word(2)
+    pub fn get_byte(&self, index: usize) -> (Option<AbstractExpression>, u8) {
+        assert!(index < 16);
+        return (self.base[index].clone(), self.offset[index]);
+    }
+    pub fn get_halfword(&self, index: usize) -> (Option<AbstractExpression>, u16) {
+        assert!(index <= 8);
+        let index = index * 2;
+        let half_base = generate_expression(
+            "bytes to halfword",
+            self.base[index + 1].clone().unwrap(),
+            self.base[index].clone().unwrap(),
+        );
+        let half_index = ((self.offset[index + 1] as u16) << 8) | self.offset[index] as u16;
+        return (Some(half_base), half_index);
+    }
+    pub fn set_byte(&mut self, index: usize, base: Option<AbstractExpression>, offset: u8) {
+        assert!(index < 16);
+        self.base[index] = base;
+        self.offset[index] = offset;
+    }
+    pub fn set_halfword(&mut self, index: usize, base: Option<AbstractExpression>, offset: u16) {
+        assert!(index < 8);
+        let index = index * 2;
+        self.base[index + 1] = Some(generate_expression(
+            "&",
+            base.clone().unwrap(),
+            AbstractExpression::Immediate(0b11111111),
+        ));
+        self.base[index] = Some(generate_expression(
+            "&",
+            base.unwrap(),
+            AbstractExpression::Immediate(0b1111111100000000),
+        ));
+        self.offset[index] = (offset << 8) as u8;
+        self.offset[index + 1] = offset as u8;
+    }
+
+    pub fn set(
+        &mut self,
+        name: String,
+        kind: RegisterKind,
+        base: [Option<AbstractExpression>; 16],
+        offset: [u8; 16],
+    ) {
+        self.name = name;
         self.kind = kind;
         self.base = base;
         self.offset = offset;
@@ -293,6 +377,27 @@ impl Instruction {
             r3: None,
             r4: None,
         }
+    }
+
+    pub fn is_simd(&self) -> bool {
+        if let Some(i) = &self.r1 {
+            if i.contains("v") {
+                return true;
+            }
+        } else if let Some(i) = &self.r2 {
+            if i.contains("v") {
+                return true;
+            }
+        } else if let Some(i) = &self.r3 {
+            if i.contains("v") {
+                return true;
+            }
+        } else if let Some(i) = &self.r4 {
+            if i.contains("v") {
+                return true;
+            }
+        }
+        false
     }
 }
 #[derive(Debug, Clone)]
