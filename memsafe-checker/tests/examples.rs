@@ -7,7 +7,7 @@ mod tests {
 
     #[test]
     fn bn_add() -> std::io::Result<()> {
-        //env_logger::init();
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/bn-armv8-apple.S")?;
         let reader = BufReader::new(file);
@@ -198,8 +198,8 @@ mod tests {
     }
 
     /*
-    * This should fail since first memory access can succeed when length is 0,
-    */
+     * This should fail since first memory access can succeed when length is 0,
+     */
     #[test]
     fn basic_abstract_loop() -> std::io::Result<()> {
         // env_logger::init();
@@ -395,7 +395,7 @@ mod tests {
         engine.add_region(
             RegionType::READ,
             "base".to_string(),
-            AbstractExpression::Immediate(2),
+            AbstractExpression::Immediate(8),
         );
 
         let res = engine.start("start".to_string());
@@ -475,7 +475,7 @@ mod tests {
         engine.add_region(
             RegionType::READ,
             "base".to_string(),
-            AbstractExpression::Immediate(4),
+            AbstractExpression::Immediate(16),
         );
 
         let res = engine.start("start".to_string());

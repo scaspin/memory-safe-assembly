@@ -453,7 +453,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             }
                             (None, Some(label), None) => {
                                 log::info!("returning: {}", pc);
-                                if &label == "Return" {
+                                if &label == "return" {
                                     break;
                                 }
                                 let newline = self.get_linenumber_of_label(label.clone());
@@ -562,10 +562,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
             {
                 let current_state = self.computer.get_state();
                 // LOOP has repeated at least twice
-                println!("last: {:?}", last_jump_label);
-                println!("last: {:?}", last_rw_list);
-                println!("cur: {:?}", &pc);
-                println!("cur: {:?}", rw_list);
                 if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
                     // JUMP TO Kth ITERATION
 
@@ -592,7 +588,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         let last = &last_state.0[i];
                         let cur = &current_state.0[i];
                         let diff: i64 = match cur.kind {
-                            RegisterKind::RegisterBase => {
+                            RegisterKind::RegisterBase | RegisterKind::Number => {
                                 if last.base == cur.base {
                                     cur.offset - last.offset
                                 } else {
@@ -600,7 +596,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 }
                             }
                             RegisterKind::Immediate => cur.offset - last.offset,
-                            _ => 0,
                         };
 
                         if diff > 0 {
@@ -620,7 +615,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 offset: 0,
                             };
 
-                            println!("reg: {:?}", new_reg);
                             self.computer.registers[i] = new_reg;
                         }
                     }
@@ -636,10 +630,17 @@ impl<'ctx> ExecutionEngine<'ctx> {
         // in loop protocol
         } else {
             // K+1 loop is a repeat of K loop!
-            for j in self.jump_history.clone().into_iter().rev() {
-                let (last_jump_label, branch_decision, last_jump_exp, last_rw_list, last_state) = j;
-
-                if last_jump_label == pc && last_jump_exp == expression && last_rw_list == rw_list
+            if let Some((
+                last_jump_label,
+                branch_decision,
+                last_jump_exp,
+                last_rw_list,
+                last_state,
+            )) = self.jump_history.last()
+            {
+                if last_jump_label == &pc
+                    && last_jump_exp == &expression
+                    && last_rw_list == &rw_list
                 // && last_state == &self.computer.get_state()
                 {
                     self.computer.solver.pop(1);
@@ -675,7 +676,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         let last = &last_state.0[i];
                         let cur = &current_state.0[i];
                         let diff: i64 = match cur.kind {
-                            RegisterKind::RegisterBase => {
+                            RegisterKind::RegisterBase | RegisterKind::Number => {
                                 if last.base == cur.base {
                                     cur.offset - last.offset
                                 } else {
@@ -683,7 +684,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 }
                             }
                             RegisterKind::Immediate => cur.offset - last.offset,
-                            _ => 0,
                         };
 
                         // check diff matches, if not BAD
@@ -706,9 +706,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
                 }
-                return Some(branch_decision);
+                return Some(*branch_decision);
+            } else {
+                return None;
             }
-            return None;
         }
     }
 }
