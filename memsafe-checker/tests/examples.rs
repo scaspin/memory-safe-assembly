@@ -611,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn simd_init_neon() -> std::io::Result<()> {
+    fn test_simd_gcm_init_neon() -> std::io::Result<()> {
         //env_logger::init();
 
         let file = File::open("tests/asm-examples/ghash-neon-armv8.S")?;
@@ -629,17 +629,17 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "htable".to_string());
-        engine.add_region_from(
-            common::RegionType::RW,
+        engine.add_region(
+            RegionType::RW,
             "htable".to_string(),
-            (Some(128 / 8 * 16), None, None),
+            AbstractExpression::Immediate(128 * 16),
         );
 
         engine.add_abstract_from(0, "h".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "h".to_string(),
-            (Some(64 / 8 * 16), None, None),
+            AbstractExpression::Immediate(64 * 16),
         );
 
         let res = engine.start(start_label);

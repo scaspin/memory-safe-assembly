@@ -166,7 +166,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             self.overflow.clone(),
         );
     }
-  
+
     pub fn set_immediate(&mut self, register: String, value: u64) {
         self.set_register(register, RegisterKind::Immediate, None, value as i64);
     }
@@ -1215,7 +1215,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
-                    base: base,
+                    base: address.base.expect("Need base").to_string(),
                     offset: address.offset,
                 });
                 self.set_register(t, RegisterKind::Number, None, 0);
@@ -1243,7 +1243,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let region = self.memory.get_mut(&base.clone()).expect("No region");
                 let register = &self.registers[get_register_index(register)];
                 region.insert(address.offset.clone(), register.clone());
-              
+
                 log::info!(
                     "Store to address {:?} + {}",
                     base.clone(),
@@ -1256,10 +1256,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                 });
                 return Ok(());
             } else {
-                log::error!("No element at this address in region");
-                return Err(MemorySafetyError::new(
-                    "Cannot read element at this address from region",
-                ));
+                log::info!(
+                    "Storing from an abstract but safe region of memory {:?}",
+                    address
+                );
+                self.rw_queue.push(MemoryAccess {
+                    kind: RegionType::WRITE,
+                    base: address.base.expect("Need base").to_string(),
+                    offset: address.offset,
+                });
+                Ok(())
             }
         } else {
             return res;
