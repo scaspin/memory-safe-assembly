@@ -11,10 +11,11 @@ fn get_register_index(reg_name: String) -> usize {
     if reg_name == "xzr" {
         return 32;
     }
-    let r0 = name.strip_prefix("x").unwrap_or(&name);
-    let r1: usize = r0
-        .strip_prefix("w")
-        .unwrap_or(&r0)
+    let mut r = name.strip_prefix("x").unwrap_or(&name);
+    r = r.strip_prefix("w").unwrap_or(&name);
+    let r1: usize = r
+        .strip_prefix("v")
+        .unwrap_or(&r)
         .parse::<usize>()
         .expect(format!("Invalid register value {:?}", reg_name).as_str());
     return r1;
@@ -184,8 +185,44 @@ impl<'ctx> ARMCORTEXA<'_> {
     ) {
         if name.contains("w") {
             self.registers[get_register_index(name.clone())].set(kind, base, (offset as i32) as i64)
-        } else {
+        } else if name.contains("x") {
             self.registers[get_register_index(name.clone())].set(kind, base, offset as i64)
+        } else if name.contains("v") {
+            // peel back {} on mem accesses
+            let mut v = name.clone();
+            if name.contains("{") {
+                v = name.trim_matches(|c| c == '{' || c == '}').to_string();
+            }
+            // example v17.s[1] that accesses a specific element within vector
+            if name.contains("[") {
+                let left_brac = name.find("[").expect("need left bracket");
+                let right_brac = name.find("]").expect("need right bracket");
+                let index_string = name.get(left_brac..right_brac).expect("need brackets");
+                let index = index_string
+                    .parse::<usize>()
+                    .expect("index into vector must be an integer");
+                if let Some((vector, arrangement)) = v.split_once(".") {
+                    let register = &mut self.simd_registers[get_register_index(vector.to_string())];
+                    match arrangement {
+                        "b" => register.set_byte(index, base, offset as u8),
+                        "h" => register.set_halfword(index, base, offset as u16),
+                        "s" => todo!(),
+                        "d" => todo!(),
+                        _ => log::error!("Not a valid vector arrangement {:?}", arrangement),
+                    }
+                } else {
+                    log::error!("Vector register not formatted correctly")
+                };
+            }
+
+            // if let Some((vector, arrangement)) = v.split_once(".") {
+            //     todo!();
+            //     // let register = &mut self.simd_registers[get_register_index(vector.to_string())];
+            //     // register.set(arrangement, kind, base, offset as i64);
+            //     // maybe better as a separate function since we need params to hold multiple values
+            // } else {
+            //     log::error!("Vector register not formatted correctly")
+            // };
         }
     }
 
@@ -644,7 +681,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     )];
                 }
             }
-            "ldr" => {
+            "ldr" | "ld1" => {
                 let reg1 = instruction.r1.clone().unwrap();
                 let reg2 = instruction.r2.clone().unwrap();
 
@@ -732,7 +769,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     _ => (),
                 }
             }
-            "str" => {
+            "str" | "st1" => {
                 let reg1 = instruction.r1.clone().unwrap();
                 let reg2 = instruction.r2.clone().unwrap();
 
@@ -819,10 +856,15 @@ impl<'ctx> ARMCORTEXA<'_> {
                     );
                 }
             }
+            "movi" | "shl" | "ext" | "ushr" | "dup" | "sshr" => {
+                // also need "and" "orr" and "eor" for simd
+                todo!()
+            }
             _ => {
                 log::warn!("Instruction not supported {:?}", instruction);
             }
         }
+
         Ok(None)
     }
 

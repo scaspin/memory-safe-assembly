@@ -40,7 +40,6 @@ impl RegisterValue {
 // TODO: add way to mark endianess if necessary
 #[derive(Debug, Clone, PartialEq)]
 pub struct SimdRegister {
-    pub name: String,
     pub kind: RegisterKind,
     pub base: [Option<AbstractExpression>; 16],
     pub offset: [u8; 16],
@@ -58,7 +57,6 @@ impl SimdRegister {
             ));
         }
         Self {
-            name: string_name.clone(),
             kind: RegisterKind::RegisterBase,
             base: bases,
             offset: [0; 16],
@@ -109,15 +107,15 @@ impl SimdRegister {
 
     pub fn set(
         &mut self,
-        name: String,
+        //arrangement: string,
         kind: RegisterKind,
         base: [Option<AbstractExpression>; 16],
         offset: [u8; 16],
     ) {
-        self.name = name;
         self.kind = kind;
         self.base = base;
         self.offset = offset;
+        todo!(); // figure out how to do this with "arrangement" values such as 16b, 8h, 4w, 2d
     }
 }
 
