@@ -1,13 +1,13 @@
 mod tests {
     use bums;
-    use bums::common;
+    use bums::common::*;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
     use z3::*;
 
     #[test]
     fn bn_add() -> std::io::Result<()> {
-        //env_logger::init();
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/bn-armv8-apple.S")?;
         let reader = BufReader::new(file);
@@ -24,38 +24,16 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         // size is number of words!
-        let size = common::AbstractExpression::Expression(
+        let size = AbstractExpression::Expression(
             "*".to_string(),
-            Box::new(common::AbstractExpression::Abstract("size".to_string())),
-            Box::new(common::AbstractExpression::Immediate(4)),
+            Box::new(AbstractExpression::Abstract("size".to_string())),
+            Box::new(AbstractExpression::Immediate(4)),
         );
 
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "x0".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: size.clone(),
-        });
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::WRITE,
-            base: "x0".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: size.clone(),
-        });
+        engine.add_region(RegionType::RW, "x0".to_string(), size.clone());
 
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "x1".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: size.clone(),
-        });
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "x2".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: size.clone(),
-        });
-
+        engine.add_region(RegionType::READ, "x1".to_string(), size.clone());
+        engine.add_region(RegionType::READ, "x2".to_string(), size.clone());
         engine.add_abstract(String::from("x3"), size);
 
         let res = engine.start(start_label);
@@ -82,37 +60,17 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         // size is number of words!
-        let size = common::AbstractExpression::Expression(
+        let size = AbstractExpression::Expression(
             "*".to_string(),
-            Box::new(common::AbstractExpression::Abstract("size".to_string())),
-            Box::new(common::AbstractExpression::Immediate(4)),
+            Box::new(AbstractExpression::Abstract("size".to_string())),
+            Box::new(AbstractExpression::Immediate(4)),
         );
 
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "x0".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: size.clone(),
-        });
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::WRITE,
-            base: "x0".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: size.clone(),
-        });
+        engine.add_region(RegionType::RW, "x0".to_string(), size.clone());
 
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "x1".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: size.clone(),
-        });
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "x2".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: size.clone(),
-        });
+        engine.add_region(RegionType::READ, "x1".to_string(), size.clone());
+
+        engine.add_region(RegionType::READ, "x2".to_string(), size.clone());
 
         engine.add_abstract(String::from("x3"), size);
 
@@ -140,33 +98,23 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         // x0 -- context
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::RW,
             "x0".to_string(),
-            (Some(32), None, None),
-        );
-        engine.add_region_from(
-            common::RegionType::WRITE,
-            "x0".to_string(),
-            (Some(32), None, None),
+            AbstractExpression::Immediate(32),
         );
 
-        let blocks = common::AbstractExpression::Abstract("Blocks".to_string());
-        let length = common::AbstractExpression::Expression(
+        let blocks = AbstractExpression::Abstract("Blocks".to_string());
+        let length = AbstractExpression::Expression(
             "lsl".to_string(),
             Box::new(blocks.clone()),
-            Box::new(common::AbstractExpression::Immediate(6)),
+            Box::new(AbstractExpression::Immediate(6)),
         );
-        let base = common::AbstractExpression::Abstract("Base".to_string());
+        let base = AbstractExpression::Abstract("Base".to_string());
 
         // x1 -- input blocks
         engine.add_abstract(String::from("x1"), base.clone());
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "Base".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: length,
-        });
+        engine.add_region(RegionType::READ, "Base".to_string(), length);
 
         // x2 -- number of blocks
         engine.add_abstract(String::from("x2"), blocks);
@@ -196,33 +144,28 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         // x0 -- context
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "x0".to_string(),
-            (Some(32), None, None),
+            AbstractExpression::Immediate(32),
         );
-        engine.add_region_from(
-            common::RegionType::WRITE,
+        engine.add_region(
+            RegionType::WRITE,
             "x0".to_string(),
-            (Some(32), None, None),
+            AbstractExpression::Immediate(32),
         );
 
-        let blocks = common::AbstractExpression::Abstract("Blocks".to_string());
-        let length = common::AbstractExpression::Expression(
+        let blocks = AbstractExpression::Abstract("Blocks".to_string());
+        let length = AbstractExpression::Expression(
             "lsl".to_string(),
             Box::new(blocks.clone()),
-            Box::new(common::AbstractExpression::Immediate(6)),
+            Box::new(AbstractExpression::Immediate(6)),
         );
-        let base = common::AbstractExpression::Abstract("Base".to_string());
+        let base = AbstractExpression::Abstract("Base".to_string());
 
         // x1 -- input blocks
         engine.add_abstract(String::from("x1"), base.clone());
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "Base".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: length,
-        });
+        engine.add_region(RegionType::READ, "Base".to_string(), length);
 
         // x2 -- number of blocks
         engine.add_abstract(String::from("x2"), blocks);
@@ -235,6 +178,8 @@ mod tests {
 
     #[test]
     fn stack_push_pop() -> std::io::Result<()> {
+        // env_logger::init();
+
         let file = File::open("tests/asm-examples/stack-push-pop.S")?;
         let reader = BufReader::new(file);
         let start_label = String::from("stack_test");
@@ -252,8 +197,11 @@ mod tests {
         res
     }
 
+    /*
+     * This should fail since first memory access can succeed when length is 0,
+     */
     #[test]
-    fn basic_abstract_loop_no_constraints() -> std::io::Result<()> {
+    fn basic_abstract_loop() -> std::io::Result<()> {
         // env_logger::init();
 
         let file = File::open("tests/asm-examples/abstract-loop.S")?;
@@ -269,15 +217,11 @@ mod tests {
         let ctx = Context::new(&cfg);
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
-        let length = common::AbstractExpression::Abstract("Length".to_string());
-        let base = common::AbstractExpression::Abstract("Base".to_string());
+        let length = AbstractExpression::Abstract("Length".to_string());
+        let base = AbstractExpression::Abstract("Base".to_string());
         // Base is the base address of the input buffer
         engine.add_abstract(String::from("x1"), base.clone());
-        engine.add_region_from(
-            common::RegionType::READ,
-            "base".to_string(),
-            (None, Some("length".to_string()), None),
-        );
+        engine.add_region(RegionType::READ, "Base".to_string(), length.clone());
 
         engine.add_abstract(String::from("x2"), length);
 
@@ -304,16 +248,11 @@ mod tests {
         let ctx = Context::new(&cfg);
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
-        let length = common::AbstractExpression::Abstract("Length".to_string());
-        let base = common::AbstractExpression::Abstract("Base".to_string());
+        let length = AbstractExpression::Abstract("Length".to_string());
+        let base = AbstractExpression::Abstract("Base".to_string());
         // Base is the base address of the input buffer
         engine.add_abstract(String::from("x1"), base.clone());
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "Base".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: length.clone(),
-        });
+        engine.add_region(RegionType::READ, "Base".to_string(), length.clone());
 
         engine.add_abstract(String::from("x2"), length);
 
@@ -343,17 +282,12 @@ mod tests {
         let ctx = Context::new(&cfg);
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
-        let length1 = common::AbstractExpression::Abstract("Length1".to_string());
-        let length2 = common::AbstractExpression::Abstract("Length2".to_string());
-        let base1 = common::AbstractExpression::Abstract("Base1".to_string());
+        let length1 = AbstractExpression::Abstract("Length1".to_string());
+        let length2 = AbstractExpression::Abstract("Length2".to_string());
+        let base1 = AbstractExpression::Abstract("Base1".to_string());
 
         engine.add_abstract(String::from("x1"), base1.clone());
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "Base1".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: length1,
-        });
+        engine.add_region(RegionType::READ, "Base1".to_string(), length1);
         engine.add_abstract(String::from("x2"), length2.clone());
 
         engine.change_alignment(1);
@@ -379,16 +313,11 @@ mod tests {
         let ctx = Context::new(&cfg);
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
-        let length = common::AbstractExpression::Abstract("Length".to_string());
-        let base = common::AbstractExpression::Abstract("Base".to_string());
+        let length = AbstractExpression::Abstract("Length".to_string());
+        let base = AbstractExpression::Abstract("Base".to_string());
         // Base is the base address of the input buffer
         engine.add_abstract(String::from("x1"), base.clone());
-        engine.add_region(common::MemorySafeRegion {
-            region_type: common::RegionType::READ,
-            base: "Base".to_string(),
-            start: common::AbstractExpression::Immediate(0),
-            end: length.clone(),
-        });
+        engine.add_region(RegionType::READ, "Base".to_string(), length.clone());
 
         engine.add_abstract(String::from("x2"), length);
         engine.change_alignment(1);
@@ -412,10 +341,10 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "base".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "base".to_string(),
-            (None, Some("length".to_string()), None),
+            AbstractExpression::Abstract("length".to_string()),
         );
 
         let res = engine.start("start".to_string());
@@ -425,6 +354,8 @@ mod tests {
 
     #[test]
     fn z3_abstract_bound_unsafe_zero() -> std::io::Result<()> {
+        // env_logger::init();
+
         let mut program = Vec::new();
         program.push("start:".to_string());
 
@@ -435,10 +366,10 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "base".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "base".to_string(),
-            (None, Some("length".to_string()), None),
+            AbstractExpression::Abstract("length".to_string()),
         );
 
         let res = engine.start("start".to_string());
@@ -461,10 +392,10 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "base".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "base".to_string(),
-            (Some(2), None, None),
+            AbstractExpression::Immediate(8),
         );
 
         let res = engine.start("start".to_string());
@@ -486,10 +417,10 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "base".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "base".to_string(),
-            (Some(2), None, None),
+            AbstractExpression::Immediate(2),
         );
 
         let res = engine.start("start".to_string());
@@ -541,10 +472,10 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "base".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "base".to_string(),
-            (Some(4), None, None),
+            AbstractExpression::Immediate(16),
         );
 
         let res = engine.start("start".to_string());
@@ -576,16 +507,12 @@ mod tests {
         engine.add_abstract_from(0, "base".to_string());
         engine.add_abstract_from(1, "blocks".to_string());
 
-        let length = common::AbstractExpression::Expression(
+        let length = AbstractExpression::Expression(
             "lsl".to_string(),
-            Box::new(common::AbstractExpression::Abstract("blocks".to_string())),
-            Box::new(common::AbstractExpression::Immediate(2)),
+            Box::new(AbstractExpression::Abstract("blocks".to_string())),
+            Box::new(AbstractExpression::Immediate(2)),
         );
-        engine.add_region_from(
-            common::RegionType::READ,
-            "base".to_string(),
-            (None, None, Some(length)),
-        );
+        engine.add_region(RegionType::READ, "base".to_string(), length);
 
         let res = engine.start("start".to_string());
         assert!(res.is_ok());
@@ -613,10 +540,10 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "base".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "base".to_string(),
-            (Some(3), None, None),
+            AbstractExpression::Immediate(3),
         );
 
         let res = engine.start("start".to_string());
@@ -644,10 +571,10 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "base".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "base".to_string(),
-            (None, Some("length".to_string()), None),
+            AbstractExpression::Abstract("length".to_string()),
         );
         engine.add_abstract_from(1, "length".to_string());
 
@@ -684,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn simd_init_neon() -> std::io::Result<()> {
+    fn test_simd_gcm_init_neon() -> std::io::Result<()> {
         //env_logger::init();
 
         let file = File::open("tests/asm-examples/ghash-neon-armv8.S")?;
@@ -702,17 +629,17 @@ mod tests {
         let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
         engine.add_abstract_from(0, "htable".to_string());
-        engine.add_region_from(
-            common::RegionType::RW,
+        engine.add_region(
+            RegionType::RW,
             "htable".to_string(),
-            (Some(128 / 8 * 16), None, None),
+            AbstractExpression::Immediate(128 * 16),
         );
 
         engine.add_abstract_from(0, "h".to_string());
-        engine.add_region_from(
-            common::RegionType::READ,
+        engine.add_region(
+            RegionType::READ,
             "h".to_string(),
-            (Some(64 / 8 * 16), None, None),
+            AbstractExpression::Immediate(64 * 16),
         );
 
         let res = engine.start(start_label);

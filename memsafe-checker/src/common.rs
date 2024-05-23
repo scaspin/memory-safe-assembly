@@ -1,68 +1,36 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 use z3::*;
 
-// TODO: find a way to make solving easier? less verbose
-// static OPERATIONS : [(&str, &str); 3] = [("+", "-"), ("-", "+"), ("<", ">")];
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum RegisterKind {
-    RegisterBase, // register name / expression + offset
-    Number,       // abstract number (from input for example)
-    Abstract,     // abstract name / asbtract expression + offset
-    Immediate,    // known number
-    Address,      // known number we can jump to!
+    RegisterBase, // abstract name / asbtract expression + immediate offset
+    Number,       // abstract number (from input for example), do not know this number
+    Immediate,    // immediate number
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RegisterValue {
-    pub name: String,
     pub kind: RegisterKind,
     pub base: Option<AbstractExpression>,
     pub offset: i64,
 }
 
 impl RegisterValue {
-    pub fn new(name: &str) -> Self {
-        let string_name = name.to_string();
-        if name == "sp" || name == "x29" {
-            return RegisterValue {
-                name: string_name,
-                kind: RegisterKind::Address,
-                base: Some(AbstractExpression::Abstract("sp".to_string())),
-                offset: 0,
-            };
-        } else if name == "x30" {
-            return Self {
-                name: string_name,
-                kind: RegisterKind::Address,
-                base: Some(AbstractExpression::Abstract("Return".to_string())),
-                offset: 0,
-            };
-        } else if name == "xzr" {
-            return RegisterValue {
-                name: string_name,
-                kind: RegisterKind::Immediate,
-                base: None,
-                offset: 0,
-            };
-        }
+    pub fn new(kind: RegisterKind, base: Option<AbstractExpression>, offset: i64) -> Self {
+        Self { kind, base, offset }
+    }
+
+    pub fn new_empty(name: &str) -> Self {
         Self {
-            name: string_name.clone(),
             kind: RegisterKind::RegisterBase,
-            base: Some(AbstractExpression::Abstract(string_name.to_string())),
+            base: Some(AbstractExpression::Abstract(name.to_string())),
             offset: 0,
         }
     }
 
-    pub fn set(
-        &mut self,
-        name: String,
-        kind: RegisterKind,
-        base: Option<AbstractExpression>,
-        offset: i64,
-    ) {
-        self.name = name;
+    pub fn set(&mut self, kind: RegisterKind, base: Option<AbstractExpression>, offset: i64) {
         self.kind = kind;
         self.base = base;
         self.offset = offset;
@@ -194,22 +162,6 @@ impl fmt::Display for AbstractComparison {
 }
 
 impl AbstractExpression {
-    pub fn get_register_names(&self) -> Vec<String> {
-        let mut registers = Vec::new();
-        match self {
-            AbstractExpression::Register(reg) => {
-                registers.push(reg.name.clone());
-            }
-            AbstractExpression::Expression(_, arg1, arg2) => {
-                registers.append(&mut arg1.get_register_names());
-                registers.append(&mut arg2.get_register_names());
-            }
-            _ => (),
-        }
-
-        registers
-    }
-
     pub fn get_abstracts(&self) -> Vec<String> {
         let mut abstracts = Vec::new();
         match self {
@@ -283,13 +235,6 @@ impl AbstractComparison {
         }
     }
 
-    pub fn get_register_names(&self) -> Vec<String> {
-        let mut registers = Vec::new();
-        registers.append(&mut self.left.get_register_names());
-        registers.append(&mut self.right.get_register_names());
-        registers
-    }
-
     pub fn reduce_solution(&self) -> (AbstractExpression, AbstractExpression) {
         todo!()
     }
@@ -352,10 +297,44 @@ impl fmt::Display for RegionType {
 
 #[derive(Debug, Clone)]
 pub struct MemorySafeRegion {
-    pub region_type: RegionType,
-    pub base: String,
-    pub start: AbstractExpression,
-    pub end: AbstractExpression,
+    pub kind: RegionType,
+    length: AbstractExpression, // length of region in BYTES
+    content: HashMap<i64, RegisterValue>,
+}
+
+impl MemorySafeRegion {
+    pub fn new(length: AbstractExpression, kind: RegionType) -> Self {
+        let mut content = HashMap::new();
+        match length {
+            AbstractExpression::Immediate(l) => {
+                for i in 0..(l) {
+                    content.insert(i * 4, RegisterValue::new(RegisterKind::Number, None, 0));
+                }
+            }
+            _ => (),
+        }
+
+        Self {
+            kind,
+            length,
+            content,
+        }
+    }
+    pub fn insert(&mut self, address: i64, value: RegisterValue) {
+        self.content.insert(address, value);
+    }
+
+    pub fn get(&self, address: i64) -> Option<RegisterValue> {
+        let res = self.content.get(&address);
+        match res.clone() {
+            Some(_) => res.cloned(),
+            None => Some(RegisterValue::new(RegisterKind::Number, None, 0)),
+        }
+    }
+
+    pub fn get_length(&self) -> AbstractExpression {
+        return self.length.clone();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -547,7 +526,6 @@ pub fn string_to_int(s: &str) -> i64 {
 pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
     let new_offset = register.offset >> shift;
     RegisterValue {
-        name: register.name,
         kind: register.kind,
         base: Some(generate_expression(
             &op,

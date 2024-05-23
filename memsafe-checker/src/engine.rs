@@ -122,7 +122,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                         num = i.parse::<i64>().unwrap();
                     }
-                    computer.add_memory(address, num);
+                    computer.add_memory_value("memory".to_string(), address, num);
                     // address = address + (alignment as i64);
                     // heap grows down
                     address = address + 4;
@@ -145,156 +145,38 @@ impl<'ctx> ExecutionEngine<'ctx> {
         };
     }
 
-    pub fn add_region(&mut self, region: MemorySafeRegion) {
-        // FIX make better so don't have to convert to string
-        match region.end.clone() {
-            AbstractExpression::Immediate(i) => self.add_region_from(
-                region.region_type,
-                region.base.to_string(),
-                (Some(i.try_into().unwrap()), None, None),
-            ),
-            AbstractExpression::Expression(..) => self.add_region_from(
-                region.region_type,
-                region.base.to_string(),
-                (None, None, Some(region.end.clone())),
-            ),
-            _ => self.add_region_from(
-                region.region_type,
-                region.base.to_string(),
-                (None, Some(region.end.to_string()), None),
-            ),
+    pub fn add_region(&mut self, ty: RegionType, base: String, length: AbstractExpression) {
+        let zero = ast::Int::from_i64(self.computer.context, 0);
+        // let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
+        // let bound = expression_to_ast(self.computer.context, length.clone()).unwrap();
+        // let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
+        // let abstract_pointer_from_base = ast::Int::new_const(self.computer.context, base.clone());
+        for a in length.get_abstracts() {
+            self.abstracts
+                .insert(a.clone(), ("?_".to_owned() + &a.clone()).to_string());
+            let temp = ast::Int::new_const(self.computer.context, a);
+            self.computer.solver.assert(&temp.ge(&zero));
         }
-    }
 
-    pub fn add_region_from(
-        &mut self,
-        ty: RegionType,
-        base: String,
-        length: (Option<usize>, Option<String>, Option<AbstractExpression>),
-    ) {
-        match length {
-            (Some(num), None, None) => {
-                // FIX: decide whether to include alignment or not
-                let region_size = ((num.clone() as i64) - 1) * self.computer.alignment;
+        self.computer.add_memory_region(base.clone(), ty, length);
 
-                self.computer.set_region(MemorySafeRegion {
-                    region_type: ty,
-                    base: base.clone(),
-                    start: AbstractExpression::Immediate(0),
-                    end: AbstractExpression::Immediate(region_size.clone()),
-                });
+        // // upper bound is the base pointer + bound value - alignment
+        // let upper_bound = ast::Int::add(
+        //     self.computer.context,
+        //     &[&abstract_pointer_from_base, &bound_aligned],
+        // );
+        // let pointer = ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
+        // // can access this region starting with 0
+        // self.computer
+        //     .solver
+        //     .assert(&abstract_pointer_from_base.ge(&zero));
 
-                let zero = ast::Int::from_i64(self.computer.context, 0);
-                // define bound of region with respect to the pointer
-                let bound = ast::Int::from_i64(self.computer.context, region_size);
-                let abs_base = ast::Int::new_const(self.computer.context, base.clone());
-                let lower_bound = ast::Int::add(self.computer.context, &[&abs_base, &zero]);
-                let upper_bound = ast::Int::add(self.computer.context, &[&abs_base, &bound]);
-
-                let pointer =
-                    ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
-
-                // basics are positive
-                self.computer.solver.assert(&lower_bound.ge(&zero));
-                self.computer.solver.assert(&upper_bound.ge(&zero));
-                self.computer.solver.assert(&abs_base.ge(&zero));
-
-                // address is positive
-                self.computer.solver.assert(&pointer.ge(&zero));
-                // can access this region starting with 0
-                self.computer.solver.assert(&pointer.ge(&lower_bound));
-                // can access this region up to and including address of upper bound
-                self.computer.solver.assert(&pointer.le(&upper_bound));
-            }
-            (None, Some(abs), None) => {
-                self.abstracts
-                    .insert(abs.clone(), ("?_".to_owned() + &abs.clone()).to_string());
-
-                let zero = ast::Int::from_i64(self.computer.context, 0);
-                let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
-                let bound = ast::Int::new_const(self.computer.context, abs.clone());
-                let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
-                let abstract_pointer_from_base =
-                    ast::Int::new_const(self.computer.context, base.clone());
-                self.computer
-                    .solver
-                    .assert(&abstract_pointer_from_base.ge(&zero));
-
-                // upper bound is the base pointer + bound value - alignment
-                let upper_bound = ast::Int::add(
-                    self.computer.context,
-                    &[&abstract_pointer_from_base, &bound_aligned],
-                );
-
-                self.computer.set_region(MemorySafeRegion {
-                    region_type: ty,
-                    base: base.clone(),
-                    start: AbstractExpression::Immediate(0),
-                    end: AbstractExpression::Expression(
-                        "-".to_string(),
-                        Box::new(AbstractExpression::Abstract(abs)),
-                        Box::new(AbstractExpression::Immediate(self.computer.alignment)),
-                    ),
-                });
-
-                let pointer =
-                    ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
-
-                // can access this region starting with 0
-                self.computer.solver.assert(&pointer.ge(&zero));
-                self.computer.solver.assert(&bound.ge(&zero));
-                self.computer
-                    .solver
-                    .assert(&abstract_pointer_from_base.ge(&zero));
-
-                // can access this region up to and including address of upper bound
-                self.computer.solver.assert(&pointer.le(&upper_bound));
-            }
-            (None, None, Some(expr)) => {
-                let zero = ast::Int::from_i64(self.computer.context, 0);
-                let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
-                let bound = expression_to_ast(self.computer.context, expr.clone()).unwrap();
-                let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
-                let abstract_pointer_from_base =
-                    ast::Int::new_const(self.computer.context, base.clone());
-                for a in expr.get_abstracts() {
-                    self.abstracts
-                        .insert(a.clone(), ("?_".to_owned() + &a.clone()).to_string());
-                    let temp = ast::Int::new_const(self.computer.context, a);
-                    self.computer.solver.assert(&temp.ge(&zero));
-                }
-
-                // upper bound is the base pointer + bound value - alignment
-                let upper_bound = ast::Int::add(
-                    self.computer.context,
-                    &[&abstract_pointer_from_base, &bound_aligned],
-                );
-
-                self.computer.set_region(MemorySafeRegion {
-                    region_type: ty,
-                    base: base.clone(),
-                    start: AbstractExpression::Immediate(0),
-                    end: expr,
-                });
-
-                let pointer =
-                    ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
-
-                // can access this region starting with 0
-                self.computer
-                    .solver
-                    .assert(&abstract_pointer_from_base.ge(&zero));
-
-                // can access this region up to and including address of upper bound
-                self.computer.solver.assert(&pointer.le(&upper_bound));
-            }
-            (_, _, _) => (), // should never happen! just to be safe
-        }
+        // // can access this region up to and including address of upper bound
+        // self.computer.solver.assert(&pointer.le(&upper_bound));
     }
 
     pub fn add_immediate(&mut self, register: String, value: usize) {
         self.computer.set_immediate(register, value as u64);
-        // ast::Int::from_i64(self.computer.context, value as i64);
     }
 
     pub fn add_abstract(&mut self, register: String, value: AbstractExpression) {
@@ -571,7 +453,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             }
                             (None, Some(label), None) => {
                                 log::info!("returning: {}", pc);
-                                if &label == "Return" {
+                                if &label == "return" {
                                     break;
                                 }
                                 let newline = self.get_linenumber_of_label(label.clone());
@@ -675,12 +557,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
         log::info!("memory accesses: {:?}", rw_list.clone());
 
         if !self.in_loop {
-            if let Some((last_jump_label, branch_decision, _, last_rw_list, last_state)) =
-                self.jump_history.last()
-            {
-                let current_state = self.computer.get_state();
-                // LOOP has repeated at least twice
-                if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
+            for j in self.jump_history.clone().into_iter().rev() {
+                let (last_jump_label, branch_decision, _, last_rw_list, last_state) = j;
+                if last_jump_label == pc && last_rw_list.len() == rw_list.len() {
                     // JUMP TO Kth ITERATION
 
                     self.computer.solver.push();
@@ -702,13 +581,12 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
 
+                    let current_state = self.computer.get_state();
                     for i in 0..(last_state.0.len()) {
                         let last = &last_state.0[i];
                         let cur = &current_state.0[i];
                         let diff: i64 = match cur.kind {
-                            RegisterKind::RegisterBase
-                            | RegisterKind::Abstract
-                            | RegisterKind::Address => {
+                            RegisterKind::RegisterBase | RegisterKind::Number => {
                                 if last.base == cur.base {
                                     cur.offset - last.offset
                                 } else {
@@ -716,7 +594,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 }
                             }
                             RegisterKind::Immediate => cur.offset - last.offset,
-                            _ => 0,
                         };
 
                         if diff > 0 {
@@ -731,7 +608,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             );
 
                             let new_reg = RegisterValue {
-                                name: cur.name.clone(),
                                 kind: cur.kind.clone(),
                                 base: Some(new_base),
                                 offset: 0,
@@ -742,27 +618,19 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
 
                     self.in_loop = true;
-                    return Some(*branch_decision);
-                } else {
-                    return None;
+                    return Some(branch_decision);
                 }
-            } else {
-                return None;
             }
+
+            return None;
+
         // in loop protocol
         } else {
             // K+1 loop is a repeat of K loop!
-            if let Some((
-                last_jump_label,
-                branch_decision,
-                last_jump_exp,
-                last_rw_list,
-                last_state,
-            )) = self.jump_history.last()
-            {
-                if last_jump_label == &pc
-                    && last_jump_exp == &expression
-                    && last_rw_list == &rw_list
+            for j in self.jump_history.clone().into_iter().rev() {
+                let (last_jump_label, branch_decision, last_jump_exp, last_rw_list, last_state) = j;
+
+                if last_jump_label == pc && last_jump_exp == expression && last_rw_list == rw_list
                 // && last_state == &self.computer.get_state()
                 {
                     self.computer.solver.pop(1);
@@ -798,9 +666,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         let last = &last_state.0[i];
                         let cur = &current_state.0[i];
                         let diff: i64 = match cur.kind {
-                            RegisterKind::RegisterBase
-                            | RegisterKind::Abstract
-                            | RegisterKind::Address => {
+                            RegisterKind::RegisterBase | RegisterKind::Number => {
                                 if last.base == cur.base {
                                     cur.offset - last.offset
                                 } else {
@@ -808,7 +674,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 }
                             }
                             RegisterKind::Immediate => cur.offset - last.offset,
-                            _ => 0,
                         };
 
                         // check diff matches, if not BAD
@@ -822,7 +687,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             if base.contains(&loop_var_name) && base.contains_expression(&base_step)
                             {
                                 let new_reg = RegisterValue {
-                                    name: cur.name.clone(),
                                     kind: cur.kind.clone(),
                                     base: cur.base.clone(),
                                     offset: 0,
@@ -832,10 +696,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
                 }
-                return Some(*branch_decision);
-            } else {
-                return None;
+                return Some(branch_decision);
             }
+            return None;
         }
     }
 }
