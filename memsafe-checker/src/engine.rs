@@ -557,12 +557,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
         log::info!("memory accesses: {:?}", rw_list.clone());
 
         if !self.in_loop {
-            if let Some((last_jump_label, branch_decision, _, last_rw_list, last_state)) =
-                self.jump_history.last()
-            {
-                let current_state = self.computer.get_state();
-                // LOOP has repeated at least twice
-                if last_jump_label == &pc && last_rw_list.len() == rw_list.len() {
+            for j in self.jump_history.clone().into_iter().rev() {
+                let (last_jump_label, branch_decision, _, last_rw_list, last_state) = j;
+                if last_jump_label == pc && last_rw_list.len() == rw_list.len() {
                     // JUMP TO Kth ITERATION
 
                     self.computer.solver.push();
@@ -584,6 +581,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
 
+                    let current_state = self.computer.get_state();
                     for i in 0..(last_state.0.len()) {
                         let last = &last_state.0[i];
                         let cur = &current_state.0[i];
@@ -620,27 +618,19 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
 
                     self.in_loop = true;
-                    return Some(*branch_decision);
-                } else {
-                    return None;
+                    return Some(branch_decision);
                 }
-            } else {
-                return None;
             }
+
+            return None;
+
         // in loop protocol
         } else {
             // K+1 loop is a repeat of K loop!
-            if let Some((
-                last_jump_label,
-                branch_decision,
-                last_jump_exp,
-                last_rw_list,
-                last_state,
-            )) = self.jump_history.last()
-            {
-                if last_jump_label == &pc
-                    && last_jump_exp == &expression
-                    && last_rw_list == &rw_list
+            for j in self.jump_history.clone().into_iter().rev() {
+                let (last_jump_label, branch_decision, last_jump_exp, last_rw_list, last_state) = j;
+
+                if last_jump_label == pc && last_jump_exp == expression && last_rw_list == rw_list
                 // && last_state == &self.computer.get_state()
                 {
                     self.computer.solver.pop(1);
@@ -706,10 +696,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
                 }
-                return Some(*branch_decision);
-            } else {
-                return None;
+                return Some(branch_decision);
             }
+            return None;
         }
     }
 }
