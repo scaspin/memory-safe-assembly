@@ -612,7 +612,7 @@ mod tests {
 
     #[test]
     fn test_simd_gcm_init_neon() -> std::io::Result<()> {
-        //env_logger::init();
+        env_logger::init();
 
         let file = File::open("tests/asm-examples/ghash-neon-armv8.S")?;
         let reader = BufReader::new(file);
@@ -635,7 +635,7 @@ mod tests {
             AbstractExpression::Immediate(128 * 16),
         );
 
-        engine.add_abstract_from(0, "h".to_string());
+        engine.add_abstract_from(1, "h".to_string());
         engine.add_region(
             RegionType::READ,
             "h".to_string(),
