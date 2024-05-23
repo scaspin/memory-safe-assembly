@@ -399,6 +399,27 @@ impl Instruction {
             r4: None,
         }
     }
+
+    pub fn is_simd(&self) -> bool {
+        if let Some(i) = &self.r1 {
+            if i.contains("v") {
+                return true;
+            }
+        } else if let Some(i) = &self.r2 {
+            if i.contains("v") {
+                return true;
+            }
+        } else if let Some(i) = &self.r3 {
+            if i.contains("v") {
+                return true;
+            }
+        } else if let Some(i) = &self.r4 {
+            if i.contains("v") {
+                return true;
+            }
+        }
+        false
+    }
 }
 #[derive(Debug, Clone)]
 pub struct ParseInstructionError;
