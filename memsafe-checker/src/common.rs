@@ -45,15 +45,15 @@ pub struct SimdRegister {
     pub offset: [u8; 16],
 }
 
-const ARRAY_REPEAT_VALUE: Option<AbstractExpression> = None;
+pub const BASE_INIT: Option<AbstractExpression> = None;
 
 impl SimdRegister {
     pub fn new(name: &str) -> Self {
         let string_name = name.to_string();
-        let mut bases = [ARRAY_REPEAT_VALUE; 16];
+        let mut bases = [BASE_INIT; 16];
         for i in 0..1 {
             bases[i] = Some(AbstractExpression::Abstract(
-                string_name.to_string() + &i.to_string(),
+                string_name.clone() + &i.to_string(),
             ));
         }
         Self {
@@ -72,42 +72,54 @@ impl SimdRegister {
         assert!(index < 16);
         return (self.base[index].clone(), self.offset[index]);
     }
-    pub fn get_halfword(&self, index: usize) -> (Option<AbstractExpression>, u16) {
+    pub fn get_halfword(&self, index: usize) -> ([Option<AbstractExpression>; 2], [u8; 2]) {
         assert!(index <= 8);
         let index = index * 2;
-        let half_base = generate_expression(
-            "bytes to halfword",
-            self.base[index + 1].clone().unwrap(),
-            self.base[index].clone().unwrap(),
-        );
-        let half_index = ((self.offset[index + 1] as u16) << 8) | self.offset[index] as u16;
-        return (Some(half_base), half_index);
+        let base: [Option<AbstractExpression>; 2] = [self.base[index], self.base[index + 1]];
+        let offset: [u8; 2] = [self.offset[index], self.offset[index + 1]];
+        return (base, offset);
     }
-    pub fn set_byte(&mut self, index: usize, base: Option<AbstractExpression>, offset: u8) {
+
+    pub fn get_word(&self, index: usize) -> ([Option<AbstractExpression>; 4], [u8; 4]) {
+        todo!();
+    }
+
+    pub fn get_double(&self, index: usize) -> ([Option<AbstractExpression>; 8], [u8; 16]) {
+        todo!();
+    }
+
+    pub fn set_byte(&self, index: usize, base: Option<AbstractExpression>, offset: u8) {
         assert!(index < 16);
         self.base[index] = base;
         self.offset[index] = offset;
     }
-    pub fn set_halfword(&mut self, index: usize, base: Option<AbstractExpression>, offset: u16) {
-        assert!(index < 8);
+    pub fn set_halfword(
+        &self,
+        index: usize,
+        base: [Option<AbstractExpression>; 2],
+        offset: [u8; 2],
+    ) {
+        assert!(index <= 8);
         let index = index * 2;
-        self.base[index + 1] = Some(generate_expression(
-            "&",
-            base.clone().unwrap(),
-            AbstractExpression::Immediate(0b11111111),
-        ));
-        self.base[index] = Some(generate_expression(
-            "&",
-            base.unwrap(),
-            AbstractExpression::Immediate(0b1111111100000000),
-        ));
-        self.offset[index] = (offset << 8) as u8;
-        self.offset[index + 1] = offset as u8;
+        todo!();
+    }
+
+    pub fn set_word(&self, index: usize, base: [Option<AbstractExpression>; 4], offset: [u8; 4]) {
+        todo!();
+    }
+
+    pub fn set_double(
+        &self,
+        index: usize,
+        base: [Option<AbstractExpression>; 8],
+        offset: [u8; 16],
+    ) {
+        todo!();
     }
 
     pub fn set(
         &mut self,
-        //arrangement: string,
+        _arrangement: String,
         kind: RegisterKind,
         base: [Option<AbstractExpression>; 16],
         offset: [u8; 16],
@@ -115,7 +127,16 @@ impl SimdRegister {
         self.kind = kind;
         self.base = base;
         self.offset = offset;
-        todo!(); // figure out how to do this with "arrangement" values such as 16b, 8h, 4w, 2d
+    }
+
+    pub fn set_register(
+        &mut self,
+        _arrangement: String,
+        kind: RegisterKind,
+        base: Option<AbstractExpression>,
+        offset: u128,
+    ) {
+        todo!();
     }
 }
 
@@ -521,7 +542,7 @@ pub fn string_to_int(s: &str) -> i64 {
     return value;
 }
 
-pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
+pub fn shift_right_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
     let new_offset = register.offset >> shift;
     RegisterValue {
         kind: register.kind,
