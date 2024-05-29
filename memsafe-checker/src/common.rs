@@ -75,7 +75,8 @@ impl SimdRegister {
     pub fn get_halfword(&self, index: usize) -> ([Option<AbstractExpression>; 2], [u8; 2]) {
         assert!(index <= 8);
         let index = index * 2;
-        let base: [Option<AbstractExpression>; 2] = [self.base[index], self.base[index + 1]];
+        let base: [Option<AbstractExpression>; 2] =
+            [self.base[index].clone(), self.base[index + 1].clone()];
         let offset: [u8; 2] = [self.offset[index], self.offset[index + 1]];
         return (base, offset);
     }
@@ -84,17 +85,23 @@ impl SimdRegister {
         todo!();
     }
 
-    pub fn get_double(&self, index: usize) -> ([Option<AbstractExpression>; 8], [u8; 16]) {
-        todo!();
+    pub fn get_double(&self, index: usize) -> ([Option<AbstractExpression>; 8], [u8; 8]) {
+        assert!(index <= 1);
+        let index = index * 8;
+        let mut base: [Option<AbstractExpression>; 8] = Default::default();
+        base.clone_from_slice(&self.base[index..(index + 8)]);
+        let mut offset: [u8; 8] = Default::default();
+        offset.clone_from_slice(&self.offset[index..(index + 8)]);
+        return (base, offset);
     }
 
-    pub fn set_byte(&self, index: usize, base: Option<AbstractExpression>, offset: u8) {
+    pub fn set_byte(&mut self, index: usize, base: Option<AbstractExpression>, offset: u8) {
         assert!(index < 16);
         self.base[index] = base;
         self.offset[index] = offset;
     }
     pub fn set_halfword(
-        &self,
+        &mut self,
         index: usize,
         base: [Option<AbstractExpression>; 2],
         offset: [u8; 2],
@@ -104,17 +111,27 @@ impl SimdRegister {
         todo!();
     }
 
-    pub fn set_word(&self, index: usize, base: [Option<AbstractExpression>; 4], offset: [u8; 4]) {
+    pub fn set_word(
+        &mut self,
+        index: usize,
+        base: [Option<AbstractExpression>; 4],
+        offset: [u8; 4],
+    ) {
         todo!();
     }
 
     pub fn set_double(
-        &self,
+        &mut self,
         index: usize,
         base: [Option<AbstractExpression>; 8],
-        offset: [u8; 16],
+        offset: [u8; 8],
     ) {
-        todo!();
+        assert!(index < 2);
+        let index = index * 8;
+        for i in 0..8 {
+            self.base[index + i] = base[i].clone();
+            self.offset[index + i] = offset[i];
+        }
     }
 
     pub fn set(
@@ -131,12 +148,25 @@ impl SimdRegister {
 
     pub fn set_register(
         &mut self,
-        _arrangement: String,
+        arrangement: String,
         kind: RegisterKind,
         base: Option<AbstractExpression>,
         offset: u128,
     ) {
-        todo!();
+        self.kind = kind;
+        if let Some(b) = base {
+            for i in 0..15 {
+                self.base[i] = Some(AbstractExpression::Expression(
+                    "&".to_string(),
+                    Box::new(AbstractExpression::Abstract(format!("0b{}", i))),
+                    Box::new(b.clone()),
+                ));
+            }
+        } else {
+            self.base = [BASE_INIT; 16];
+        }
+
+        self.offset = offset.to_be_bytes();
     }
 }
 

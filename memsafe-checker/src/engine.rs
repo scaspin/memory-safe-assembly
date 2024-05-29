@@ -147,10 +147,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     pub fn add_region(&mut self, ty: RegionType, base: String, length: AbstractExpression) {
         let zero = ast::Int::from_i64(self.computer.context, 0);
-        // let align = ast::Int::from_i64(self.computer.context, self.computer.alignment);
-        // let bound = expression_to_ast(self.computer.context, length.clone()).unwrap();
-        // let bound_aligned = ast::Int::sub(self.computer.context, &[&bound, &align]);
-        // let abstract_pointer_from_base = ast::Int::new_const(self.computer.context, base.clone());
         for a in length.get_abstracts() {
             self.abstracts
                 .insert(a.clone(), ("?_".to_owned() + &a.clone()).to_string());
@@ -159,20 +155,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
         }
 
         self.computer.add_memory_region(base.clone(), ty, length);
-
-        // // upper bound is the base pointer + bound value - alignment
-        // let upper_bound = ast::Int::add(
-        //     self.computer.context,
-        //     &[&abstract_pointer_from_base, &bound_aligned],
-        // );
-        // let pointer = ast::Int::new_const(self.computer.context, "pointer_".to_owned() + &base);
-        // // can access this region starting with 0
-        // self.computer
-        //     .solver
-        //     .assert(&abstract_pointer_from_base.ge(&zero));
-
-        // // can access this region up to and including address of upper bound
-        // self.computer.solver.assert(&pointer.le(&upper_bound));
     }
 
     pub fn add_immediate(&mut self, register: String, value: usize) {
@@ -231,6 +213,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 instruction = self.program.code[pc].clone();
             }
 
+            log::info!("simd 16 {:?}", self.computer.simd_registers[16].offset);
+            log::info!("simd 17 {:?}", self.computer.simd_registers[17].offset);
+            log::info!("simd 18 {:?}", self.computer.simd_registers[18].offset);
+            log::info!("simd 19 {:?}", self.computer.simd_registers[19].offset);
             log::info!("{:?}: {:?}", pc, instruction);
 
             let execute_result = self.computer.execute(&instruction);
