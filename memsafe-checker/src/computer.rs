@@ -963,7 +963,6 @@ impl<'ctx> ARMCORTEXA<'_> {
                     if let Some((_, arrange)) = reg1.split_once(".") {
                         match arrange {
                             "2d" => {
-                                // let src = &self.simd_registers[get_register_index(reg2.clone())];
                                 for i in 0..2 {
                                     let (bases, offsets) = self.simd_registers
                                         [get_register_index(reg2.clone())]
@@ -981,7 +980,43 @@ impl<'ctx> ARMCORTEXA<'_> {
                         }
                     }
                 }
-                "ext" | "ushr" | "dup" | "sshr" => {
+                "ext" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need source register");
+                    let reg3 = instruction.r3.clone().expect("Need immediate");
+                    let reg4 = instruction.r4.clone().expect("Need immediate");
+                    let imm = self.operand(reg4);
+
+                    if let Some((_, arrange)) = reg1.split_once(".") {
+                        match arrange {
+                            "2d" => {
+                                todo!();
+                            }
+                            "16b" => {
+                                let amt = imm.offset as usize;
+                                assert!(amt < 16);
+                                for i in 0..amt {
+                                    let (base, offset) = &self.simd_registers
+                                        [get_register_index(reg2.clone())]
+                                    .get_byte(i);
+                                    let dest =
+                                        &mut self.simd_registers[get_register_index(reg1.clone())];
+                                    dest.set_byte(i, base.clone(), *offset);
+                                }
+                                for i in amt..16 {
+                                    let (base, offset) = &self.simd_registers
+                                        [get_register_index(reg3.clone())]
+                                    .get_byte(i);
+                                    let dest =
+                                        &mut self.simd_registers[get_register_index(reg1.clone())];
+                                    dest.set_byte(i, base.clone(), *offset);
+                                }
+                            }
+                            _ => todo!(),
+                        }
+                    }
+                }
+                "ushr" | "dup" | "sshr" => {
                     // also need "and" "orr" and "eor" for simd
                     todo!()
                 }

@@ -82,7 +82,13 @@ impl SimdRegister {
     }
 
     pub fn get_word(&self, index: usize) -> ([Option<AbstractExpression>; 4], [u8; 4]) {
-        todo!();
+        assert!(index <= 4);
+        let index = index * 4;
+        let mut base: [Option<AbstractExpression>; 4] = Default::default();
+        base.clone_from_slice(&self.base[index..(index + 4)]);
+        let mut offset: [u8; 4] = Default::default();
+        offset.clone_from_slice(&self.offset[index..(index + 4)]);
+        return (base, offset);
     }
 
     pub fn get_double(&self, index: usize) -> ([Option<AbstractExpression>; 8], [u8; 8]) {
@@ -108,7 +114,10 @@ impl SimdRegister {
     ) {
         assert!(index <= 8);
         let index = index * 2;
-        todo!();
+        for i in 0..2 {
+            self.base[index + i] = base[i].clone();
+            self.offset[index + i] = offset[i];
+        }
     }
 
     pub fn set_word(
@@ -117,7 +126,12 @@ impl SimdRegister {
         base: [Option<AbstractExpression>; 4],
         offset: [u8; 4],
     ) {
-        todo!();
+        assert!(index < 4);
+        let index = index * 4;
+        for i in 0..4 {
+            self.base[index + i] = base[i].clone();
+            self.offset[index + i] = offset[i];
+        }
     }
 
     pub fn set_double(
@@ -158,7 +172,10 @@ impl SimdRegister {
             for i in 0..15 {
                 self.base[i] = Some(AbstractExpression::Expression(
                     "&".to_string(),
-                    Box::new(AbstractExpression::Abstract(format!("0b{}", i))),
+                    Box::new(AbstractExpression::Abstract(format!(
+                        "{}{}",
+                        arrangement, i
+                    ))),
                     Box::new(b.clone()),
                 ));
             }
