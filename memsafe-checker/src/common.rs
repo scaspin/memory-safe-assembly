@@ -51,9 +51,9 @@ impl SimdRegister {
     pub fn new(name: &str) -> Self {
         let string_name = name.to_string();
         let mut bases = [BASE_INIT; 16];
-        for i in 0..1 {
+        for i in 0..16 {
             bases[i] = Some(AbstractExpression::Abstract(
-                string_name.clone() + &i.to_string(),
+                string_name.clone() + "_" + &i.to_string(),
             ));
         }
         Self {
@@ -184,6 +184,112 @@ impl SimdRegister {
         }
 
         self.offset = offset.to_be_bytes();
+    }
+
+    pub fn get_as_register(&self) -> RegisterValue {
+        let mut offset_buf: [u8; 8] = Default::default();
+        offset_buf.clone_from_slice(&self.offset[0..8]);
+        let offset: i64 = i64::from_be_bytes(offset_buf);
+
+        let base = generate_expression(
+            ",",
+            generate_expression(
+                ",",
+                generate_expression(
+                    ",",
+                    generate_expression(
+                        ",",
+                        self.base[0]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[1]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                    ),
+                    generate_expression(
+                        ",",
+                        self.base[2]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[3]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                    ),
+                ),
+                generate_expression(
+                    ",",
+                    generate_expression(
+                        ",",
+                        self.base[5]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[5]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                    ),
+                    generate_expression(
+                        ",",
+                        self.base[6]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[7]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                    ),
+                ),
+            ),
+            generate_expression(
+                ",",
+                generate_expression(
+                    ",",
+                    generate_expression(
+                        ",",
+                        self.base[8]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[9]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                    ),
+                    generate_expression(
+                        ",",
+                        self.base[10]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[11]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                    ),
+                ),
+                generate_expression(
+                    ",",
+                    generate_expression(
+                        ",",
+                        self.base[12]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[13]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                    ),
+                    generate_expression(
+                        ",",
+                        self.base[14]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[15]
+                            .clone()
+                            .unwrap_or(AbstractExpression::Immediate(0)),
+                    ),
+                ),
+            ),
+        );
+
+        return RegisterValue {
+            kind: self.kind.clone(),
+            base: Some(base),
+            offset,
+        };
     }
 }
 
@@ -504,9 +610,10 @@ impl FromStr for Instruction {
 
         if v.len() > 1 {
             let val1 = v[1].to_string();
-            if val1.contains("[") {
+            if val1.contains("[") && !val1.contains("v") {
+                // TODO: clean up parsing so we don't have to do it like this
                 v1 = Some(brac.clone());
-            } else if val1.contains("]") {
+            } else if val1.contains("]") && !val1.contains("v") {
                 v1 = None;
             } else {
                 v1 = Some(val1);
@@ -516,9 +623,9 @@ impl FromStr for Instruction {
         }
         if v.len() > 2 {
             let val2 = v[2].to_string();
-            if val2.contains("[") {
+            if val2.contains("[") && !val2.contains("v") {
                 v2 = Some(brac.clone());
-            } else if val2.contains("]") {
+            } else if val2.contains("]") && !val2.contains("v") {
                 v2 = None;
             } else {
                 v2 = Some(val2);

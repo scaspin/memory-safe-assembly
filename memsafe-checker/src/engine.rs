@@ -213,10 +213,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 instruction = self.program.code[pc].clone();
             }
 
-            log::info!("simd 16 {:?}", self.computer.simd_registers[16].offset);
-            log::info!("simd 17 {:?}", self.computer.simd_registers[17].offset);
-            log::info!("simd 18 {:?}", self.computer.simd_registers[18].offset);
-            log::info!("simd 19 {:?}", self.computer.simd_registers[19].offset);
             log::info!("{:?}: {:?}", pc, instruction);
 
             let execute_result = self.computer.execute(&instruction);

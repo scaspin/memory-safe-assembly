@@ -612,7 +612,7 @@ mod tests {
 
     #[test]
     fn test_simd_gcm_init_neon() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/ghash-neon-armv8.S")?;
         let reader = BufReader::new(file);
