@@ -56,12 +56,6 @@ extern "C" {
     // fn bn_mul_mont();
 
     // //ghash
-
-    // H is passed to |gcm_init_*| as a pair of byte-swapped, 64-bit values.
-    // htable: [u128;16], h: [u64;2]
-    pub fn gcm_init_neon(htable: *mut u128, h: *const u64);
-    // fn gcm_gmult_neon();
-    // fn gcm_ghash_neon();
     pub fn gcm_init_v8(htable: *mut u128, h: *const u64);
     // fn gcm_gmult_v8();
     // fn gcm_ghash_v8();
@@ -126,7 +120,7 @@ mod tests {
     //         aes_hw_ctr32_encrypt_blocks(
     //             input.as_ptr(),
     //             output.as_mut_ptr(),
-    //             input.len() ,
+    //             input.len(),
     //             key_ptr,
     //             ivec.as_mut_ptr(),
     //         )
@@ -179,16 +173,6 @@ mod tests {
             );
         }
         assert!(output != [10; 64]);
-    }
-
-    #[test]
-    fn test_gcm_neon_init_call_to_asm() {
-        let mut htable: [u128; 16] = [1; 16];
-        let h: [u64; 2] = [3; 2];
-        unsafe {
-            gcm_init_neon(htable.as_mut_ptr(), h.as_ptr());
-        }
-        assert!(htable != [1; 16]);
     }
 
     #[test]

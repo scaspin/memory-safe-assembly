@@ -646,4 +646,103 @@ mod tests {
         assert!(res.is_ok());
         Ok(())
     }
+
+    #[test]
+    fn test_simd_gcm_gmult_neon() -> std::io::Result<()> {
+        env_logger::init();
+
+        let file = File::open("tests/asm-examples/ghash-neon-armv8.S")?;
+        let reader = BufReader::new(file);
+        let start_label = String::from("_gcm_gmult_neon");
+
+        let mut program = Vec::new();
+        for line in reader.lines() {
+            program.push(line.unwrap_or(String::from("")));
+        }
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract(
+            "x0".to_string(),
+            AbstractExpression::Abstract("context".to_string()),
+        );
+        engine.add_region(
+            RegionType::RW,
+            "context".to_string(),
+            AbstractExpression::Immediate(16 * 8),
+        );
+
+        engine.add_abstract(
+            "x1".to_string(),
+            AbstractExpression::Abstract("h".to_string()),
+        );
+        engine.add_region(
+            RegionType::RW,
+            "h".to_string(),
+            AbstractExpression::Immediate(64 * 2),
+        );
+
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_simd_gcm_ghash_neon() -> std::io::Result<()> {
+        // env_logger::init();
+
+        let file = File::open("tests/asm-examples/ghash-neon-armv8.S")?;
+        let reader = BufReader::new(file);
+        let start_label = String::from("_gcm_ghash_neon");
+
+        let mut program = Vec::new();
+        for line in reader.lines() {
+            program.push(line.unwrap_or(String::from("")));
+        }
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract(
+            "x0".to_string(),
+            AbstractExpression::Abstract("context".to_string()),
+        );
+        engine.add_region(
+            RegionType::RW,
+            "context".to_string(),
+            AbstractExpression::Immediate(16 * 8),
+        );
+
+        engine.add_abstract(
+            "x1".to_string(),
+            AbstractExpression::Abstract("h".to_string()),
+        );
+        engine.add_region(
+            RegionType::RW,
+            "h".to_string(),
+            AbstractExpression::Immediate(128 * 16),
+        );
+
+        let blocks = AbstractExpression::Abstract("blocks".to_string());
+        engine.add_abstract(
+            "x2".to_string(),
+            AbstractExpression::Abstract("input".to_string()),
+        );
+        engine.add_region(
+            RegionType::RW,
+            "input".to_string(),
+            generate_expression("+", blocks.clone(), AbstractExpression::Immediate(16)),
+        );
+
+        engine.add_abstract("x3".to_string(), blocks);
+
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
+        Ok(())
+    }
 }

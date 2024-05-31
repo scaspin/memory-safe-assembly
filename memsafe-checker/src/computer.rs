@@ -456,7 +456,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 "bic" => {
                     self.arithmetic(
                         &instruction.op,
-                        &|x, y| x & !y,
+                        &|x, y: i64| x & !y,
                         instruction.r1.clone().expect("Need dst register"),
                         instruction.r2.clone().expect("Need one operand"),
                         instruction.r3.clone().expect("Need two operand"),
@@ -1167,7 +1167,7 @@ impl<'ctx> ARMCORTEXA<'_> {
     fn arithmetic(
         &mut self,
         op_string: &str,
-        op: &dyn Fn(i64, i64) -> i64,
+        op: impl Fn(i64, i64) -> i64,
         reg0: String,
         reg1: String,
         reg2: String,
@@ -1264,10 +1264,10 @@ impl<'ctx> ARMCORTEXA<'_> {
     fn vector_arithmetic(
         &mut self,
         op_string: &str,
-        op_byte: &dyn Fn(u8, u8) -> u8,
-        op_half: &dyn Fn(u16, u16) -> u16,
-        op_word: &dyn Fn(u32, u32) -> u32,
-        op_double: &dyn Fn(u64, u64) -> u64,
+        op_byte: impl Fn(u8, u8) -> u8,
+        op_half: impl Fn(u16, u16) -> u16,
+        op_word: impl Fn(u32, u32) -> u32,
+        op_double: impl Fn(u64, u64) -> u64,
         instruction: &Instruction,
     ) {
         let reg1 = instruction.r1.clone().expect("Need dst register");

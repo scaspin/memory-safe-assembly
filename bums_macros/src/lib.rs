@@ -56,6 +56,7 @@ fn calculate_size_of(ty: String) -> usize {
         "u16" => std::mem::size_of::<u16>(),
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
+        "u128" => std::mem::size_of::<u128>(),
         _ => 0,
     }
 }
@@ -170,7 +171,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         Type::Reference(a) => match &*a.elem {
                             Type::Array(b) => {
                                 let ty = calculate_type_of_array_ptr(b);
-                                pointer_sizes.insert(name, ty);
+                                let size = calculate_size_of_array(b);
+                                pointer_sizes.insert(name.clone(), ty);
+                                input_sizes.insert(name, size);
                             }
                             Type::Slice(b) => {
                                 let ty = calculate_type_of_slice_ptr(b);
@@ -238,6 +241,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u8" => new_args.push(parse_quote! {#n: *const u8}),
                                     "u32" => new_args.push(parse_quote! {#n: *const u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *const u64}),
+                                    "u128" => new_args.push(parse_quote! {#n: *const u128}),
                                     _ => (),
                                 }
                             } else {
@@ -251,6 +255,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u8" => new_args.push(parse_quote! {#n: *mut u8}),
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
+                                    "u128" => new_args.push(parse_quote! {#n: *const u128}),
                                     _ => (),
                                 }
                             } else {
