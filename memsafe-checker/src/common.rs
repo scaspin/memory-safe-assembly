@@ -191,95 +191,63 @@ impl SimdRegister {
         offset_buf.clone_from_slice(&self.offset[0..8]);
         let offset: i64 = i64::from_be_bytes(offset_buf);
 
-        let base = generate_expression(
+        let base = generate_expression_from_options(
             ",",
-            generate_expression(
+            generate_expression_from_options(
                 ",",
-                generate_expression(
+                generate_expression_from_options(
                     ",",
-                    generate_expression(
+                    generate_expression_from_options(
                         ",",
-                        self.base[0]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
-                        self.base[1]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[0].clone(),
+                        self.base[1].clone(),
                     ),
-                    generate_expression(
+                    generate_expression_from_options(
                         ",",
-                        self.base[2]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
-                        self.base[3]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[2].clone(),
+                        self.base[3].clone(),
                     ),
                 ),
-                generate_expression(
+                generate_expression_from_options(
                     ",",
-                    generate_expression(
+                    generate_expression_from_options(
                         ",",
-                        self.base[5]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
-                        self.base[5]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[4].clone(),
+                        self.base[5].clone(),
                     ),
-                    generate_expression(
+                    generate_expression_from_options(
                         ",",
-                        self.base[6]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
-                        self.base[7]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[6].clone(),
+                        self.base[7].clone(),
                     ),
                 ),
             ),
-            generate_expression(
+            generate_expression_from_options(
                 ",",
-                generate_expression(
+                generate_expression_from_options(
                     ",",
-                    generate_expression(
+                    generate_expression_from_options(
                         ",",
-                        self.base[8]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
-                        self.base[9]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[8].clone(),
+                        self.base[9].clone(),
                     ),
-                    generate_expression(
+                    generate_expression_from_options(
                         ",",
-                        self.base[10]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
-                        self.base[11]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[10].clone(),
+                        self.base[11].clone(),
                     ),
                 ),
-                generate_expression(
+                generate_expression_from_options(
                     ",",
-                    generate_expression(
+                    generate_expression_from_options(
                         ",",
-                        self.base[12]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
-                        self.base[13]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[12].clone(),
+                        self.base[13].clone(),
                     ),
-                    generate_expression(
+                    generate_expression_from_options(
                         ",",
-                        self.base[14]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
-                        self.base[15]
-                            .clone()
-                            .unwrap_or(AbstractExpression::Immediate(0)),
+                        self.base[14].clone(),
+                        self.base[15].clone(),
                     ),
                 ),
             ),
@@ -287,7 +255,7 @@ impl SimdRegister {
 
         return RegisterValue {
             kind: self.kind.clone(),
-            base: Some(base),
+            base,
             offset,
         };
     }
@@ -301,7 +269,22 @@ pub fn generate_expression(
     AbstractExpression::Expression(op.to_string(), Box::new(a), Box::new(b))
 }
 
-// is there a better way to do this?
+pub fn generate_expression_from_options(
+    op: &str,
+    a: Option<AbstractExpression>,
+    b: Option<AbstractExpression>,
+) -> Option<AbstractExpression> {
+    if a.is_some() || b.is_some() {
+        return Some(generate_expression(
+            op,
+            a.clone().unwrap_or(AbstractExpression::Immediate(0)),
+            b.clone().unwrap_or(AbstractExpression::Immediate(0)),
+        ));
+    } else {
+        return None;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AbstractExpression {
     Empty,

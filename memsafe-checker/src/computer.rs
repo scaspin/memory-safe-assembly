@@ -1126,286 +1126,34 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "and" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need source register");
-                    let reg3 = instruction.r3.clone().expect("Need immediate");
-
-                    if let Some((_, arrange)) = reg1.split_once(".") {
-                        match arrange {
-                            "2d" => {
-                                for i in 0..2 {
-                                    let (bases1, offsets1) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_double(i);
-
-                                    let (bases2, offsets2) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_double(i);
-
-                                    let a = u64::from_be_bytes(offsets1);
-                                    let b = u64::from_be_bytes(offsets2);
-                                    let offset = a & b;
-
-                                    let mut new_bases = [BASE_INIT; 8];
-                                    for i in 0..8 {
-                                        if bases1[i].is_some() && bases2[i].is_some() {
-                                            new_bases[i] = Some(generate_expression(
-                                                "&",
-                                                bases1[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                                bases2[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                            ));
-                                        }
-                                    }
-
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_double(i, new_bases, offset.to_be_bytes());
-                                }
-                            }
-                            "4s" => {
-                                for i in 0..4 {
-                                    let (bases1, offsets1) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_word(i);
-
-                                    let (bases2, offsets2) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_word(i);
-                                    let a = u32::from_be_bytes(offsets1);
-                                    let b = u32::from_be_bytes(offsets2);
-                                    let offset = a & b;
-
-                                    let mut new_bases = [BASE_INIT; 4];
-                                    for i in 0..4 {
-                                        if bases1[i].is_some() && bases2[i].is_some() {
-                                            new_bases[i] = Some(generate_expression(
-                                                "&",
-                                                bases1[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                                bases2[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                            ));
-                                        }
-                                    }
-
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_word(i, new_bases, offset.to_be_bytes());
-                                }
-                            }
-                            "8h" => {
-                                for i in 0..8 {
-                                    let (bases1, offsets1) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_halfword(i);
-
-                                    let (bases2, offsets2) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_halfword(i);
-                                    let a = u16::from_be_bytes(offsets1);
-                                    let b = u16::from_be_bytes(offsets2);
-                                    let offset = a & b;
-
-                                    let mut new_bases = [BASE_INIT; 2];
-                                    for i in 0..2 {
-                                        if bases1[i].is_some() && bases2[i].is_some() {
-                                            new_bases[i] = Some(generate_expression(
-                                                "&",
-                                                bases1[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                                bases2[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                            ));
-                                        }
-                                    }
-
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_halfword(i, new_bases, offset.to_be_bytes());
-                                }
-                            }
-                            "16b" => {
-                                for i in 0..16 {
-                                    let (bases1, a) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_byte(i);
-
-                                    let (bases2, b) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_byte(i);
-
-                                    let offset = a & b;
-
-                                    let mut new_base = None;
-                                    if bases1.is_some() && bases2.is_some() {
-                                        new_base = Some(generate_expression(
-                                            "&",
-                                            bases1
-                                                .clone()
-                                                .unwrap_or(AbstractExpression::Immediate(0)),
-                                            bases2
-                                                .clone()
-                                                .unwrap_or(AbstractExpression::Immediate(0)),
-                                        ));
-                                    }
-
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_byte(i, new_base, offset);
-                                }
-                            }
-                            _ => todo!(),
-                        }
-                    }
+                    self.vector_arithmetic(
+                        "&",
+                        &|x, y| x & y,
+                        &|x, y| x & y,
+                        &|x, y| x & y,
+                        &|x, y| x & y,
+                        instruction,
+                    );
                 }
-                "orr" | "eor" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need source register");
-                    let reg3 = instruction.r3.clone().expect("Need immediate");
-
-                    if let Some((_, arrange)) = reg1.split_once(".") {
-                        match arrange {
-                            "2d" => {
-                                for i in 0..2 {
-                                    let (bases1, offsets1) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_double(i);
-
-                                    let (bases2, offsets2) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_double(i);
-
-                                    let a = u64::from_be_bytes(offsets1);
-                                    let b = u64::from_be_bytes(offsets2);
-                                    let offset = a | b;
-
-                                    let mut new_bases = [BASE_INIT; 8];
-                                    for i in 0..8 {
-                                        if bases1[i].is_some() && bases2[i].is_some() {
-                                            new_bases[i] = Some(generate_expression(
-                                                "|",
-                                                bases1[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                                bases2[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                            ));
-                                        }
-                                    }
-
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_double(i, new_bases, offset.to_be_bytes());
-                                }
-                            }
-                            "4s" => {
-                                for i in 0..4 {
-                                    let (bases1, offsets1) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_word(i);
-
-                                    let (bases2, offsets2) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_word(i);
-                                    let a = u32::from_be_bytes(offsets1);
-                                    let b = u32::from_be_bytes(offsets2);
-                                    let offset = a | b;
-
-                                    let mut new_bases = [BASE_INIT; 4];
-                                    for i in 0..4 {
-                                        if bases1[i].is_some() && bases2[i].is_some() {
-                                            new_bases[i] = Some(generate_expression(
-                                                "|",
-                                                bases1[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                                bases2[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                            ));
-                                        }
-                                    }
-
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_word(i, new_bases, offset.to_be_bytes());
-                                }
-                            }
-                            "8h" => {
-                                for i in 0..8 {
-                                    let (bases1, offsets1) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_halfword(i);
-
-                                    let (bases2, offsets2) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_halfword(i);
-                                    let a = u16::from_be_bytes(offsets1);
-                                    let b = u16::from_be_bytes(offsets2);
-                                    let offset = a | b;
-
-                                    let mut new_bases = [BASE_INIT; 2];
-                                    for i in 0..2 {
-                                        if bases1[i].is_some() && bases2[i].is_some() {
-                                            new_bases[i] = Some(generate_expression(
-                                                "|",
-                                                bases1[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                                bases2[i]
-                                                    .clone()
-                                                    .unwrap_or(AbstractExpression::Immediate(0)),
-                                            ));
-                                        }
-                                    }
-
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_halfword(i, new_bases, offset.to_be_bytes());
-                                }
-                            }
-                            "16b" => {
-                                for i in 0..16 {
-                                    let (bases1, a) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_byte(i);
-
-                                    let (bases2, b) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_byte(i);
-
-                                    let offset = a | b;
-
-                                    let mut new_base = None;
-                                    if bases1.is_some() && bases2.is_some() {
-                                        new_base = Some(generate_expression(
-                                            "|",
-                                            bases1
-                                                .clone()
-                                                .unwrap_or(AbstractExpression::Immediate(0)),
-                                            bases2
-                                                .clone()
-                                                .unwrap_or(AbstractExpression::Immediate(0)),
-                                        ));
-                                    }
-
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_byte(i, new_base, offset);
-                                }
-                            }
-                            _ => todo!(),
-                        }
-                    }
+                "orr" => {
+                    self.vector_arithmetic(
+                        "|",
+                        &|x, y| x | y,
+                        &|x, y| x | y,
+                        &|x, y| x | y,
+                        &|x, y| x | y,
+                        instruction,
+                    );
+                }
+                "eor" => {
+                    self.vector_arithmetic(
+                        "^",
+                        &|x, y| x ^ y,
+                        &|x, y| x ^ y,
+                        &|x, y| x ^ y,
+                        &|x, y| x ^ y,
+                        instruction,
+                    );
                 }
                 _ => {
                     log::warn!("Instruction not supported {:?}", instruction);
@@ -1510,6 +1258,121 @@ impl<'ctx> ARMCORTEXA<'_> {
         } else {
             // println!("op: {:?}, r1: {:?}, r2:{:?}", op_string, r1, r2 );
             log::error!("Cannot perform arithmetic on these two registers")
+        }
+    }
+
+    fn vector_arithmetic(
+        &mut self,
+        op_string: &str,
+        op_byte: &dyn Fn(u8, u8) -> u8,
+        op_half: &dyn Fn(u16, u16) -> u16,
+        op_word: &dyn Fn(u32, u32) -> u32,
+        op_double: &dyn Fn(u64, u64) -> u64,
+        instruction: &Instruction,
+    ) {
+        let reg1 = instruction.r1.clone().expect("Need dst register");
+        let reg2 = instruction.r2.clone().expect("Need source register");
+        let reg3 = instruction.r3.clone().expect("Need immediate");
+
+        if let Some((_, arrange)) = reg1.split_once(".") {
+            match arrange {
+                "2d" => {
+                    for i in 0..2 {
+                        let (bases1, offsets1) =
+                            self.simd_registers[get_register_index(reg2.clone())].get_double(i);
+
+                        let (bases2, offsets2) =
+                            self.simd_registers[get_register_index(reg3.clone())].get_double(i);
+
+                        let a = u64::from_be_bytes(offsets1);
+                        let b = u64::from_be_bytes(offsets2);
+                        let offset = op_double(a, b);
+
+                        let mut new_bases = [BASE_INIT; 8];
+                        for i in 0..8 {
+                            if bases1[i].is_some() && bases2[i].is_some() {
+                                new_bases[i] = generate_expression_from_options(
+                                    op_string,
+                                    bases1[i].clone(),
+                                    bases2[i].clone(),
+                                );
+                            }
+                        }
+
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+                        dest.set_double(i, new_bases, offset.to_be_bytes());
+                    }
+                }
+                "4s" => {
+                    for i in 0..4 {
+                        let (bases1, offsets1) =
+                            self.simd_registers[get_register_index(reg2.clone())].get_word(i);
+
+                        let (bases2, offsets2) =
+                            self.simd_registers[get_register_index(reg3.clone())].get_word(i);
+                        let a = u32::from_be_bytes(offsets1);
+                        let b = u32::from_be_bytes(offsets2);
+                        let offset = op_word(a, b);
+
+                        let mut new_bases = [BASE_INIT; 4];
+                        for i in 0..4 {
+                            new_bases[i] = generate_expression_from_options(
+                                op_string,
+                                bases1[i].clone(),
+                                bases2[i].clone(),
+                            );
+                        }
+
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+                        dest.set_word(i, new_bases, offset.to_be_bytes());
+                    }
+                }
+                "8h" => {
+                    for i in 0..8 {
+                        let (bases1, offsets1) =
+                            self.simd_registers[get_register_index(reg2.clone())].get_halfword(i);
+
+                        let (bases2, offsets2) =
+                            self.simd_registers[get_register_index(reg3.clone())].get_halfword(i);
+                        let a = u16::from_be_bytes(offsets1);
+                        let b = u16::from_be_bytes(offsets2);
+                        let offset = op_half(a, b);
+
+                        let mut new_bases = [BASE_INIT; 2];
+                        for i in 0..2 {
+                            new_bases[i] = generate_expression_from_options(
+                                op_string,
+                                bases1[i].clone(),
+                                bases2[i].clone(),
+                            );
+                        }
+
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+                        dest.set_halfword(i, new_bases, offset.to_be_bytes());
+                    }
+                }
+                "16b" => {
+                    for i in 0..16 {
+                        let (bases1, a) =
+                            self.simd_registers[get_register_index(reg2.clone())].get_byte(i);
+
+                        let (bases2, b) =
+                            self.simd_registers[get_register_index(reg3.clone())].get_byte(i);
+
+                        let offset = op_byte(a, b);
+
+                        let new_base = generate_expression_from_options(
+                            op_string,
+                            bases1.clone(),
+                            bases2.clone(),
+                        );
+
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+                        dest.set_byte(i, new_base, offset);
+                    }
+                }
+                _ => todo!(),
+            }
         }
     }
 
