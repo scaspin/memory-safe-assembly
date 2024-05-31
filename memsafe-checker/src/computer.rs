@@ -166,6 +166,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         &self,
     ) -> (
         [RegisterValue; 33],
+        [SimdRegister; 32],
         Option<FlagValue>,
         Option<FlagValue>,
         Option<FlagValue>,
@@ -173,6 +174,7 @@ impl<'ctx> ARMCORTEXA<'_> {
     ) {
         return (
             self.registers.clone(),
+            self.simd_registers.clone(),
             self.zero.clone(),
             self.neg.clone(),
             self.carry.clone(),
@@ -210,85 +212,6 @@ impl<'ctx> ARMCORTEXA<'_> {
             }
         }
     }
-
-    // fn set_vector(
-    //     &mut self,
-    //     name: String,
-    //     kind: RegisterKind,
-    //     bases: [Option<AbstractExpression>; 16],
-    //     offsets: [u8; 16],
-    // ) {
-    //     if name.contains("v") {
-    //         let v = name.clone();
-    //         // example v17.s[1] that accesses a specific element within vector
-    //         if name.contains("[") {
-    //             let left_brac = name.find("[").expect("need left bracket");
-    //             let right_brac = name.find("]").expect("need right bracket");
-    //             let index_string = name.get(left_brac..right_brac).expect("need brackets");
-    //             let index = index_string
-    //                 .parse::<usize>()
-    //                 .expect("index into vector must be an integer");
-    //             if let Some((vector, arrangement)) = v.split_once(".") {
-    //                 let register = &mut self.simd_registers[get_register_index(vector.to_string())];
-    //                 register.kind = kind;
-    //                 match arrangement {
-    //                     "b" => register.set_byte(index, bases[0].clone(), offsets[0].clone() as u8),
-    //                     "h" => register.set_halfword(
-    //                         index,
-    //                         bases[0].clone(),
-    //                         offsets[0].clone() as i16,
-    //                     ),
-    //                     "s" => todo!(),
-    //                     "d" => todo!(),
-    //                     _ => log::error!("Not a valid vector arrangement {:?}", arrangement),
-    //                 }
-    //             } else {
-    //                 log::error!("Vector register not formatted correctly")
-    //             };
-    //         } else {
-    //             log::error!("Vector register not formatted correctly")
-    //         };
-    //     } else {
-    //         log::error!("Register is not a vector register")
-    //     }
-    // }
-
-    // fn set_vector_from_register(
-    //     &mut self,
-    //     name: String,
-    //     kind: RegisterKind,
-    //     base: Option<AbstractExpression>,
-    //     offset: i64,
-    // ) {
-    //     if name.contains("v") {
-    //         let mut v = name.clone();
-    //         if name.contains("{") {
-    //             // peel back {} on mem accesses
-    //             v = name.trim_matches(|c| c == '{' || c == '}').to_string();
-    //         }
-
-    //         if let Some((vector, arrangement)) = v.split_once(".") {
-    //             let register = &mut self.simd_registers[get_register_index(vector.to_string())];
-    //             match arrangement {
-    //                 "16b" => {
-    //                     // FIX should it go in top or bottom of vector
-    //                     register.offset[8..16].clone_from_slice(&offset.to_be_bytes());
-    //                 }
-    //                 "8h" => todo!(),
-    //                 "4s" => todo!(),
-    //                 "2d" => {
-    //                     // TODO fix how to transform base and offset
-    //                     register.kind = kind;
-    //                     register.set_double(0, base.clone(), offset);
-    //                     register.set_double(1, base, offset);
-    //                 }
-    //                 _ => log::error!("Not a valid vector arrangement {:?}", arrangement),
-    //             }
-    //         }
-    //     } else {
-    //         log::error!("Register is not a vector register")
-    //     }
-    // }
 
     pub fn add_memory_value(&mut self, region: String, address: i64, value: i64) {
         let reg_value = RegisterValue::new(RegisterKind::Immediate, None, value);

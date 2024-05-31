@@ -28,6 +28,7 @@ pub struct ExecutionEngine<'ctx> {
         (
             // relevent state
             [RegisterValue; 33],
+            [SimdRegister; 32],
             Option<FlagValue>,
             Option<FlagValue>,
             Option<FlagValue>,
@@ -599,6 +600,53 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
 
+                    for i in 0..(last_state.1.len()) {
+                        let last = &last_state.1[i];
+                        let cur = &current_state.1[i];
+                        let diff: [u8; 16] = match cur.kind {
+                            RegisterKind::RegisterBase | RegisterKind::Number => {
+                                if last.base == cur.base {
+                                    (0..16)
+                                        .map(|i| cur.offset[i] - last.offset[i])
+                                        .collect::<Vec<_>>()
+                                        .try_into()
+                                        .unwrap()
+                                } else {
+                                    [0; 16]
+                                }
+                            }
+                            RegisterKind::Immediate => (0..16)
+                                .map(|i| cur.offset[i] - last.offset[i])
+                                .collect::<Vec<_>>()
+                                .try_into()
+                                .unwrap(),
+                        };
+
+                        let mut new_reg = SimdRegister {
+                            kind: cur.kind.clone(),
+                            base: cur.base.clone(),
+                            offset: cur.offset,
+                        };
+
+                        for j in 0..16 {
+                            let d = diff[j];
+                            if d > 0 {
+                                let new_base = generate_expression_from_options(
+                                    "+",
+                                    cur.base[j].clone(),
+                                    Some(generate_expression(
+                                        "*",
+                                        AbstractExpression::Abstract(loop_var_name.clone()),
+                                        AbstractExpression::Immediate(d as i64),
+                                    )),
+                                );
+
+                                new_reg.base[j] = new_base;
+                            }
+                        }
+                        self.computer.simd_registers[i] = new_reg;
+                    }
+
                     self.in_loop = true;
                     return Some(branch_decision);
                 }
@@ -675,6 +723,60 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 };
                                 self.computer.registers[i] = new_reg;
                             }
+                        }
+                    }
+
+                    for i in 0..(last_state.1.len()) {
+                        let last = &last_state.1[i];
+                        let cur = &current_state.1[i];
+                        let diff: [u8; 16] = match cur.kind {
+                            RegisterKind::RegisterBase | RegisterKind::Number => {
+                                if last.base == cur.base {
+                                    (0..16)
+                                        .map(|i| cur.offset[i] - last.offset[i])
+                                        .collect::<Vec<_>>()
+                                        .try_into()
+                                        .unwrap()
+                                } else {
+                                    [0; 16]
+                                }
+                            }
+                            RegisterKind::Immediate => (0..16)
+                                .map(|i| cur.offset[i] - last.offset[i])
+                                .collect::<Vec<_>>()
+                                .try_into()
+                                .unwrap(),
+                        };
+
+                        let base = cur.base.clone();
+
+                        if base
+                            .iter()
+                            .any(|s| s.is_some() && s.clone().unwrap().contains(&loop_var_name))
+                        {
+                            let mut new_reg = SimdRegister {
+                                kind: cur.kind.clone(),
+                                base: cur.base.clone(),
+                                offset: cur.offset,
+                            };
+
+                            for j in 0..16 {
+                                let d = diff[j];
+                                if d > 0 {
+                                    let new_base = generate_expression_from_options(
+                                        "+",
+                                        cur.base[j].clone(),
+                                        Some(generate_expression(
+                                            "*",
+                                            AbstractExpression::Abstract(loop_var_name.clone()),
+                                            AbstractExpression::Immediate(d as i64),
+                                        )),
+                                    );
+
+                                    new_reg.base[j] = new_base;
+                                }
+                            }
+                            self.computer.simd_registers[i] = new_reg;
                         }
                     }
                 }
