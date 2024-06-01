@@ -307,9 +307,10 @@ impl<'ctx> ARMCORTEXA<'_> {
                     offset: self.alignment,
                 };
             } else {
+                // TODO: use label as memory key
                 return RegisterValue {
                     kind: RegisterKind::RegisterBase,
-                    base: None,
+                    base: Some(AbstractExpression::Abstract("memory".to_string())),
                     offset: 0,
                 };
             }
@@ -848,6 +849,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                         );
                     }
                 }
+                "mov" => {
+                    todo!();
+                }
                 _ => {
                     log::warn!("Instruction not supported {:?}", instruction);
                 }
@@ -856,15 +860,46 @@ impl<'ctx> ARMCORTEXA<'_> {
             // SIMD
             match instruction.op.as_str() {
                 "ld1" => {
-                    let reg1 = instruction.r1.clone().unwrap();
-                    let reg2 = instruction.r2.clone().unwrap();
+                    let reg1 = instruction.r1.clone().expect("Need first source register");
+                    let reg2 = instruction
+                        .r2
+                        .clone()
+                        .expect("Need second source or dst register");
+                    if let Some(reg3) = &instruction.r3 {
+                        if reg2.contains("}") {
+                            let base_name = get_register_name_string(reg3.clone());
+                            let base_add_reg =
+                                self.registers[get_register_index(base_name.clone())].clone();
+                            match self.load_vector(reg1, base_add_reg.clone()) {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                            match self.load_vector(reg2, base_add_reg.clone()) {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                        } else {
+                            let imm = self.operand(reg3.to_string());
+                            let base_name = get_register_name_string(reg2.clone());
+                            let mut base_add_reg =
+                                self.registers[get_register_index(base_name.clone())].clone();
 
-                    let reg2base = get_register_name_string(reg2.clone());
-                    let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
-                    let res = self.load_vector(reg1, base_add_reg.clone());
-                    match res {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
+                            base_add_reg.offset = base_add_reg.offset + imm.offset;
+                            let res = self.load_vector(reg1, base_add_reg.clone());
+                            match res {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                        }
+                    } else {
+                        let base_name = get_register_name_string(reg2.clone());
+                        let base_add_reg =
+                            self.registers[get_register_index(base_name.clone())].clone();
+                        let res = self.load_vector(reg1, base_add_reg.clone());
+                        match res {
+                            Err(e) => return Err(e.to_string()),
+                            _ => (),
+                        }
                     }
                 }
 
@@ -1077,6 +1112,21 @@ impl<'ctx> ARMCORTEXA<'_> {
                         &|x, y| x ^ y,
                         instruction,
                     );
+                }
+                "rev64" => {
+                    todo!();
+                }
+                "ins" => {
+                    todo!();
+                }
+                "pmull" => {
+                    todo!();
+                }
+                "zip1" => {
+                    todo!();
+                }
+                "zip2" => {
+                    todo!();
                 }
                 _ => {
                     log::warn!("Instruction not supported {:?}", instruction);
@@ -1758,7 +1808,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             AbstractExpression::Abstract(regbase) => (
                 self.memory
                     .get(&regbase.clone())
-                    .expect("Region not in memory"),
+                    .expect(&format!("Region not in memory {}", regbase.clone())),
                 ast::Int::new_const(self.context, regbase),
             ),
             _ => {
@@ -1823,7 +1873,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         }
         return Err(MemorySafetyError::new(
             format!(
-                "Writing to address outside allowable memory regions {:?}, {:?}",
+                "Accessing address outside allowable memory regions {:?}, {:?}",
                 base_expr, offset
             )
             .as_str(),

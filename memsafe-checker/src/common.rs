@@ -488,7 +488,12 @@ impl MemorySafeRegion {
     }
 
     pub fn get_length(&self) -> AbstractExpression {
-        return self.length.clone();
+        match self.length {
+            AbstractExpression::Immediate(_) => {
+                return AbstractExpression::Immediate((self.content.len() * 4) as i64)
+            }
+            _ => self.length.clone(),
+        }
     }
 }
 
