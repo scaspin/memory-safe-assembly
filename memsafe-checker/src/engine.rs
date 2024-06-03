@@ -149,8 +149,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
     pub fn add_region(&mut self, ty: RegionType, base: String, length: AbstractExpression) {
         let zero = ast::Int::from_i64(self.computer.context, 0);
         for a in length.get_abstracts() {
-            self.abstracts
-                .insert(a.clone(), ("?_".to_owned() + &a.clone()).to_string());
             let temp = ast::Int::new_const(self.computer.context, a);
             self.computer.solver.assert(&temp.ge(&zero));
         }

@@ -7,7 +7,7 @@ mod tests {
 
     #[test]
     fn bn_add() -> std::io::Result<()> {
-        // env_logger::init();
+        env_logger::init();
 
         let file = File::open("tests/asm-examples/bn-armv8-apple.S")?;
         let reader = BufReader::new(file);
@@ -525,7 +525,7 @@ mod tests {
 
         let mut program = Vec::new();
         program.push("start:".to_string());
-        program.push("add x1,x0,x1,lsl#4".to_string());
+        program.push("add x1,x0,x1".to_string());
         program.push("loop:".to_string());
         program.push("cmp x0,x1".to_string());
         program.push("b.eq end".to_string());
@@ -543,8 +543,9 @@ mod tests {
         engine.add_region(
             RegionType::READ,
             "base".to_string(),
-            AbstractExpression::Immediate(3),
+            AbstractExpression::Abstract("length".to_string()),
         );
+        engine.add_abstract_from(1, "length".to_string());
 
         let res = engine.start("start".to_string());
         assert!(res.is_err());
@@ -736,13 +737,13 @@ mod tests {
         engine.add_region(
             RegionType::RW,
             "input".to_string(),
-            generate_expression("+", blocks.clone(), AbstractExpression::Immediate(16)),
+            generate_expression("*", blocks.clone(), AbstractExpression::Immediate(16)),
         );
 
         engine.add_abstract("x3".to_string(), blocks);
 
         let res = engine.start(start_label);
-        assert!(res.is_ok());
+        assert!(res.is_err());
         Ok(())
     }
 }
