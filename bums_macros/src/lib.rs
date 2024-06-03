@@ -1,23 +1,18 @@
 extern crate proc_macro;
+use parse::{Parse, ParseStream};
 use proc_macro::{Span, TokenStream};
 #[allow(unused_imports)]
-use proc_macro_error::{
-    abort_call_site, emit_call_site_error, emit_call_site_warning, emit_error, proc_macro_error,
-};
+use proc_macro_error::*;
+use punctuated::Punctuated;
 use quote::quote;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use syn::parse::{Parse, ParseStream};
-use syn::punctuated::Punctuated;
-use syn::{
-    parse_macro_input, parse_quote, Expr, ExprCall, FnArg, Ident, Lit, Pat, Result, Signature,
-    Stmt, Token, TypeArray, TypeSlice,
-};
+use syn::*;
 use z3::{Config, Context};
 
 use bums;
-use bums::common::RegionType;
+use bums::common::{AbstractExpression, RegionType};
 
 #[derive(Debug)]
 struct CallColon {
@@ -36,7 +31,7 @@ impl Parse for CallColon {
 
 #[derive(Debug)]
 struct AttributeList {
-    filename: syn::LitStr,
+    filename: LitStr,
     _separator: Option<Token![,]>,
     argument_list: Punctuated<Expr, Token![,]>,
 }
@@ -46,7 +41,7 @@ impl Parse for AttributeList {
         return Ok(Self {
             filename: input.parse()?,
             _separator: input.parse()?,
-            argument_list: syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)?,
+            argument_list: punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)?,
         });
     }
 }
@@ -61,6 +56,7 @@ fn calculate_size_of(ty: String) -> usize {
         "u16" => std::mem::size_of::<u16>(),
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
+        "u128" => std::mem::size_of::<u128>(),
         _ => 0,
     }
 }
@@ -69,7 +65,7 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
     let mut elem: String = String::new();
     let mut len: usize = 0;
     match &*a.elem {
-        syn::Type::Path(b) => {
+        Type::Path(b) => {
             elem = b.path.segments[0].ident.to_string();
         }
         _ => (),
@@ -89,7 +85,7 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
 fn calculate_type_of_array_ptr(a: &TypeArray) -> String {
     let mut elem: String = String::new();
     match &*a.elem {
-        syn::Type::Path(b) => {
+        Type::Path(b) => {
             elem = b.path.segments[0].ident.to_string();
         }
         _ => (),
@@ -100,7 +96,7 @@ fn calculate_type_of_array_ptr(a: &TypeArray) -> String {
 fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
     let mut elem: String = String::new();
     match &*a.elem {
-        syn::Type::Path(b) => {
+        Type::Path(b) => {
             elem = b.path.segments[0].ident.to_string();
         }
         _ => (),
@@ -132,14 +128,14 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     Pat::Ident(a) => {
                         let s = a.ident.clone();
                         let mut q = Punctuated::new();
-                        q.push(syn::PathSegment {
+                        q.push(PathSegment {
                             ident: s,
-                            arguments: syn::PathArguments::None,
+                            arguments: PathArguments::None,
                         });
-                        let w = Expr::Path(syn::ExprPath {
+                        let w = Expr::Path(ExprPath {
                             attrs: Vec::new(),
                             qself: None,
-                            path: syn::Path {
+                            path: Path {
                                 leading_colon: None,
                                 segments: q,
                             },
@@ -166,18 +162,20 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     let ty = &*pat_type.ty;
                     input_types.insert(name.clone(), ty);
                     match ty {
-                        syn::Type::Array(a) => {
+                        Type::Array(a) => {
                             let ty = calculate_type_of_array_ptr(a);
                             let size = calculate_size_of_array(a);
                             input_sizes.insert(name.clone(), size);
                             pointer_sizes.insert(name, ty);
                         }
-                        syn::Type::Reference(a) => match &*a.elem {
-                            syn::Type::Array(b) => {
+                        Type::Reference(a) => match &*a.elem {
+                            Type::Array(b) => {
                                 let ty = calculate_type_of_array_ptr(b);
-                                pointer_sizes.insert(name, ty);
+                                let size = calculate_size_of_array(b);
+                                pointer_sizes.insert(name.clone(), ty);
+                                input_sizes.insert(name, size);
                             }
-                            syn::Type::Slice(b) => {
+                            Type::Slice(b) => {
                                 let ty = calculate_type_of_slice_ptr(b);
                                 pointer_sizes.insert(name, ty);
                             }
@@ -196,17 +194,17 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // extract name of function being invoked to pass to invocation
     let mut q = Punctuated::new();
-    q.push(syn::PathSegment {
+    q.push(PathSegment {
         ident: fn_name.clone(),
-        arguments: syn::PathArguments::None,
+        arguments: PathArguments::None,
     });
 
     let invocation: ExprCall = ExprCall {
         attrs: vec![],
-        func: Box::new(Expr::Path(syn::ExprPath {
+        func: Box::new(Expr::Path(ExprPath {
             attrs: Vec::new(),
             qself: None,
-            path: syn::Path {
+            path: Path {
                 leading_colon: None,
                 segments: q,
             },
@@ -243,6 +241,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u8" => new_args.push(parse_quote! {#n: *const u8}),
                                     "u32" => new_args.push(parse_quote! {#n: *const u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *const u64}),
+                                    "u128" => new_args.push(parse_quote! {#n: *const u128}),
                                     _ => (),
                                 }
                             } else {
@@ -256,6 +255,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u8" => new_args.push(parse_quote! {#n: *mut u8}),
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
+                                    "u128" => new_args.push(parse_quote! {#n: *const u128}),
                                     _ => (),
                                 }
                             } else {
@@ -346,28 +346,28 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 //get type to get size
                 match &*pat_type.ty {
-                    syn::Type::Path(_) => {
+                    Type::Path(_) => {
                         // simple types that fit in a register?
                         // for c in &a.path.segments {
                         //      size = size + calculate_size_of(c.ident.to_string());
                         // }
                         engine.add_abstract_from(i, name.clone());
                     }
-                    syn::Type::Array(a) => {
+                    Type::Array(a) => {
                         let size = calculate_size_of_array(a);
                         engine.add_abstract_from(i, name.clone());
-                        engine.add_region_from(
+                        engine.add_region(
                             RegionType::WRITE,
                             name.clone(),
-                            (Some(size), None, None),
+                            AbstractExpression::Immediate(size as i64),
                         );
-                        engine.add_region_from(
+                        engine.add_region(
                             RegionType::READ,
                             name.clone(),
-                            (Some(size), None, None),
+                            AbstractExpression::Immediate(size as i64),
                         );
                     }
-                    syn::Type::Ptr(a) => {
+                    Type::Ptr(a) => {
                         // load pointer into register
                         engine.add_abstract_from(i, name.clone());
 
@@ -377,32 +377,32 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                         // if pointing to an array defined as a function param, no abstract length
                         if let Some(bound) = input_sizes.get(no_suffix) {
-                            engine.add_region_from(
+                            engine.add_region(
                                 RegionType::READ,
                                 name.clone(),
-                                (Some(*bound), None, None),
+                                AbstractExpression::Immediate(bound.clone() as i64),
                             );
                             if a.mutability.is_some() {
-                                engine.add_region_from(
+                                engine.add_region(
                                     RegionType::WRITE,
                                     name.clone(),
-                                    (Some(*bound), None, None),
+                                    AbstractExpression::Immediate(*bound as i64),
                                 );
                             }
                             continue;
                         }
 
                         let bound = no_suffix.to_owned() + "_len";
-                        engine.add_region_from(
+                        engine.add_region(
                             RegionType::READ,
                             name.clone(),
-                            (None, Some(bound.clone()), None),
+                            AbstractExpression::Abstract(bound.clone()),
                         );
                         if a.mutability.is_some() {
-                            engine.add_region_from(
+                            engine.add_region(
                                 RegionType::WRITE,
                                 name.clone(),
-                                (None, Some(bound), None),
+                                AbstractExpression::Abstract(bound),
                             );
                         }
                     }
@@ -440,7 +440,7 @@ struct InlineInput {
 
 impl Parse for InlineInput {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut inputs = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)
+        let mut inputs = punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)
             .unwrap()
             .into_iter();
         let output = Self {
@@ -459,7 +459,7 @@ struct GlobalInput {
 
 impl Parse for GlobalInput {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut inputs = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)
+        let mut inputs = punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)
             .unwrap()
             .into_iter();
         let output = Self {

@@ -7,7 +7,7 @@
 .private_extern	_bn_add_words
 .align	4
 _bn_add_words:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	cmn	xzr, xzr
 
 	lsr	x8, x3, #1
@@ -42,7 +42,7 @@ Ladd_exit:
 .private_extern	_bn_sub_words
 .align	4
 _bn_sub_words:
-	AARCH64_VALID_CALL_TARGET
+	// AARCH64_VALID_CALL_TARGET
 	cmp	xzr, xzr
 
 	lsr	x8, x3, #1
