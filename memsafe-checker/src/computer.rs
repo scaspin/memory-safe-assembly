@@ -50,7 +50,8 @@ pub struct ARMCORTEXA<'ctx> {
 
 impl<'ctx> fmt::Debug for ARMCORTEXA<'ctx> {
     fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        println!("registers {:?}", &self.registers);
+        println!("registers {:#?}", &self.registers);
+        println!("simd registers {:?}", &self.simd_registers);
         Ok(())
     }
 }
@@ -346,7 +347,21 @@ impl<'ctx> ARMCORTEXA<'_> {
                         instruction.r4.clone(),
                     );
                 }
+                "subs" => {
+                    self.cmp(
+                        instruction.r1.clone().expect("need register to compare"),
+                        instruction.r2.clone().expect("need register to compare"),
+                    );
 
+                    self.arithmetic(
+                        "-",
+                        &|x, y| x - y,
+                        instruction.r1.clone().expect("Need dst register"),
+                        instruction.r2.clone().expect("Need one operand"),
+                        instruction.r3.clone().expect("Need two operand"),
+                        instruction.r4.clone(),
+                    );
+                }
                 "and" => {
                     self.arithmetic(
                         &instruction.op,
@@ -606,7 +621,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 "b" => {
                     return Ok(Some((None, instruction.r1.clone(), None)));
                 }
-                "b.ne" => {
+                "b.ne" | "bne" => {
                     match &self.zero {
                 // if zero is set to false, then cmp -> not equal and we branch
                 Some(flag) => match flag {
@@ -850,7 +865,11 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "mov" => {
-                    todo!();
+                    let reg1 = instruction.r1.clone().expect("Need dst reg");
+                    let reg2 = instruction.r2.clone().expect("Need src reg");
+
+                    let src = self.operand(reg2);
+                    self.set_register(reg1, src.kind, src.base, src.offset);
                 }
                 _ => {
                     log::warn!("Instruction not supported {:?}", instruction);
@@ -997,8 +1016,25 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     if let Some((_, arrange)) = reg1.split_once(".") {
                         match arrange {
-                            "2d" => {
-                                todo!();
+                            "8b" => {
+                                let amt = imm.offset as usize;
+                                assert!(amt < 8);
+                                for i in 0..amt {
+                                    let (base, offset) = self.simd_registers
+                                        [get_register_index(reg2.clone())]
+                                    .get_byte(i);
+                                    let dest =
+                                        &mut self.simd_registers[get_register_index(reg1.clone())];
+                                    dest.set_byte(i, base.clone(), offset);
+                                }
+                                for i in amt..8 {
+                                    let (base, offset) = self.simd_registers
+                                        [get_register_index(reg3.clone())]
+                                    .get_byte(i);
+                                    let dest =
+                                        &mut self.simd_registers[get_register_index(reg1.clone())];
+                                    dest.set_byte(i, base.clone(), offset);
+                                }
                             }
                             "16b" => {
                                 let amt = imm.offset as usize;
@@ -1114,22 +1150,205 @@ impl<'ctx> ARMCORTEXA<'_> {
                     );
                 }
                 "rev64" => {
-                    todo!();
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need source register");
+
+                    let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+                    let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+                    dest.kind = src.kind.clone();
+                    for i in 0..16 {
+                        let (base, offset) = src.get_byte(15 - i);
+                        dest.set_byte(i, base, offset);
+                    }
                 }
                 "ins" => {
-                    todo!();
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let mut reg2 = instruction.r2.clone().expect("Need source register");
+
+                    // vector, element
+                    if reg2.contains("v") {
+                        let left_brac = reg2.find("[").expect("need left bracket");
+                        let right_brac = reg2.find("]").expect("need right bracket");
+                        let index_string = reg2
+                            .get((left_brac + 1)..right_brac)
+                            .expect("need brackets");
+                        let index = index_string
+                            .parse::<usize>()
+                            .expect("index into vector must be an integer");
+
+                        reg2 = reg2.split_at(left_brac).0.to_string();
+                        if let Some((vector1, arrangement1)) = reg1.split_once(".") {
+                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                                assert!(arrangement1.contains(arrangement2));
+                                let src = self.simd_registers
+                                    [get_register_index(vector2.to_string())]
+                                .clone();
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+
+                                match arrangement2 {
+                                    "b" => {
+                                        let (base, offset) = src.get_byte(index);
+                                        dest.set_byte(index, base, offset);
+                                    }
+                                    "h" => {
+                                        let (base, offset) = src.get_halfword(index);
+                                        dest.set_halfword(index, base, offset);
+                                    }
+                                    "s" => {
+                                        let (base, offset) = src.get_word(index);
+                                        dest.set_word(index, base, offset);
+                                    }
+                                    "d" => {
+                                        let (base, offset) = src.get_double(index);
+                                        dest.set_double(index, base, offset);
+                                    }
+                                    _ => log::error!(
+                                        "Not a valid vector arrangement {:?}",
+                                        arrangement1
+                                    ),
+                                }
+                            }
+                        }
+                    // vector, general
+                    } else {
+                        todo!();
+                    }
                 }
                 "pmull" => {
-                    todo!();
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+                    let reg3 = instruction.r3.clone().expect("Need second source register");
+
+                    if let Some((vector1, _)) = reg1.split_once(".") {
+                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                assert_eq!(arrangement2, arrangement3);
+
+                                let src1 = self.simd_registers
+                                    [get_register_index(vector2.to_string())]
+                                .clone();
+                                let src2 = self.simd_registers
+                                    [get_register_index(vector3.to_string())]
+                                .clone();
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+
+                                match arrangement2 {
+                                    "8b" => {
+                                        for i in 0..8 {
+                                            let base = generate_expression_from_options(
+                                                "*",
+                                                src1.get_byte(i).0,
+                                                src2.get_byte(i).0,
+                                            );
+                                            let offset = src1.get_byte(i).1 * src2.get_byte(i).1;
+
+                                            dest.set_byte(i, base, offset);
+                                        }
+                                    }
+                                    "4h" => {
+                                        for i in 0..8 {
+                                            let (bases1, offsets1) = self.simd_registers
+                                                [get_register_index(reg2.clone())]
+                                            .get_halfword(i);
+
+                                            let (bases2, offsets2) = self.simd_registers
+                                                [get_register_index(reg3.clone())]
+                                            .get_halfword(i);
+                                            let a = u16::from_be_bytes(offsets1);
+                                            let b = u16::from_be_bytes(offsets2);
+                                            let offset = a * b;
+
+                                            let mut new_bases = [BASE_INIT; 2];
+                                            for i in 0..2 {
+                                                new_bases[i] = generate_expression_from_options(
+                                                    "*",
+                                                    bases1[i].clone(),
+                                                    bases2[i].clone(),
+                                                );
+                                            }
+
+                                            let dest = &mut self.simd_registers
+                                                [get_register_index(reg1.clone())];
+                                            dest.set_halfword(i, new_bases, offset.to_be_bytes());
+                                        }
+                                    }
+                                    _ => todo!(),
+                                }
+                            }
+                        }
+                    }
                 }
                 "zip1" => {
-                    todo!();
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+                    let reg3 = instruction.r3.clone().expect("Need second source register");
+
+                    if let Some((vector1, _)) = reg1.split_once(".") {
+                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                assert_eq!(arrangement2, arrangement3);
+
+                                let src1 = self.simd_registers
+                                    [get_register_index(vector2.to_string())]
+                                .clone();
+                                let src2 = self.simd_registers
+                                    [get_register_index(vector3.to_string())]
+                                .clone();
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+
+                                match arrangement2 {
+                                    "2d" => {
+                                        let elem = src1.get_double(0);
+                                        dest.set_double(0, elem.0, elem.1);
+
+                                        let elem = src2.get_double(0);
+                                        dest.set_double(1, elem.0, elem.1);
+                                    }
+                                    _ => todo!(),
+                                }
+                            }
+                        }
+                    }
                 }
                 "zip2" => {
-                    todo!();
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+                    let reg3 = instruction.r3.clone().expect("Need second source register");
+
+                    if let Some((vector1, _)) = reg1.split_once(".") {
+                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                assert_eq!(arrangement2, arrangement3);
+
+                                let src1 = self.simd_registers
+                                    [get_register_index(vector2.to_string())]
+                                .clone();
+                                let src2 = self.simd_registers
+                                    [get_register_index(vector3.to_string())]
+                                .clone();
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+
+                                match arrangement2 {
+                                    "2d" => {
+                                        let elem = src1.get_double(1);
+                                        dest.set_double(0, elem.0, elem.1);
+
+                                        let elem = src2.get_double(1);
+                                        dest.set_double(1, elem.0, elem.1);
+                                    }
+                                    _ => todo!(),
+                                }
+                            }
+                        }
+                    }
                 }
                 _ => {
-                    log::warn!("Instruction not supported {:?}", instruction);
+                    log::warn!("SIMD instruction not supported {:?}", instruction);
                     todo!()
                 }
             }
@@ -1300,6 +1519,30 @@ impl<'ctx> ARMCORTEXA<'_> {
                         dest.set_word(i, new_bases, offset.to_be_bytes());
                     }
                 }
+                "4h" => {
+                    for i in 0..4 {
+                        let (bases1, offsets1) =
+                            self.simd_registers[get_register_index(reg2.clone())].get_halfword(i);
+
+                        let (bases2, offsets2) =
+                            self.simd_registers[get_register_index(reg3.clone())].get_halfword(i);
+                        let a = u16::from_be_bytes(offsets1);
+                        let b = u16::from_be_bytes(offsets2);
+                        let offset = op_half(a, b);
+
+                        let mut new_bases = [BASE_INIT; 2];
+                        for i in 0..4 {
+                            new_bases[i] = generate_expression_from_options(
+                                op_string,
+                                bases1[i].clone(),
+                                bases2[i].clone(),
+                            );
+                        }
+
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+                        dest.set_halfword(i, new_bases, offset.to_be_bytes());
+                    }
+                }
                 "8h" => {
                     for i in 0..8 {
                         let (bases1, offsets1) =
@@ -1322,6 +1565,26 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                         let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
                         dest.set_halfword(i, new_bases, offset.to_be_bytes());
+                    }
+                }
+                "8b" => {
+                    for i in 0..8 {
+                        let (bases1, a) =
+                            self.simd_registers[get_register_index(reg2.clone())].get_byte(i);
+
+                        let (bases2, b) =
+                            self.simd_registers[get_register_index(reg3.clone())].get_byte(i);
+
+                        let offset = op_byte(a, b);
+
+                        let new_base = generate_expression_from_options(
+                            op_string,
+                            bases1.clone(),
+                            bases2.clone(),
+                        );
+
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+                        dest.set_byte(i, new_base, offset);
                     }
                 }
                 "16b" => {
