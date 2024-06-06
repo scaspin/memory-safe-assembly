@@ -737,7 +737,7 @@ mod tests {
         engine.add_region(
             RegionType::RW,
             "input".to_string(),
-            generate_expression("*", blocks.clone(), AbstractExpression::Immediate(16 * 8)),
+            generate_expression("*", blocks.clone(), AbstractExpression::Immediate(16)),
         );
 
         engine.add_abstract("x3".to_string(), blocks);
@@ -772,7 +772,7 @@ mod tests {
         engine.add_region(
             RegionType::RW,
             "context".to_string(),
-            AbstractExpression::Immediate(16 * 8),
+            AbstractExpression::Immediate(16),
         );
 
         engine.add_abstract(
@@ -793,10 +793,13 @@ mod tests {
         engine.add_region(
             RegionType::RW,
             "input".to_string(),
-            generate_expression("*", blocks.clone(), AbstractExpression::Immediate(16 * 8)),
+            generate_expression("*", blocks.clone(), AbstractExpression::Immediate(16 * 4)),
         );
 
-        engine.add_abstract("x3".to_string(), blocks);
+        engine.add_abstract(
+            "x3".to_string(),
+            generate_expression("*", blocks.clone(), AbstractExpression::Immediate(16)),
+        );
 
         let res = engine.start(start_label);
         assert!(res.is_ok());

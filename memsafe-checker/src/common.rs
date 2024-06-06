@@ -48,16 +48,16 @@ pub struct SimdRegister {
 pub const BASE_INIT: Option<AbstractExpression> = None;
 
 impl SimdRegister {
-    pub fn new(name: &str) -> Self {
-        let string_name = name.to_string();
-        let mut bases = [BASE_INIT; 16];
-        for i in 0..16 {
-            bases[i] = Some(AbstractExpression::Abstract(
-                string_name.clone() + "_" + &i.to_string(),
-            ));
-        }
+    pub fn new(_name: &str) -> Self {
+        // let string_name = name.to_string();
+        let bases = [BASE_INIT; 16];
+        // for i in 0..16 {
+        //     bases[i] = Some(AbstractExpression::Abstract(
+        //         string_name.clone() + "_" + &i.to_string(),
+        //     ));
+        // }
         Self {
-            kind: RegisterKind::RegisterBase,
+            kind: RegisterKind::Number,
             base: bases,
             offset: [0; 16],
         }
@@ -706,9 +706,13 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
             return Some(ast::Int::new_const(context, a));
         }
         AbstractExpression::Register(reg) => {
-            let base = expression_to_ast(context, reg.base.clone().expect("common")).expect("common");
-            let offset = ast::Int::from_i64(context, reg.offset);
-            return Some(ast::Int::add(context, &[&base, &offset]));
+            if let Some(base) = reg.base.clone() {
+                let base = expression_to_ast(context, base).unwrap();
+                let offset = ast::Int::from_i64(context, reg.offset);
+                return Some(ast::Int::add(context, &[&base, &offset]));
+            } else {
+                return Some(ast::Int::from_i64(context, reg.offset));
+            }
         }
         AbstractExpression::Expression(op, old1, old2) => {
             let new1 = expression_to_ast(context, *old1).expect("common");
