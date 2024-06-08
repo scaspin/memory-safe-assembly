@@ -2,10 +2,11 @@ fn main() {
     println!("cargo:rerun-if-changed=assembly/aws-fips");
     let mut build = cc::Build::new();
 
-    for entry in std::fs::read_dir("assembly/aws-fips/").unwrap() {
+    for entry in std::fs::read_dir("generated-asm/linux-aarch64/crypto/fipsmodule").unwrap() {
         match entry {
             Ok(entry) => {
-                build.file(entry.path());
+		println!("cargo::rerun-if-changed={}", entry.path().display());
+                build.include("include").file(entry.path());
             }
             Err(e) => println!("cargo::warning:{}", e),
         }
