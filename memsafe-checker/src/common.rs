@@ -763,3 +763,7 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
         _ => todo!(),
     }
 }
+
+pub fn string_to_expression(input: &String) -> AbstractExpression {
+    todo!()
+}
