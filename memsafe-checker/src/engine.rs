@@ -164,6 +164,12 @@ impl<'ctx> ExecutionEngine<'ctx> {
         self.computer.set_abstract(register, value);
     }
 
+    pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
+        let name = ("x".to_owned() + &register.to_string()).to_string();
+        self.computer
+            .set_abstract(name.clone(),value);
+    }
+
     pub fn add_abstract_from(&mut self, register: usize, value: String) {
         let name = ("x".to_owned() + &register.to_string()).to_string();
         self.computer

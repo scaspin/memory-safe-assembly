@@ -7,12 +7,12 @@ use punctuated::Punctuated;
 use quote::quote;
 use std::collections::HashMap;
 use std::fs::File;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader};
 use syn::*;
 use z3::{Config, Context};
 
-use bums;
-use bums::common::{AbstractExpression, RegionType};
+use bums::common::*;
 
 #[derive(Debug)]
 struct CallColon {
@@ -104,6 +104,12 @@ fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
     return elem;
 }
 
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -118,6 +124,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_sizes = HashMap::new();
     let mut pointer_sizes = HashMap::new();
     let mut input_types = HashMap::new();
+    let mut input_expressions = HashMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
     // if caller did not specify arguments in macro, grab names from function call
     if attributes.argument_list.is_empty() {
@@ -179,12 +186,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 let ty = calculate_type_of_slice_ptr(b);
                                 pointer_sizes.insert(name, ty);
                             }
-                            _ => (),
+                            _ => todo!(),
                         },
-                        _ => (),
+                        _ => todo!(),
                     }
                 }
-                _ => (),
+                _ => todo!(),
             }
         }
         for i in &attributes.argument_list {
@@ -255,7 +262,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u8" => new_args.push(parse_quote! {#n: *mut u8}),
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
-                                    "u128" => new_args.push(parse_quote! {#n: *const u128}),
+                                    "u128" => new_args.push(parse_quote! {#n: *mut u128}),
                                     _ => (),
                                 }
                             } else {
@@ -275,13 +282,14 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         new_args.push(parse_quote! {#i: #ty});
                     }
                 }
-                Expr::Binary(_) => {
-                    //FIX: find a better name for this
-                    let n = Ident::new("expr", proc_macro2::Span::call_site().into());
-                    new_args.push(parse_quote! {#n : usize});
+                Expr::Binary(b) => {
+                    let exp = quote!{#b}.to_string();
+                    let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
+                    input_expressions.insert(name.clone(), exp);
+                    new_args.push(parse_quote! {#name : usize});
                 }
-                Expr::Lit(_) => new_args.push(parse_quote! {_: usize}),
-                _ => (),
+                Expr::Lit(l) => new_args.push(parse_quote! {#l: usize}),
+                _ => todo!(),
             }
         }
         for a in &new_args {
@@ -343,7 +351,13 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     Pat::Ident(b) => {
                         name = b.ident.clone().to_string();
                     }
-                    _ => (),
+                    Pat::Lit(l) => {
+                        match &l.lit {
+                            Lit::Str(s) =>name =  s.value(),
+                            _ => todo!(),
+                        }
+                    }
+                    _ => todo!(),
                 }
                 //get type to get size
                 match &*pat_type.ty {
@@ -352,21 +366,21 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         // for c in &a.path.segments {
                         //      size = size + calculate_size_of(c.ident.to_string());
                         // }
-                        engine.add_abstract_from(i, name.clone());
+                        if let Some(binary) = input_expressions.get(&name) {
+                            engine.add_abstract_expression_from(i, string_to_expression(binary));
+                        } else {
+                            engine.add_abstract_from(i, name.clone());
+                        }
                     }
                     Type::Array(a) => {
                         let size = calculate_size_of_array(a);
                         engine.add_abstract_from(i, name.clone());
                         engine.add_region(
-                            RegionType::WRITE,
+                            RegionType::RW,
                             name.clone(),
                             AbstractExpression::Immediate(size as i64),
                         );
-                        engine.add_region(
-                            RegionType::READ,
-                            name.clone(),
-                            AbstractExpression::Immediate(size as i64),
-                        );
+
                     }
                     Type::Ptr(a) => {
                         // load pointer into register
@@ -378,32 +392,34 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                         // if pointing to an array defined as a function param, no abstract length
                         if let Some(bound) = input_sizes.get(no_suffix) {
-                            engine.add_region(
-                                RegionType::READ,
-                                name.clone(),
-                                AbstractExpression::Immediate(bound.clone() as i64),
-                            );
                             if a.mutability.is_some() {
                                 engine.add_region(
-                                    RegionType::WRITE,
+                                    RegionType::RW,
                                     name.clone(),
                                     AbstractExpression::Immediate(*bound as i64),
+                                );
+                            } else {
+                                engine.add_region(
+                                    RegionType::READ,
+                                    name.clone(),
+                                    AbstractExpression::Immediate(bound.clone() as i64),
                                 );
                             }
                             continue;
                         }
 
                         let bound = no_suffix.to_owned() + "_len";
-                        engine.add_region(
-                            RegionType::READ,
-                            name.clone(),
-                            AbstractExpression::Abstract(bound.clone()),
-                        );
-                        if a.mutability.is_some() {
+                        if a.mutability.is_some() {  
                             engine.add_region(
                                 RegionType::WRITE,
                                 name.clone(),
                                 AbstractExpression::Abstract(bound),
+                            );
+                        } else {
+                            engine.add_region(
+                                RegionType::READ,
+                                name.clone(),
+                                AbstractExpression::Abstract(bound.clone()),
                             );
                         }
                     }

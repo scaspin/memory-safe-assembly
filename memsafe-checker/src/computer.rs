@@ -2100,8 +2100,8 @@ impl<'ctx> ARMCORTEXA<'_> {
             }
         };
 
-        if region.kind != ty && region.kind != RegionType::RW {
-            return Err(MemorySafetyError::new("Access does not match region type"));
+        if ty == RegionType::WRITE && region.kind == RegionType::READ {
+            return Err(MemorySafetyError::new(&format!("Access does not match region type {:#?} {:?} {:?}", region.kind, ty, base_expr)));
         }
 
         let mut abs_offset = ast::Int::from_i64(self.context, offset);
