@@ -1,24 +1,24 @@
 use bums_macros;
 
-#[bums_macros::check_mem_safe("assembly/example.S")]
+#[bums_macros::check_mem_safe("playground/assembly/example.S", a, b)]
 fn somefunc(a: i32, b: i32) -> i32;
 
-#[bums_macros::check_mem_safe("assembly/example.S", a.as_ptr())]
+#[bums_macros::check_mem_safe("playground/assembly/example.S", a.as_ptr())]
 fn somefuncwithslice(a: &[u8]);
 
-#[bums_macros::check_mem_safe("assembly/example.S", a.as_mut_ptr(), a.len())]
+#[bums_macros::check_mem_safe("playground/assembly/example.S", a.as_mut_ptr(), a.len())]
 fn somefuncwithweirdcallingconventionwrite(a: &mut [u8]);
 
-#[bums_macros::check_mem_safe("assembly/example.S", a.as_ptr(), a.len())]
+#[bums_macros::check_mem_safe("playground/assembly/example.S", a.as_ptr(), a.len())]
 fn somefuncwithweirdcallingconventionread(a: &[u8]);
 
-#[bums_macros::check_mem_safe("assembly/store.S")]
+#[bums_macros::check_mem_safe("playground/assembly/store.S")]
 fn store(a: i32, b: i32, vec: *mut u32);
 
-#[bums_macros::check_mem_safe("assembly/store.S", vec.as_mut_ptr())]
+#[bums_macros::check_mem_safe("playground/assembly/store.S", vec.as_mut_ptr())]
 fn store_slice(vec: &mut [u8]);
 
-#[bums_macros::check_mem_safe("assembly/add.S")]
+#[bums_macros::check_mem_safe("playground/assembly/add.S", a, b)]
 fn add(a: i32, b: i32) -> i32;
 
 fn main() {
