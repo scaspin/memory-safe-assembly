@@ -1,10 +1,10 @@
-#[bums_macros::check_mem_safe("crypto-playground/generated-asm/linux-aarch64/crypto/fipsmodule/ghash-neon-armv8.S", htable.as_mut_ptr(), h.as_ptr())]
+#[bums_macros::check_mem_safe("ghash-neon-armv8.S", htable.as_mut_ptr(), h.as_ptr())]
 fn gcm_init_neon(htable: &mut [u128; 16], h: &[u64; 2]);
 
-#[bums_macros::check_mem_safe("crypto-playground/generated-asm/linux-aarch64/crypto/fipsmodule/ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr())]
+#[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr())]
 fn gcm_gmult_neon(context: &mut [u8; 16], h: &[u64; 2]);
 
-#[bums_macros::check_mem_safe("crypto-playground/generated-asm/linux-aarch64/crypto/fipsmodule/ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len() )]
+#[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len() )]
 fn gcm_ghash_neon(context: &mut [u8; 16], h: &[u128; 16], buf: &[u8]);
 
 #[cfg(test)]

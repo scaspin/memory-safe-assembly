@@ -301,10 +301,10 @@ pub fn bn_sub(r: &mut BIGNUM, a: &BIGNUM, b: &BIGNUM) -> Result<(), String> {
     return Ok(());
 }
 
-#[bums_macros::check_mem_safe("crypto-playground/generated-asm/linux-aarch64/crypto/fipsmodule/bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len())]
+#[bums_macros::check_mem_safe("bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len())]
 fn bn_add_words(output: &mut [u64], a: &[u64], b: &[u64]) -> bool;
 
-#[bums_macros::check_mem_safe("crypto-playground/generated-asm/linux-aarch64/crypto/fipsmodule/bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len())]
+#[bums_macros::check_mem_safe("bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len())]
 fn bn_sub_words(output: &mut [u64], a: &[u64], b: &[u64]) -> bool;
 
 #[cfg(test)]
