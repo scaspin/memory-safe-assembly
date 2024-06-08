@@ -79,8 +79,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 // code.push(text.clone());
 
-                if text.contains(":") && !text.contains(".") {
-                    let label = text.strip_suffix(":").unwrap();
+                if text.ends_with(":") && !text.contains(".") {
+                    let label = text.strip_suffix(":").expect("engine1");
                     labels.push((label.to_string(), line_number));
                     // if text == start {
                     //     pc = line_number;
@@ -110,18 +110,18 @@ impl<'ctx> ExecutionEngine<'ctx> {
         for def in defs.iter() {
             let v: Vec<&str> = def.split(|c| c == '\t' || c == ',').collect();
             if v[0] == ".align" {
-                //alignment = v[1].parse::<usize>().unwrap();
+                //alignment = v[1].parse::<usize>().expect("engine");
                 // do nothing for now
             } else if v[0] == ".byte" || v[0] == ".long" {
                 for i in v.iter().skip(1) {
                     let num: i64;
                     if i.contains("x") {
-                        num = i64::from_str_radix(i.strip_prefix("0x").unwrap(), 16).unwrap();
+                        num = i64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16).expect("engine3");
                     } else {
                         if i.is_empty() {
                             continue;
                         }
-                        num = i.parse::<i64>().unwrap();
+                        num = i.parse::<i64>().expect("engine4");
                     }
                     computer.add_memory_value("memory".to_string(), address, num);
                     // address = address + (alignment as i64);
@@ -341,7 +341,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 }
                             }
                             (Some(condition), None, Some(address)) => {
-                                let jump_dest = address.try_into().unwrap();
+                                let jump_dest = address.try_into().expect("engine5");
                                 let rw_list = self.computer.read_rw_queue();
                                 match self.evaluate_branch_condition(
                                     pc.clone(),
@@ -495,7 +495,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     fn add_constraint(&self, constraint: AbstractComparison, decision: bool) {
         let c = comparison_to_ast(self.computer.context, constraint)
-            .unwrap()
+            .expect("engine6")
             .simplify();
 
         if decision {
@@ -510,7 +510,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
         if self.jump_history.len() > 10 {
             let mut loop_count = 0;
-            let pc = self.jump_history.last().unwrap().0;
+            let pc = self.jump_history.last().expect("engine7").0;
             for h in self.jump_history.clone() {
                 let (last_jump, _, _, _, _) = h;
 
@@ -551,7 +551,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                     // find the variable that the loop estimates
                     let simplified = comparison_to_ast(self.computer.context, expression.clone())
-                        .unwrap()
+                        .expect("engine8")
                         .simplify();
                     for a in self.abstracts.keys() {
                         if simplified.to_string().contains(a) {
@@ -608,7 +608,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         .map(|i| cur.offset[i] - last.offset[i])
                                         .collect::<Vec<_>>()
                                         .try_into()
-                                        .unwrap()
+                                        .expect("engine9")
                                 } else {
                                     [0; 16]
                                 }
@@ -617,7 +617,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 .map(|i| cur.offset[i] - last.offset[i])
                                 .collect::<Vec<_>>()
                                 .try_into()
-                                .unwrap(),
+                                .expect("enginea"),
                         };
 
                         let mut new_reg = SimdRegister {
@@ -663,13 +663,13 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 {
                     self.computer.solver.pop(1);
                     let condition =
-                        comparison_to_ast(self.computer.context, expression.clone()).unwrap();
+                        comparison_to_ast(self.computer.context, expression.clone()).expect("engineb");
                     self.computer.solver.assert(&condition.simplify());
                     match self.computer.solver.check() {
                         SatResult::Sat => {
                             log::info!(
                                 "satisfiable with model: {:?}",
-                                self.computer.solver.get_model().unwrap()
+                                self.computer.solver.get_model().expect("enginec")
                             );
                             self.in_loop = false;
                             return Some(!branch_decision);
@@ -734,7 +734,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         .map(|i| cur.offset[i] - last.offset[i])
                                         .collect::<Vec<_>>()
                                         .try_into()
-                                        .unwrap()
+                                        .expect("engined")
                                 } else {
                                     [0; 16]
                                 }
@@ -743,14 +743,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 .map(|i| cur.offset[i] - last.offset[i])
                                 .collect::<Vec<_>>()
                                 .try_into()
-                                .unwrap(),
+                                .expect("enginee"),
                         };
 
                         let base = cur.base.clone();
 
                         if base
                             .iter()
-                            .any(|s| s.is_some() && s.clone().unwrap().contains(&loop_var_name))
+                            .any(|s| s.is_some() && s.clone().expect("enginef").contains(&loop_var_name))
                         {
                             let mut new_reg = SimdRegister {
                                 kind: cur.kind.clone(),
