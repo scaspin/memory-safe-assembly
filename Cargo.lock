@@ -44,11 +44,25 @@ version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "474d7cec9d0a1126fad1b224b767fcbf351c23b0309bb21ec210bcfd379926a5"
 dependencies = [
- "aws-lc-sys",
+ "aws-lc-sys 0.17.0",
  "mirai-annotations",
  "paste",
  "untrusted",
  "zeroize",
+]
+
+[[package]]
+name = "aws-lc-sys"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68aa3d613f42dbf301dbbcaf3dc260805fd33ffd95f6d290ad7231a9e5d877a7"
+dependencies = [
+ "bindgen 0.69.4",
+ "cmake",
+ "dunce",
+ "fs_extra",
+ "libc",
+ "paste",
 ]
 
 [[package]]
@@ -205,7 +219,7 @@ name = "crypto-playground"
 version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
- "aws-lc-sys",
+ "aws-lc-sys 0.14.1",
  "bums_macros",
  "byteorder",
  "cc",
