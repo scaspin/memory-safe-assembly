@@ -292,7 +292,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 offset: reg.offset,
             };
         } else if v.contains('[') && v.contains(',') && v.contains('#') {
-            let a = v.split_once(',').unwrap();
+            let a = v.split_once(',').expect("computer");
             let reg = self.registers[get_register_index(a.0.trim_matches('[').to_string())].clone();
             return RegisterValue {
                 kind: RegisterKind::RegisterBase,
@@ -505,7 +505,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         [get_register_index(instruction.r1.clone().expect("Need one register"))]
                     .clone();
                     if (register.base.is_none()
-                        || register.base.clone().unwrap() == AbstractExpression::Empty)
+                        || register.base.clone().expect("computer") == AbstractExpression::Empty)
                         && register.offset == 0
                     {
                         return Ok(None);
@@ -529,7 +529,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     .clone();
 
                     if (register.base.is_none()
-                        || register.base.clone().unwrap() == AbstractExpression::Empty)
+                        || register.base.clone().expect("computer") == AbstractExpression::Empty)
                         && register.offset == 0
                     {
                         return Ok(Some((None, instruction.r2.clone(), None)));
@@ -672,7 +672,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     return Ok(Some((None, Some("return".to_string()), None)));
                                 }
                             }
-                            return Ok(Some((None, None, Some(x30.offset.try_into().unwrap()))));
+                            return Ok(Some((None, None, Some(x30.offset.try_into().expect("computer")))));
                         } else {
                             log::error!("cannot jump on non-address");
                         }
@@ -686,8 +686,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "ldr" => {
-                    let reg1 = instruction.r1.clone().unwrap();
-                    let reg2 = instruction.r2.clone().unwrap();
+                    let reg1 = instruction.r1.clone().expect("computer");
+                    let reg2 = instruction.r2.clone().expect("computer");
 
                     let reg2base = get_register_name_string(reg2.clone());
                     let mut base_add_reg =
@@ -716,7 +716,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // post-index
                     if instruction.r3.is_some() {
-                        let new_imm = self.operand(instruction.r3.clone().unwrap());
+                        let new_imm = self.operand(instruction.r3.clone().expect("computer"));
                         self.set_register(
                             reg2base,
                             base_add_reg.kind,
@@ -726,9 +726,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "ldp" => {
-                    let reg1 = instruction.r1.clone().unwrap();
-                    let reg2 = instruction.r2.clone().unwrap();
-                    let reg3 = instruction.r3.clone().unwrap();
+                    let reg1 = instruction.r1.clone().expect("computer");
+                    let reg2 = instruction.r2.clone().expect("computer");
+                    let reg3 = instruction.r3.clone().expect("computer");
 
                     let reg3base = get_register_name_string(reg3.clone());
                     let mut base_add_reg =
@@ -757,7 +757,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // post-index
                     if instruction.r4.is_some() {
-                        let new_imm = self.operand(instruction.r4.clone().unwrap());
+                        let new_imm = self.operand(instruction.r4.clone().expect("computer"));
                         self.set_register(
                             reg3base,
                             base_add_reg.kind,
@@ -776,8 +776,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "str" => {
-                    let reg1 = instruction.r1.clone().unwrap();
-                    let reg2 = instruction.r2.clone().unwrap();
+                    let reg1 = instruction.r1.clone().expect("computer");
+                    let reg2 = instruction.r2.clone().expect("computer");
 
                     let reg2base = get_register_name_string(reg2.clone());
                     let mut base_add_reg =
@@ -807,7 +807,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // post-index
                     if instruction.r3.is_some() {
-                        let new_imm = self.operand(instruction.r3.clone().unwrap());
+                        let new_imm = self.operand(instruction.r3.clone().expect("computer"));
                         self.set_register(
                             reg2base,
                             base_add_reg.kind,
@@ -817,9 +817,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "stp" => {
-                    let reg1 = instruction.r1.clone().unwrap();
-                    let reg2 = instruction.r2.clone().unwrap();
-                    let reg3 = instruction.r3.clone().unwrap();
+                    let reg1 = instruction.r1.clone().expect("computer");
+                    let reg2 = instruction.r2.clone().expect("computer");
+                    let reg3 = instruction.r3.clone().expect("computer");
 
                     let reg3base = get_register_name_string(reg3.clone());
                     let mut base_add_reg =
@@ -855,7 +855,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // post-index
                     if instruction.r4.is_some() {
-                        let new_imm = self.operand(instruction.r4.clone().unwrap());
+                        let new_imm = self.operand(instruction.r4.clone().expect("computer"));
                         self.set_register(
                             reg3base,
                             base_add_reg.kind,
@@ -923,8 +923,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
 
                 "st1" => {
-                    let reg1 = instruction.r1.clone().unwrap();
-                    let reg2 = instruction.r2.clone().unwrap();
+                    let reg1 = instruction.r1.clone().expect("computer");
+                    let reg2 = instruction.r2.clone().expect("computer");
 
                     let reg2base = get_register_name_string(reg2.clone());
                     let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
@@ -955,7 +955,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     .get_double(i);
                                     let mut offset = u64::from_be_bytes(offsets);
                                     (offset, _) =
-                                        offset.overflowing_shl(imm.offset.try_into().unwrap());
+                                        offset.overflowing_shl(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -982,7 +982,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     .get_double(i);
                                     let mut offset = u64::from_be_bytes(offsets);
                                     (offset, _) =
-                                        offset.overflowing_shr(imm.offset.try_into().unwrap());
+                                        offset.overflowing_shr(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -996,7 +996,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     .get_word(i);
                                     let mut offset = u32::from_be_bytes(offsets);
                                     (offset, _) =
-                                        offset.overflowing_shr(imm.offset.try_into().unwrap());
+                                        offset.overflowing_shr(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -1370,7 +1370,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         if reg3.is_some() {
             if let Some(expr) = reg3 {
-                let parts = expr.split_once('#').unwrap();
+                let parts = expr.split_once('#').expect("computer");
 
                 r2 = shift_right_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
             }
@@ -2081,7 +2081,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     if abstracts.contains(r) {
                         result = Some((
                             self.memory.get(r).expect("Region not in memory"),
-                            expression_to_ast(self.context, base_expr.clone()).unwrap(),
+                            expression_to_ast(self.context, base_expr.clone()).expect("computer"),
                         ));
                         break;
                     };
@@ -2110,7 +2110,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         // let width = ast::Int::from_i64(self.context, 2);    // how wide is memory access, two bytes
         let lowerbound_value = ast::Int::from_i64(self.context, 0);
         let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
-        let upperbound_value = expression_to_ast(self.context, region.get_length()).unwrap();
+        let upperbound_value = expression_to_ast(self.context, region.get_length()).expect("computer");
         let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
         let l = access.lt(&low_access);
         let u = access.ge(&up_access);

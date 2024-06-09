@@ -1,0 +1,9 @@
+[workspace]
+members = [
+  "bums_macros",
+  "memsafe-checker",
+  "playground",
+  "crypto-playground"
+]
+
+resolver = "2"

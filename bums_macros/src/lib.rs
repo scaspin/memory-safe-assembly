@@ -73,7 +73,7 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
     match &a.len {
         Expr::Lit(b) => match &b.lit {
             Lit::Int(i) => {
-                len = i.token().to_string().parse::<usize>().unwrap();
+                len = i.token().to_string().parse::<usize>().expect("calculate_size_array");
             }
             _ => (),
         },
@@ -307,7 +307,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // compile file
     // make this path
     let filename = attributes.filename.value();
-    let res = File::open(filename.clone());
+    let assembly_file: std::path::PathBuf = [std::env::var("OUT_DIR").expect("OUT_DIR"), filename.clone()].iter().collect();
+    let res = File::open(assembly_file);
     let file: File;
     match res {
         Ok(opened) => {
@@ -413,7 +414,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    let label = "_".to_owned() + &vars.item_fn.ident.to_string();
+    let label = &vars.item_fn.ident.to_string();
     let res = engine.start(label.clone());
 
     match res {
@@ -441,11 +442,11 @@ struct InlineInput {
 impl Parse for InlineInput {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut inputs = punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)
-            .unwrap()
+            .expect("parse InlineInput")
             .into_iter();
         let output = Self {
-            code: inputs.next().unwrap(),
-            startlabel: inputs.next().unwrap().clone(),
+            code: inputs.next().expect("code"),
+            startlabel: inputs.next().expect("startlabel").clone(),
         };
         return Ok(output);
     }
@@ -460,11 +461,11 @@ struct GlobalInput {
 impl Parse for GlobalInput {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut inputs = punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)
-            .unwrap()
+            .expect("parse_inputs")
             .into_iter();
         let output = Self {
-            filename: inputs.next().unwrap().clone(),
-            startlabel: inputs.next().unwrap().clone(),
+            filename: inputs.next().expect("filename").clone(),
+            startlabel: inputs.next().expect("parse_startlabel").clone(),
         };
         return Ok(output);
     }

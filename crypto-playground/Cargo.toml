@@ -10,7 +10,7 @@ num-traits = "0.2.18"
 
 [dev-dependencies]
 aws-lc-rs = "*"
-aws-lc-sys = "*"
+aws-lc-sys = "0.14.1"
 
 [build-dependencies]
 bums_macros = { path = "../bums_macros" }

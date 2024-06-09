@@ -574,7 +574,7 @@ impl FromStr for Instruction {
             let right = s.rfind(']');
             let exclamation = s.rfind('!');
             if left.is_some() && right.is_some() {
-                brac = s[left.unwrap()..right.unwrap()].to_string();
+                brac = s[left.expect("common")..right.expect("common")].to_string();
             }
             if exclamation.is_some() {
                 brac = brac + "!";
@@ -672,13 +672,13 @@ pub fn string_to_int(s: &str) -> i64 {
     if v.contains('*') {
         let parts = v.split('*');
         for part in parts {
-            let m = part.parse::<i64>().unwrap();
+            let m = part.parse::<i64>().expect("common");
             value = value * m;
         }
     } else if v.contains("x") {
-        value = i64::from_str_radix(v.strip_prefix("0x").unwrap(), 16).unwrap();
+        value = i64::from_str_radix(v.strip_prefix("0x").expect("common"), 16).expect("common");
     } else {
-        value = v.parse::<i64>().unwrap();
+        value = v.parse::<i64>().expect("common");
     }
 
     return value;
@@ -706,13 +706,13 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
             return Some(ast::Int::new_const(context, a));
         }
         AbstractExpression::Register(reg) => {
-            let base = expression_to_ast(context, reg.base.clone().unwrap()).unwrap();
+            let base = expression_to_ast(context, reg.base.clone().expect("common")).expect("common");
             let offset = ast::Int::from_i64(context, reg.offset);
             return Some(ast::Int::add(context, &[&base, &offset]));
         }
         AbstractExpression::Expression(op, old1, old2) => {
-            let new1 = expression_to_ast(context, *old1).unwrap();
-            let new2 = expression_to_ast(context, *old2).unwrap();
+            let new1 = expression_to_ast(context, *old1).expect("common");
+            let new2 = expression_to_ast(context, *old2).expect("common");
             match op.as_str() {
                 "+" => return Some(ast::Int::add(context, &[&new1, &new2])),
                 "-" => return Some(ast::Int::sub(context, &[&new1, &new2])),
@@ -738,8 +738,8 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
 }
 
 pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> Option<ast::Bool> {
-    let left = expression_to_ast(context, *expression.left).unwrap();
-    let right = expression_to_ast(context, *expression.right).unwrap();
+    let left = expression_to_ast(context, *expression.left).expect("common");
+    let right = expression_to_ast(context, *expression.right).expect("common");
     match expression.op.as_str() {
         "<" => {
             return Some(left.le(&right));
