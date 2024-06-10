@@ -55,6 +55,10 @@
 _sha256_block_data_order:
 	// AARCH64_VALID_CALL_TARGET
 	// AARCH64_SIGN_LINK_REGISTER
+
+	cmp x2, xzr
+	b.eq Early_abort
+
 	stp	x29,x30,[sp,#-128]!
 	add	x29,sp,#0
 
@@ -1018,6 +1022,8 @@ Loop_16_xx:
 	// AARCH64_VALIDATE_LINK_REGISTER
 	ret
 
+Early_abort:
+	ret
 
 .section	__TEXT,__const
 .align	6

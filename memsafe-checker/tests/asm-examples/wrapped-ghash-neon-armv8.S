@@ -61,7 +61,7 @@ _gcm_gmult_neon:
 _gcm_ghash_neon:
 	// AARCH64_VALID_CALL_TARGET
 	cmp x3, xzr
-	b.ne Early_abort
+	b.eq Early_abort
 
 	ld1	{v0.16b}, [x0]		// load Xi
 	ld1	{v5.1d}, [x1], #8		// load twisted H

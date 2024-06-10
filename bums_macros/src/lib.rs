@@ -110,6 +110,60 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
+fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
+    let left_expr = syn_expr_to_abstract_expression(&input.left);
+    let right_expr = syn_expr_to_abstract_expression(&input.right);
+
+    match input.op {
+        BinOp::Add(_) => return generate_expression("+", left_expr, right_expr),
+        BinOp::Sub(_) => return generate_expression("-", left_expr, right_expr),
+        BinOp::Div(_) => return generate_expression("/", left_expr, right_expr),
+        BinOp::Mul(_) => return generate_expression("*", left_expr, right_expr),
+        _ => todo!(),
+    }
+}
+
+fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
+    match &input {
+        Expr::Lit(l) => match &l.lit {
+            Lit::Str(s) => return AbstractExpression::Abstract(s.value()),
+            Lit::Int(i) => {
+                return AbstractExpression::Immediate(
+                    i.base10_parse::<i64>().expect("undefined integer"),
+                )
+            }
+            _ => todo!(),
+        },
+        Expr::Binary(b) => return binary_to_abstract_expression(b),
+        Expr::MethodCall(c) => {
+            let mut var_name: String = String::new();
+            match *c.receiver.clone() {
+                Expr::Path(a) => {
+                    var_name = a.path.segments[0].ident.to_string();
+                }
+                _ => (),
+            }
+            match c.method.to_string().as_str() {
+                "len" => {
+                    var_name = var_name + "_len";
+                }
+                "as_ptr" => {
+                    var_name = var_name + "_as_ptr";
+                }
+                "as_mut_ptr" => {
+                    var_name = var_name + "_as_mut_ptr";
+                }
+                _ => (),
+            };
+            return AbstractExpression::Abstract(var_name);
+        }
+        Expr::Path(p) => {
+            return AbstractExpression::Abstract(p.path.segments[0].ident.to_string());
+        }
+        _ => todo!(),
+    }
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -224,11 +278,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     extern_fn.ident = fn_name.clone();
     if !attributes.argument_list.is_empty() {
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
+        let mut span = proc_macro2::Span::call_site();
         for i in attributes.argument_list {
             match i {
                 Expr::MethodCall(a) => {
                     let mut var_name: String = String::new();
-                    let mut span = proc_macro2::Span::call_site();
                     match *a.receiver {
                         Expr::Path(a) => {
                             var_name = a.path.segments[0].ident.to_string();
@@ -283,10 +337,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 }
                 Expr::Binary(b) => {
-                    let exp = quote!{#b}.to_string();
+                    let exp = quote! {#b}.to_string();
                     let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
-                    input_expressions.insert(name.clone(), exp);
-                    new_args.push(parse_quote! {#name : usize});
+                    input_expressions.insert(name.clone(), b);
+                    let n = Ident::new(&name, span.into());
+                    new_args.push(parse_quote! {#n : usize});
                 }
                 Expr::Lit(l) => new_args.push(parse_quote! {#l: usize}),
                 _ => todo!(),
@@ -351,23 +406,20 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     Pat::Ident(b) => {
                         name = b.ident.clone().to_string();
                     }
-                    Pat::Lit(l) => {
-                        match &l.lit {
-                            Lit::Str(s) =>name =  s.value(),
-                            _ => todo!(),
-                        }
-                    }
+                    Pat::Lit(l) => match &l.lit {
+                        Lit::Str(s) => name = s.value(),
+                        _ => todo!(),
+                    },
                     _ => todo!(),
                 }
                 //get type to get size
                 match &*pat_type.ty {
                     Type::Path(_) => {
-                        // simple types that fit in a register?
-                        // for c in &a.path.segments {
-                        //      size = size + calculate_size_of(c.ident.to_string());
-                        // }
                         if let Some(binary) = input_expressions.get(&name) {
-                            engine.add_abstract_expression_from(i, string_to_expression(binary));
+                            engine.add_abstract_expression_from(
+                                i,
+                                binary_to_abstract_expression(binary),
+                            );
                         } else {
                             engine.add_abstract_from(i, name.clone());
                         }
@@ -380,7 +432,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             name.clone(),
                             AbstractExpression::Immediate(size as i64),
                         );
-
                     }
                     Type::Ptr(a) => {
                         // load pointer into register
@@ -409,17 +460,25 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
 
                         let bound = no_suffix.to_owned() + "_len";
-                        if a.mutability.is_some() {  
+                        if a.mutability.is_some() {
                             engine.add_region(
                                 RegionType::WRITE,
                                 name.clone(),
-                                AbstractExpression::Abstract(bound),
+                                generate_expression(
+                                    "*",
+                                    AbstractExpression::Abstract(bound),
+                                    AbstractExpression::Immediate(8),
+                                ),
                             );
                         } else {
                             engine.add_region(
                                 RegionType::READ,
                                 name.clone(),
-                                AbstractExpression::Abstract(bound.clone()),
+                                generate_expression(
+                                    "*",
+                                    AbstractExpression::Abstract(bound),
+                                    AbstractExpression::Immediate(8),
+                                ),
                             );
                         }
                     }
