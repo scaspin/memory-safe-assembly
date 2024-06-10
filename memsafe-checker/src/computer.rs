@@ -37,7 +37,7 @@ fn get_register_index(reg_name: String) -> usize {
 pub struct ARMCORTEXA<'ctx> {
     pub registers: [RegisterValue; 33],
     pub simd_registers: [SimdRegister; 32],
-    pub zero: Option<FlagValue>,
+    zero: Option<FlagValue>,
     neg: Option<FlagValue>,
     carry: Option<FlagValue>,
     overflow: Option<FlagValue>,

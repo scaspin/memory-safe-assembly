@@ -445,7 +445,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         if let Some(bound) = input_sizes.get(no_suffix) {
                             if a.mutability.is_some() {
                                 engine.add_region(
-                                    RegionType::RW,
+                                    RegionType::WRITE,
                                     name.clone(),
                                     AbstractExpression::Immediate(*bound as i64),
                                 );
