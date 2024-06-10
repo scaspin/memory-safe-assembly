@@ -7,12 +7,12 @@ use punctuated::Punctuated;
 use quote::quote;
 use std::collections::HashMap;
 use std::fs::File;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader};
 use syn::*;
 use z3::{Config, Context};
 
-use bums;
-use bums::common::{AbstractExpression, RegionType};
+use bums::common::*;
 
 #[derive(Debug)]
 struct CallColon {
@@ -73,7 +73,11 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
     match &a.len {
         Expr::Lit(b) => match &b.lit {
             Lit::Int(i) => {
-                len = i.token().to_string().parse::<usize>().expect("calculate_size_array");
+                len = i
+                    .token()
+                    .to_string()
+                    .parse::<usize>()
+                    .expect("calculate_size_array");
             }
             _ => (),
         },
@@ -104,6 +108,66 @@ fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
     return elem;
 }
 
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
+
+fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
+    let left_expr = syn_expr_to_abstract_expression(&input.left);
+    let right_expr = syn_expr_to_abstract_expression(&input.right);
+
+    match input.op {
+        BinOp::Add(_) => return generate_expression("+", left_expr, right_expr),
+        BinOp::Sub(_) => return generate_expression("-", left_expr, right_expr),
+        BinOp::Div(_) => return generate_expression("/", left_expr, right_expr),
+        BinOp::Mul(_) => return generate_expression("*", left_expr, right_expr),
+        _ => todo!(),
+    }
+}
+
+fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
+    match &input {
+        Expr::Lit(l) => match &l.lit {
+            Lit::Str(s) => return AbstractExpression::Abstract(s.value()),
+            Lit::Int(i) => {
+                return AbstractExpression::Immediate(
+                    i.base10_parse::<i64>().expect("undefined integer"),
+                )
+            }
+            _ => todo!(),
+        },
+        Expr::Binary(b) => return binary_to_abstract_expression(b),
+        Expr::MethodCall(c) => {
+            let mut var_name: String = String::new();
+            match *c.receiver.clone() {
+                Expr::Path(a) => {
+                    var_name = a.path.segments[0].ident.to_string();
+                }
+                _ => (),
+            }
+            match c.method.to_string().as_str() {
+                "len" => {
+                    var_name = var_name + "_len";
+                }
+                "as_ptr" => {
+                    var_name = var_name + "_as_ptr";
+                }
+                "as_mut_ptr" => {
+                    var_name = var_name + "_as_mut_ptr";
+                }
+                _ => (),
+            };
+            return AbstractExpression::Abstract(var_name);
+        }
+        Expr::Path(p) => {
+            return AbstractExpression::Abstract(p.path.segments[0].ident.to_string());
+        }
+        _ => todo!(),
+    }
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -118,6 +182,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_sizes = HashMap::new();
     let mut pointer_sizes = HashMap::new();
     let mut input_types = HashMap::new();
+    let mut input_expressions = HashMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
     // if caller did not specify arguments in macro, grab names from function call
     if attributes.argument_list.is_empty() {
@@ -179,12 +244,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 let ty = calculate_type_of_slice_ptr(b);
                                 pointer_sizes.insert(name, ty);
                             }
-                            _ => (),
+                            _ => todo!(),
                         },
-                        _ => (),
+                        _ => todo!(),
                     }
                 }
-                _ => (),
+                _ => todo!(),
             }
         }
         for i in &attributes.argument_list {
@@ -217,11 +282,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     extern_fn.ident = fn_name.clone();
     if !attributes.argument_list.is_empty() {
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
+        let mut span = proc_macro2::Span::call_site();
         for i in attributes.argument_list {
             match i {
                 Expr::MethodCall(a) => {
                     let mut var_name: String = String::new();
-                    let mut span = proc_macro2::Span::call_site();
                     match *a.receiver {
                         Expr::Path(a) => {
                             var_name = a.path.segments[0].ident.to_string();
@@ -255,7 +320,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u8" => new_args.push(parse_quote! {#n: *mut u8}),
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
-                                    "u128" => new_args.push(parse_quote! {#n: *const u128}),
+                                    "u128" => new_args.push(parse_quote! {#n: *mut u128}),
                                     _ => (),
                                 }
                             } else {
@@ -275,13 +340,15 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         new_args.push(parse_quote! {#i: #ty});
                     }
                 }
-                Expr::Binary(_) => {
-                    //FIX: find a better name for this
-                    let n = Ident::new("expr", proc_macro2::Span::call_site().into());
+                Expr::Binary(b) => {
+                    let exp = quote! {#b}.to_string();
+                    let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
+                    input_expressions.insert(name.clone(), b);
+                    let n = Ident::new(&name, span.into());
                     new_args.push(parse_quote! {#n : usize});
                 }
-                Expr::Lit(_) => new_args.push(parse_quote! {_: usize}),
-                _ => (),
+                Expr::Lit(l) => new_args.push(parse_quote! {#l: usize}),
+                _ => todo!(),
             }
         }
         for a in &new_args {
@@ -307,7 +374,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // compile file
     // make this path
     let filename = attributes.filename.value();
-    let assembly_file: std::path::PathBuf = [std::env::var("OUT_DIR").expect("OUT_DIR"), filename.clone()].iter().collect();
+    let assembly_file: std::path::PathBuf =
+        [std::env::var("OUT_DIR").expect("OUT_DIR"), filename.clone()]
+            .iter()
+            .collect();
     let res = File::open(assembly_file);
     let file: File;
     match res {
@@ -343,27 +413,29 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     Pat::Ident(b) => {
                         name = b.ident.clone().to_string();
                     }
-                    _ => (),
+                    Pat::Lit(l) => match &l.lit {
+                        Lit::Str(s) => name = s.value(),
+                        _ => todo!(),
+                    },
+                    _ => todo!(),
                 }
                 //get type to get size
                 match &*pat_type.ty {
                     Type::Path(_) => {
-                        // simple types that fit in a register?
-                        // for c in &a.path.segments {
-                        //      size = size + calculate_size_of(c.ident.to_string());
-                        // }
-                        engine.add_abstract_from(i, name.clone());
+                        if let Some(binary) = input_expressions.get(&name) {
+                            engine.add_abstract_expression_from(
+                                i,
+                                binary_to_abstract_expression(binary),
+                            );
+                        } else {
+                            engine.add_abstract_from(i, name.clone());
+                        }
                     }
                     Type::Array(a) => {
                         let size = calculate_size_of_array(a);
                         engine.add_abstract_from(i, name.clone());
                         engine.add_region(
-                            RegionType::WRITE,
-                            name.clone(),
-                            AbstractExpression::Immediate(size as i64),
-                        );
-                        engine.add_region(
-                            RegionType::READ,
+                            RegionType::RW,
                             name.clone(),
                             AbstractExpression::Immediate(size as i64),
                         );
@@ -378,32 +450,42 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                         // if pointing to an array defined as a function param, no abstract length
                         if let Some(bound) = input_sizes.get(no_suffix) {
-                            engine.add_region(
-                                RegionType::READ,
-                                name.clone(),
-                                AbstractExpression::Immediate(bound.clone() as i64),
-                            );
                             if a.mutability.is_some() {
                                 engine.add_region(
                                     RegionType::WRITE,
                                     name.clone(),
                                     AbstractExpression::Immediate(*bound as i64),
                                 );
+                            } else {
+                                engine.add_region(
+                                    RegionType::READ,
+                                    name.clone(),
+                                    AbstractExpression::Immediate(bound.clone() as i64),
+                                );
                             }
                             continue;
                         }
 
                         let bound = no_suffix.to_owned() + "_len";
-                        engine.add_region(
-                            RegionType::READ,
-                            name.clone(),
-                            AbstractExpression::Abstract(bound.clone()),
-                        );
                         if a.mutability.is_some() {
                             engine.add_region(
                                 RegionType::WRITE,
                                 name.clone(),
-                                AbstractExpression::Abstract(bound),
+                                generate_expression(
+                                    "*",
+                                    AbstractExpression::Abstract(bound),
+                                    AbstractExpression::Immediate(8),
+                                ),
+                            );
+                        } else {
+                            engine.add_region(
+                                RegionType::READ,
+                                name.clone(),
+                                generate_expression(
+                                    "*",
+                                    AbstractExpression::Abstract(bound),
+                                    AbstractExpression::Immediate(8),
+                                ),
                             );
                         }
                     }
@@ -414,8 +496,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    let label = &vars.item_fn.ident.to_string();
-    let res = engine.start(label.clone());
+    let label = "_".to_owned() + &vars.item_fn.ident.to_string();
+    let res = engine.start(label);
 
     match res {
         Ok(_) => return token_stream,

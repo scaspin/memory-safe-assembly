@@ -1,12 +1,14 @@
 .text
 
-
 .private_extern	_OPENSSL_armcap_P
 .globl	_sha256_block_data_order
 .private_extern	_sha256_block_data_order
 
 .align	6
 _sha256_block_data_order:
+	cmp x2, xzr
+	b.eq Early_abort
+	
 	stp	x29,x30,[sp,#-128]!
 	add	x29,sp,#0
 
@@ -31,9 +33,6 @@ Loop:
 	ldr	w19,[x30],#4			// *K++
 	eor	w28,w21,w22				// magic seed
 	str	x1,[x29,#112]
-#ifndef	__AARCH64EB__
-	rev	w3,w3			// 0
-#endif
 	ror	w16,w24,#6
 	add	w27,w27,w19			// h+=K[i]
 	eor	w6,w24,w24,ror#14
@@ -54,9 +53,6 @@ Loop:
 	add	w27,w27,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w27,w27,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w4,w4			// 1
-#endif
 	ldp	w5,w6,[x1],#2*4
 	add	w27,w27,w17			// h+=Sigma0(a)
 	ror	w16,w23,#6
@@ -79,9 +75,6 @@ Loop:
 	add	w26,w26,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w26,w26,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w5,w5			// 2
-#endif
 	add	w26,w26,w17			// h+=Sigma0(a)
 	ror	w16,w22,#6
 	add	w25,w25,w19			// h+=K[i]
@@ -103,9 +96,6 @@ Loop:
 	add	w25,w25,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w25,w25,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w6,w6			// 3
-#endif
 	ldp	w7,w8,[x1],#2*4
 	add	w25,w25,w17			// h+=Sigma0(a)
 	ror	w16,w21,#6
@@ -128,9 +118,6 @@ Loop:
 	add	w24,w24,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w24,w24,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w7,w7			// 4
-#endif
 	add	w24,w24,w17			// h+=Sigma0(a)
 	ror	w16,w20,#6
 	add	w23,w23,w19			// h+=K[i]
@@ -152,9 +139,6 @@ Loop:
 	add	w23,w23,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w23,w23,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w8,w8			// 5
-#endif
 	ldp	w9,w10,[x1],#2*4
 	add	w23,w23,w17			// h+=Sigma0(a)
 	ror	w16,w27,#6
@@ -177,9 +161,6 @@ Loop:
 	add	w22,w22,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w22,w22,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w9,w9			// 6
-#endif
 	add	w22,w22,w17			// h+=Sigma0(a)
 	ror	w16,w26,#6
 	add	w21,w21,w19			// h+=K[i]
@@ -201,9 +182,6 @@ Loop:
 	add	w21,w21,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w21,w21,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w10,w10			// 7
-#endif
 	ldp	w11,w12,[x1],#2*4
 	add	w21,w21,w17			// h+=Sigma0(a)
 	ror	w16,w25,#6
@@ -226,9 +204,6 @@ Loop:
 	add	w20,w20,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w20,w20,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w11,w11			// 8
-#endif
 	add	w20,w20,w17			// h+=Sigma0(a)
 	ror	w16,w24,#6
 	add	w27,w27,w19			// h+=K[i]
@@ -250,9 +225,6 @@ Loop:
 	add	w27,w27,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w27,w27,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w12,w12			// 9
-#endif
 	ldp	w13,w14,[x1],#2*4
 	add	w27,w27,w17			// h+=Sigma0(a)
 	ror	w16,w23,#6
@@ -275,9 +247,6 @@ Loop:
 	add	w26,w26,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w26,w26,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w13,w13			// 10
-#endif
 	add	w26,w26,w17			// h+=Sigma0(a)
 	ror	w16,w22,#6
 	add	w25,w25,w19			// h+=K[i]
@@ -299,9 +268,6 @@ Loop:
 	add	w25,w25,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w25,w25,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w14,w14			// 11
-#endif
 	ldp	w15,w0,[x1],#2*4
 	add	w25,w25,w17			// h+=Sigma0(a)
 	str	w6,[sp,#12]
@@ -325,9 +291,6 @@ Loop:
 	add	w24,w24,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w24,w24,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w15,w15			// 12
-#endif
 	add	w24,w24,w17			// h+=Sigma0(a)
 	str	w7,[sp,#0]
 	ror	w16,w20,#6
@@ -350,9 +313,6 @@ Loop:
 	add	w23,w23,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w23,w23,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w0,w0			// 13
-#endif
 	ldp	w1,w2,[x1]
 	add	w23,w23,w17			// h+=Sigma0(a)
 	str	w8,[sp,#4]
@@ -376,9 +336,6 @@ Loop:
 	add	w22,w22,w19			// h+=Maj(a,b,c)
 	ldr	w19,[x30],#4		// *K++, w28 in next round
 	//add	w22,w22,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w1,w1			// 14
-#endif
 	ldr	w6,[sp,#12]
 	add	w22,w22,w17			// h+=Sigma0(a)
 	str	w9,[sp,#8]
@@ -402,9 +359,6 @@ Loop:
 	add	w21,w21,w28			// h+=Maj(a,b,c)
 	ldr	w28,[x30],#4		// *K++, w19 in next round
 	//add	w21,w21,w17			// h+=Sigma0(a)
-#ifndef	__AARCH64EB__
-	rev	w2,w2			// 15
-#endif
 	ldr	w7,[sp,#0]
 	add	w21,w21,w17			// h+=Sigma0(a)
 	str	w10,[sp,#12]
@@ -967,8 +921,11 @@ Loop_16_xx:
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#128
+	AARCH64_VALIDATE_LINK_REGISTER
 	ret
 
+Early_abort:
+	ret
 
 .section	__TEXT,__const
 .align	6
@@ -993,6 +950,4 @@ LK256:
 .long	0	//terminator
 
 .byte	83,72,65,50,53,54,32,98,108,111,99,107,32,116,114,97,110,115,102,111,114,109,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
-.align	2
-.align	2
-.text
+

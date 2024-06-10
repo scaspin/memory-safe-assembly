@@ -2,7 +2,6 @@
 members = [
   "bums_macros",
   "memsafe-checker",
-  "playground",
   "crypto-playground"
 ]
 

@@ -167,7 +167,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         &self,
     ) -> (
         [RegisterValue; 33],
-        [SimdRegister; 32],
+        // [SimdRegister; 32],
         Option<FlagValue>,
         Option<FlagValue>,
         Option<FlagValue>,
@@ -175,7 +175,7 @@ impl<'ctx> ARMCORTEXA<'_> {
     ) {
         return (
             self.registers.clone(),
-            self.simd_registers.clone(),
+            // self.simd_registers.clone(),
             self.zero.clone(),
             self.neg.clone(),
             self.carry.clone(),
@@ -349,8 +349,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "subs" => {
                     self.cmp(
-                        instruction.r1.clone().expect("need register to compare"),
                         instruction.r2.clone().expect("need register to compare"),
+                        instruction.r3.clone().expect("need register to compare"),
                     );
 
                     self.arithmetic(
@@ -623,24 +623,24 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "b.ne" | "bne" => {
                     match &self.zero {
-                // if zero is set to false, then cmp -> not equal and we branch
-                Some(flag) => match flag {
-                    FlagValue::REAL(b) => {
-                        if !b {
-                            return Ok(Some((None, instruction.r1.clone(), None)));
-                        } else {
-                            return Ok(None);
-                        }
+                                // if zero is set to false, then cmp -> not equal and we branch
+                        Some(flag) => match flag {
+                            FlagValue::REAL(b) => {
+                                if !b {
+                                    return Ok(Some((None, instruction.r1.clone(), None)));
+                                } else {
+                                    return Ok(None);
+                                }
+                            }
+                            FlagValue::ABSTRACT(s) => {
+                                return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
+                            }
+                        },
+                        None => return Err(
+                            "Flag cannot be branched on since it has not been set within the program yet"
+                                .to_string(),
+                        ),
                     }
-                    FlagValue::ABSTRACT(s) => {
-                        return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
-                    }
-                },
-                None => return Err(
-                    "Flag cannot be branched on since it has not been set within the program yet"
-                        .to_string(),
-                ),
-            }
                 }
                 "b.eq" => {
                     match &self.zero {
@@ -672,9 +672,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     return Ok(Some((None, Some("return".to_string()), None)));
                                 }
                             }
-                            return Ok(Some((None, None, Some(x30.offset.try_into().expect("computer")))));
+                            return Ok(Some((
+                                None,
+                                None,
+                                Some(x30.offset.try_into().expect("computer")),
+                            )));
                         } else {
-                            log::error!("cannot jump on non-address");
+                            return Ok(Some((None, Some("return".to_string()), None)));
                         }
                     } else {
                         let _r1 = &self.registers[get_register_index(
@@ -954,8 +958,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_double(i);
                                     let mut offset = u64::from_be_bytes(offsets);
-                                    (offset, _) =
-                                        offset.overflowing_shl(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset
+                                        .overflowing_shl(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -981,8 +985,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_double(i);
                                     let mut offset = u64::from_be_bytes(offsets);
-                                    (offset, _) =
-                                        offset.overflowing_shr(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset
+                                        .overflowing_shr(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -995,8 +999,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_word(i);
                                     let mut offset = u32::from_be_bytes(offsets);
-                                    (offset, _) =
-                                        offset.overflowing_shr(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset
+                                        .overflowing_shr(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -1630,8 +1634,8 @@ impl<'ctx> ARMCORTEXA<'_> {
     }
 
     fn cmp(&mut self, reg1: String, reg2: String) {
-        let r1 = self.registers[get_register_index(reg1.clone())].clone();
-        let r2 = self.registers[get_register_index(reg2.clone())].clone();
+        let r1 = self.operand(reg1.clone()).clone();
+        let r2 = self.operand(reg2.clone()).clone();
 
         if r1.kind == r2.kind {
             match r1.kind {
@@ -2100,17 +2104,24 @@ impl<'ctx> ARMCORTEXA<'_> {
             }
         };
 
-        if region.kind != ty && region.kind != RegionType::RW {
-            return Err(MemorySafetyError::new("Access does not match region type"));
+        if ty == RegionType::WRITE && region.kind == RegionType::READ {
+            return Err(MemorySafetyError::new(&format!(
+                "Access does not match region type {:#?} {:?} {:?}",
+                region.kind, ty, base_expr
+            )));
         }
 
-        let abs_offset = ast::Int::from_i64(self.context, offset);
+        let mut abs_offset = ast::Int::from_i64(self.context, offset);
+        if base_expr.contains("sp") {
+            abs_offset = ast::Int::from_i64(self.context, offset.abs());
+        }
         let access = ast::Int::add(self.context, &[&base, &abs_offset]);
 
         // let width = ast::Int::from_i64(self.context, 2);    // how wide is memory access, two bytes
         let lowerbound_value = ast::Int::from_i64(self.context, 0);
         let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
-        let upperbound_value = expression_to_ast(self.context, region.get_length()).expect("computer");
+        let upperbound_value =
+            expression_to_ast(self.context, region.get_length()).expect("computer");
         let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
         let l = access.lt(&low_access);
         let u = access.ge(&up_access);
@@ -2125,6 +2136,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 return Ok(());
             }
             (a, b) => {
+                log::info!("Load from address {:?} + {} unsafe", base_expr, offset);
                 log::error!(
                     "impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}",
                     a,

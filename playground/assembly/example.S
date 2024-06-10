@@ -1,3 +1,0 @@
-.globl	start
-start: 
-    nop

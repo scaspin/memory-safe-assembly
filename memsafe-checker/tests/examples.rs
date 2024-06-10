@@ -7,7 +7,7 @@ mod tests {
 
     #[test]
     fn bn_add() -> std::io::Result<()> {
-        env_logger::init();
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/bn-armv8-apple.S")?;
         let reader = BufReader::new(file);
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn sha256_armv8_ios64() -> std::io::Result<()> {
-        //env_logger::init();
+        // env_logger::init();
 
         let file = File::open("tests/asm-examples/processed-sha256-armv8-ios64.S")?;
         let reader = BufReader::new(file);
@@ -108,7 +108,7 @@ mod tests {
         let length = AbstractExpression::Expression(
             "lsl".to_string(),
             Box::new(blocks.clone()),
-            Box::new(AbstractExpression::Immediate(6)),
+            Box::new(AbstractExpression::Immediate(12)),
         );
         let base = AbstractExpression::Abstract("Base".to_string());
 
@@ -420,7 +420,7 @@ mod tests {
         engine.add_region(
             RegionType::READ,
             "base".to_string(),
-            AbstractExpression::Immediate(2),
+            AbstractExpression::Immediate(1),
         );
 
         let res = engine.start("start".to_string());
@@ -744,6 +744,111 @@ mod tests {
 
         let res = engine.start(start_label);
         assert!(res.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn corrected_simd_gcm_ghash_neon() -> std::io::Result<()> {
+        // env_logger::init();
+
+        let file = File::open("tests/asm-examples/wrapped-ghash-neon-armv8.S")?;
+        let reader = BufReader::new(file);
+        let start_label = String::from("_gcm_ghash_neon");
+
+        let mut program = Vec::new();
+        for line in reader.lines() {
+            program.push(line.unwrap_or(String::from("")));
+        }
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        engine.add_abstract(
+            "x0".to_string(),
+            AbstractExpression::Abstract("context".to_string()),
+        );
+        engine.add_region(
+            RegionType::RW,
+            "context".to_string(),
+            AbstractExpression::Immediate(16),
+        );
+
+        engine.add_abstract(
+            "x1".to_string(),
+            AbstractExpression::Abstract("h".to_string()),
+        );
+        engine.add_region(
+            RegionType::RW,
+            "h".to_string(),
+            AbstractExpression::Immediate(128 * 16),
+        );
+
+        let blocks = AbstractExpression::Abstract("blocks".to_string());
+        engine.add_abstract(
+            "x2".to_string(),
+            AbstractExpression::Abstract("input".to_string()),
+        );
+        engine.add_region(
+            RegionType::RW,
+            "input".to_string(),
+            generate_expression("*", blocks.clone(), AbstractExpression::Immediate(16 * 4)),
+        );
+
+        engine.add_abstract(
+            "x3".to_string(),
+            generate_expression("*", blocks.clone(), AbstractExpression::Immediate(16)),
+        );
+
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn corrected_sha256_armv8_ios64() -> std::io::Result<()> {
+        // env_logger::init();
+
+        let file = File::open("tests/asm-examples/wrapped-sha256-armv8-ios64.S")?;
+        let reader = BufReader::new(file);
+        let start_label = String::from("_sha256_block_data_order");
+
+        let mut program = Vec::new();
+        for line in reader.lines() {
+            program.push(line.unwrap_or(String::from("")));
+        }
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+        // x0 -- context
+        engine.add_region(
+            RegionType::RW,
+            "x0".to_string(),
+            AbstractExpression::Immediate(32 * 8),
+        );
+
+        let blocks = AbstractExpression::Abstract("Blocks".to_string());
+        let length = AbstractExpression::Expression(
+            "*".to_string(),
+            Box::new(blocks.clone()),
+            Box::new(AbstractExpression::Immediate(64 * 8)),
+        );
+        let base = AbstractExpression::Abstract("Base".to_string());
+
+        // x1 -- input blocks
+        engine.add_abstract(String::from("x1"), base.clone());
+        engine.add_region(RegionType::READ, "Base".to_string(), length);
+
+        // x2 -- number of blocks
+        engine.add_abstract(String::from("x2"), blocks);
+
+        //engine.dont_fail_fast();
+        let res = engine.start(start_label);
+        assert!(res.is_ok());
         Ok(())
     }
 }
