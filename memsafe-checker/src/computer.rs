@@ -672,7 +672,11 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     return Ok(Some((None, Some("return".to_string()), None)));
                                 }
                             }
-                            return Ok(Some((None, None, Some(x30.offset.try_into().expect("computer")))));
+                            return Ok(Some((
+                                None,
+                                None,
+                                Some(x30.offset.try_into().expect("computer")),
+                            )));
                         } else {
                             return Ok(Some((None, Some("return".to_string()), None)));
                         }
@@ -954,8 +958,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_double(i);
                                     let mut offset = u64::from_be_bytes(offsets);
-                                    (offset, _) =
-                                        offset.overflowing_shl(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset
+                                        .overflowing_shl(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -981,8 +985,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_double(i);
                                     let mut offset = u64::from_be_bytes(offsets);
-                                    (offset, _) =
-                                        offset.overflowing_shr(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset
+                                        .overflowing_shr(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -995,8 +999,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_word(i);
                                     let mut offset = u32::from_be_bytes(offsets);
-                                    (offset, _) =
-                                        offset.overflowing_shr(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset
+                                        .overflowing_shr(imm.offset.try_into().expect("computer"));
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -2116,7 +2120,8 @@ impl<'ctx> ARMCORTEXA<'_> {
         // let width = ast::Int::from_i64(self.context, 2);    // how wide is memory access, two bytes
         let lowerbound_value = ast::Int::from_i64(self.context, 0);
         let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
-        let upperbound_value = expression_to_ast(self.context, region.get_length()).expect("computer");
+        let upperbound_value =
+            expression_to_ast(self.context, region.get_length()).expect("computer");
         let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
         let l = access.lt(&low_access);
         let u = access.ge(&up_access);

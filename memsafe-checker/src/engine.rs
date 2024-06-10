@@ -108,15 +108,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
         // load computer static memory
         let mut address = 4;
         for def in defs.iter() {
-            let v: Vec<&str> = def.split(|c| c == '\t' || c == ',').collect();
+            let v: Vec<&str> = def.split(|c| c == '\t' || c == ',' || c == ' ').collect();
             if v[0] == ".align" {
-                //alignment = v[1].parse::<usize>().expect("engine");
+                //let alignment = v[1].parse::<usize>().expect("engine");
                 // do nothing for now
-            } else if v[0] == ".byte" || v[0] == ".long" {
+            } else if v[0] == ".byte" || v[0] == ".long" || v[0] == ".quad" {
                 for i in v.iter().skip(1) {
                     let num: i64;
                     if i.contains("x") {
-                        num = i64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16).expect("engine3");
+                        num = i64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
+                            .expect("engine3");
                     } else {
                         if i.is_empty() {
                             continue;
@@ -669,8 +670,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 // && last_state == &self.computer.get_state()
                 {
                     self.computer.solver.pop(1);
-                    let condition =
-                        comparison_to_ast(self.computer.context, expression.clone()).expect("engineb");
+                    let condition = comparison_to_ast(self.computer.context, expression.clone())
+                        .expect("engineb");
                     self.computer.solver.assert(&condition.simplify());
                     self.in_loop = false;
                     return Some(!branch_decision);

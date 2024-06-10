@@ -69,6 +69,10 @@ sha256_block_data_order:
 	b.ne	.Lv8_entry
 #endif
 	AARCH64_SIGN_LINK_REGISTER
+
+	cmp x3, xzr
+	b.eq Early_abort
+
 	stp	x29,x30,[sp,#-128]!
 	add	x29,sp,#0
 
@@ -1031,6 +1035,10 @@ sha256_block_data_order:
 	ldp	x29,x30,[sp],#128
 	AARCH64_VALIDATE_LINK_REGISTER
 	ret
+
+Early_abort:
+	ret
+	
 .size	sha256_block_data_order,.-sha256_block_data_order
 
 .section	.rodata

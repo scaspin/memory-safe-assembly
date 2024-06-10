@@ -73,7 +73,11 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
     match &a.len {
         Expr::Lit(b) => match &b.lit {
             Lit::Int(i) => {
-                len = i.token().to_string().parse::<usize>().expect("calculate_size_array");
+                len = i
+                    .token()
+                    .to_string()
+                    .parse::<usize>()
+                    .expect("calculate_size_array");
             }
             _ => (),
         },
@@ -370,7 +374,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // compile file
     // make this path
     let filename = attributes.filename.value();
-    let assembly_file: std::path::PathBuf = [std::env::var("OUT_DIR").expect("OUT_DIR"), filename.clone()].iter().collect();
+    let assembly_file: std::path::PathBuf =
+        [std::env::var("OUT_DIR").expect("OUT_DIR"), filename.clone()]
+            .iter()
+            .collect();
     let res = File::open(assembly_file);
     let file: File;
     match res {
@@ -489,8 +496,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    let label = &vars.item_fn.ident.to_string();
-    let res = engine.start(label.clone());
+    let label = "_".to_owned() + &vars.item_fn.ident.to_string();
+    let res = engine.start(label);
 
     match res {
         Ok(_) => return token_stream,
