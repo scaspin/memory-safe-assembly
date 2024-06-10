@@ -420,7 +420,7 @@ mod tests {
         engine.add_region(
             RegionType::READ,
             "base".to_string(),
-            AbstractExpression::Immediate(2),
+            AbstractExpression::Immediate(1),
         );
 
         let res = engine.start("start".to_string());
@@ -828,14 +828,14 @@ mod tests {
         engine.add_region(
             RegionType::RW,
             "x0".to_string(),
-            AbstractExpression::Immediate(32),
+            AbstractExpression::Immediate(32 * 8),
         );
 
         let blocks = AbstractExpression::Abstract("Blocks".to_string());
         let length = AbstractExpression::Expression(
-            "lsl".to_string(),
+            "*".to_string(),
             Box::new(blocks.clone()),
-            Box::new(AbstractExpression::Immediate(12)),
+            Box::new(AbstractExpression::Immediate(64 * 8)),
         );
         let base = AbstractExpression::Abstract("Base".to_string());
 
