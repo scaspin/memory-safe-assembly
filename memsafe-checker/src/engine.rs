@@ -79,12 +79,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 // code.push(text.clone());
 
-                if text.ends_with(":") && !text.contains(".") {
+                if text.ends_with(":") {
                     let label = text.strip_suffix(":").expect("engine1");
                     labels.push((label.to_string(), line_number));
-                    // if text == start {
-                    //     pc = line_number;
-                    // }
                     code.push(Instruction::new(text))
                 } else {
                     let parsed = text.parse::<Instruction>();

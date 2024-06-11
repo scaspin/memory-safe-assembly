@@ -496,7 +496,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    let label = "_".to_owned() + &vars.item_fn.ident.to_string();
+    let mut label = vars.item_fn.ident.to_string();
+
+    if std::env::consts::OS == "macos" || std::env::consts::OS == "ios" {
+        label = "_".to_owned() + &label;
+    }
+
     let res = engine.start(label);
 
     match res {
