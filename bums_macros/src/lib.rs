@@ -403,22 +403,18 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // TODO: make sure to handle overflows into Stack
     // add memory safe regions
     for i in 0..arguments_to_memory_safe_regions.len() {
-        let mut name = String::new();
-
         let a = &arguments_to_memory_safe_regions[i];
         match a {
             FnArg::Typed(pat_type) => {
                 // get name
-                match &*pat_type.pat {
-                    Pat::Ident(b) => {
-                        name = b.ident.clone().to_string();
-                    }
+                let name = match &*pat_type.pat {
+                    Pat::Ident(b) => b.ident.clone().to_string(),
                     Pat::Lit(l) => match &l.lit {
-                        Lit::Str(s) => name = s.value(),
+                        Lit::Str(s) => s.value(),
                         _ => todo!(),
                     },
                     _ => todo!(),
-                }
+                };
                 //get type to get size
                 match &*pat_type.ty {
                     Type::Path(_) => {

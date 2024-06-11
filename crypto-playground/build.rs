@@ -1,7 +1,6 @@
 use std::{env, fs::File, io::Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("cargo:rerun-if-changed=assembly/aws-fips");
     let mut build = cc::Build::new();
 
     let mut os = match env::var("CARGO_CFG_TARGET_OS")?.as_str() {
