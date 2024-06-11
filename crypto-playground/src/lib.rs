@@ -1,6 +1,7 @@
+pub mod aes;
 pub mod awslc;
 pub mod bn;
-pub mod gcm;
+pub mod ghash;
 pub mod sha256;
 mod utils;
 

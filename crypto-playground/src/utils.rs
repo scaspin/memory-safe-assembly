@@ -1,3 +1,4 @@
+use byteorder::ByteOrder;
 use num_traits::PrimInt;
 
 pub fn ms_memcpy<T: std::marker::Copy>(dst: &mut [T], src: &[T], n: usize) {
@@ -39,6 +40,26 @@ pub fn ms_addc_u64(x: u64, y: u64, carry_in: bool) -> (u64, bool) {
 pub fn ms_subc_u64(x: u64, y: u64, carry_in: bool) -> (u64, bool) {
     let ret = x - y - (carry_in as u64);
     (ret, (x < y) | ((x == y) & carry_in))
+}
+
+#[inline]
+pub fn ms_xor16(output: &mut [u8; 16], a: &[u8; 16], b: &[u8; 16]) {
+    // (scaspin) todo from aws-lc: need to check this here too! but don't have crypto_word_t yet
+    // TODO(davidben): Ideally we'd leave this to the compiler, which could use
+    // vector registers, etc. But the compiler doesn't know that |in| and |out|
+    // cannot partially alias. |restrict| is slightly two strict (we allow exact
+    // aliasing), but perhaps in-place could be a separate function?
+    // OPENSSL_STATIC_ASSERT(16 % sizeof(crypto_word_t) == 0,
+    // block_cannot_be_evenly_divided_into_crypto_word_t)
+
+    // TODO: (scaspin) I don't really get what's going on here tbh
+    let i = 0;
+    while i < 16 {
+        byteorder::LE::write_u32(
+            &mut output[i..],
+            byteorder::LE::read_u32(&a[i..]) ^ byteorder::LE::read_u32(&b[i..]),
+        );
+    }
 }
 
 #[inline]
