@@ -191,6 +191,23 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.set_register(register, RegisterKind::RegisterBase, Some(value), 0);
     }
 
+    pub fn set_stack_element(
+        &mut self,
+        address: i64,
+        base: Option<AbstractExpression>,
+        offset: i64,
+    ) {
+        let stack = self.memory.get_mut("sp").expect("Stack not found");
+        stack.insert(
+            address,
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base,
+                offset,
+            },
+        );
+    }
+
     fn set_register(
         &mut self,
         name: String,

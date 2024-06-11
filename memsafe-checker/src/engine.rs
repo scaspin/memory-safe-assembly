@@ -166,8 +166,13 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
-        let name = ("x".to_owned() + &register.to_string()).to_string();
-        self.computer.set_abstract(name.clone(), value);
+        if register < 4 {
+            let name = ("x".to_owned() + &register.to_string()).to_string();
+            self.computer.set_abstract(name.clone(), value);
+        } else {
+            let stack_index = ((register as i64) - 3) * -8;
+            self.computer.set_stack_element(stack_index, Some(value), 0);
+        }
     }
 
     pub fn add_abstract_from(&mut self, register: usize, value: String) {
