@@ -116,8 +116,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 for i in v.iter().skip(1) {
                     let num: i64;
                     if i.contains("x") {
-                        num = i64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
-                            .expect("engine3");
+                        num = u64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
+                            .expect("engine3") as i64;
                     } else {
                         if i.is_empty() {
                             continue;
@@ -166,7 +166,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
-        if register < 4 {
+        if register < 8 {
             let name = ("x".to_owned() + &register.to_string()).to_string();
             self.computer.set_abstract(name.clone(), value);
         } else {
@@ -176,9 +176,18 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn add_abstract_from(&mut self, register: usize, value: String) {
-        let name = ("x".to_owned() + &register.to_string()).to_string();
-        self.computer
-            .set_abstract(name.clone(), AbstractExpression::Abstract(value));
+        if register < 8 {
+            let name = ("x".to_owned() + &register.to_string()).to_string();
+            self.computer
+                .set_abstract(name.clone(), AbstractExpression::Abstract(value));
+        } else {
+            let stack_index = ((register as i64) - 3) * -8;
+            self.computer.set_stack_element(
+                stack_index,
+                Some(AbstractExpression::Abstract(value)),
+                0,
+            );
+        }
     }
 
     pub fn dont_fail_fast(&mut self) {

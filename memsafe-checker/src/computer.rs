@@ -1885,7 +1885,7 @@ impl<'ctx> ARMCORTEXA<'_> {
      */
     fn load(&mut self, t: String, address: RegisterValue) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
-            address.base.clone().expect("Need a name for region"),
+            address.base.clone().expect("Need a name for region}"),
             address.offset,
             RegionType::READ,
         );
