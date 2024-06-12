@@ -136,7 +136,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
                     i.base10_parse::<i64>().expect("undefined integer"),
                 )
             }
-            _ => todo!(),
+            _ => todo!("Input Literal type"),
         },
         Expr::Binary(b) => return binary_to_abstract_expression(b),
         Expr::MethodCall(c) => {
@@ -164,7 +164,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
         Expr::Path(p) => {
             return AbstractExpression::Abstract(p.path.segments[0].ident.to_string());
         }
-        _ => todo!(),
+        _ => todo!("Input type"),
     }
 }
 
@@ -244,12 +244,39 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 let ty = calculate_type_of_slice_ptr(b);
                                 pointer_sizes.insert(name, ty);
                             }
-                            _ => todo!(),
+                            Type::Tuple(t) => {
+                                let mut size = 0;
+                                for e in &t.elems {
+                                    match e {
+                                        Type::Array(a) => {
+                                            size = size + calculate_size_of_array(&a);
+                                        }
+                                        Type::Path(p) => {
+                                            for i in &p.path.segments {
+                                                match i.ident.to_string().as_str() {
+                                                    "usize" => {
+                                                        size = size + std::mem::size_of::<usize>()
+                                                    }
+                                                    _ => todo!("path size"),
+                                                }
+                                            }
+                                        }
+                                        _ => println!("hey"),
+                                    }
+                                    input_sizes.insert(name.clone(), size);
+                                }
+                            }
+                            _ => todo!("Input Reference Type"),
                         },
-                        _ => todo!(),
+                        Type::Path(p) => {
+                            println!("types {:?}", ty);
+                            println!("path {:?}", p);
+                            // println!("path {:?}", std::mem::size_of::<ty>());
+                        }
+                        _ => todo!("Standard Input type {:?}", ty),
                     }
                 }
-                _ => todo!(),
+                _ => todo!("Untyped args"),
             }
         }
         for i in &attributes.argument_list {
@@ -348,7 +375,30 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     new_args.push(parse_quote! {#n : usize});
                 }
                 Expr::Lit(l) => new_args.push(parse_quote! {#l: usize}),
-                _ => todo!(),
+                Expr::Cast(c) => {
+                    let var_name: String;
+                    match &*c.expr {
+                        Expr::Reference(r) => match &*r.expr {
+                            Expr::Path(p) => {
+                                var_name = p.path.segments[0].ident.to_string();
+                            }
+                            _ => todo!("name of cast ref expr types"),
+                        },
+                        _ => todo!("name of cast expr types"),
+                    }
+
+                    // match &*c.ty {
+                    //     Type::Ptr(p) => {
+
+                    //     }
+                    //     _ => todo!("type of cast"),
+                    // }
+
+                    let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span.into());
+                    let ty = c.ty;
+                    new_args.push(parse_quote! {#n : #ty});
+                }
+                _ => todo!("Arg list type"),
             }
         }
         for a in &new_args {
@@ -403,7 +453,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // TODO: make sure to handle overflows into Stack
     // add memory safe regions
     for i in 0..arguments_to_memory_safe_regions.len() {
-        let mut name = String::new();
+        let name;
 
         let a = &arguments_to_memory_safe_regions[i];
         match a {
@@ -415,9 +465,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                     Pat::Lit(l) => match &l.lit {
                         Lit::Str(s) => name = s.value(),
-                        _ => todo!(),
+                        _ => todo!("Regions literal pattern"),
                     },
-                    _ => todo!(),
+                    _ => todo!("Regions pattern pattern"),
                 }
                 //get type to get size
                 match &*pat_type.ty {
@@ -492,7 +542,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     _ => println!("yet unsupported type: {:?}", pat_type.ty),
                 }
             }
-            _ => (),
+            _ => todo!("lib"),
         }
     }
 
