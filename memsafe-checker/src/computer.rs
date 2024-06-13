@@ -796,7 +796,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let res1 = self.load(reg1, base_add_reg.clone());
 
                     let mut next = base_add_reg.clone();
-                    next.offset = next.offset + 8;
+                    next.offset = next.offset + 4;
                     let res2 = self.load(reg2, next);
 
                     // post-index
@@ -890,7 +890,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         _ => (),
                     }
                     let mut next = base_add_reg.clone();
-                    next.offset = next.offset + 8;
+                    next.offset = next.offset + 4;
                     let res = self.store(reg2, next);
                     match res {
                         Err(e) => return Err(e.to_string()),
