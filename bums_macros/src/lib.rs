@@ -57,13 +57,13 @@ fn calculate_size_of(ty: String) -> usize {
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
         "u128" => std::mem::size_of::<u128>(),
-        _ => 0,
+        _ => todo!(),
     }
 }
 
 fn calculate_size_of_array(a: &TypeArray) -> usize {
     let mut elem: String = String::new();
-    let mut len: usize = 0;
+    let len;
     match &*a.elem {
         Type::Path(b) => {
             elem = b.path.segments[0].ident.to_string();
@@ -79,9 +79,9 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
                     .parse::<usize>()
                     .expect("calculate_size_array");
             }
-            _ => (),
+            _ => todo!("size of array1"),
         },
-        _ => (),
+        _ => todo!("size of array2"),
     }
     return calculate_size_of(elem) * len;
 }
@@ -230,7 +230,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         Type::Array(a) => {
                             let ty = calculate_type_of_array_ptr(a);
                             let size = calculate_size_of_array(a);
-                            input_sizes.insert(name.clone(), size);
+                            input_sizes.insert(name.clone(), size * 2);
                             pointer_sizes.insert(name, ty);
                         }
                         Type::Reference(a) => match &*a.elem {
@@ -238,7 +238,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 let ty = calculate_type_of_array_ptr(b);
                                 let size = calculate_size_of_array(b);
                                 pointer_sizes.insert(name.clone(), ty);
-                                input_sizes.insert(name, size);
+                                input_sizes.insert(name, size * 2);
                             }
                             Type::Slice(b) => {
                                 let ty = calculate_type_of_slice_ptr(b);
@@ -255,23 +255,21 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                             for i in &p.path.segments {
                                                 match i.ident.to_string().as_str() {
                                                     "usize" => {
-                                                        size = size + std::mem::size_of::<usize>()
+                                                        size = size + std::mem::size_of::<usize>();
                                                     }
                                                     _ => todo!("path size"),
                                                 }
                                             }
                                         }
-                                        _ => println!("hey"),
+                                        _ => todo!("element list type"),
                                     }
-                                    input_sizes.insert(name.clone(), size);
                                 }
+                                input_sizes.insert(name.clone(), size * 2);
                             }
                             _ => todo!("Input Reference Type"),
                         },
-                        Type::Path(p) => {
-                            println!("types {:?}", ty);
-                            println!("path {:?}", p);
-                            // println!("path {:?}", std::mem::size_of::<ty>());
+                        Type::Path(_) => {
+                            todo!();
                         }
                         _ => todo!("Standard Input type {:?}", ty),
                     }
@@ -382,17 +380,21 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             Expr::Path(p) => {
                                 var_name = p.path.segments[0].ident.to_string();
                             }
-                            _ => todo!("name of cast ref expr types"),
+                            Expr::Tuple(_) => {
+                                var_name = "tuple".to_string();
+                                // TODO: better name
+                            }
+                            _ => todo!("name of cast ref expr types {:?}", r),
                         },
-                        _ => todo!("name of cast expr types"),
+                        Expr::Tuple(_) => {
+                            var_name = "tuple".to_string();
+                            // TODO: better name
+                        }
+                        Expr::Path(p) => {
+                            var_name = p.path.segments[0].ident.to_string();
+                        }
+                        _ => todo!("name of cast expr types {:?}", c.expr),
                     }
-
-                    // match &*c.ty {
-                    //     Type::Ptr(p) => {
-
-                    //     }
-                    //     _ => todo!("type of cast"),
-                    // }
 
                     let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span.into());
                     let ty = c.ty;
@@ -498,48 +500,97 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
                         let no_suffix = no_mut_name.strip_suffix("_as_ptr").unwrap_or(no_mut_name);
 
-                        // if pointing to an array defined as a function param, no abstract length
-                        if let Some(bound) = input_sizes.get(no_suffix) {
-                            if a.mutability.is_some() {
-                                engine.add_region(
-                                    RegionType::WRITE,
-                                    name.clone(),
-                                    AbstractExpression::Immediate(*bound as i64),
-                                );
-                            } else {
-                                engine.add_region(
-                                    RegionType::READ,
-                                    name.clone(),
-                                    AbstractExpression::Immediate(bound.clone() as i64),
-                                );
-                            }
-                            continue;
-                        }
+                        match &*a.elem {
+                            Type::Tuple(t) => {
+                                // add the whole region covered by the tuple
+                                if let Some(bound) = input_sizes.get(no_suffix) {
+                                    if a.mutability.is_some() {
+                                        engine.add_region(
+                                            RegionType::WRITE,
+                                            name.clone(),
+                                            AbstractExpression::Immediate(*bound as i64),
+                                        );
+                                    } else {
+                                        engine.add_region(
+                                            RegionType::READ,
+                                            name.clone(),
+                                            AbstractExpression::Immediate(bound.clone() as i64),
+                                        );
+                                    }
+                                }
 
-                        let bound = no_suffix.to_owned() + "_len";
-                        if a.mutability.is_some() {
-                            engine.add_region(
-                                RegionType::WRITE,
-                                name.clone(),
-                                generate_expression(
-                                    "*",
-                                    AbstractExpression::Abstract(bound),
-                                    AbstractExpression::Immediate(8),
-                                ),
-                            );
-                        } else {
-                            engine.add_region(
-                                RegionType::READ,
-                                name.clone(),
-                                generate_expression(
-                                    "*",
-                                    AbstractExpression::Abstract(bound),
-                                    AbstractExpression::Immediate(8),
-                                ),
-                            );
+                                let mut i = 0;
+                                let mut index = 0;
+                                for e in &t.elems {
+                                    match e {
+                                        Type::Path(p) => {
+                                            if p.path.segments.len() == 1 {
+                                                let abs = p.path.segments[0].ident.to_string();
+                                                match abs.as_str() {
+                                                    "usize" => {
+                                                        let new_name = no_suffix.to_owned()
+                                                            + "_usize_"
+                                                            + &i.to_string();
+                                                        engine.add_abstract_to_memory(
+                                                            name.clone(),
+                                                            index,
+                                                            AbstractExpression::Abstract(
+                                                                new_name.to_string(),
+                                                            ),
+                                                        )
+                                                    }
+                                                    _ => todo!("tuple abstracts"),
+                                                }
+                                            }
+                                        }
+                                        Type::Array(a) => {
+                                            if let Some(_) = input_sizes.get(no_suffix) {
+                                                index =
+                                                    index + ((calculate_size_of_array(a)) as i64);
+                                            }
+                                        }
+                                        _ => todo!("unsupported tuple type {:?}", e),
+                                    }
+                                    i = i + 1;
+                                }
+                            }
+                            _ => {
+                                // if pointing to an array defined as a function param, no abstract length
+                                if let Some(bound) = input_sizes.get(no_suffix) {
+                                    if a.mutability.is_some() {
+                                        engine.add_region(
+                                            RegionType::WRITE,
+                                            name.clone(),
+                                            AbstractExpression::Immediate(*bound as i64),
+                                        );
+                                    } else {
+                                        engine.add_region(
+                                            RegionType::READ,
+                                            name.clone(),
+                                            AbstractExpression::Immediate(bound.clone() as i64),
+                                        );
+                                    }
+                                    continue;
+                                }
+
+                                let bound = no_suffix.to_owned() + "_len";
+                                if a.mutability.is_some() {
+                                    engine.add_region(
+                                        RegionType::WRITE,
+                                        name.clone(),
+                                        AbstractExpression::Abstract(bound),
+                                    );
+                                } else {
+                                    engine.add_region(
+                                        RegionType::READ,
+                                        name.clone(),
+                                        AbstractExpression::Abstract(bound),
+                                    );
+                                }
+                            }
                         }
                     }
-                    _ => println!("yet unsupported type: {:?}", pat_type.ty),
+                    _ => todo!("yet unsupported type: {:?}", pat_type.ty),
                 }
             }
             _ => todo!("lib"),
