@@ -215,6 +215,9 @@ impl<'ctx> ARMCORTEXA<'_> {
         base: Option<AbstractExpression>,
         offset: i64,
     ) {
+        if offset == -1 {
+            todo!();
+        }
         if name.contains("w") {
             self.registers[get_register_index(name.clone())].set(kind, base, (offset as i32) as i64)
         } else if name.contains("x") {
@@ -233,6 +236,26 @@ impl<'ctx> ARMCORTEXA<'_> {
 
     pub fn add_memory_value(&mut self, region: String, address: i64, value: i64) {
         let reg_value = RegisterValue::new(RegisterKind::Immediate, None, value);
+        match self.memory.get_mut(&region) {
+            Some(r) => {
+                r.insert(address, reg_value);
+            }
+            None => {
+                let mut region_map =
+                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW);
+                region_map.insert(address, reg_value);
+                self.memory.insert(region, region_map);
+            }
+        }
+    }
+
+    pub fn add_memory_value_abstract(
+        &mut self,
+        region: String,
+        address: i64,
+        value: AbstractExpression,
+    ) {
+        let reg_value = RegisterValue::new(RegisterKind::RegisterBase, Some(value), 0);
         match self.memory.get_mut(&region) {
             Some(r) => {
                 r.insert(address, reg_value);
@@ -910,6 +933,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             let base_name = get_register_name_string(reg3.clone());
                             let base_add_reg =
                                 self.registers[get_register_index(base_name.clone())].clone();
+
                             match self.load_vector(reg1, base_add_reg.clone()) {
                                 Err(e) => return Err(e.to_string()),
                                 _ => (),
@@ -917,6 +941,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                             match self.load_vector(reg2, base_add_reg.clone()) {
                                 Err(e) => return Err(e.to_string()),
                                 _ => (),
+                            }
+
+                            if let Some(reg4) = &instruction.r4 {
+                                let new_imm = self.operand(get_register_name_string(reg4.clone()));
+                                self.set_register(
+                                    reg3.clone(),
+                                    base_add_reg.kind,
+                                    base_add_reg.base,
+                                    base_add_reg.offset + new_imm.offset,
+                                );
                             }
                         } else {
                             let imm = self.operand(reg3.to_string());
@@ -1392,8 +1426,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         if reg3.is_some() {
             if let Some(expr) = reg3 {
                 let parts = expr.split_once('#').expect("computer");
-
-                r2 = shift_right_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
+                r2 = shift_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
             }
         }
 

@@ -165,6 +165,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
         self.computer.set_abstract(register, value);
     }
 
+    pub fn add_abstract_to_memory(
+        &mut self,
+        region: String,
+        address: i64,
+        value: AbstractExpression,
+    ) {
+        self.computer
+            .add_memory_value_abstract(region, address, value);
+    }
+
     pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
         if register < 8 {
             let name = ("x".to_owned() + &register.to_string()).to_string();
