@@ -208,10 +208,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let output = &vars.item_fn.output;
 
     let mut invariants: Vec<AbstractComparison> = Vec::new();
+    let mut asserts = quote! {};
     if let Some(Expr::Array(a)) = attributes.argument_list.last() {
         for e in &a.elems {
             if let Expr::Binary(b) = e {
                 invariants.push(binary_to_abstract_comparison(b));
+                asserts = quote! { #asserts assert!(#e);};
             } else {
                 emit_call_site_error!("Cannot define an invariant that is not a binary expression");
             }
@@ -499,6 +501,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let original_fn_call = vars.item_fn.clone();
     let unsafe_block: Stmt = parse_quote! {
         #original_fn_call {
+
+            #asserts;
 
             #struct_decs;
 
