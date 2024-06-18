@@ -127,6 +127,21 @@ fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
     }
 }
 
+fn binary_to_abstract_comparison(input: &ExprBinary) -> AbstractComparison {
+    let left_expr = syn_expr_to_abstract_expression(&input.left);
+    let right_expr = syn_expr_to_abstract_expression(&input.right);
+
+    match input.op {
+        BinOp::Eq(_) => return generate_comparison("==", left_expr, right_expr),
+        BinOp::Lt(_) => return generate_comparison("<", left_expr, right_expr),
+        BinOp::Le(_) => return generate_comparison("=<", left_expr, right_expr),
+        BinOp::Ne(_) => return generate_comparison("!=", left_expr, right_expr),
+        BinOp::Ge(_) => return generate_comparison(">=", left_expr, right_expr),
+        BinOp::Gt(_) => return generate_comparison(">", left_expr, right_expr),
+        _ => todo!(),
+    }
+}
+
 fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
     match &input {
         Expr::Lit(l) => match &l.lit {
@@ -188,9 +203,21 @@ fn tuple_to_struct(name: String, tuple: TypeTuple) -> ItemStruct {
 #[proc_macro_error]
 pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
-    let attributes = parse_macro_input!(attr as AttributeList);
+    let mut attributes = parse_macro_input!(attr as AttributeList);
     let fn_name = &vars.item_fn.ident;
     let output = &vars.item_fn.output;
+
+    let mut invariants: Vec<AbstractComparison> = Vec::new();
+    if let Some(Expr::Array(a)) = attributes.argument_list.last() {
+        for e in &a.elems {
+            if let Expr::Binary(b) = e {
+                invariants.push(binary_to_abstract_comparison(b));
+            } else {
+                emit_call_site_error!("Cannot define an invariant that is not a binary expression");
+            }
+        }
+        attributes.argument_list.pop();
+    }
 
     //get args from function call to pass to invocation
     let mut arguments_to_memory_safe_regions = Vec::new();
@@ -659,6 +686,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
+    for i in invariants {
+        engine.add_invariant(i);
+    }
     let label = "_".to_owned() + &vars.item_fn.ident.to_string();
     let res = engine.start(label);
 

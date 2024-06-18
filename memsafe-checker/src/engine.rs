@@ -539,6 +539,13 @@ impl<'ctx> ExecutionEngine<'ctx> {
         }
     }
 
+    pub fn add_invariant(&self, constraint: AbstractComparison) {
+        let c = comparison_to_ast(self.computer.context, constraint)
+            .expect("engine6.5")
+            .simplify();
+        self.computer.solver.assert(&c);
+    }
+
     fn looping_too_deep(&self) -> bool {
         // jump out if too deep in tree
 

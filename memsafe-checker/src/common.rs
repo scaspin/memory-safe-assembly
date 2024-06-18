@@ -374,6 +374,18 @@ impl AbstractExpression {
     }
 }
 
+pub fn generate_comparison(
+    op: &str,
+    a: AbstractExpression,
+    b: AbstractExpression,
+) -> AbstractComparison {
+    AbstractComparison {
+        op: op.to_string(),
+        left: Box::new(a),
+        right: Box::new(b),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AbstractComparison {
     pub op: String,
