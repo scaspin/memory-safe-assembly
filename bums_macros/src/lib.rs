@@ -168,6 +168,21 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
     }
 }
 
+fn tuple_to_struct(name: String, tuple: TypeTuple) -> ItemStruct {
+    let span = Span::call_site().into();
+
+    // Creating fields for the struct
+    let mut fields: syn::punctuated::Punctuated<Field, token::Comma> = Punctuated::new();
+    for (index, expr) in tuple.elems.iter().enumerate() {
+        let field_ident = syn::Ident::new(&format!("{}_field{}", name, index), span);
+        let field: Field = parse_quote! {#field_ident: #expr};
+        fields.push(field.clone());
+    }
+
+    let struct_name = syn::Ident::new(&(name + "_struct"), span);
+    parse_quote! { #[repr(C)] struct #struct_name { #fields }}
+}
+
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
@@ -184,6 +199,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_types = HashMap::new();
     let mut input_expressions = HashMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
+    let mut new_structs = HashMap::new();
     // if caller did not specify arguments in macro, grab names from function call
     if attributes.argument_list.is_empty() {
         for i in &vars.item_fn.inputs {
@@ -246,6 +262,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                             Type::Tuple(t) => {
                                 let mut size = 0;
+                                new_structs
+                                    .insert(name.clone(), tuple_to_struct(name.clone(), t.clone()));
                                 for e in &t.elems {
                                     match e {
                                         Type::Array(a) => {
@@ -278,7 +296,37 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
         for i in &attributes.argument_list {
-            arguments_to_pass.push(i.clone());
+            if let Expr::Cast(c) = i {
+                let struct_name;
+                if let Expr::Path(p) = &*c.expr {
+                    struct_name = p.path.segments[0].ident.to_string();
+                } else {
+                    struct_name = "struct".to_string();
+                }
+
+                let mut fields = quote! {};
+                let mut i = 0;
+                let struct_ident = Ident::new(&struct_name, proc_macro2::Span::call_site().into());
+                for f in &new_structs
+                    .get(&struct_name)
+                    .expect("Need established struct")
+                    .fields
+                {
+                    let fieldname = f.ident.clone().expect("Need field name");
+                    let lit: Lit = Lit::new(proc_macro2::Literal::usize_unsuffixed(i));
+                    fields = quote! { #fields #fieldname: #struct_ident.#lit, };
+                    i = i + 1;
+                }
+
+                let real_struct_name = Ident::new(
+                    &(struct_name + "_struct"),
+                    proc_macro2::Span::call_site().into(),
+                );
+                arguments_to_pass
+                    .push(parse_quote! {&#real_struct_name { #fields } as *const #real_struct_name})
+            } else {
+                arguments_to_pass.push(i.clone());
+            }
         }
     }
 
@@ -380,16 +428,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             Expr::Path(p) => {
                                 var_name = p.path.segments[0].ident.to_string();
                             }
-                            Expr::Tuple(_) => {
-                                var_name = "tuple".to_string();
-                                // TODO: better name
-                            }
                             _ => todo!("name of cast ref expr types {:?}", r),
                         },
-                        Expr::Tuple(_) => {
-                            var_name = "tuple".to_string();
-                            // TODO: better name
-                        }
                         Expr::Path(p) => {
                             var_name = p.path.segments[0].ident.to_string();
                         }
@@ -397,8 +437,18 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
 
                     let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span.into());
-                    let ty = c.ty;
-                    new_args.push(parse_quote! {#n : #ty});
+                    let ty = c.ty.clone();
+                    if let Type::Ptr(p) = *ty.clone() {
+                        if let Type::Infer(_) = *p.elem {
+                            let struct_name =
+                                Ident::new(&(var_name.clone() + "_struct"), span.into());
+                            new_args.push(parse_quote! {#n : *const #struct_name});
+                        } else {
+                            new_args.push(parse_quote! {#n : #ty});
+                        }
+                    } else {
+                        new_args.push(parse_quote! {#n : #ty});
+                    }
                 }
                 _ => todo!("Arg list type"),
             }
@@ -409,9 +459,22 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         extern_fn = parse_quote! {fn #fn_name(#new_args)};
     }
 
+    let mut struct_decs = quote! {};
+    for i in new_structs.values() {
+        struct_decs = quote! {
+
+            #struct_decs
+
+            #i;
+        };
+    }
+
     let original_fn_call = vars.item_fn.clone();
     let unsafe_block: Stmt = parse_quote! {
         #original_fn_call {
+
+            #struct_decs;
+
             extern "C" {
                 #extern_fn #output;
             }
@@ -452,7 +515,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let ctx = Context::new(&cfg);
     let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
-    // TODO: make sure to handle overflows into Stack
     // add memory safe regions
     for i in 0..arguments_to_memory_safe_regions.len() {
         let name;

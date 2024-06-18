@@ -47,17 +47,17 @@ enum AesFunc {
 // fn vpaes_cbc_encrypt();
 //fn vpaes_ctr32_encrypt_blocks();
 
-#[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const ([u32; 60],usize), htable.as_ptr())]
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr())]
 fn aes_gcm_enc_kernel(
     input: &[u8],
     output: &mut [u8],
     xi: &mut [u8],
     ivec: &mut [u8; 16],
-    key: &([u32; 60], usize),
+    keys: &([u32; 60], usize),
     htable: &[u128; 16],
 );
 
-#[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const ([u32; 60],usize), htable.as_ptr())]
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr())]
 fn aes_gcm_dec_kernel(
     input: &[u8],
     output: &mut [u8],
@@ -68,7 +68,7 @@ fn aes_gcm_dec_kernel(
 );
 
 // SHOULD REALLY HAVE (rounds == 10; rounds == 12; rounds == 14)
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_ptr(), input.len(), keys as *const ([u32; 60],usize), ivec.as_mut_ptr())]
+#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr())]
 fn aes_hw_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
@@ -76,7 +76,7 @@ fn aes_hw_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_ptr(), input.len(), keys as *const ([u32; 60],usize), ivec.as_mut_ptr())]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr())]
 fn vpaes_ctr32_encrypt_blocks(
     input: &mut [u8],
     output: &mut [u8],
@@ -84,7 +84,7 @@ fn vpaes_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const ([u32; 60],usize))]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _)]
 fn vpaes_encrypt(input: &mut [u8], output: &mut [u8], keys: &([u32; 60], usize));
 
 fn aes_ctr128_encrypt(
