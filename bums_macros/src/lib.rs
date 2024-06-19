@@ -188,7 +188,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
                 Member::Named(n) => n.to_string(),
                 Member::Unnamed(n) => n.index.to_string(),
             };
-            let new_name = base.to_owned() + "_" + &index;
+            let new_name = base.to_owned() + "_field" + &index;
             return AbstractExpression::Abstract(new_name);
         }
         _ => todo!("Input type {:?}", input),
@@ -323,7 +323,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                         _ => todo!("element list type"),
                                     }
                                 }
-                                input_sizes.insert(name.clone(), size * 2);
+                                input_sizes.insert(name.clone(), size);
                             }
                             _ => todo!("Input Reference Type"),
                         },
@@ -606,59 +606,67 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         let no_suffix = no_mut_name.strip_suffix("_as_ptr").unwrap_or(no_mut_name);
 
                         match &*a.elem {
-                            Type::Tuple(t) => {
-                                // add the whole region covered by the tuple
-                                if let Some(bound) = input_sizes.get(no_suffix) {
-                                    if a.mutability.is_some() {
-                                        engine.add_region(
-                                            RegionType::WRITE,
-                                            name.clone(),
-                                            AbstractExpression::Immediate(*bound as i64),
-                                        );
-                                    } else {
-                                        engine.add_region(
-                                            RegionType::READ,
-                                            name.clone(),
-                                            AbstractExpression::Immediate(bound.clone() as i64),
-                                        );
-                                    }
-                                }
+                            Type::Path(p) => {
+                                // if pointer to a macro-defined struct
 
-                                let mut i = 0;
-                                let mut index = 0;
-                                for e in &t.elems {
-                                    match e {
-                                        Type::Path(p) => {
-                                            if p.path.segments.len() == 1 {
-                                                let abs = p.path.segments[0].ident.to_string();
-                                                match abs.as_str() {
-                                                    "usize" => {
-                                                        let new_name =
-                                                            no_suffix.to_owned() + &i.to_string();
-                                                        engine.add_abstract_to_memory(
-                                                            name.clone(),
-                                                            index,
-                                                            AbstractExpression::Abstract(
-                                                                new_name.to_string(),
-                                                            ),
-                                                        )
+                                if p.path.segments[0].ident.to_string().contains("struct") {
+                                    // add the whole region covered by the tuple
+                                    if let Some(bound) = input_sizes.get(no_suffix) {
+                                        if a.mutability.is_some() {
+                                            engine.add_region(
+                                                RegionType::WRITE,
+                                                name.clone(),
+                                                AbstractExpression::Immediate(*bound as i64),
+                                            );
+                                        } else {
+                                            engine.add_region(
+                                                RegionType::READ,
+                                                name.clone(),
+                                                AbstractExpression::Immediate(bound.clone() as i64),
+                                            );
+                                        }
+                                    }
+
+                                    let s = new_structs
+                                        .get(no_suffix)
+                                        .expect("Need well defined struct");
+                                    let mut i = 0;
+                                    let mut index = 0;
+                                    for e in &s.fields {
+                                        match e.ty.clone() {
+                                            Type::Path(p) => {
+                                                if p.path.segments.len() == 1 {
+                                                    let abs = p.path.segments[0].ident.to_string();
+                                                    match abs.as_str() {
+                                                        "usize" => {
+                                                            let new_name = e.ident.clone().expect(
+                                                                "need name of variable to input",
+                                                            );
+                                                            engine.add_abstract_to_memory(
+                                                                name.clone(),
+                                                                index,
+                                                                AbstractExpression::Abstract(
+                                                                    new_name.to_string(),
+                                                                ),
+                                                            );
+                                                        }
+                                                        _ => todo!("tuple abstracts"),
                                                     }
-                                                    _ => todo!("tuple abstracts"),
                                                 }
                                             }
-                                        }
-                                        Type::Array(a) => {
-                                            if let Some(_) = input_sizes.get(no_suffix) {
-                                                index =
-                                                    index + ((calculate_size_of_array(a)) as i64);
+                                            Type::Array(a) => {
+                                                if let Some(_) = input_sizes.get(no_suffix) {
+                                                    index = index
+                                                        + ((calculate_size_of_array(&a)) as i64);
+                                                }
                                             }
+                                            _ => todo!("unsupported tuple type {:?}", e),
                                         }
-                                        _ => todo!("unsupported tuple type {:?}", e),
+                                        i = i + 1;
                                     }
-                                    i = i + 1;
+                                    continue;
                                 }
-                            }
-                            _ => {
+
                                 // if pointing to an array defined as a function param, no abstract length
                                 if let Some(bound) = input_sizes.get(no_suffix) {
                                     if a.mutability.is_some() {
@@ -692,6 +700,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     );
                                 }
                             }
+                            _ => todo!("unsupported pointer type to pass to asm {:?}", a.elem),
                         }
                     }
                     _ => todo!("yet unsupported type: {:?}", pat_type.ty),
