@@ -57,7 +57,7 @@ fn calculate_size_of(ty: String) -> usize {
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
         "u128" => std::mem::size_of::<u128>(),
-        _ => todo!(),
+        _ => todo!("size of type"),
     }
 }
 
@@ -123,7 +123,7 @@ fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
         BinOp::Sub(_) => return generate_expression("-", left_expr, right_expr),
         BinOp::Div(_) => return generate_expression("/", left_expr, right_expr),
         BinOp::Mul(_) => return generate_expression("*", left_expr, right_expr),
-        _ => todo!(),
+        _ => todo!("expression todo"),
     }
 }
 
@@ -134,11 +134,11 @@ fn binary_to_abstract_comparison(input: &ExprBinary) -> AbstractComparison {
     match input.op {
         BinOp::Eq(_) => return generate_comparison("==", left_expr, right_expr),
         BinOp::Lt(_) => return generate_comparison("<", left_expr, right_expr),
-        BinOp::Le(_) => return generate_comparison("=<", left_expr, right_expr),
+        BinOp::Le(_) => return generate_comparison("<=", left_expr, right_expr),
         BinOp::Ne(_) => return generate_comparison("!=", left_expr, right_expr),
         BinOp::Ge(_) => return generate_comparison(">=", left_expr, right_expr),
         BinOp::Gt(_) => return generate_comparison(">", left_expr, right_expr),
-        _ => todo!(),
+        _ => todo!("comparison conversion"),
     }
 }
 
@@ -179,7 +179,19 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
         Expr::Path(p) => {
             return AbstractExpression::Abstract(p.path.segments[0].ident.to_string());
         }
-        _ => todo!("Input type"),
+        Expr::Field(f) => {
+            let base = match &*f.base {
+                Expr::Path(p) => p.clone().path.segments[0].ident.to_string(),
+                _ => todo!("field processing {:?}", f.base),
+            };
+            let index = match &f.member {
+                Member::Named(n) => n.to_string(),
+                Member::Unnamed(n) => n.index.to_string(),
+            };
+            let new_name = base.to_owned() + "_" + &index;
+            return AbstractExpression::Abstract(new_name);
+        }
+        _ => todo!("Input type {:?}", input),
     }
 }
 
@@ -316,7 +328,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             _ => todo!("Input Reference Type"),
                         },
                         Type::Path(_) => {
-                            todo!();
+                            todo!("path impl");
                         }
                         _ => todo!("Standard Input type {:?}", ty),
                     }
@@ -621,9 +633,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                                 let abs = p.path.segments[0].ident.to_string();
                                                 match abs.as_str() {
                                                     "usize" => {
-                                                        let new_name = no_suffix.to_owned()
-                                                            + "_usize_"
-                                                            + &i.to_string();
+                                                        let new_name =
+                                                            no_suffix.to_owned() + &i.to_string();
                                                         engine.add_abstract_to_memory(
                                                             name.clone(),
                                                             index,
@@ -706,157 +717,5 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             emit_call_site_warning!(error);
             return token_stream;
         }
-    };
-}
-
-// FUNCTION LIKE PROC MACRO
-// todo: attribute on asm call instead?
-
-#[derive(Debug)]
-struct InlineInput {
-    code: Expr,
-    startlabel: Expr,
-}
-
-impl Parse for InlineInput {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut inputs = punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)
-            .expect("parse InlineInput")
-            .into_iter();
-        let output = Self {
-            code: inputs.next().expect("code"),
-            startlabel: inputs.next().expect("startlabel").clone(),
-        };
-        return Ok(output);
-    }
-}
-
-#[derive(Debug)]
-struct GlobalInput {
-    filename: Expr,
-    startlabel: Expr,
-}
-
-impl Parse for GlobalInput {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut inputs = punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)
-            .expect("parse_inputs")
-            .into_iter();
-        let output = Self {
-            filename: inputs.next().expect("filename").clone(),
-            startlabel: inputs.next().expect("parse_startlabel").clone(),
-        };
-        return Ok(output);
-    }
-}
-
-#[proc_macro]
-#[proc_macro_error]
-pub fn safe_asm(input: TokenStream) -> TokenStream {
-    //Parse the input as a function
-    let vars = parse_macro_input!(input as InlineInput);
-
-    let code_str = match vars.code {
-        Expr::Lit(literal) => match literal.lit {
-            Lit::Str(string) => string.value(),
-            _ => todo!(),
-        },
-        _ => todo!(),
-    };
-
-    let mut program = Vec::new();
-    for line in code_str.split("\n") {
-        program.push(line.trim().to_string());
-    }
-
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
-
-    // TODO add regions
-
-    let label = match vars.startlabel.clone() {
-        Expr::Lit(literal) => match literal.lit {
-            Lit::Str(string) => string.value(),
-            _ => todo!(),
-        },
-        _ => todo!(),
-    };
-
-    let res = engine.start(label.clone());
-
-    match res {
-        Ok(_) => {
-            return quote! {
-                            use std::arch::asm;
-                            unsafe {
-                                asm!(#code_str);
-                            }
-            }
-            .into();
-        }
-        Err(error) => abort_call_site!(error),
-    };
-}
-
-#[proc_macro]
-#[proc_macro_error]
-pub fn safe_global_asm(input: TokenStream) -> TokenStream {
-    //Parse the input as a function
-    let vars = parse_macro_input!(input as GlobalInput);
-
-    let filename = match vars.filename {
-        Expr::Lit(literal) => match literal.lit {
-            Lit::Str(string) => string.value(),
-            _ => todo!(),
-        },
-        _ => todo!(),
-    };
-
-    let res = File::open(filename.clone());
-    let file: File;
-    match res {
-        Ok(opened) => {
-            file = opened;
-        }
-        Err(error) => {
-            // make more specific span
-            abort_call_site!(error);
-        }
-    };
-
-    let reader = BufReader::new(file);
-    let mut program = Vec::new();
-    for line in reader.lines() {
-        program.push(line.unwrap_or(String::from("")));
-    }
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
-
-    // TODO add regions
-
-    let label = match vars.startlabel.clone() {
-        Expr::Lit(literal) => match literal.lit {
-            Lit::Str(string) => string.value(),
-            _ => todo!(),
-        },
-        _ => todo!(),
-    };
-
-    let res = engine.start(label.clone());
-
-    match res {
-        Ok(_) => {
-            let funcall = Ident::new(&label, Span::call_site().into());
-            return quote! {
-                use std::arch::global_asm;
-                global_asm!(include_str!(#filename));
-
-                extern "C" { fn #funcall(); }
-            }
-            .into();
-        }
-        Err(error) => abort_call_site!(error),
     };
 }

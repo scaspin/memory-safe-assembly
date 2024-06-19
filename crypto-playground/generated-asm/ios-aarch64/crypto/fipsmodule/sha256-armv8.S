@@ -69,10 +69,6 @@ _sha256_block_data_order:
 	b.ne	Lv8_entry
 #endif
 	AARCH64_SIGN_LINK_REGISTER
-	
-	cmp x2, xzr
-	b.eq Early_abort
-
 	stp	x29,x30,[sp,#-128]!
 	add	x29,sp,#0
 
@@ -1034,8 +1030,6 @@ Loop_16_xx:
 	ldp	x27,x28,[x29,#80]
 	ldp	x29,x30,[sp],#128
 	AARCH64_VALIDATE_LINK_REGISTER
-	ret
-Early_abort:
 	ret
 
 .section	__TEXT,__const

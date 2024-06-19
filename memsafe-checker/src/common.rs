@@ -794,6 +794,15 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
     let right = expression_to_ast(context, *expression.right).expect("common11");
     match expression.op.as_str() {
         "<" => {
+            return Some(left.lt(&right));
+        }
+        ">" => {
+            return Some(left.gt(&right));
+        }
+        ">=" => {
+            return Some(left.ge(&right));
+        }
+        "<=" => {
             return Some(left.le(&right));
         }
         "==" => {
@@ -808,6 +817,6 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
                 &[&left.lt(&right), &left.gt(&right)],
             ));
         }
-        _ => todo!(),
+        _ => todo!("unsupported op {:?}", expression.op),
     }
 }

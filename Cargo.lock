@@ -224,6 +224,7 @@ dependencies = [
  "byteorder",
  "cc",
  "num-traits",
+ "zeroize",
 ]
 
 [[package]]
