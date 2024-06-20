@@ -76,16 +76,16 @@ fn aes_hw_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>0, input.len() == output.len()])]
 fn vpaes_ctr32_encrypt_blocks(
-    input: &mut [u8],
+    input: &[u8],
     output: &mut [u8],
     keys: &([u32; 60], usize),
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 16])]
-fn vpaes_encrypt(input: &mut [u8], output: &mut [u8], keys: &([u32; 60], usize));
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 16, input.len()>0,input.len() == output.len()])]
+fn vpaes_encrypt(input: &[u8], output: &mut [u8], keys: &([u32; 60], usize));
 
 fn aes_ctr128_encrypt(
     key: &mut AesKey,
@@ -95,9 +95,10 @@ fn aes_ctr128_encrypt(
 ) {
     // from aws-lc-rs: let mut num = MaybeUninit::<u32>::new(0);
     let mut num: u32 = 0;
+    let input_clone: &[u8] = &in_out.to_vec().clone();
 
     let res = AES_ctr128_encrypt(
-        in_out,
+        input_clone,
         in_out,
         in_out.len(),
         &mut (key.rd_key, key.rounds),
@@ -107,12 +108,12 @@ fn aes_ctr128_encrypt(
     );
     match res {
         Ok(_) => Zeroize::zeroize(block_buffer),
-        Err(e) => todo!(),
+        Err(e) => panic!("Error {:?}", e),
     }
 }
 
 fn AES_ctr128_encrypt(
-    input: &mut [u8],
+    input: &[u8],
     out: &mut [u8],
     len: usize,
     key: &([u32; 60], usize),
@@ -165,8 +166,8 @@ fn AES_ctr128_encrypt(
 }
 
 fn CRYPTO_ctr128_encrypt(
-    input: &mut [u8],
-    output: &mut [u8],
+    mut input: &[u8],
+    mut output: &mut [u8],
     len: usize,
     key: &([u32; 60], usize),
     ivec: &mut [u8; 16],
@@ -180,7 +181,7 @@ fn CRYPTO_ctr128_encrypt(
     let mut n = *num as usize;
     let mut len = len;
 
-    let i = 0;
+    let mut i = 0;
     while (n > 0) && (len > 0) {
         output[i] = input[i] ^ block_buffer[n];
         len = len - 1;
@@ -204,7 +205,7 @@ fn CRYPTO_ctr128_encrypt(
         );
         len = len - 16;
         output = &mut output[16..];
-        input = &mut input[16..];
+        input = &input[16..];
         n = 0
     }
 
@@ -220,12 +221,12 @@ fn CRYPTO_ctr128_encrypt(
     }
 
     // can I do this in rust? there must be better way;
-    num = &mut (n as u32);
+    *num = n as u32;
 }
 
 fn CRYPTO_ctr128_encrypt_ctr32(
-    input: &mut [u8],
-    output: &mut [u8],
+    mut input: &[u8],
+    mut output: &mut [u8],
     len: usize,
     key: &([u32; 60], usize),
     ivec: &mut [u8; 16],
@@ -240,7 +241,7 @@ fn CRYPTO_ctr128_encrypt_ctr32(
     let mut n = *num as usize;
     let mut len = len;
 
-    let i = 0;
+    let mut i = 0;
     while (n > 0) && (len > 0) {
         output[i] = input[i] ^ block_buffer[n];
         len = len - 1;
@@ -250,7 +251,7 @@ fn CRYPTO_ctr128_encrypt_ctr32(
 
     let mut ctr32 = byteorder::BE::read_u32(&mut ivec[12..]);
     while len >= 16 {
-        let blocks = len / 16;
+        let mut blocks = len / 16;
 
         // (scaspin) don't think we need to translate this to rust?
         // 1<<28 is just a not-so-small yet not-so-large number...
@@ -267,10 +268,10 @@ fn CRYPTO_ctr128_encrypt_ctr32(
         }
 
         match func {
-            AesHwCtr32EncryptBlocks => {
+            AesFunc::AesHwCtr32EncryptBlocks => {
                 aes_hw_ctr32_encrypt_blocks(&input[0..blocks], &mut output[0..blocks], key, ivec)
             }
-            VpaesCtr32EncryptBlocks => {
+            AesFunc::VpaesCtr32EncryptBlocks => {
                 vpaes_ctr32_encrypt_blocks(&input[0..blocks], &mut output[0..blocks], key, ivec)
             }
         }
@@ -282,17 +283,18 @@ fn CRYPTO_ctr128_encrypt_ctr32(
         blocks = blocks * 16;
         len = len - blocks;
         output = &mut output[blocks..];
-        input = &mut input[blocks..];
+        input = &input[blocks..];
     }
 
     if len != 0 {
         ms_memset(block_buffer, 0, 16);
+        let block_buffer_input = &block_buffer[0..1].to_vec().clone();
         match func {
-            AesHwCtr32EncryptBlocks => {
-                aes_hw_ctr32_encrypt_blocks(&block_buffer[0..1], &mut block_buffer[0..1], key, ivec)
+            AesFunc::AesHwCtr32EncryptBlocks => {
+                aes_hw_ctr32_encrypt_blocks(block_buffer_input, &mut block_buffer[0..1], key, ivec)
             }
-            VpaesCtr32EncryptBlocks => {
-                vpaes_ctr32_encrypt_blocks(&block_buffer[0..1], &mut block_buffer[0..1], key, ivec)
+            AesFunc::VpaesCtr32EncryptBlocks => {
+                vpaes_ctr32_encrypt_blocks(block_buffer_input, &mut block_buffer[0..1], key, ivec)
             }
         }
         ctr32 = ctr32 + 1;
@@ -309,27 +311,27 @@ fn CRYPTO_ctr128_encrypt_ctr32(
     }
 
     // (scaspin) this is a bit icky. FIX? there must be better way;
-    num = &mut (n as u32);
+    *num = n as u32;
 }
 
 fn ctr96_inc(counter: &mut [u8]) {
     let n = 12;
-    let c: u32 = 1;
+    let mut c: u32 = 1;
 
     for i in (0..11).rev() {
         c = c + (counter[n] as u32);
-        counter[n] = c as u8;
+        counter[i] = c as u8;
         c = c >> 8;
     }
 }
 
 fn ctr128_inc(counter: &mut [u8]) {
     let n = 16;
-    let c: u32 = 1;
+    let mut c: u32 = 1;
 
     for i in (0..11).rev() {
         c = c + (counter[n] as u32);
-        counter[n] = c as u8;
+        counter[i] = c as u8;
         c = c >> 8;
     }
 }

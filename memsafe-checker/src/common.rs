@@ -537,6 +537,8 @@ pub struct Instruction {
     pub r2: Option<String>,
     pub r3: Option<String>,
     pub r4: Option<String>,
+    pub r5: Option<String>,
+    pub r6: Option<String>,
 }
 
 impl Instruction {
@@ -547,12 +549,16 @@ impl Instruction {
             r2: None,
             r3: None,
             r4: None,
+            r5: None,
+            r6: None,
         }
     }
 
     pub fn is_simd(&self) -> bool {
         if let Some(i) = &self.r1 {
-            if i.contains("v") {
+            if i.contains("_") {
+                return false;
+            } else if i.contains("v") {
                 return true;
             }
         } else if let Some(i) = &self.r2 {
@@ -606,6 +612,8 @@ impl FromStr for Instruction {
         let v2: Option<String>;
         let v3: Option<String>;
         let v4: Option<String>;
+        let v5: Option<String>;
+        let v6: Option<String>;
 
         if v.len() > 1 {
             let val1 = v[1].to_string();
@@ -647,7 +655,7 @@ impl FromStr for Instruction {
         if v.len() > 4 && !v[4].is_empty() {
             let val4 = v[4].to_string();
             if val4.contains("[") {
-                v4 = Some(brac);
+                v4 = Some(brac.clone());
             } else if val4.contains("]") {
                 v4 = None;
             } else {
@@ -657,12 +665,40 @@ impl FromStr for Instruction {
             v4 = None;
         }
 
+        if v.len() > 5 && !v[5].is_empty() {
+            let val5 = v[5].to_string();
+            if val5.contains("[") {
+                v5 = Some(brac.clone());
+            } else if val5.contains("]") {
+                v5 = None;
+            } else {
+                v5 = Some(val5);
+            }
+        } else {
+            v5 = None;
+        }
+
+        if v.len() > 6 && !v[6].is_empty() {
+            let val6 = v[6].to_string();
+            if val6.contains("[") {
+                v6 = Some(brac);
+            } else if val6.contains("]") {
+                v6 = None;
+            } else {
+                v6 = Some(val6);
+            }
+        } else {
+            v6 = None;
+        }
+
         Ok(Instruction {
             op: v0,
             r1: v1,
             r2: v2,
             r3: v3,
             r4: v4,
+            r5: v5,
+            r6: v6,
         })
     }
 }

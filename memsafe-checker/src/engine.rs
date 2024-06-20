@@ -244,7 +244,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
             log::info!("{:?}: {:?}", pc, instruction);
 
-            let execute_result = self.computer.execute(&instruction);
+            let execute_result = self.computer.execute(pc, &instruction);
 
             match execute_result {
                 Ok(some) => {
