@@ -124,7 +124,7 @@ pub fn sha256_digest(msg: &[u8], output: &mut [u8]) {
     sha256(msg, msg.len(), output);
 }
 
-#[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() > 0])]
+#[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
 fn sha256_block_data_order(context: &mut [u32; 8], input: &[u8]);
 
 #[cfg(test)]
@@ -144,7 +144,7 @@ mod tests {
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
                 0x5be0cd19,
             ];
-            let input = [0xee; 64];
+            let input = [0xee; 128];
             sha256_block_data_order(&mut context, &input);
             context
         };
@@ -154,7 +154,7 @@ mod tests {
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
                 0x5be0cd19,
             ];
-            let input = [0xee; 64];
+            let input = [0xee; 128];
             unsafe {
                 aws_sha256_block_data_order(context.as_mut_ptr(), input.as_ptr(), input.len() / 64);
             }

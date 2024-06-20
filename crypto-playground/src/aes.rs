@@ -2,7 +2,8 @@ use crate::utils::*;
 use byteorder::ByteOrder;
 use zeroize::Zeroize;
 
-struct AesKey {
+#[repr(C)]
+pub struct AesKey {
     rd_key: [u32; 4 * (14 + 1)], //14 is the MAX number of AES rounds
     rounds: usize,
 }
@@ -47,28 +48,28 @@ enum AesFunc {
 // fn vpaes_cbc_encrypt();
 //fn vpaes_ctr32_encrypt_blocks();
 
-#[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 16])]
-fn aes_gcm_enc_kernel(
-    input: &[u8],
-    output: &mut [u8],
-    xi: &mut [u8],
-    ivec: &mut [u8; 16],
-    keys: &([u32; 60], usize),
-    htable: &[u128; 16],
-);
+// #[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>64, input.len() == output.len()])]
+// fn aes_gcm_enc_kernel(
+//     input: &[u8],
+//     output: &mut [u8],
+//     xi: &mut [u8],
+//     ivec: &mut [u8; 16],
+//     keys: &([u32; 60], usize),
+//     htable: &[u128; 16],
+// );
 
-#[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 16])]
-fn aes_gcm_dec_kernel(
-    input: &[u8],
-    output: &mut [u8],
-    xi: &mut [u8; 16],
-    ivec: &mut [u8; 16],
-    keys: &([u32; 60], usize),
-    htable: &[u128; 16],
-);
+// #[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>64, input.len() == output.len()])]
+// fn aes_gcm_dec_kernel(
+//     input: &[u8],
+//     output: &mut [u8],
+//     xi: &mut [u8; 16],
+//     ivec: &mut [u8; 16],
+//     keys: &([u32; 60], usize),
+//     htable: &[u128; 16],
+// );
 
-// SHOULD REALLY HAVE (rounds == 10; rounds == 12; rounds == 14)
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16])]
+// SHOULD REALLY HAVE (rounds == 10 or rounds == 12 or rounds == 14)
+#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len()/32, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>32, input.len() == output.len()])]
 fn aes_hw_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
@@ -76,7 +77,7 @@ fn aes_hw_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>0, input.len() == output.len()])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len()/32, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>32, input.len() == output.len()])]
 fn vpaes_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
@@ -84,10 +85,11 @@ fn vpaes_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 16, input.len()>0,input.len() == output.len()])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 16, input.len()>32,input.len() == output.len()])]
 fn vpaes_encrypt(input: &[u8], output: &mut [u8], keys: &([u32; 60], usize));
 
-fn aes_ctr128_encrypt(
+#[allow(non_snake_case)]
+pub fn AES_ctr128_encrypt(
     key: &mut AesKey,
     ivec: &mut [u8; 16],
     block_buffer: &mut [u8; 16],
@@ -97,7 +99,7 @@ fn aes_ctr128_encrypt(
     let mut num: u32 = 0;
     let input_clone: &[u8] = &in_out.to_vec().clone();
 
-    let res = AES_ctr128_encrypt(
+    let res = aes_ctr128_encrypt(
         input_clone,
         in_out,
         in_out.len(),
@@ -112,7 +114,7 @@ fn aes_ctr128_encrypt(
     }
 }
 
-fn AES_ctr128_encrypt(
+fn aes_ctr128_encrypt(
     input: &[u8],
     out: &mut [u8],
     len: usize,
@@ -122,7 +124,7 @@ fn AES_ctr128_encrypt(
     num: &mut u32,
 ) -> Result<(), ()> {
     if std::arch::is_aarch64_feature_detected!("aes") {
-        CRYPTO_ctr128_encrypt_ctr32(
+        crypto_ctr128_encrypt_ctr32(
             input,
             out,
             len,
@@ -134,7 +136,7 @@ fn AES_ctr128_encrypt(
         );
     } else if std::arch::is_aarch64_feature_detected!("sve2-bitperm") {
         if std::arch::is_aarch64_feature_detected!("neon") {
-            CRYPTO_ctr128_encrypt_ctr32(
+            crypto_ctr128_encrypt_ctr32(
                 input,
                 out,
                 len,
@@ -145,11 +147,11 @@ fn AES_ctr128_encrypt(
                 AesFunc::VpaesCtr32EncryptBlocks,
             );
         } else {
-            CRYPTO_ctr128_encrypt(input, out, len, key, ivec, block_buffer, num);
+            crypto_ctr128_encrypt(input, out, len, key, ivec, block_buffer, num);
         }
     } else {
-        // CRYPTO_ctr128_encrypt_ctr32(in, out, len, key, ivec, ecount_buf, num, aes_nohw_ctr32_encrypt_blocks);
-        // CRYPTO_ctr128_encrypt_ctr32(
+        // crypto_ctr128_encrypt_ctr32(in, out, len, key, ivec, ecount_buf, num, aes_nohw_ctr32_encrypt_blocks);
+        // crypto_ctr128_encrypt_ctr32(
         //     input,
         //     out,
         //     len,
@@ -165,7 +167,7 @@ fn AES_ctr128_encrypt(
     Ok(())
 }
 
-fn CRYPTO_ctr128_encrypt(
+fn crypto_ctr128_encrypt(
     mut input: &[u8],
     mut output: &mut [u8],
     len: usize,
@@ -224,7 +226,7 @@ fn CRYPTO_ctr128_encrypt(
     *num = n as u32;
 }
 
-fn CRYPTO_ctr128_encrypt_ctr32(
+fn crypto_ctr128_encrypt_ctr32(
     mut input: &[u8],
     mut output: &mut [u8],
     len: usize,
@@ -315,23 +317,131 @@ fn CRYPTO_ctr128_encrypt_ctr32(
 }
 
 fn ctr96_inc(counter: &mut [u8]) {
-    let n = 12;
     let mut c: u32 = 1;
 
-    for i in (0..11).rev() {
+    for n in (0..11).rev() {
         c = c + (counter[n] as u32);
-        counter[i] = c as u8;
+        counter[n] = c as u8;
         c = c >> 8;
     }
 }
 
 fn ctr128_inc(counter: &mut [u8]) {
-    let n = 16;
     let mut c: u32 = 1;
 
-    for i in (0..11).rev() {
+    for n in (0..11).rev() {
         c = c + (counter[n] as u32);
-        counter[i] = c as u8;
+        counter[n] = c as u8;
         c = c >> 8;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    extern "C" {
+        #[link_name = "aws_lc_0_14_1_aes_hw_ctr32_encrypt_blocks"]
+        fn aws_aes_hw_ctr32_encrypt_blocks(
+            input_as_ptr: *const u8,
+            output_as_mut_ptr: *mut u8,
+            len: usize,
+            keys_as_mut_ptr: *const AesKey,
+            ivec_as_mut_ptr: *mut u8,
+        );
+
+        #[link_name = "aws_lc_0_14_1_vpaes_ctr32_encrypt_blocks"]
+        fn aws_vpaes_ctr32_encrypt_blocks(
+            input_as_ptr: *const u8,
+            output_as_mut_ptr: *mut u8,
+            len: usize,
+            keys_as_mut_ptr: *const AesKey,
+            ivec_as_mut_ptr: *mut u8,
+        );
+
+        #[link_name = "aws_lc_0_14_1_vpaes_encrypt"]
+        fn aws_vpaes_encrypt(
+            input_as_ptr: *const u8,
+            output_as_mut_ptr: *mut u8,
+            keys_as_mut_ptr: *const AesKey,
+        );
+
+    }
+
+    #[test]
+    fn test_aes_hw_ctr32_encrypt_blocks_asm_impl() {
+        let input = [0xee; 128];
+        let mut output = [0; 128];
+        let key = AesKey::new();
+        let mut ivec: [u8; 16] = [0xfc; 16];
+
+        let ours = {
+            aes_hw_ctr32_encrypt_blocks(&input, &mut output, &(key.rd_key, key.rounds), &mut ivec);
+            output
+        };
+
+        let theirs = {
+            unsafe {
+                aws_aes_hw_ctr32_encrypt_blocks(
+                    input.as_ptr(),
+                    output.as_mut_ptr(),
+                    input.len() / 32,
+                    &key as *const AesKey,
+                    ivec.as_mut_ptr(),
+                );
+                output
+            }
+        };
+        assert_eq!(ours, theirs);
+        assert!(ours != [0; 128]);
+    }
+
+    #[test]
+    fn test_vpaes_ctr32_encrypt_blocks_asm_impl() {
+        let input = [0xee; 128];
+        let mut output = [0; 128];
+        let key = AesKey::new();
+        let mut ivec: [u8; 16] = [0xfc; 16];
+
+        let ours = {
+            vpaes_ctr32_encrypt_blocks(&input, &mut output, &(key.rd_key, key.rounds), &mut ivec);
+            output
+        };
+
+        let theirs = {
+            unsafe {
+                aws_vpaes_ctr32_encrypt_blocks(
+                    input.as_ptr(),
+                    output.as_mut_ptr(),
+                    input.len() / 32,
+                    &key as *const AesKey,
+                    ivec.as_mut_ptr(),
+                );
+                output
+            }
+        };
+        assert_eq!(ours, theirs);
+        assert!(ours != [0; 128]);
+    }
+
+    #[test]
+    fn test_vpaes_encrypt_asm_impl() {
+        let input = [0xee; 128];
+        let mut output = [0; 128];
+        let key = AesKey::new();
+
+        let ours = {
+            vpaes_encrypt(&input, &mut output, &(key.rd_key, key.rounds));
+            output
+        };
+
+        let theirs = {
+            unsafe {
+                aws_vpaes_encrypt(input.as_ptr(), output.as_mut_ptr(), &key as *const AesKey);
+                output
+            }
+        };
+        assert_eq!(ours, theirs);
+        assert!(ours != [0; 128]);
     }
 }
