@@ -1044,7 +1044,6 @@ impl<'ctx> ARMCORTEXA<'_> {
                         }
                     }
                 }
-
                 "st1" => {
                     let reg1 = instruction.r1.clone().expect("computer19");
                     let reg2 = instruction.r2.clone().expect("computer20");
@@ -1062,6 +1061,18 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let reg2 = instruction.r2.clone().expect("Need immediate");
                     let imm = self.operand(reg2);
                     self.set_register(reg1, RegisterKind::Immediate, None, imm.offset);
+                }
+                "mov" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst reg");
+                    let reg2 = instruction.r2.clone().expect("Need src reg");
+                    let src = self.operand(reg2);
+                    self.set_register(reg1, src.kind, src.base, src.offset);
+                }
+                "fmov" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst reg");
+                    let reg2 = instruction.r2.clone().expect("Need src reg");
+                    let src = self.operand(reg2);
+                    self.set_register(reg1, src.kind, src.base, src.offset);
                 }
                 "shl" => {
                     let reg1 = instruction.r1.clone().expect("Need dst register");
@@ -1342,7 +1353,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         todo!("vector general ins unsupported");
                     }
                 }
-                "pmull" => {
+                "pmull" | "pmull2" => {
                     let reg1 = instruction.r1.clone().expect("Need dst register");
                     let reg2 = instruction.r2.clone().expect("Need first source register");
                     let reg3 = instruction.r3.clone().expect("Need second source register");
@@ -1468,6 +1479,87 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         dest.set_double(1, elem.0, elem.1);
                                     }
                                     _ => todo!("zip2 unsupported vector access"),
+                                }
+                            }
+                        }
+                    }
+                }
+                "aese" | "aesmc" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+
+                    let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+                    let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+                    match (src.kind.clone(), dest.kind.clone()) {
+                        (RegisterKind::Number, RegisterKind::Number) => {
+                            // don't need to do anything
+                            ()
+                        }
+                        _ => todo!(),
+                    }
+                }
+                "trn1" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+                    let reg3 = instruction.r3.clone().expect("Need second source register");
+
+                    if let Some((vector1, _)) = reg1.split_once(".") {
+                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                assert_eq!(arrangement2, arrangement3);
+
+                                let src1 = self.simd_registers
+                                    [get_register_index(vector2.to_string())]
+                                .clone();
+                                let src2 = self.simd_registers
+                                    [get_register_index(vector3.to_string())]
+                                .clone();
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+
+                                match arrangement2 {
+                                    "2d" => {
+                                        let elem = src1.get_double(0);
+                                        dest.set_double(0, elem.0, elem.1);
+
+                                        let elem = src2.get_double(0);
+                                        dest.set_double(1, elem.0, elem.1);
+                                    }
+                                    _ => todo!("trn1 unsupported vector access"),
+                                }
+                            }
+                        }
+                    }
+                }
+                "trn2" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+                    let reg3 = instruction.r3.clone().expect("Need second source register");
+
+                    if let Some((vector1, _)) = reg1.split_once(".") {
+                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                assert_eq!(arrangement2, arrangement3);
+
+                                let src1 = self.simd_registers
+                                    [get_register_index(vector2.to_string())]
+                                .clone();
+                                let src2 = self.simd_registers
+                                    [get_register_index(vector3.to_string())]
+                                .clone();
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+
+                                match arrangement2 {
+                                    "2d" => {
+                                        let elem = src1.get_double(1);
+                                        dest.set_double(0, elem.0, elem.1);
+
+                                        let elem = src2.get_double(1);
+                                        dest.set_double(1, elem.0, elem.1);
+                                    }
+                                    _ => todo!("trn2 unsupported vector access"),
                                 }
                             }
                         }
@@ -2195,21 +2287,29 @@ impl<'ctx> ARMCORTEXA<'_> {
         offset: i64,
         ty: RegionType,
     ) -> Result<(), MemorySafetyError> {
-        let (region, base) = match base_expr.clone() {
+        let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => (
                 self.memory
                     .get(&regbase.clone())
                     .expect(&format!("Region not in memory 1 {}", regbase.clone())),
+                ast::Int::new_const(self.context, regbase.clone()),
                 ast::Int::new_const(self.context, regbase),
             ),
             _ => {
                 let abstracts = base_expr.get_abstracts();
-                let mut result: Option<(&MemorySafeRegion, z3::ast::Int<'_>)> = None;
+                let mut result: Option<(&MemorySafeRegion, z3::ast::Int<'_>, z3::ast::Int<'_>)> =
+                    None;
                 for r in self.memory.keys() {
                     if abstracts.contains(r) {
                         result = Some((
                             self.memory.get(r).expect("Region not in memory 2"),
-                            expression_to_ast(self.context, base_expr.clone()).expect("computer25"),
+                            expression_to_ast(
+                                self.context,
+                                AbstractExpression::Abstract(r.to_string()),
+                            )
+                            .expect("computer25"),
+                            expression_to_ast(self.context, base_expr.clone())
+                                .expect("computer251"),
                         ));
                         break;
                     };
@@ -2239,7 +2339,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         if base_expr.contains("sp") {
             abs_offset = ast::Int::from_i64(self.context, offset.abs());
         }
-        let access = ast::Int::add(self.context, &[&base, &abs_offset]);
+        let access = ast::Int::add(self.context, &[&base_access, &abs_offset]);
 
         // let width = ast::Int::from_i64(self.context, 2);    // how wide is memory access, two bytes
         let lowerbound_value = ast::Int::from_i64(self.context, 0);
@@ -2251,8 +2351,8 @@ impl<'ctx> ARMCORTEXA<'_> {
         let u = access.ge(&up_access);
 
         match (
-            self.solver.check_assumptions(&[l]),
-            self.solver.check_assumptions(&[u]),
+            self.solver.check_assumptions(&[l.clone()]),
+            self.solver.check_assumptions(&[u.clone()]),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
                 log::info!("Memory safe with solver's check!");

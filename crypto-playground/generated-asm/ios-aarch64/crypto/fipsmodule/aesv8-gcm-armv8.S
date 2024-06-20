@@ -37,7 +37,7 @@ _aes_gcm_enc_kernel:
 	add	x19, x8, x17, lsl#4                   // borrow input_l1 for last key
 	ldp	x13, x14, [x19]                       // load round N keys
 	ldr	q31, [x19, #-16]                        // load round N-1 keys
-	add	x4, x0, x1, lsr #3   // end_input_ptr
+	add	x4, x0, x1, lsr#3   // end_input_ptr
 	lsr	x5, x1, #3              // byte_len
 	mov	x15, x5
 	ldp	x10, x11, [x16]              // ctr96_b64, ctr96_t32
@@ -812,7 +812,7 @@ _aes_gcm_dec_kernel:
 	sub	x5, x5, #1      // byte_len - 1
 	ldr	q25, [x8, #112]                                // load rk7
 	and	x5, x5, #0xffffffffffffffc0 // number of bytes to be processed in main loop (at least 1 byte must be handled by tail)
-	add	x4, x0, x1, lsr #3   // end_input_ptr
+	add	x4, x0, x1, lsr#3   // end_input_ptr
 	ldr	q24, [x8, #96]                                 // load rk6
 	lsr	x12, x11, #32
 	ldr	q23, [x8, #80]                                 // load rk5

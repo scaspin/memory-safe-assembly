@@ -723,7 +723,9 @@ pub fn string_to_int(s: &str) -> i64 {
             value = value * m;
         }
     } else if v.contains("x") {
-        value = i64::from_str_radix(v.strip_prefix("0x").expect("common4"), 16).expect("common5");
+        // FIX: store as two if i128 is needed
+        value = i128::from_str_radix(v.strip_prefix("0x").expect("common4"), 16).expect("common5")
+            as i64;
     } else {
         value = v.parse::<i64>().expect("common6");
     }
