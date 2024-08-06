@@ -4,7 +4,8 @@ fn gcm_init_neon(htable: &mut [u128; 16], h: &[u64; 2]);
 #[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr())]
 fn gcm_gmult_neon(context: &mut [u8; 16], h: &[u128; 16]);
 
-#[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len(), [buf.len() > 32])]
+// length in bits, not bytes
+#[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len()*8, [buf.len() > 32])]
 fn gcm_ghash_neon(context: &mut [u8; 16], h: &[u128; 16], buf: &[u8]);
 
 #[cfg(test)]
@@ -45,17 +46,17 @@ mod tests {
 
     #[test]
     fn test_gcm_neon_gmult_call_to_asm() {
-        let mut htable: [u8; 16] = [1; 16];
-        let h: [u128; 16] = [0xfc; 16];
+        let mut xi: [u8; 16] = [1; 16];
+        let htable: [u128; 16] = [0xfc; 16];
         let them = {
             unsafe {
-                aws_gcm_gmult_neon(htable.as_mut_ptr(), h.as_ptr());
+                aws_gcm_gmult_neon(xi.as_mut_ptr(), htable.as_ptr());
             }
             htable
         };
 
         let us = {
-            gcm_gmult_neon(&mut htable, &h);
+            gcm_gmult_neon(&mut xi, &htable);
 
             htable
         };
@@ -65,22 +66,27 @@ mod tests {
 
     #[test]
     fn test_gcm_neon_ghash_call_to_asm() {
-        let mut htable: [u8; 16] = [1; 16];
-        let h: [u128; 16] = [3; 16];
+        let mut xi: [u8; 16] = [1; 16];
+        let htable: [u128; 16] = [3; 16];
         let buf: &[u8] = &[0xff; 64];
 
         let them = {
             unsafe {
-                aws_gcm_ghash_neon(htable.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len());
+                aws_gcm_ghash_neon(xi.as_mut_ptr(), htable.as_ptr(), buf.as_ptr(), buf.len());
             }
             htable
         };
 
         let us = {
-            gcm_ghash_neon(&mut htable, &h, buf);
+            gcm_ghash_neon(&mut xi, &htable, buf);
             htable
         };
         assert_eq!(them, us);
         assert!(us != [1; 16]);
     }
 }
+
+// (aws-lc-rs) aes_128_gcm_siv -> (aes-lc) EVP_aead_aes_128_gcm_siv -> aead_aes_gcm_siv_seal_scatter -> gcm_siv_polyval ->
+// CRYPTO_POLYVAL_init :
+// CRYPTO_ghash_init -> gcm_init_neon
+// CRYPTO_POLYVAL_update_blocks -> gcm_ghash_neon

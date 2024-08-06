@@ -11,7 +11,7 @@ pub struct AesKey {
 impl AesKey {
     pub fn new() -> Self {
         return Self {
-            rd_key: [0; 60],
+            rd_key: [0x10; 60],
             rounds: 10,
         };
     }
@@ -69,7 +69,7 @@ enum AesFunc {
 // );
 
 // SHOULD REALLY HAVE (rounds == 10 or rounds == 12 or rounds == 14)
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len()/32, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>32, input.len() == output.len()])]
+#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>=16, input.len() == output.len()])]
 fn aes_hw_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
@@ -77,7 +77,7 @@ fn aes_hw_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len()/32, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>32, input.len() == output.len()])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 16, input.len()>=16, input.len() == output.len()])]
 fn vpaes_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
@@ -85,7 +85,7 @@ fn vpaes_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 16, input.len()>32,input.len() == output.len()])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 16, input.len()>= 16,input.len() == output.len()])]
 fn vpaes_encrypt(input: &[u8], output: &mut [u8], keys: &([u32; 60], usize));
 
 #[allow(non_snake_case)]
@@ -178,7 +178,7 @@ fn crypto_ctr128_encrypt(
 ) {
     // assert!(key && ecount_buf && num);
     // assert!(len == 0 || (in && out));
-    // assert!(num < 16);
+    assert!(*num <= 16);
 
     let mut n = *num as usize;
     let mut len = len;
@@ -236,8 +236,8 @@ fn crypto_ctr128_encrypt_ctr32(
     num: &mut u32,
     func: AesFunc,
 ) {
-    // assert!(key && ecount_buf && num);
-    // assert!(len == 0 || (in && out));
+    // assert!(key && block_buffer && num);
+    // assert!(len == 0 || (input && output));
     // assert!(num < 16);
 
     let mut n = *num as usize;
@@ -251,7 +251,11 @@ fn crypto_ctr128_encrypt_ctr32(
         i = i + 1;
     }
 
+    input = &input[i..];
+    output = &mut output[i..];
+
     let mut ctr32 = byteorder::BE::read_u32(&mut ivec[12..]);
+
     while len >= 16 {
         let mut blocks = len / 16;
 
@@ -270,12 +274,18 @@ fn crypto_ctr128_encrypt_ctr32(
         }
 
         match func {
-            AesFunc::AesHwCtr32EncryptBlocks => {
-                aes_hw_ctr32_encrypt_blocks(&input[0..blocks], &mut output[0..blocks], key, ivec)
-            }
-            AesFunc::VpaesCtr32EncryptBlocks => {
-                vpaes_ctr32_encrypt_blocks(&input[0..blocks], &mut output[0..blocks], key, ivec)
-            }
+            AesFunc::AesHwCtr32EncryptBlocks => aes_hw_ctr32_encrypt_blocks(
+                &input[0..(blocks * 16)],
+                &mut output[0..(blocks * 16)],
+                key,
+                ivec,
+            ),
+            AesFunc::VpaesCtr32EncryptBlocks => vpaes_ctr32_encrypt_blocks(
+                &input[0..(blocks * 16)],
+                &mut output[0..(blocks * 16)],
+                key,
+                ivec,
+            ),
         }
 
         byteorder::BE::write_u32(&mut ivec[12..], ctr32);
@@ -366,6 +376,17 @@ mod tests {
             keys_as_mut_ptr: *const AesKey,
         );
 
+        #[link_name = "aws_lc_0_14_1_AES_encrypt"]
+        fn aws_AES_ctr128_encrypt(
+            input_as_ptr: *const u8,
+            output_as_mut_ptr: *mut u8,
+            len: usize,
+            keys_as_mut_ptr: *const AesKey,
+            ivec_as_mut_ptr: &mut [u8; 16],
+            block_buffer: *mut [u8; 16],
+            num: *mut u32,
+        );
+
     }
 
     #[test]
@@ -385,7 +406,7 @@ mod tests {
                 aws_aes_hw_ctr32_encrypt_blocks(
                     input.as_ptr(),
                     output.as_mut_ptr(),
-                    input.len() / 32,
+                    input.len() / 16,
                     &key as *const AesKey,
                     ivec.as_mut_ptr(),
                 );
@@ -413,7 +434,7 @@ mod tests {
                 aws_vpaes_ctr32_encrypt_blocks(
                     input.as_ptr(),
                     output.as_mut_ptr(),
-                    input.len() / 32,
+                    input.len() / 16,
                     &key as *const AesKey,
                     ivec.as_mut_ptr(),
                 );
@@ -443,5 +464,98 @@ mod tests {
         };
         assert_eq!(ours, theirs);
         assert!(ours != [0; 128]);
+    }
+
+    #[test]
+    fn test_aes_deterministic() {
+        let key1 = &mut AesKey::new();
+        let key2 = &mut AesKey::new();
+        let ivec1: &mut [u8; 16] = &mut [0; 16];
+        let ivec2: &mut [u8; 16] = &mut [0; 16];
+        let block_buffer1: &mut [u8; 16] = &mut [0; 16];
+        let block_buffer2: &mut [u8; 16] = &mut [0; 16];
+        let input_us: &mut [u8] = &mut [0xee; 32];
+        let input_them: &mut [u8] = &mut [0xee; 32];
+
+        let ours = {
+            AES_ctr128_encrypt(key1, ivec1, block_buffer1, input_us);
+            input_us
+        };
+
+        let theirs = {
+            AES_ctr128_encrypt(key2, ivec2, block_buffer2, input_them);
+            input_them
+        };
+        assert_eq!(ours, theirs);
+        assert!(ours != [0xee; 128]);
+    }
+
+    #[ignore]
+    #[test]
+    fn test_aes_against_aws_lc() {
+        let key1 = &mut AesKey::new();
+        // let key2 = &mut AesKey::new();
+        let key2 = AesKey::new();
+        let ivec1: &mut [u8; 16] = &mut [0; 16];
+        let ivec2: &mut [u8; 16] = &mut [0; 16];
+        let block_buffer1: &mut [u8; 16] = &mut [0; 16];
+        let block_buffer2: &mut [u8; 16] = &mut [0; 16];
+        let input_us: &mut [u8] = &mut [0xee; 32];
+        let input_them: &mut [u8] = &mut [0xee; 32];
+
+        let ours = {
+            AES_ctr128_encrypt(key1, ivec1, block_buffer1, input_us);
+            input_us
+        };
+
+        let theirs = {
+            let output: &mut [u8] = &mut [0; 32];
+            let num: u32 = 0;
+            unsafe {
+                let num_ptr = num as *mut u32;
+                aws_AES_ctr128_encrypt(
+                    input_them.as_ptr(),
+                    output.as_mut_ptr(),
+                    1,
+                    &key2 as *const AesKey,
+                    ivec2,
+                    block_buffer2,
+                    num_ptr,
+                );
+                input_them
+            }
+        };
+        assert_eq!(ours, theirs);
+        assert!(ours != [0xee; 128]);
+    }
+
+    #[test]
+    fn test_aes_against_aws_lc_rs_public() {
+        use aws_lc_rs::cipher::{EncryptingKey, UnboundCipherKey, AES_128};
+        use aws_lc_rs::test::from_hex;
+
+        let key_string = "000102030405060708090a0b0c0d0e0f";
+        let key = &mut AesKey::new();
+        let input_them: &mut [u8; 32] = &mut [0xee; 32];
+        let input_us: &mut [u8] = &mut [0xee; 32];
+
+        let ours = {
+            let ivec: &mut [u8; 16] = &mut [0; 16];
+            let block_buffer: &mut [u8; 16] = &mut [0; 16];
+            AES_ctr128_encrypt(key, ivec, block_buffer, input_us);
+            input_us
+        };
+
+        let theirs = {
+            let key = from_hex(key_string).unwrap();
+            let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
+            let encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
+
+            let mut in_out = input_them.clone();
+            let _ = encrypting_key.encrypt(&mut in_out);
+            in_out
+        };
+        assert_eq!(ours, theirs);
+        assert!(ours != [0xee; 128]);
     }
 }
