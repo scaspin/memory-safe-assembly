@@ -2,10 +2,11 @@ use crate::utils::*;
 use byteorder::ByteOrder;
 use zeroize::Zeroize;
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct AesKey {
     rd_key: [u32; 4 * (14 + 1)], //14 is the MAX number of AES rounds
-    rounds: usize,
+    rounds: u32,
 }
 
 impl AesKey {
@@ -14,6 +15,19 @@ impl AesKey {
             rd_key: [0x10; 60],
             rounds: 10,
         };
+    }
+
+    pub fn new_from_bytes(bytes: &[u8]) -> Self {
+        let mut i = 0;
+        let mut rd_key: [u32; 60] = [0; 60];
+        let mut rounds = u32::from_le_bytes(bytes[240..244].try_into().unwrap());
+        println!("rounds: {:?}", rounds);
+        for j in 0..60 {
+            rd_key[j] = u32::from_le_bytes(bytes[i..(i + 4)].try_into().unwrap());
+            i = i + 4;
+        }
+
+        Self { rd_key, rounds }
     }
 }
 
@@ -73,7 +87,7 @@ enum AesFunc {
 fn aes_hw_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
-    keys: &([u32; 60], usize),
+    keys: &([u32; 60], u32),
     ivec: &mut [u8; 16],
 );
 
@@ -81,12 +95,12 @@ fn aes_hw_ctr32_encrypt_blocks(
 fn vpaes_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
-    keys: &([u32; 60], usize),
+    keys: &([u32; 60], u32),
     ivec: &mut [u8; 16],
 );
 
 #[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 16, input.len()>= 16,input.len() == output.len()])]
-fn vpaes_encrypt(input: &[u8], output: &mut [u8], keys: &([u32; 60], usize));
+fn vpaes_encrypt(input: &[u8], output: &mut [u8], keys: &([u32; 60], u32));
 
 #[allow(non_snake_case)]
 pub fn AES_ctr128_encrypt(
@@ -118,7 +132,7 @@ fn aes_ctr128_encrypt(
     input: &[u8],
     out: &mut [u8],
     len: usize,
-    key: &([u32; 60], usize),
+    key: &([u32; 60], u32),
     ivec: &mut [u8; 16],
     block_buffer: &mut [u8; 16],
     num: &mut u32,
@@ -171,7 +185,7 @@ fn crypto_ctr128_encrypt(
     mut input: &[u8],
     mut output: &mut [u8],
     len: usize,
-    key: &([u32; 60], usize),
+    key: &([u32; 60], u32),
     ivec: &mut [u8; 16],
     block_buffer: &mut [u8; 16],
     num: &mut u32,
@@ -230,7 +244,7 @@ fn crypto_ctr128_encrypt_ctr32(
     mut input: &[u8],
     mut output: &mut [u8],
     len: usize,
-    key: &([u32; 60], usize),
+    key: &([u32; 60], u32),
     ivec: &mut [u8; 16],
     block_buffer: &mut [u8; 16],
     num: &mut u32,
@@ -535,7 +549,12 @@ mod tests {
         use aws_lc_rs::test::from_hex;
 
         let key_string = "000102030405060708090a0b0c0d0e0f";
-        let key = &mut AesKey::new();
+        let key = from_hex(key_string).unwrap();
+        let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
+        let mut encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
+        let key_bytes = encrypting_key.key.key();
+
+        let key = &mut AesKey::new_from_bytes(key_bytes);
         let input_them: &mut [u8; 32] = &mut [0xee; 32];
         let input_us: &mut [u8] = &mut [0xee; 32];
 
@@ -547,10 +566,6 @@ mod tests {
         };
 
         let theirs = {
-            let key = from_hex(key_string).unwrap();
-            let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
-            let encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
-
             let mut in_out = input_them.clone();
             let _ = encrypting_key.encrypt(&mut in_out);
             in_out

@@ -316,6 +316,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                                     "usize" => {
                                                         size = size + std::mem::size_of::<usize>();
                                                     }
+                                                    "u32" => {
+                                                        size = size + std::mem::size_of::<u32>();
+                                                    }
                                                     _ => todo!("path size"),
                                                 }
                                             }
@@ -639,6 +642,18 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                                     let abs = p.path.segments[0].ident.to_string();
                                                     match abs.as_str() {
                                                         "usize" => {
+                                                            let new_name = e.ident.clone().expect(
+                                                                "need name of variable to input",
+                                                            );
+                                                            engine.add_abstract_to_memory(
+                                                                name.clone(),
+                                                                index,
+                                                                AbstractExpression::Abstract(
+                                                                    new_name.to_string(),
+                                                                ),
+                                                            );
+                                                        }
+                                                        "u32" => {
                                                             let new_name = e.ident.clone().expect(
                                                                 "need name of variable to input",
                                                             );
