@@ -2287,6 +2287,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         offset: i64,
         ty: RegionType,
     ) -> Result<(), MemorySafetyError> {
+        let mut symbolic_base = false;
         let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => (
                 self.memory
@@ -2296,6 +2297,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 ast::Int::new_const(self.context, regbase),
             ),
             _ => {
+                symbolic_base = true;
                 let abstracts = base_expr.get_abstracts();
                 let mut result: Option<(&MemorySafeRegion, z3::ast::Int<'_>, z3::ast::Int<'_>)> =
                     None;
@@ -2348,7 +2350,13 @@ impl<'ctx> ARMCORTEXA<'_> {
             expression_to_ast(self.context, region.get_length()).expect("computer26");
         let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
         let l = access.lt(&low_access);
-        let u = access.ge(&up_access);
+        let u = {
+            if offset == 0 && !symbolic_base {
+                access.ge(&up_access)
+            } else {
+                access.gt(&up_access)
+            }
+        };
 
         match (
             self.solver.check_assumptions(&[l.clone()]),
