@@ -60,9 +60,6 @@ gcm_gmult_neon:
 .align	4
 gcm_ghash_neon:
 	AARCH64_VALID_CALL_TARGET
-
-	cmp x3, xzr
-	b.eq Early_abort
 	
 	ld1	{v0.16b}, [x0]		// load Xi
 	ld1	{v5.1d}, [x1], #8		// load twisted H
@@ -323,9 +320,6 @@ gcm_ghash_neon:
 	ext	v0.16b, v0.16b, v0.16b, #8
 	st1	{v0.16b}, [x0]
 
-	ret
-
-Early_abort:
 	ret
 
 .size	gcm_ghash_neon,.-gcm_ghash_neon

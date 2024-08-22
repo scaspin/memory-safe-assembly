@@ -374,6 +374,18 @@ impl AbstractExpression {
     }
 }
 
+pub fn generate_comparison(
+    op: &str,
+    a: AbstractExpression,
+    b: AbstractExpression,
+) -> AbstractComparison {
+    AbstractComparison {
+        op: op.to_string(),
+        left: Box::new(a),
+        right: Box::new(b),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AbstractComparison {
     pub op: String,
@@ -525,6 +537,8 @@ pub struct Instruction {
     pub r2: Option<String>,
     pub r3: Option<String>,
     pub r4: Option<String>,
+    pub r5: Option<String>,
+    pub r6: Option<String>,
 }
 
 impl Instruction {
@@ -535,12 +549,16 @@ impl Instruction {
             r2: None,
             r3: None,
             r4: None,
+            r5: None,
+            r6: None,
         }
     }
 
     pub fn is_simd(&self) -> bool {
         if let Some(i) = &self.r1 {
-            if i.contains("v") {
+            if i.contains("_") {
+                return false;
+            } else if i.contains("v") {
                 return true;
             }
         } else if let Some(i) = &self.r2 {
@@ -573,7 +591,7 @@ impl FromStr for Instruction {
             let right = s.rfind(']');
             let exclamation = s.rfind('!');
             if left.is_some() && right.is_some() {
-                brac = s[left.expect("common")..right.expect("common")].to_string();
+                brac = s[left.expect("common1")..right.expect("common2")].to_string();
             }
             if exclamation.is_some() {
                 brac = brac + "!";
@@ -594,6 +612,8 @@ impl FromStr for Instruction {
         let v2: Option<String>;
         let v3: Option<String>;
         let v4: Option<String>;
+        let v5: Option<String>;
+        let v6: Option<String>;
 
         if v.len() > 1 {
             let val1 = v[1].to_string();
@@ -635,7 +655,7 @@ impl FromStr for Instruction {
         if v.len() > 4 && !v[4].is_empty() {
             let val4 = v[4].to_string();
             if val4.contains("[") {
-                v4 = Some(brac);
+                v4 = Some(brac.clone());
             } else if val4.contains("]") {
                 v4 = None;
             } else {
@@ -645,12 +665,40 @@ impl FromStr for Instruction {
             v4 = None;
         }
 
+        if v.len() > 5 && !v[5].is_empty() {
+            let val5 = v[5].to_string();
+            if val5.contains("[") {
+                v5 = Some(brac.clone());
+            } else if val5.contains("]") {
+                v5 = None;
+            } else {
+                v5 = Some(val5);
+            }
+        } else {
+            v5 = None;
+        }
+
+        if v.len() > 6 && !v[6].is_empty() {
+            let val6 = v[6].to_string();
+            if val6.contains("[") {
+                v6 = Some(brac);
+            } else if val6.contains("]") {
+                v6 = None;
+            } else {
+                v6 = Some(val6);
+            }
+        } else {
+            v6 = None;
+        }
+
         Ok(Instruction {
             op: v0,
             r1: v1,
             r2: v2,
             r3: v3,
             r4: v4,
+            r5: v5,
+            r6: v6,
         })
     }
 }
@@ -667,32 +715,71 @@ pub fn get_register_name_string(r: String) -> String {
 
 pub fn string_to_int(s: &str) -> i64 {
     let mut value = 1;
-    let v = s.trim_matches('#');
+    let v = s.trim_matches(' ').trim_matches('#');
     if v.contains('*') {
         let parts = v.split('*');
         for part in parts {
-            let m = part.parse::<i64>().expect("common");
+            let m = part.parse::<i64>().expect("common3");
             value = value * m;
         }
     } else if v.contains("x") {
-        value = i64::from_str_radix(v.strip_prefix("0x").expect("common"), 16).expect("common");
+        // FIX: store as two if i128 is needed
+        value = i128::from_str_radix(v.strip_prefix("0x").expect("common4"), 16).expect("common5")
+            as i64;
     } else {
-        value = v.parse::<i64>().expect("common");
+        value = v.parse::<i64>().expect("common6");
     }
 
     return value;
 }
 
-pub fn shift_right_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
-    let new_offset = register.offset >> shift;
-    RegisterValue {
-        kind: register.kind,
-        base: Some(generate_expression(
-            &op,
-            register.base.unwrap_or(AbstractExpression::Empty),
-            AbstractExpression::Immediate(shift),
-        )),
-        offset: new_offset,
+pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
+    match op.as_str() {
+        "lsl" => {
+            let new_offset = register.offset << shift;
+            RegisterValue {
+                kind: register.kind,
+                base: Some(generate_expression(
+                    &op,
+                    register.base.unwrap_or(AbstractExpression::Empty),
+                    AbstractExpression::Immediate(shift),
+                )),
+                offset: new_offset,
+            }
+        }
+        "lsr" => {
+            let new_offset = register.offset << shift;
+            RegisterValue {
+                kind: register.kind,
+                base: Some(generate_expression(
+                    &op,
+                    register.base.unwrap_or(AbstractExpression::Empty),
+                    AbstractExpression::Immediate(shift),
+                )),
+                offset: new_offset,
+            }
+        }
+        "ror" => {
+            let new_offset = register.offset >> shift;
+            RegisterValue {
+                kind: register.kind,
+                base: Some(generate_expression(
+                    &op,
+                    register.base.unwrap_or(AbstractExpression::Empty),
+                    AbstractExpression::Immediate(shift),
+                )),
+                offset: new_offset,
+            }
+        }
+        "" => {
+            let new_offset = register.offset + shift;
+            RegisterValue {
+                kind: register.kind,
+                base: register.base,
+                offset: new_offset,
+            }
+        }
+        _ => todo!("{}", op),
     }
 }
 
@@ -706,7 +793,7 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
         }
         AbstractExpression::Register(reg) => {
             if let Some(base) = reg.base.clone() {
-                let base = expression_to_ast(context, base).unwrap();
+                let base = expression_to_ast(context, base).expect("common7");
                 let offset = ast::Int::from_i64(context, reg.offset);
                 return Some(ast::Int::add(context, &[&base, &offset]));
             } else {
@@ -714,8 +801,8 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
             }
         }
         AbstractExpression::Expression(op, old1, old2) => {
-            let new1 = expression_to_ast(context, *old1).expect("common");
-            let new2 = expression_to_ast(context, *old2).expect("common");
+            let new1 = expression_to_ast(context, *old1).expect("common8");
+            let new2 = expression_to_ast(context, *old2).expect("common8");
             match op.as_str() {
                 "+" => return Some(ast::Int::add(context, &[&new1, &new2])),
                 "-" => return Some(ast::Int::sub(context, &[&new1, &new2])),
@@ -741,10 +828,19 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
 }
 
 pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> Option<ast::Bool> {
-    let left = expression_to_ast(context, *expression.left).expect("common");
-    let right = expression_to_ast(context, *expression.right).expect("common");
+    let left = expression_to_ast(context, *expression.left).expect("common10");
+    let right = expression_to_ast(context, *expression.right).expect("common11");
     match expression.op.as_str() {
         "<" => {
+            return Some(left.lt(&right));
+        }
+        ">" => {
+            return Some(left.gt(&right));
+        }
+        ">=" => {
+            return Some(left.ge(&right));
+        }
+        "<=" => {
             return Some(left.le(&right));
         }
         "==" => {
@@ -759,6 +855,6 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
                 &[&left.lt(&right), &left.gt(&right)],
             ));
         }
-        _ => todo!(),
+        _ => todo!("unsupported op {:?}", expression.op),
     }
 }

@@ -17,19 +17,20 @@ fn get_register_index(reg_name: String) -> usize {
         if let Some((num, _)) = r.split_once(".") {
             return num
                 .parse::<usize>()
-                .expect(format!("Invalid register value {:?}", reg_name).as_str());
+                .expect(format!("Invalid register value 1 {:?}", reg_name).as_str());
         } else {
             return r
                 .parse::<usize>()
-                .expect(format!("Invalid register value {:?}", reg_name).as_str());
+                .expect(format!("Invalid register value 2 {:?}", reg_name).as_str());
         }
     } else {
-        let r = name.strip_prefix("x").unwrap_or(&name);
+        let mut r = name.strip_prefix("x").unwrap_or(&name);
+        r = r.strip_prefix("w").unwrap_or(&r);
         return r
-            .strip_prefix("w")
+            .strip_prefix("d")
             .unwrap_or(&r)
             .parse::<usize>()
-            .expect(format!("Invalid register value {:?}", reg_name).as_str());
+            .expect(format!("Invalid register value 3 {:?}", reg_name).as_str());
     }
 }
 
@@ -191,6 +192,23 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.set_register(register, RegisterKind::RegisterBase, Some(value), 0);
     }
 
+    pub fn set_stack_element(
+        &mut self,
+        address: i64,
+        base: Option<AbstractExpression>,
+        offset: i64,
+    ) {
+        let stack = self.memory.get_mut("sp").expect("Stack not found");
+        stack.insert(
+            address,
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base,
+                offset,
+            },
+        );
+    }
+
     fn set_register(
         &mut self,
         name: String,
@@ -211,11 +229,38 @@ impl<'ctx> ARMCORTEXA<'_> {
                     offset as u128,
                 );
             }
+        } else if name.contains("d") {
+            self.simd_registers[get_register_index(name.clone())].set_register(
+                "2d".to_string(),
+                kind,
+                base,
+                offset as u128,
+            );
         }
     }
 
     pub fn add_memory_value(&mut self, region: String, address: i64, value: i64) {
         let reg_value = RegisterValue::new(RegisterKind::Immediate, None, value);
+        match self.memory.get_mut(&region) {
+            Some(r) => {
+                r.insert(address, reg_value);
+            }
+            None => {
+                let mut region_map =
+                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW);
+                region_map.insert(address, reg_value);
+                self.memory.insert(region, region_map);
+            }
+        }
+    }
+
+    pub fn add_memory_value_abstract(
+        &mut self,
+        region: String,
+        address: i64,
+        value: AbstractExpression,
+    ) {
+        let reg_value = RegisterValue::new(RegisterKind::RegisterBase, Some(value), 0);
         match self.memory.get_mut(&region) {
             Some(r) => {
                 r.insert(address, reg_value);
@@ -292,7 +337,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 offset: reg.offset,
             };
         } else if v.contains('[') && v.contains(',') && v.contains('#') {
-            let a = v.split_once(',').expect("computer");
+            let a = v.split_once(',').expect("computer1");
             let reg = self.registers[get_register_index(a.0.trim_matches('[').to_string())].clone();
             return RegisterValue {
                 kind: RegisterKind::RegisterBase,
@@ -323,6 +368,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
     pub fn execute(
         &mut self,
+        pc: usize,
         instruction: &Instruction,
     ) -> Result<Option<(Option<AbstractComparison>, Option<String>, Option<u128>)>, String> {
         if !instruction.is_simd() {
@@ -461,7 +507,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                     FlagValue::ABSTRACT(_) => {
                         log::error!("Can't support this yet :)");
-                        todo!();
+                        todo!("Abstract flag expressions");
                     }
                 },
                 "sbcs" => match self.carry.clone().expect("Need carry flag set") {
@@ -488,7 +534,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                     FlagValue::ABSTRACT(_) => {
                         log::error!("Can't support this yet :)");
-                        todo!();
+                        todo!("Abstract flag expression 2");
                     }
                 },
                 "adrp" => {
@@ -505,7 +551,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         [get_register_index(instruction.r1.clone().expect("Need one register"))]
                     .clone();
                     if (register.base.is_none()
-                        || register.base.clone().expect("computer") == AbstractExpression::Empty)
+                        || register.base.clone().expect("computer2") == AbstractExpression::Empty)
                         && register.offset == 0
                     {
                         return Ok(None);
@@ -529,7 +575,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     .clone();
 
                     if (register.base.is_none()
-                        || register.base.clone().expect("computer") == AbstractExpression::Empty)
+                        || register.base.clone().expect("computer3") == AbstractExpression::Empty)
                         && register.offset == 0
                     {
                         return Ok(Some((None, instruction.r2.clone(), None)));
@@ -575,7 +621,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             }
                             FlagValue::ABSTRACT(_) => {
                                 log::error!("Can't support this yet :)");
-                                todo!();
+                                todo!("Abstract Flag Expression3");
                             }
                         },
                         "cc" => match self.carry.clone().expect("Need carry flag set") {
@@ -598,10 +644,10 @@ impl<'ctx> ARMCORTEXA<'_> {
                             }
                             FlagValue::ABSTRACT(_) => {
                                 log::error!("Can't support this yet :)");
-                                todo!();
+                                todo!("Abstract flag expressions 4");
                             }
                         },
-                        _ => todo!(),
+                        _ => todo!("unsupported comparison type {:?}", instruction.r2),
                     }
                 }
                 "cmp" => {
@@ -620,6 +666,15 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "b" => {
                     return Ok(Some((None, instruction.r1.clone(), None)));
+                }
+                "bl" => {
+                    let label = instruction
+                        .r1
+                        .clone()
+                        .expect("need label to jump")
+                        .to_string();
+                    self.set_register("x30".to_string(), RegisterKind::Immediate, None, pc as i64);
+                    return Ok(Some((None, Some(label), None)));
                 }
                 "b.ne" | "bne" => {
                     match &self.zero {
@@ -670,12 +725,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                             if let Some(AbstractExpression::Abstract(address)) = x30.base {
                                 if address == "return" && x30.offset == 0 {
                                     return Ok(Some((None, Some("return".to_string()), None)));
+                                } else {
+                                    return Ok(Some((None, Some(address.to_string()), None)));
                                 }
                             }
                             return Ok(Some((
                                 None,
                                 None,
-                                Some(x30.offset.try_into().expect("computer")),
+                                Some(x30.offset.try_into().expect("computer4")),
                             )));
                         } else {
                             return Ok(Some((None, Some("return".to_string()), None)));
@@ -690,8 +747,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "ldr" => {
-                    let reg1 = instruction.r1.clone().expect("computer");
-                    let reg2 = instruction.r2.clone().expect("computer");
+                    let reg1 = instruction.r1.clone().expect("computer5");
+                    let reg2 = instruction.r2.clone().expect("computer6");
 
                     let reg2base = get_register_name_string(reg2.clone());
                     let mut base_add_reg =
@@ -720,7 +777,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // post-index
                     if instruction.r3.is_some() {
-                        let new_imm = self.operand(instruction.r3.clone().expect("computer"));
+                        let new_imm = self.operand(instruction.r3.clone().expect("computer7"));
                         self.set_register(
                             reg2base,
                             base_add_reg.kind,
@@ -730,9 +787,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "ldp" => {
-                    let reg1 = instruction.r1.clone().expect("computer");
-                    let reg2 = instruction.r2.clone().expect("computer");
-                    let reg3 = instruction.r3.clone().expect("computer");
+                    let reg1 = instruction.r1.clone().expect("computer8");
+                    let reg2 = instruction.r2.clone().expect("computer9");
+                    let reg3 = instruction.r3.clone().expect("computer10");
 
                     let reg3base = get_register_name_string(reg3.clone());
                     let mut base_add_reg =
@@ -761,7 +818,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // post-index
                     if instruction.r4.is_some() {
-                        let new_imm = self.operand(instruction.r4.clone().expect("computer"));
+                        let new_imm = self.operand(instruction.r4.clone().expect("computer11"));
                         self.set_register(
                             reg3base,
                             base_add_reg.kind,
@@ -780,8 +837,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "str" => {
-                    let reg1 = instruction.r1.clone().expect("computer");
-                    let reg2 = instruction.r2.clone().expect("computer");
+                    let reg1 = instruction.r1.clone().expect("computer12");
+                    let reg2 = instruction.r2.clone().expect("computer13");
 
                     let reg2base = get_register_name_string(reg2.clone());
                     let mut base_add_reg =
@@ -811,7 +868,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // post-index
                     if instruction.r3.is_some() {
-                        let new_imm = self.operand(instruction.r3.clone().expect("computer"));
+                        let new_imm = self.operand(instruction.r3.clone().expect("computer14"));
                         self.set_register(
                             reg2base,
                             base_add_reg.kind,
@@ -821,9 +878,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 "stp" => {
-                    let reg1 = instruction.r1.clone().expect("computer");
-                    let reg2 = instruction.r2.clone().expect("computer");
-                    let reg3 = instruction.r3.clone().expect("computer");
+                    let reg1 = instruction.r1.clone().expect("computer15");
+                    let reg2 = instruction.r2.clone().expect("computer16");
+                    let reg3 = instruction.r3.clone().expect("computer17");
 
                     let reg3base = get_register_name_string(reg3.clone());
                     let mut base_add_reg =
@@ -859,7 +916,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // post-index
                     if instruction.r4.is_some() {
-                        let new_imm = self.operand(instruction.r4.clone().expect("computer"));
+                        let new_imm = self.operand(instruction.r4.clone().expect("computer18"));
                         self.set_register(
                             reg3base,
                             base_add_reg.kind,
@@ -888,11 +945,15 @@ impl<'ctx> ARMCORTEXA<'_> {
                         .r2
                         .clone()
                         .expect("Need second source or dst register");
-                    if let Some(reg3) = &instruction.r3 {
-                        if reg2.contains("}") {
-                            let base_name = get_register_name_string(reg3.clone());
+                    // either two vector registers in r1 and r2, or four in r1-r4, followed by address and potentially followed by immediate increment value
+                    if let Some(reg5) = &instruction.r5 {
+                        let reg3 = instruction.r3.clone().expect("Need 3rd vector");
+                        let reg4 = instruction.r4.clone().expect("Need 4th vector");
+                        if reg4.contains("}") {
+                            let base_name = get_register_name_string(reg5.clone());
                             let base_add_reg =
                                 self.registers[get_register_index(base_name.clone())].clone();
+
                             match self.load_vector(reg1, base_add_reg.clone()) {
                                 Err(e) => return Err(e.to_string()),
                                 _ => (),
@@ -900,6 +961,64 @@ impl<'ctx> ARMCORTEXA<'_> {
                             match self.load_vector(reg2, base_add_reg.clone()) {
                                 Err(e) => return Err(e.to_string()),
                                 _ => (),
+                            }
+                            match self.load_vector(reg3, base_add_reg.clone()) {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                            match self.load_vector(reg4, base_add_reg.clone()) {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+
+                            if let Some(reg6) = &instruction.r6 {
+                                let new_imm = self.operand(get_register_name_string(reg6.clone()));
+                                let peeled_reg5 =
+                                    reg5.strip_prefix("[").unwrap_or(reg5).to_string();
+                                self.set_register(
+                                    peeled_reg5,
+                                    base_add_reg.kind,
+                                    base_add_reg.base,
+                                    base_add_reg.offset + new_imm.offset,
+                                );
+                            }
+                        } else {
+                            let imm = self.operand(reg3.to_string());
+                            let base_name = get_register_name_string(reg2.clone());
+                            let mut base_add_reg =
+                                self.registers[get_register_index(base_name.clone())].clone();
+
+                            base_add_reg.offset = base_add_reg.offset + imm.offset;
+                            let res = self.load_vector(reg1, base_add_reg.clone());
+                            match res {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                        }
+                    } else if let Some(reg3) = &instruction.r3 {
+                        if reg2.contains("}") {
+                            let base_name = get_register_name_string(reg3.clone());
+                            let base_add_reg =
+                                self.registers[get_register_index(base_name.clone())].clone();
+
+                            match self.load_vector(reg1, base_add_reg.clone()) {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                            match self.load_vector(reg2, base_add_reg.clone()) {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                            if let Some(reg4) = &instruction.r4 {
+                                let new_imm = self.operand(get_register_name_string(reg4.clone()));
+                                let peeled_reg3 =
+                                    reg3.strip_prefix("[").unwrap_or(reg3).to_string();
+                                self.set_register(
+                                    peeled_reg3,
+                                    base_add_reg.kind,
+                                    base_add_reg.base,
+                                    base_add_reg.offset + new_imm.offset,
+                                );
                             }
                         } else {
                             let imm = self.operand(reg3.to_string());
@@ -925,10 +1044,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                         }
                     }
                 }
-
                 "st1" => {
-                    let reg1 = instruction.r1.clone().expect("computer");
-                    let reg2 = instruction.r2.clone().expect("computer");
+                    let reg1 = instruction.r1.clone().expect("computer19");
+                    let reg2 = instruction.r2.clone().expect("computer20");
 
                     let reg2base = get_register_name_string(reg2.clone());
                     let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
@@ -944,6 +1062,18 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let imm = self.operand(reg2);
                     self.set_register(reg1, RegisterKind::Immediate, None, imm.offset);
                 }
+                "mov" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst reg");
+                    let reg2 = instruction.r2.clone().expect("Need src reg");
+                    let src = self.operand(reg2);
+                    self.set_register(reg1, src.kind, src.base, src.offset);
+                }
+                "fmov" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst reg");
+                    let reg2 = instruction.r2.clone().expect("Need src reg");
+                    let src = self.operand(reg2);
+                    self.set_register(reg1, src.kind, src.base, src.offset);
+                }
                 "shl" => {
                     let reg1 = instruction.r1.clone().expect("Need dst register");
                     let reg2 = instruction.r2.clone().expect("Need source register");
@@ -958,15 +1088,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_double(i);
                                     let mut offset = u64::from_be_bytes(offsets);
-                                    (offset, _) = offset
-                                        .overflowing_shl(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset.overflowing_shl(
+                                        imm.offset.try_into().expect("computer21"),
+                                    );
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
                                     dest.set_double(i, bases, offset.to_be_bytes());
                                 }
                             }
-                            _ => todo!(),
+                            _ => todo!("unsupported shl vector type"),
                         }
                     }
                 }
@@ -985,8 +1116,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_double(i);
                                     let mut offset = u64::from_be_bytes(offsets);
-                                    (offset, _) = offset
-                                        .overflowing_shr(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset.overflowing_shr(
+                                        imm.offset.try_into().expect("computer22"),
+                                    );
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
@@ -999,15 +1131,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         [get_register_index(reg2.clone())]
                                     .get_word(i);
                                     let mut offset = u32::from_be_bytes(offsets);
-                                    (offset, _) = offset
-                                        .overflowing_shr(imm.offset.try_into().expect("computer"));
+                                    (offset, _) = offset.overflowing_shr(
+                                        imm.offset.try_into().expect("computer23"),
+                                    );
                                     // TODO: figure out best way to modify bases
                                     let dest =
                                         &mut self.simd_registers[get_register_index(reg1.clone())];
                                     dest.set_word(i, bases, offset.to_be_bytes());
                                 }
                             }
-                            _ => todo!(),
+                            _ => todo!("unsupported ushr vector type"),
                         }
                     }
                 }
@@ -1060,7 +1193,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     dest.set_byte(i, base.clone(), offset);
                                 }
                             }
-                            _ => todo!(),
+                            _ => todo!("unsupported ext vector type"),
                         }
                     }
                 }
@@ -1120,7 +1253,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             }
                         };
                     } else {
-                        todo!() // from general purpose register
+                        todo!("unsupported dup from general purpose") // from general purpose register
                     }
                 }
                 "and" => {
@@ -1217,10 +1350,10 @@ impl<'ctx> ARMCORTEXA<'_> {
                         }
                     // vector, general
                     } else {
-                        todo!();
+                        todo!("vector general ins unsupported");
                     }
                 }
-                "pmull" => {
+                "pmull" | "pmull2" => {
                     let reg1 = instruction.r1.clone().expect("Need dst register");
                     let reg2 = instruction.r2.clone().expect("Need first source register");
                     let reg3 = instruction.r3.clone().expect("Need second source register");
@@ -1279,7 +1412,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                             dest.set_halfword(i, new_bases, offset.to_be_bytes());
                                         }
                                     }
-                                    _ => todo!(),
+                                    _ => todo!("pmull unsupported vector access"),
                                 }
                             }
                         }
@@ -1312,7 +1445,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         let elem = src2.get_double(0);
                                         dest.set_double(1, elem.0, elem.1);
                                     }
-                                    _ => todo!(),
+                                    _ => todo!("zip1 unsupported vector access"),
                                 }
                             }
                         }
@@ -1345,7 +1478,88 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         let elem = src2.get_double(1);
                                         dest.set_double(1, elem.0, elem.1);
                                     }
-                                    _ => todo!(),
+                                    _ => todo!("zip2 unsupported vector access"),
+                                }
+                            }
+                        }
+                    }
+                }
+                "aese" | "aesmc" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+
+                    let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+                    let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+                    match (src.kind.clone(), dest.kind.clone()) {
+                        (RegisterKind::Number, RegisterKind::Number) => {
+                            // don't need to do anything
+                            ()
+                        }
+                        _ => todo!(),
+                    }
+                }
+                "trn1" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+                    let reg3 = instruction.r3.clone().expect("Need second source register");
+
+                    if let Some((vector1, _)) = reg1.split_once(".") {
+                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                assert_eq!(arrangement2, arrangement3);
+
+                                let src1 = self.simd_registers
+                                    [get_register_index(vector2.to_string())]
+                                .clone();
+                                let src2 = self.simd_registers
+                                    [get_register_index(vector3.to_string())]
+                                .clone();
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+
+                                match arrangement2 {
+                                    "2d" => {
+                                        let elem = src1.get_double(0);
+                                        dest.set_double(0, elem.0, elem.1);
+
+                                        let elem = src2.get_double(0);
+                                        dest.set_double(1, elem.0, elem.1);
+                                    }
+                                    _ => todo!("trn1 unsupported vector access"),
+                                }
+                            }
+                        }
+                    }
+                }
+                "trn2" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need first source register");
+                    let reg3 = instruction.r3.clone().expect("Need second source register");
+
+                    if let Some((vector1, _)) = reg1.split_once(".") {
+                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                assert_eq!(arrangement2, arrangement3);
+
+                                let src1 = self.simd_registers
+                                    [get_register_index(vector2.to_string())]
+                                .clone();
+                                let src2 = self.simd_registers
+                                    [get_register_index(vector3.to_string())]
+                                .clone();
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+
+                                match arrangement2 {
+                                    "2d" => {
+                                        let elem = src1.get_double(1);
+                                        dest.set_double(0, elem.0, elem.1);
+
+                                        let elem = src2.get_double(1);
+                                        dest.set_double(1, elem.0, elem.1);
+                                    }
+                                    _ => todo!("trn2 unsupported vector access"),
                                 }
                             }
                         }
@@ -1353,7 +1567,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 _ => {
                     log::warn!("SIMD instruction not supported {:?}", instruction);
-                    todo!()
+                    todo!("unsupported vector operation {:?}", instruction);
                 }
             }
         }
@@ -1374,9 +1588,11 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         if reg3.is_some() {
             if let Some(expr) = reg3 {
-                let parts = expr.split_once('#').expect("computer");
-
-                r2 = shift_right_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
+                // FIX: account for possibility of space between # and number
+                let parts = expr
+                    .split_once('#')
+                    .expect(&format!("computer24 {:?}", expr).to_string());
+                r2 = shift_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
             }
         }
 
@@ -1611,7 +1827,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         dest.set_byte(i, new_base, offset);
                     }
                 }
-                _ => todo!(),
+                _ => todo!("unsupported vector arithmetic access"),
             }
         }
     }
@@ -1868,7 +2084,7 @@ impl<'ctx> ARMCORTEXA<'_> {
      */
     fn load(&mut self, t: String, address: RegisterValue) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
-            address.base.clone().expect("Need a name for region"),
+            address.base.clone().expect("Need a name for region}"),
             address.offset,
             RegionType::READ,
         );
@@ -2071,21 +2287,31 @@ impl<'ctx> ARMCORTEXA<'_> {
         offset: i64,
         ty: RegionType,
     ) -> Result<(), MemorySafetyError> {
-        let (region, base) = match base_expr.clone() {
+        let mut symbolic_base = false;
+        let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => (
                 self.memory
                     .get(&regbase.clone())
-                    .expect(&format!("Region not in memory {}", regbase.clone())),
+                    .expect(&format!("Region not in memory 1 {}", regbase.clone())),
+                ast::Int::new_const(self.context, regbase.clone()),
                 ast::Int::new_const(self.context, regbase),
             ),
             _ => {
+                symbolic_base = true;
                 let abstracts = base_expr.get_abstracts();
-                let mut result: Option<(&MemorySafeRegion, z3::ast::Int<'_>)> = None;
+                let mut result: Option<(&MemorySafeRegion, z3::ast::Int<'_>, z3::ast::Int<'_>)> =
+                    None;
                 for r in self.memory.keys() {
                     if abstracts.contains(r) {
                         result = Some((
-                            self.memory.get(r).expect("Region not in memory"),
-                            expression_to_ast(self.context, base_expr.clone()).expect("computer"),
+                            self.memory.get(r).expect("Region not in memory 2"),
+                            expression_to_ast(
+                                self.context,
+                                AbstractExpression::Abstract(r.to_string()),
+                            )
+                            .expect("computer25"),
+                            expression_to_ast(self.context, base_expr.clone())
+                                .expect("computer251"),
                         ));
                         break;
                     };
@@ -2115,20 +2341,26 @@ impl<'ctx> ARMCORTEXA<'_> {
         if base_expr.contains("sp") {
             abs_offset = ast::Int::from_i64(self.context, offset.abs());
         }
-        let access = ast::Int::add(self.context, &[&base, &abs_offset]);
+        let access = ast::Int::add(self.context, &[&base_access, &abs_offset]);
 
         // let width = ast::Int::from_i64(self.context, 2);    // how wide is memory access, two bytes
         let lowerbound_value = ast::Int::from_i64(self.context, 0);
         let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
         let upperbound_value =
-            expression_to_ast(self.context, region.get_length()).expect("computer");
+            expression_to_ast(self.context, region.get_length()).expect("computer26");
         let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
         let l = access.lt(&low_access);
-        let u = access.ge(&up_access);
+        let u = {
+            if offset == 0 && !symbolic_base {
+                access.ge(&up_access)
+            } else {
+                access.gt(&up_access)
+            }
+        };
 
         match (
-            self.solver.check_assumptions(&[l]),
-            self.solver.check_assumptions(&[u]),
+            self.solver.check_assumptions(&[l.clone()]),
+            self.solver.check_assumptions(&[u.clone()]),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
                 log::info!("Memory safe with solver's check!");

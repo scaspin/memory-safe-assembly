@@ -116,8 +116,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 for i in v.iter().skip(1) {
                     let num: i64;
                     if i.contains("x") {
-                        num = i64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
-                            .expect("engine3");
+                        num = u64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
+                            .expect("engine3") as i64;
                     } else {
                         if i.is_empty() {
                             continue;
@@ -165,15 +165,39 @@ impl<'ctx> ExecutionEngine<'ctx> {
         self.computer.set_abstract(register, value);
     }
 
+    pub fn add_abstract_to_memory(
+        &mut self,
+        region: String,
+        address: i64,
+        value: AbstractExpression,
+    ) {
+        self.computer
+            .add_memory_value_abstract(region, address, value);
+    }
+
     pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
-        let name = ("x".to_owned() + &register.to_string()).to_string();
-        self.computer.set_abstract(name.clone(), value);
+        if register < 8 {
+            let name = ("x".to_owned() + &register.to_string()).to_string();
+            self.computer.set_abstract(name.clone(), value);
+        } else {
+            let stack_index = ((register as i64) - 3) * -8;
+            self.computer.set_stack_element(stack_index, Some(value), 0);
+        }
     }
 
     pub fn add_abstract_from(&mut self, register: usize, value: String) {
-        let name = ("x".to_owned() + &register.to_string()).to_string();
-        self.computer
-            .set_abstract(name.clone(), AbstractExpression::Abstract(value));
+        if register < 8 {
+            let name = ("x".to_owned() + &register.to_string()).to_string();
+            self.computer
+                .set_abstract(name.clone(), AbstractExpression::Abstract(value));
+        } else {
+            let stack_index = ((register as i64) - 3) * -8;
+            self.computer.set_stack_element(
+                stack_index,
+                Some(AbstractExpression::Abstract(value)),
+                0,
+            );
+        }
     }
 
     pub fn dont_fail_fast(&mut self) {
@@ -220,7 +244,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
             log::info!("{:?}: {:?}", pc, instruction);
 
-            let execute_result = self.computer.execute(&instruction);
+            let execute_result = self.computer.execute(pc, &instruction);
 
             match execute_result {
                 Ok(some) => {
@@ -513,6 +537,13 @@ impl<'ctx> ExecutionEngine<'ctx> {
         } else {
             self.computer.solver.assert(&c.not());
         }
+    }
+
+    pub fn add_invariant(&self, constraint: AbstractComparison) {
+        let c = comparison_to_ast(self.computer.context, constraint)
+            .expect("engine6.5")
+            .simplify();
+        self.computer.solver.assert(&c);
     }
 
     fn looping_too_deep(&self) -> bool {
