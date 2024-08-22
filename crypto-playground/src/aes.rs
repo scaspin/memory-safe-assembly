@@ -20,7 +20,7 @@ impl AesKey {
     pub fn new_from_bytes(bytes: &[u8]) -> Self {
         let mut i = 0;
         let mut rd_key: [u32; 60] = [0; 60];
-        let mut rounds = u32::from_le_bytes(bytes[240..244].try_into().unwrap());
+        let rounds = u32::from_le_bytes(bytes[240..244].try_into().unwrap());
         for j in 0..60 {
             rd_key[j] = u32::from_le_bytes(bytes[i..(i + 4)].try_into().unwrap());
             i = i + 4;
@@ -544,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn test_aes_against_aws_lc_rs_public() {
+    fn test_aes_against_aws_lc_rs_aes_encrypt_public() {
         use crate::aes::tests::cipher::{
             EncryptingKey, EncryptionContext, UnboundCipherKey, AES_128,
         };
@@ -567,7 +567,6 @@ mod tests {
         let ours = {
             let im = match context {
                 EncryptionContext::Iv128(ref v) => v.as_ref(),
-                _ => &[0; 16],
             };
             let mut ivec = im.clone();
             let block_buffer: &mut [u8; 16] = &mut [0; 16];

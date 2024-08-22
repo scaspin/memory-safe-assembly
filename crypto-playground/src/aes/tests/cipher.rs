@@ -136,6 +136,7 @@
 //! ```
 
 #![allow(clippy::module_name_repetitions)]
+#![allow(unused)]
 
 pub(crate) mod aes;
 pub(crate) mod block;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR ISC
 
 use crate::aes::tests::cipher::aes::encrypt_block_aes;
-use crate::aes::tests::cipher::block::{Block, BLOCK_LEN};
+use crate::aes::tests::cipher::block::Block;
 use crate::aes::tests::cipher::chacha::ChaCha20Key;
 use aws_lc_rs::cipher::{AES_128_KEY_LEN, AES_256_KEY_LEN};
 use aws_lc_rs::error::Unspecified;
@@ -51,15 +51,15 @@ impl Drop for SymmetricCipherKey {
 impl SymmetricCipherKey {
     pub(crate) fn print(&mut self) -> &[u8] {
         match self {
-            SymmetricCipherKey::Aes128 { enc_key, dec_key }
-            | SymmetricCipherKey::Aes256 { enc_key, dec_key } => unsafe {
+            SymmetricCipherKey::Aes128 { enc_key, .. }
+            | SymmetricCipherKey::Aes256 { enc_key, .. } => unsafe {
                 let enc_bytes: &[u8; size_of::<AES_KEY>()] = (enc_key as *mut AES_KEY)
                     .cast::<[u8; size_of::<AES_KEY>()]>()
                     .as_mut()
                     .unwrap();
                 enc_bytes
             },
-            SymmetricCipherKey::ChaCha20 { raw_key } => &[0],
+            SymmetricCipherKey::ChaCha20 { .. } => &[0],
         }
     }
 
