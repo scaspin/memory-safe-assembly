@@ -21,7 +21,6 @@ impl AesKey {
         let mut i = 0;
         let mut rd_key: [u32; 60] = [0; 60];
         let mut rounds = u32::from_le_bytes(bytes[240..244].try_into().unwrap());
-        println!("rounds: {:?}", rounds);
         for j in 0..60 {
             rd_key[j] = u32::from_le_bytes(bytes[i..(i + 4)].try_into().unwrap());
             i = i + 4;
@@ -363,6 +362,7 @@ fn ctr128_inc(counter: &mut [u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod cipher;
 
     extern "C" {
         #[link_name = "aws_lc_0_14_1_aes_hw_ctr32_encrypt_blocks"]
@@ -506,7 +506,7 @@ mod tests {
 
     #[ignore]
     #[test]
-    fn test_aes_against_aws_lc() {
+    fn test_aes_against_aws_lc_low_level() {
         let key1 = &mut AesKey::new();
         // let key2 = &mut AesKey::new();
         let key2 = AesKey::new();
@@ -545,29 +545,39 @@ mod tests {
 
     #[test]
     fn test_aes_against_aws_lc_rs_public() {
-        use aws_lc_rs::cipher::{EncryptingKey, UnboundCipherKey, AES_128};
+        use crate::aes::tests::cipher::{
+            EncryptingKey, EncryptionContext, UnboundCipherKey, AES_128,
+        };
         use aws_lc_rs::test::from_hex;
 
         let key_string = "000102030405060708090a0b0c0d0e0f";
         let key = from_hex(key_string).unwrap();
         let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
         let mut encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
-        let key_bytes = encrypting_key.key.key();
+        let context = encrypting_key
+            .algorithm()
+            .new_encryption_context(encrypting_key.mode())
+            .expect("expect context");
 
+        let key_bytes = encrypting_key.key.key();
         let key = &mut AesKey::new_from_bytes(key_bytes);
         let input_them: &mut [u8; 32] = &mut [0xee; 32];
         let input_us: &mut [u8] = &mut [0xee; 32];
 
         let ours = {
-            let ivec: &mut [u8; 16] = &mut [0; 16];
+            let im = match context {
+                EncryptionContext::Iv128(ref v) => v.as_ref(),
+                _ => &[0; 16],
+            };
+            let mut ivec = im.clone();
             let block_buffer: &mut [u8; 16] = &mut [0; 16];
-            AES_ctr128_encrypt(key, ivec, block_buffer, input_us);
+            AES_ctr128_encrypt(key, &mut ivec, block_buffer, input_us);
             input_us
         };
 
         let theirs = {
             let mut in_out = input_them.clone();
-            let _ = encrypting_key.encrypt(&mut in_out);
+            let _ = encrypting_key.less_safe_encrypt(&mut in_out, context);
             in_out
         };
         assert_eq!(ours, theirs);
