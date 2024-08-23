@@ -2,7 +2,8 @@
 members = [
   "bums_macros",
   "memsafe-checker",
-  "crypto-playground"
+  "crypto-playground",
+  "rav1d-playground"
 ]
 
 resolver = "2"
