@@ -1,0 +1,204 @@
+
+object-files/ca81b3637afdb6b5-looprestoration_common.o:	file format mach-o arm64
+
+Disassembly of section __TEXT,__text:
+
+0000000000000000 <sgr_box3_vert_neon>:
+       0: 6dbd27e8     	stp	d8, d9, [sp, #-48]!
+       4: 6d012fea     	stp	d10, d11, [sp, #16]
+       8: 6d0237ec     	stp	d12, d13, [sp, #32]
+       c: 11000884     	add	w4, w4, #2
+      10: 5ac010c9     	clz	w9, w6
+      14: 4e040cbc     	dup.4s	v28, w5
+      18: a9401805     	ldp	x5, x6, [x0]
+      1c: f9400800     	ldr	x0, [x0, #16]
+      20: a9402027     	ldp	x7, x8, [x1]
+      24: f9400821     	ldr	x1, [x1, #16]
+      28: 4f00053f     	movi.4s	v31, #9
+      2c: 51006129     	sub	w9, w9, #24
+      30: 9000000c     	adrp	x12, 0x0 <sgr_box3_vert_neon+0x30>
+      34: 9100018c     	add	x12, x12, #0
+      38: 528038ed     	mov	w13, #455
+      3c: 4c406190     	ld1.16b	{ v16, v17, v18 }, [x12]
+      40: 4e020d26     	dup.8h	v6, w9
+      44: 4f00e4b3     	movi.16b	v19, #5
+      48: 0f01e6f4     	movi.8b	v20, #55
+      4c: 0f02e515     	movi.8b	v21, #72
+      50: 0f03e4b6     	movi.8b	v22, #101
+      54: 0f05e537     	movi.8b	v23, #169
+      58: 0f07e7d8     	movi.8b	v24, #254
+      5c: 0e6600c7     	saddl.4s	v7, v6, v6
+      60: 4f00a43d     	movi.8h	v29, #1, lsl #8
+      64: 4e040dbe     	dup.4s	v30, w13
+      68: 6e338610     	sub.16b	v16, v16, v19
+      6c: 6e338631     	sub.16b	v17, v17, v19
+      70: 6e338652     	sub.16b	v18, v18, v19
+      74: 4cdfa8a8     	ld1.4s	{ v8, v9 }, [x5], #32
+      78: 4cdfa8ca     	ld1.4s	{ v10, v11 }, [x6], #32
+      7c: 4cdf74ec     	ld1.8h	{ v12 }, [x7], #16
+      80: 4cdf750d     	ld1.8h	{ v13 }, [x8], #16
+      84: 4cdfa800     	ld1.4s	{ v0, v1 }, [x0], #32
+      88: 4cdf7422     	ld1.8h	{ v2 }, [x1], #16
+      8c: 4eaa8508     	add.4s	v8, v8, v10
+      90: 4eab8529     	add.4s	v9, v9, v11
+      94: 4e6d858c     	add.8h	v12, v12, v13
+      98: 71002084     	subs	w4, w4, #8
+      9c: 4ea88400     	add.4s	v0, v0, v8
+      a0: 4ea98421     	add.4s	v1, v1, v9
+      a4: 4e6c8442     	add.8h	v2, v2, v12
+      a8: 4ea75400     	srshl.4s	v0, v0, v7
+      ac: 4ea75421     	srshl.4s	v1, v1, v7
+      b0: 4e665444     	srshl.8h	v4, v2, v6
+      b4: 4ebf9c00     	mul.4s	v0, v0, v31
+      b8: 4ebf9c21     	mul.4s	v1, v1, v31
+      bc: 2e64c083     	umull.4s	v3, v4, v4
+      c0: 6e64c084     	umull2.4s	v4, v4, v4
+      c4: 6ea32c00     	uqsub.4s	v0, v0, v3
+      c8: 6ea42c21     	uqsub.4s	v1, v1, v4
+      cc: 4ebc9c00     	mul.4s	v0, v0, v28
+      d0: 4ebc9c21     	mul.4s	v1, v1, v28
+      d4: 4cdfa8a8     	ld1.4s	{ v8, v9 }, [x5], #32
+      d8: 2f109400     	uqshrn.4h	v0, v0, #16
+      dc: 6f109420     	uqshrn2.8h	v0, v1, #16
+      e0: 4cdfa8ca     	ld1.4s	{ v10, v11 }, [x6], #32
+      e4: 2f0c9c00     	uqrshrn.8b	v0, v0, #4
+      e8: 4cdf74ec     	ld1.8h	{ v12 }, [x7], #16
+      ec: 2e343419     	cmhi.8b	v25, v0, v20
+      f0: 2e35341a     	cmhi.8b	v26, v0, v21
+      f4: 0e004201     	tbl.8b	v1, { v16, v17, v18 }, v0
+      f8: 2e36341b     	cmhi.8b	v27, v0, v22
+      fc: 2e373404     	cmhi.8b	v4, v0, v23
+     100: 0e3a8739     	add.8b	v25, v25, v26
+     104: 2e383405     	cmhi.8b	v5, v0, v24
+     108: 0e24877b     	add.8b	v27, v27, v4
+     10c: 0e3384a5     	add.8b	v5, v5, v19
+     110: 0e3b8739     	add.8b	v25, v25, v27
+     114: 0e258425     	add.8b	v5, v1, v5
+     118: 4cdf750d     	ld1.8h	{ v13 }, [x8], #16
+     11c: 0e3984a5     	add.8b	v5, v5, v25
+     120: 4cdfa800     	ld1.4s	{ v0, v1 }, [x0], #32
+     124: 2f08a4a5     	ushll.8h	v5, v5, #0
+     128: 2e62c0a3     	umull.4s	v3, v5, v2
+     12c: 6e62c0a4     	umull2.4s	v4, v5, v2
+     130: 4ebe9c63     	mul.4s	v3, v3, v30
+     134: 4ebe9c84     	mul.4s	v4, v4, v30
+     138: 4f342463     	srshr.4s	v3, v3, #12
+     13c: 4f342484     	srshr.4s	v4, v4, #12
+     140: 6e6587a5     	sub.8h	v5, v29, v5
+     144: 4cdf7422     	ld1.8h	{ v2 }, [x1], #16
+     148: 4c9fa843     	st1.4s	{ v3, v4 }, [x2], #32
+     14c: 4c9f7465     	st1.8h	{ v5 }, [x3], #16
+     150: 54fff9ec     	b.gt	0x8c <sgr_box3_vert_neon+0x8c>
+     154: 6d4237ec     	ldp	d12, d13, [sp, #32]
+     158: 6d412fea     	ldp	d10, d11, [sp, #16]
+     15c: 6cc327e8     	ldp	d8, d9, [sp], #48
+     160: d65f03c0     	ret
+
+0000000000000164 <sgr_box5_vert_neon>:
+     164: 6dbc27e8     	stp	d8, d9, [sp, #-64]!
+     168: 6d012fea     	stp	d10, d11, [sp, #16]
+     16c: 6d0237ec     	stp	d12, d13, [sp, #32]
+     170: 6d033fee     	stp	d14, d15, [sp, #48]
+     174: 11000884     	add	w4, w4, #2
+     178: 5ac010cf     	clz	w15, w6
+     17c: 4e040cbc     	dup.4s	v28, w5
+     180: a9401805     	ldp	x5, x6, [x0]
+     184: a9412007     	ldp	x7, x8, [x0, #16]
+     188: f9401000     	ldr	x0, [x0, #32]
+     18c: a9402829     	ldp	x9, x10, [x1]
+     190: a941302b     	ldp	x11, x12, [x1, #16]
+     194: f9401021     	ldr	x1, [x1, #32]
+     198: 4f00073f     	movi.4s	v31, #25
+     19c: 510061ef     	sub	w15, w15, #24
+     1a0: 9000000d     	adrp	x13, 0x0 <sgr_box5_vert_neon+0x3c>
+     1a4: 910001ad     	add	x13, x13, #0
+     1a8: 5280148e     	mov	w14, #164
+     1ac: 4c4061b0     	ld1.16b	{ v16, v17, v18 }, [x13]
+     1b0: 4e020de6     	dup.8h	v6, w15
+     1b4: 4f00e4b3     	movi.16b	v19, #5
+     1b8: 0f07e7d8     	movi.8b	v24, #254
+     1bc: 0e6600c7     	saddl.4s	v7, v6, v6
+     1c0: 4f00a43d     	movi.8h	v29, #1, lsl #8
+     1c4: 4e040dde     	dup.4s	v30, w14
+     1c8: 6e338610     	sub.16b	v16, v16, v19
+     1cc: 6e338631     	sub.16b	v17, v17, v19
+     1d0: 6e338652     	sub.16b	v18, v18, v19
+     1d4: 4cdfa8a8     	ld1.4s	{ v8, v9 }, [x5], #32
+     1d8: 4cdfa8ca     	ld1.4s	{ v10, v11 }, [x6], #32
+     1dc: 4cdfa8ec     	ld1.4s	{ v12, v13 }, [x7], #32
+     1e0: 4cdfa90e     	ld1.4s	{ v14, v15 }, [x8], #32
+     1e4: 4cdf7534     	ld1.8h	{ v20 }, [x9], #16
+     1e8: 4cdf7555     	ld1.8h	{ v21 }, [x10], #16
+     1ec: 4cdf7576     	ld1.8h	{ v22 }, [x11], #16
+     1f0: 4cdf7597     	ld1.8h	{ v23 }, [x12], #16
+     1f4: 4cdfa800     	ld1.4s	{ v0, v1 }, [x0], #32
+     1f8: 4cdf7422     	ld1.8h	{ v2 }, [x1], #16
+     1fc: 4eaa8508     	add.4s	v8, v8, v10
+     200: 4eab8529     	add.4s	v9, v9, v11
+     204: 4eae858c     	add.4s	v12, v12, v14
+     208: 4eaf85ad     	add.4s	v13, v13, v15
+     20c: 4e758694     	add.8h	v20, v20, v21
+     210: 4e7786d6     	add.8h	v22, v22, v23
+     214: 4ea88400     	add.4s	v0, v0, v8
+     218: 4ea98421     	add.4s	v1, v1, v9
+     21c: 4e748442     	add.8h	v2, v2, v20
+     220: 4eac8400     	add.4s	v0, v0, v12
+     224: 4ead8421     	add.4s	v1, v1, v13
+     228: 4e768442     	add.8h	v2, v2, v22
+     22c: 71002084     	subs	w4, w4, #8
+     230: 0f01e6f4     	movi.8b	v20, #55
+     234: 0f02e515     	movi.8b	v21, #72
+     238: 0f03e4b6     	movi.8b	v22, #101
+     23c: 0f05e537     	movi.8b	v23, #169
+     240: 4ea75400     	srshl.4s	v0, v0, v7
+     244: 4ea75421     	srshl.4s	v1, v1, v7
+     248: 4e665444     	srshl.8h	v4, v2, v6
+     24c: 4ebf9c00     	mul.4s	v0, v0, v31
+     250: 4ebf9c21     	mul.4s	v1, v1, v31
+     254: 2e64c083     	umull.4s	v3, v4, v4
+     258: 6e64c084     	umull2.4s	v4, v4, v4
+     25c: 6ea32c00     	uqsub.4s	v0, v0, v3
+     260: 6ea42c21     	uqsub.4s	v1, v1, v4
+     264: 4ebc9c00     	mul.4s	v0, v0, v28
+     268: 4ebc9c21     	mul.4s	v1, v1, v28
+     26c: 4cdfa8a8     	ld1.4s	{ v8, v9 }, [x5], #32
+     270: 2f109400     	uqshrn.4h	v0, v0, #16
+     274: 6f109420     	uqshrn2.8h	v0, v1, #16
+     278: 4cdfa8ca     	ld1.4s	{ v10, v11 }, [x6], #32
+     27c: 2f0c9c00     	uqrshrn.8b	v0, v0, #4
+     280: 4cdfa8ec     	ld1.4s	{ v12, v13 }, [x7], #32
+     284: 2e343419     	cmhi.8b	v25, v0, v20
+     288: 2e35341a     	cmhi.8b	v26, v0, v21
+     28c: 0e004201     	tbl.8b	v1, { v16, v17, v18 }, v0
+     290: 2e36341b     	cmhi.8b	v27, v0, v22
+     294: 2e373404     	cmhi.8b	v4, v0, v23
+     298: 4cdfa90e     	ld1.4s	{ v14, v15 }, [x8], #32
+     29c: 0e3a8739     	add.8b	v25, v25, v26
+     2a0: 2e383405     	cmhi.8b	v5, v0, v24
+     2a4: 0e24877b     	add.8b	v27, v27, v4
+     2a8: 4cdf7534     	ld1.8h	{ v20 }, [x9], #16
+     2ac: 0e3384a5     	add.8b	v5, v5, v19
+     2b0: 0e3b8739     	add.8b	v25, v25, v27
+     2b4: 4cdf7555     	ld1.8h	{ v21 }, [x10], #16
+     2b8: 0e258425     	add.8b	v5, v1, v5
+     2bc: 4cdf7576     	ld1.8h	{ v22 }, [x11], #16
+     2c0: 0e3984a5     	add.8b	v5, v5, v25
+     2c4: 4cdf7597     	ld1.8h	{ v23 }, [x12], #16
+     2c8: 2f08a4a5     	ushll.8h	v5, v5, #0
+     2cc: 4cdfa800     	ld1.4s	{ v0, v1 }, [x0], #32
+     2d0: 2e62c0a3     	umull.4s	v3, v5, v2
+     2d4: 6e62c0a4     	umull2.4s	v4, v5, v2
+     2d8: 4ebe9c63     	mul.4s	v3, v3, v30
+     2dc: 4ebe9c84     	mul.4s	v4, v4, v30
+     2e0: 4f342463     	srshr.4s	v3, v3, #12
+     2e4: 4f342484     	srshr.4s	v4, v4, #12
+     2e8: 6e6587a5     	sub.8h	v5, v29, v5
+     2ec: 4cdf7422     	ld1.8h	{ v2 }, [x1], #16
+     2f0: 4c9fa843     	st1.4s	{ v3, v4 }, [x2], #32
+     2f4: 4c9f7465     	st1.8h	{ v5 }, [x3], #16
+     2f8: 54fff82c     	b.gt	0x1fc <sgr_box5_vert_neon+0x98>
+     2fc: 6d433fee     	ldp	d14, d15, [sp, #48]
+     300: 6d4237ec     	ldp	d12, d13, [sp, #32]
+     304: 6d412fea     	ldp	d10, d11, [sp, #16]
+     308: 6cc427e8     	ldp	d8, d9, [sp], #64
+     30c: d65f03c0     	ret
