@@ -1,0 +1,7 @@
+,Crate,Language,Files,Lines,Blank,Comment,Code
+0,rustls,Assembly,108,141990,18435,1594,121961
+1,ring,Assembly,11,13985,1068,292,12625
+2,tokio-rustls,Assembly,71,107937,14005,837,93095
+3,webpki-roots,Assembly,71,107761,14007,837,92917
+4,hyper-rustls,Assembly,71,107761,14007,837,92917
+5,data-encoding,Assembly,15,22739,3736,363,18640
