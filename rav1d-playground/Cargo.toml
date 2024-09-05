@@ -3,6 +3,17 @@ name = "rav1d-playground"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bums_macros = { path = "../bums_macros" }
+cc = "1.1.16"
+parking_lot = "0.12.3"
+rav1d = { version="1.0.0", default-features=false, features=["bitdepth_8", "bitdepth_16"]} # need this set up or else won't compile w/most recent version which has bitdepth public
+zerocopy = "0.7.35"
+
+[build-dependencies]
+bums_macros = { path = "../bums_macros" }
+cc = "1.1.16"
