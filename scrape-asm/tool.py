@@ -2,7 +2,7 @@ import requests
 import os
 import subprocess
 import pandas as pd
-import datetime
+import argparse
 
 def fetch_top_crates(pages):
     crates = []
@@ -12,7 +12,6 @@ def fetch_top_crates(pages):
         if response.status_code == 200:
             data = response.json()
             new = ([(crate['id'], crate['repository']) for crate in data['crates']])
-            # TODO: build in parallel so that we can support all the windows-rs crates
             crates = crates + new
         else:
             print(f"Failed to fetch crates: {response.status_code}")
@@ -47,11 +46,11 @@ def clone_and_build_crate_source(crate):
         else:
             print(f'Cannot clone {crate[1]} repository')
 
-def measure_assembly_loc(crate_name):
+def measure_loc(crate_name, language):
     path = f"./crates/{crate_name}"
     cmd = ['loc', path]
     ps = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    cmd = ['grep', 'Assembly']
+    cmd = ['grep', language]
     grep = subprocess.Popen(cmd, stdin=ps.stdout, stdout=subprocess.PIPE,
                             encoding='utf-8')
     ps.stdout.close()
@@ -60,11 +59,11 @@ def measure_assembly_loc(crate_name):
     if len(result) > 1:
         return result
 
-def measure_assembly_loc_in_build(crate_name):
+def measure_loc_in_build(crate_name, language):
     path = f"./crates/{crate_name}/target/debug/build"
     cmd = ['loc', path]
     ps = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    cmd = ['grep', 'Assembly']
+    cmd = ['grep', language]
     grep = subprocess.Popen(cmd, stdin=ps.stdout, stdout=subprocess.PIPE,
                             encoding='utf-8')
     ps.stdout.close()
@@ -73,16 +72,20 @@ def measure_assembly_loc_in_build(crate_name):
     if len(result) > 1:
         return result
 
-def erase_repos(crates):
-    subprocess.run(['rm', '-rf', './crates'])
-
 if __name__ == "__main__":
-    top_crates = fetch_top_crates(6)
+
+    parser = argparse.ArgumentParser(description = 'Tool to parse pages of Crates.io, download the repositories for each, and collect number of lines of Assembly in the source code and build.')
+    parser.add_argument("pages", type=int, help = "Number of crates.io pages to parse")
+    parser.add_argument("-d", "--delete", action='store_true', help = "Delete crates locally after parsing")
+    args = parser.parse_args() 
+
+    top_crates = fetch_top_crates(args.pages+1)
     num = len(top_crates)
     print(f"Fetched {num} crates.")
 
     os.makedirs('./crates', exist_ok=True)
     os.makedirs('./data', exist_ok=True)
+    os.makedirs(f'./data/top-{len(top_crates)}', exist_ok=True)
 
     crates = []
     built_crates = []
@@ -91,19 +94,21 @@ if __name__ == "__main__":
     for crate in top_crates:
         print(crate[0])
         clone_and_build_crate_source(crate)
-        result = measure_assembly_loc(crate[0])
+        result = measure_loc(crate[0], 'Assembly')
         if result is not None:
             print(f'Assembly found in {crate[0]}')
             crates = crates + [ [crate[0]] + result[0].split()]
         
-        result = measure_assembly_loc_in_build(crate[0])
+        result = measure_loc_in_build(crate[0], 'Assembly')
         if result is not None:
             print(f'Assembly found in build of {crate[0]}')
             built_crates = built_crates + [ [crate[0]] + result[0].split()]
-        
-        # subprocess.run(['rm', '-rf', f'./crates/{crate[0]}'])
 
-    os.mkdir(f'./data/top-{len(top_crates)}')
+        if args.delete:
+            subprocess.run(['rm', '-rf', f'./crates/{crate[0]}'])
+
+    if args.delete:
+        print("Downloaded crates deleted from crates/")
 
     print(f'Done iterating, building df and saving to data/top-{len(top_crates)}')
     df1 = pd.DataFrame(crates, columns=['Crate', 'Language', 'Files', 'Lines', 'Blank', 'Comment', 'Code' ])
@@ -112,4 +117,3 @@ if __name__ == "__main__":
     df2 = pd.DataFrame(built_crates, columns=['Crate', 'Language', 'Files', 'Lines', 'Blank', 'Comment', 'Code' ])
     df2.to_csv(f'./data/top-{len(top_crates)}/loc-build.csv')
     
-    # erase_repos(top_crates)
