@@ -23,15 +23,10 @@ pub struct DynPixel(c_void);
 // fn reverse(dst: *mut DynPixel, src: *const DynPixel, n: c_int) -> ();
 
 #[bums::check_mem_safe("ipred.S", dst.as_mut_ptr(), src.as_ptr(), n)]
-fn reverse(dst: &mut [u8], src: &[u8], n: c_int);
+fn ipred_reverse_8bpc_neon(dst: &mut [u8], src: &[u8], n: i32);
 
 #[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), src.as_ptr(), n)]
-fn reverse16(dst: &mut [u16], src: &[u16], n: c_int);
-
-// extern "C" {
-//     fn reverse(dst: &mut [u8], src: &[u8], n: c_int);
-//     fn reverse16(dst: &mut [u16], src: &[u16], n: c_int);
-// }
+fn ipred_reverse_16bpc_neon(dst: &mut [u16], src: &[u16], n: i32);
 
 trait CallReverse {
     fn call_reverse(dst: &mut [Self::Pixel], src: &[Self::Pixel], n: c_int) -> ()
@@ -41,13 +36,13 @@ trait CallReverse {
 
 impl CallReverse for BitDepth8 {
     fn call_reverse(dst: &mut [u8], src: &[u8], n: c_int) {
-        unsafe { reverse(dst, src, n) }
+        ipred_reverse_8bpc_neon(dst, src, n)
     }
 }
 
 impl CallReverse for BitDepth16 {
     fn call_reverse(dst: &mut [u16], src: &[u16], n: c_int) {
-        unsafe { reverse16(dst, src, n) }
+        ipred_reverse_16bpc_neon(dst, src, n)
     }
 }
 

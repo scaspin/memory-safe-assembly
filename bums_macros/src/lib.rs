@@ -57,6 +57,7 @@ fn calculate_size_of(ty: String) -> usize {
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
         "u128" => std::mem::size_of::<u128>(),
+        "usize" => std::mem::size_of::<u128>(),
         _ => todo!("size of type"),
     }
 }
@@ -330,8 +331,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                             _ => todo!("Input Reference Type"),
                         },
-                        Type::Path(_) => {
-                            todo!("path impl");
+                        Type::Path(p) => {
+                            let ty = p.path.segments[0].ident.to_string();
+                            let size = calculate_size_of(ty);
+                            input_sizes.insert(name, size * 2);
                         }
                         _ => todo!("Standard Input type {:?}", ty),
                     }
@@ -421,10 +424,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             if let Some(size) = pointer_sizes.get(&var_name) {
                                 match size.as_str() {
                                     "u8" => new_args.push(parse_quote! {#n: *const u8}),
+                                    "u16" => new_args.push(parse_quote! {#n: *const u16}),
                                     "u32" => new_args.push(parse_quote! {#n: *const u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *const u64}),
                                     "u128" => new_args.push(parse_quote! {#n: *const u128}),
-                                    _ => (),
+                                    _ => todo!("ptr array size 1"),
                                 }
                             } else {
                                 new_args.push(parse_quote! {#n: *const usize});
@@ -435,10 +439,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             if let Some(size) = pointer_sizes.get(&var_name) {
                                 match size.as_str() {
                                     "u8" => new_args.push(parse_quote! {#n: *mut u8}),
+                                    "u16" => new_args.push(parse_quote! {#n: *mut u16}),
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
                                     "u128" => new_args.push(parse_quote! {#n: *mut u128}),
-                                    _ => (),
+                                    _ => todo!("ptr array size 2"),
                                 }
                             } else {
                                 new_args.push(parse_quote! {#n: *mut usize});
