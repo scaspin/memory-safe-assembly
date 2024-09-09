@@ -1,6 +1,10 @@
+use std::process::Command;
 use std::{fs::File, io::Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo::rerun-if-changed=disassemble-dir.sh");
+    println!("cargo::rerun-if-changed=clean-objdump.py");
+
     let mut build = cc::Build::new();
 
     for entry in std::fs::read_dir("include/src/arm/64")? {
@@ -29,5 +33,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     build.include("include").compile("linkedasms");
     println!("cargo:rustc-link-lib=linkedasms");
+
+    // convert the built object files back to asm
+    let mut command = Command::new("bash");
+    command.arg("disassemble-dir.sh");
+    command.arg(
+        std::env::var_os("OUT_DIR")
+            .map(std::path::PathBuf::from)
+            .ok_or(std::io::Error::last_os_error())?,
+    );
+    command.arg(
+        std::env::var_os("OUT_DIR")
+            .map(std::path::PathBuf::from)
+            .ok_or(std::io::Error::last_os_error())?,
+    );
+
+    command.output().expect("Failed to execute command");
+
     Ok(())
 }
