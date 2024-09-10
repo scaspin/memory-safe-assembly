@@ -9,7 +9,6 @@ edition = "2021"
 bums_macros = { path = "../bums_macros" }
 cc = "1.1.16"
 parking_lot = "0.12.3"
-# rav1d = { version="1.0.0", default-features=false, features=["bitdepth_8", "bitdepth_16"]}
 zerocopy = "0.7.35"
 
 [build-dependencies]

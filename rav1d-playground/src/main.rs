@@ -1,5 +1,8 @@
 use bums_macros as bums;
 use std::ffi::c_void;
+
+#[allow(dead_code)]
+#[allow(unexpected_cfgs)]
 mod rav1dsrc;
 use rav1dsrc::bitdepth::{BitDepth, BitDepth16, BitDepth8};
 
@@ -28,7 +31,7 @@ fn ipred_reverse_8bpc_neon(dst: &mut [u8], src: &[u8]);
 #[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), src.as_ptr(),src.len(), [src.len() == dst.len(), src.len() > 0])]
 fn ipred_reverse_16bpc_neon(dst: &mut [u16], src: &[u16]);
 
-trait CallReverse {
+pub trait CallReverse {
     fn call_reverse(dst: &mut [Self::Pixel], src: &[Self::Pixel]) -> ()
     where
         Self: BitDepth;
@@ -47,7 +50,7 @@ impl CallReverse for BitDepth16 {
 }
 
 // peel back the rav1d generics over BD::Pixel
-fn call_reverse<BD: BitDepth + CallReverse>(dst: &mut [BD::Pixel], src: &[BD::Pixel]) {
+pub fn call_reverse<BD: BitDepth + CallReverse>(dst: &mut [BD::Pixel], src: &[BD::Pixel]) {
     BD::call_reverse(dst, src);
 }
 
