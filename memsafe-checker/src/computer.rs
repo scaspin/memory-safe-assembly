@@ -42,7 +42,7 @@ pub struct ARMCORTEXA<'ctx> {
     neg: Option<FlagValue>,
     carry: Option<FlagValue>,
     overflow: Option<FlagValue>,
-    pub memory: HashMap<String, MemorySafeRegion>,
+    memory: HashMap<String, MemorySafeRegion>,
     rw_queue: Vec<MemoryAccess>,
     alignment: i64,
     pub context: &'ctx Context,
@@ -984,14 +984,6 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 Err(e) => return Err(e.to_string()),
                                 _ => (),
                             }
-                            // TODO: match vec {
-                            //    "8h" => {
-
-                            //    }
-                            //    "16b" => {
-
-                            //    }
-                            // }
                         }
                         _ => todo!("support simd operation with notation {:?}", instruction),
                     }
