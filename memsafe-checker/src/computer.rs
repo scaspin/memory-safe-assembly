@@ -42,7 +42,7 @@ pub struct ARMCORTEXA<'ctx> {
     neg: Option<FlagValue>,
     carry: Option<FlagValue>,
     overflow: Option<FlagValue>,
-    memory: HashMap<String, MemorySafeRegion>,
+    pub memory: HashMap<String, MemorySafeRegion>,
     rw_queue: Vec<MemoryAccess>,
     alignment: i64,
     pub context: &'ctx Context,
@@ -934,640 +934,708 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 _ => {
                     log::warn!("Instruction not supported {:?}", instruction);
+                    todo!("Instruction not implement {:?}", instruction)
                 }
             }
         } else {
             // SIMD
-            match instruction.op.as_str() {
-                "ld1" => {
-                    let reg1 = instruction.r1.clone().expect("Need first source register");
-                    let reg2 = instruction
-                        .r2
-                        .clone()
-                        .expect("Need second source or dst register");
-                    // either two vector registers in r1 and r2, or four in r1-r4, followed by address and potentially followed by immediate increment value
-                    if let Some(reg5) = &instruction.r5 {
-                        let reg3 = instruction.r3.clone().expect("Need 3rd vector");
-                        let reg4 = instruction.r4.clone().expect("Need 4th vector");
-                        if reg4.contains("}") {
-                            let base_name = get_register_name_string(reg5.clone());
-                            let base_add_reg =
-                                self.registers[get_register_index(base_name.clone())].clone();
+            if instruction.op.contains(".") {
+                if let Some((op, vec)) = instruction.op.split_once(".") {
+                    match op {
+                        "rev64" => {
+                            let reg1 = instruction.r1.clone().expect("Need dst register");
+                            let reg2 = instruction.r2.clone().expect("Need source register");
 
-                            match self.load_vector(reg1, base_add_reg.clone()) {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                            match self.load_vector(reg2, base_add_reg.clone()) {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                            match self.load_vector(reg3, base_add_reg.clone()) {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                            match self.load_vector(reg4, base_add_reg.clone()) {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
+                            let src =
+                                &self.simd_registers[get_register_index(reg2.clone())].clone();
+                            let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
 
-                            if let Some(reg6) = &instruction.r6 {
-                                let new_imm = self.operand(get_register_name_string(reg6.clone()));
-                                let peeled_reg5 =
-                                    reg5.strip_prefix("[").unwrap_or(reg5).to_string();
-                                self.set_register(
-                                    peeled_reg5,
-                                    base_add_reg.kind,
-                                    base_add_reg.base,
-                                    base_add_reg.offset + new_imm.offset,
-                                );
+                            dest.kind = src.kind.clone();
+                            match vec {
+                                "8h" => {
+                                    for i in 0..8 {
+                                        let (base, offset) = src.get_halfword(7 - i);
+                                        dest.set_halfword(i, base, offset);
+                                    }
+                                }
+                                "16b" => {
+                                    for i in 0..16 {
+                                        let (base, offset) = src.get_byte(15 - i);
+                                        dest.set_byte(i, base, offset);
+                                    }
+                                }
+                                _ => todo!("rev64 support more vector modes"),
+                            }
+                        }
+                        "ld1" => {
+                            // TODO: fix parster to not consider { as register
+                            // using 2 and 4 because instruction gets parsed like this:
+                            // Instruction { op: "ld1.8h", r1: Some("{"), r2: Some("v0"), r3: Some("}"), r4: Some("[x1"), r5: None, r6: None }
+                            let reg2 = instruction.r2.clone().expect("Need dst register");
+                            let reg4 = instruction.r4.clone().expect("Need source register");
+
+                            let src = &self.registers[get_register_index(
+                                reg4.strip_prefix('[').unwrap_or(&reg4).to_string(),
+                            )]
+                            .clone();
+
+                            let res = self.load_vector(reg2, src.clone());
+                            match res {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                            // TODO: match vec {
+                            //    "8h" => {
+
+                            //    }
+                            //    "16b" => {
+
+                            //    }
+                            // }
+                        }
+                        _ => todo!("support simd operation with notation {:?}", instruction),
+                    }
+                }
+            } else {
+                match instruction.op.as_str() {
+                    "ld1" => {
+                        let reg1 = instruction.r1.clone().expect("Need first source register");
+                        let reg2 = instruction
+                            .r2
+                            .clone()
+                            .expect("Need second source or dst register");
+                        // either two vector registers in r1 and r2, or four in r1-r4, followed by address and potentially followed by immediate increment value
+                        if let Some(reg5) = &instruction.r5 {
+                            let reg3 = instruction.r3.clone().expect("Need 3rd vector");
+                            let reg4 = instruction.r4.clone().expect("Need 4th vector");
+                            if reg4.contains("}") {
+                                let base_name = get_register_name_string(reg5.clone());
+                                let base_add_reg =
+                                    self.registers[get_register_index(base_name.clone())].clone();
+
+                                match self.load_vector(reg1, base_add_reg.clone()) {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+                                match self.load_vector(reg2, base_add_reg.clone()) {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+                                match self.load_vector(reg3, base_add_reg.clone()) {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+                                match self.load_vector(reg4, base_add_reg.clone()) {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+
+                                if let Some(reg6) = &instruction.r6 {
+                                    let new_imm =
+                                        self.operand(get_register_name_string(reg6.clone()));
+                                    let peeled_reg5 =
+                                        reg5.strip_prefix("[").unwrap_or(reg5).to_string();
+                                    self.set_register(
+                                        peeled_reg5,
+                                        base_add_reg.kind,
+                                        base_add_reg.base,
+                                        base_add_reg.offset + new_imm.offset,
+                                    );
+                                }
+                            } else {
+                                let imm = self.operand(reg3.to_string());
+                                let base_name = get_register_name_string(reg2.clone());
+                                let mut base_add_reg =
+                                    self.registers[get_register_index(base_name.clone())].clone();
+
+                                base_add_reg.offset = base_add_reg.offset + imm.offset;
+                                let res = self.load_vector(reg1, base_add_reg.clone());
+                                match res {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+                            }
+                        } else if let Some(reg3) = &instruction.r3 {
+                            if reg2.contains("}") {
+                                let base_name = get_register_name_string(reg3.clone());
+                                let base_add_reg =
+                                    self.registers[get_register_index(base_name.clone())].clone();
+
+                                match self.load_vector(reg1, base_add_reg.clone()) {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+                                match self.load_vector(reg2, base_add_reg.clone()) {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+                                if let Some(reg4) = &instruction.r4 {
+                                    let new_imm =
+                                        self.operand(get_register_name_string(reg4.clone()));
+                                    let peeled_reg3 =
+                                        reg3.strip_prefix("[").unwrap_or(reg3).to_string();
+                                    self.set_register(
+                                        peeled_reg3,
+                                        base_add_reg.kind,
+                                        base_add_reg.base,
+                                        base_add_reg.offset + new_imm.offset,
+                                    );
+                                }
+                            } else {
+                                let imm = self.operand(reg3.to_string());
+                                let base_name = get_register_name_string(reg2.clone());
+                                let mut base_add_reg =
+                                    self.registers[get_register_index(base_name.clone())].clone();
+
+                                base_add_reg.offset = base_add_reg.offset + imm.offset;
+                                let res = self.load_vector(reg1, base_add_reg.clone());
+                                match res {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
                             }
                         } else {
-                            let imm = self.operand(reg3.to_string());
                             let base_name = get_register_name_string(reg2.clone());
-                            let mut base_add_reg =
+                            let base_add_reg =
                                 self.registers[get_register_index(base_name.clone())].clone();
-
-                            base_add_reg.offset = base_add_reg.offset + imm.offset;
                             let res = self.load_vector(reg1, base_add_reg.clone());
                             match res {
                                 Err(e) => return Err(e.to_string()),
                                 _ => (),
                             }
                         }
-                    } else if let Some(reg3) = &instruction.r3 {
-                        if reg2.contains("}") {
-                            let base_name = get_register_name_string(reg3.clone());
-                            let base_add_reg =
-                                self.registers[get_register_index(base_name.clone())].clone();
+                    }
+                    "st1" => {
+                        let reg1 = instruction.r1.clone().expect("computer19");
+                        let reg2 = instruction.r2.clone().expect("computer20");
 
-                            match self.load_vector(reg1, base_add_reg.clone()) {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                            match self.load_vector(reg2, base_add_reg.clone()) {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                            if let Some(reg4) = &instruction.r4 {
-                                let new_imm = self.operand(get_register_name_string(reg4.clone()));
-                                let peeled_reg3 =
-                                    reg3.strip_prefix("[").unwrap_or(reg3).to_string();
-                                self.set_register(
-                                    peeled_reg3,
-                                    base_add_reg.kind,
-                                    base_add_reg.base,
-                                    base_add_reg.offset + new_imm.offset,
-                                );
-                            }
-                        } else {
-                            let imm = self.operand(reg3.to_string());
-                            let base_name = get_register_name_string(reg2.clone());
-                            let mut base_add_reg =
-                                self.registers[get_register_index(base_name.clone())].clone();
-
-                            base_add_reg.offset = base_add_reg.offset + imm.offset;
-                            let res = self.load_vector(reg1, base_add_reg.clone());
-                            match res {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                        }
-                    } else {
-                        let base_name = get_register_name_string(reg2.clone());
+                        let reg2base = get_register_name_string(reg2.clone());
                         let base_add_reg =
-                            self.registers[get_register_index(base_name.clone())].clone();
-                        let res = self.load_vector(reg1, base_add_reg.clone());
+                            self.registers[get_register_index(reg2base.clone())].clone();
+                        let res = self.store_vector(reg1, base_add_reg.clone());
                         match res {
                             Err(e) => return Err(e.to_string()),
                             _ => (),
                         }
                     }
-                }
-                "st1" => {
-                    let reg1 = instruction.r1.clone().expect("computer19");
-                    let reg2 = instruction.r2.clone().expect("computer20");
-
-                    let reg2base = get_register_name_string(reg2.clone());
-                    let base_add_reg = self.registers[get_register_index(reg2base.clone())].clone();
-                    let res = self.store_vector(reg1, base_add_reg.clone());
-                    match res {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
+                    "movi" => {
+                        let reg1 = instruction.r1.clone().expect("Need first register name");
+                        let reg2 = instruction.r2.clone().expect("Need immediate");
+                        let imm = self.operand(reg2);
+                        self.set_register(reg1, RegisterKind::Immediate, None, imm.offset);
                     }
-                }
-                "movi" => {
-                    let reg1 = instruction.r1.clone().expect("Need first register name");
-                    let reg2 = instruction.r2.clone().expect("Need immediate");
-                    let imm = self.operand(reg2);
-                    self.set_register(reg1, RegisterKind::Immediate, None, imm.offset);
-                }
-                "mov" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst reg");
-                    let reg2 = instruction.r2.clone().expect("Need src reg");
-                    let src = self.operand(reg2);
-                    self.set_register(reg1, src.kind, src.base, src.offset);
-                }
-                "fmov" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst reg");
-                    let reg2 = instruction.r2.clone().expect("Need src reg");
-                    let src = self.operand(reg2);
-                    self.set_register(reg1, src.kind, src.base, src.offset);
-                }
-                "shl" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need source register");
-                    let reg3 = instruction.r3.clone().expect("Need immediate");
-                    let imm = self.operand(reg3);
-
-                    if let Some((_, arrange)) = reg1.split_once(".") {
-                        match arrange {
-                            "2d" => {
-                                for i in 0..2 {
-                                    let (bases, offsets) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_double(i);
-                                    let mut offset = u64::from_be_bytes(offsets);
-                                    (offset, _) = offset.overflowing_shl(
-                                        imm.offset.try_into().expect("computer21"),
-                                    );
-                                    // TODO: figure out best way to modify bases
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_double(i, bases, offset.to_be_bytes());
-                                }
-                            }
-                            _ => todo!("unsupported shl vector type"),
-                        }
+                    "mov" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst reg");
+                        let reg2 = instruction.r2.clone().expect("Need src reg");
+                        let src = self.operand(reg2);
+                        self.set_register(reg1, src.kind, src.base, src.offset);
                     }
-                }
-                "ushr" | "sshr" => {
-                    // FIX figure out how to do sshr over byte strings
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need source register");
-                    let reg3 = instruction.r3.clone().expect("Need immediate");
-                    let imm = self.operand(reg3);
-
-                    if let Some((_, arrange)) = reg1.split_once(".") {
-                        match arrange {
-                            "2d" => {
-                                for i in 0..2 {
-                                    let (bases, offsets) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_double(i);
-                                    let mut offset = u64::from_be_bytes(offsets);
-                                    (offset, _) = offset.overflowing_shr(
-                                        imm.offset.try_into().expect("computer22"),
-                                    );
-                                    // TODO: figure out best way to modify bases
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_double(i, bases, offset.to_be_bytes());
-                                }
-                            }
-                            "4s" => {
-                                for i in 0..4 {
-                                    let (bases, offsets) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_word(i);
-                                    let mut offset = u32::from_be_bytes(offsets);
-                                    (offset, _) = offset.overflowing_shr(
-                                        imm.offset.try_into().expect("computer23"),
-                                    );
-                                    // TODO: figure out best way to modify bases
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_word(i, bases, offset.to_be_bytes());
-                                }
-                            }
-                            _ => todo!("unsupported ushr vector type"),
-                        }
+                    "fmov" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst reg");
+                        let reg2 = instruction.r2.clone().expect("Need src reg");
+                        let src = self.operand(reg2);
+                        self.set_register(reg1, src.kind, src.base, src.offset);
                     }
-                }
-                "ext" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need source register");
-                    let reg3 = instruction.r3.clone().expect("Need immediate");
-                    let reg4 = instruction.r4.clone().expect("Need immediate");
-                    let imm = self.operand(reg4);
+                    "shl" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need source register");
+                        let reg3 = instruction.r3.clone().expect("Need immediate");
+                        let imm = self.operand(reg3);
 
-                    if let Some((_, arrange)) = reg1.split_once(".") {
-                        match arrange {
-                            "8b" => {
-                                let amt = imm.offset as usize;
-                                assert!(amt < 8);
-                                for i in 0..amt {
-                                    let (base, offset) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_byte(i);
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_byte(i, base.clone(), offset);
+                        if let Some((_, arrange)) = reg1.split_once(".") {
+                            match arrange {
+                                "2d" => {
+                                    for i in 0..2 {
+                                        let (bases, offsets) = self.simd_registers
+                                            [get_register_index(reg2.clone())]
+                                        .get_double(i);
+                                        let mut offset = u64::from_be_bytes(offsets);
+                                        (offset, _) = offset.overflowing_shl(
+                                            imm.offset.try_into().expect("computer21"),
+                                        );
+                                        // TODO: figure out best way to modify bases
+                                        let dest = &mut self.simd_registers
+                                            [get_register_index(reg1.clone())];
+                                        dest.set_double(i, bases, offset.to_be_bytes());
+                                    }
                                 }
-                                for i in amt..8 {
-                                    let (base, offset) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_byte(i);
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_byte(i, base.clone(), offset);
-                                }
-                            }
-                            "16b" => {
-                                let amt = imm.offset as usize;
-                                assert!(amt < 16);
-                                for i in 0..amt {
-                                    let (base, offset) = self.simd_registers
-                                        [get_register_index(reg2.clone())]
-                                    .get_byte(i);
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_byte(i, base.clone(), offset);
-                                }
-                                for i in amt..16 {
-                                    let (base, offset) = self.simd_registers
-                                        [get_register_index(reg3.clone())]
-                                    .get_byte(i);
-                                    let dest =
-                                        &mut self.simd_registers[get_register_index(reg1.clone())];
-                                    dest.set_byte(i, base.clone(), offset);
-                                }
-                            }
-                            _ => todo!("unsupported ext vector type"),
-                        }
-                    }
-                }
-                "dup" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let mut reg2 = instruction.r2.clone().expect("Need source register");
-                    if reg2.contains("[") {
-                        let left_brac = reg2.find("[").expect("need left bracket");
-                        let right_brac = reg2.find("]").expect("need right bracket");
-                        let index_string = reg2
-                            .get((left_brac + 1)..right_brac)
-                            .expect("need brackets");
-                        let index = index_string
-                            .parse::<usize>()
-                            .expect("index into vector must be an integer");
-
-                        reg2 = reg2.split_at(left_brac).0.to_string();
-                        if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                assert!(arrangement1.contains(arrangement2));
-                                let src = self.simd_registers
-                                    [get_register_index(vector2.to_string())]
-                                .clone();
-                                let dest = &mut self.simd_registers
-                                    [get_register_index(vector1.to_string())];
-
-                                match arrangement2 {
-                                    "b" => {
-                                        let elem = src.get_byte(index);
-                                        for i in 0..16 {
-                                            dest.set_byte(i, elem.0.clone(), elem.1);
-                                        }
-                                    }
-                                    "h" => {
-                                        let elem = src.get_halfword(index);
-                                        for i in 0..8 {
-                                            dest.set_halfword(i, elem.0.clone(), elem.1);
-                                        }
-                                    }
-                                    "s" => {
-                                        let elem = src.get_word(index);
-                                        for i in 0..4 {
-                                            dest.set_word(i, elem.0.clone(), elem.1);
-                                        }
-                                    }
-                                    "d" => {
-                                        let elem = src.get_double(index);
-                                        for i in 0..2 {
-                                            dest.set_double(i, elem.0.clone(), elem.1);
-                                        }
-                                    }
-                                    _ => log::error!(
-                                        "Not a valid vector arrangement {:?}",
-                                        arrangement1
-                                    ),
-                                }
-                            }
-                        };
-                    } else {
-                        todo!("unsupported dup from general purpose") // from general purpose register
-                    }
-                }
-                "and" => {
-                    self.vector_arithmetic(
-                        "&",
-                        &|x, y| x & y,
-                        &|x, y| x & y,
-                        &|x, y| x & y,
-                        &|x, y| x & y,
-                        instruction,
-                    );
-                }
-                "orr" => {
-                    self.vector_arithmetic(
-                        "|",
-                        &|x, y| x | y,
-                        &|x, y| x | y,
-                        &|x, y| x | y,
-                        &|x, y| x | y,
-                        instruction,
-                    );
-                }
-                "eor" => {
-                    self.vector_arithmetic(
-                        "^",
-                        &|x, y| x ^ y,
-                        &|x, y| x ^ y,
-                        &|x, y| x ^ y,
-                        &|x, y| x ^ y,
-                        instruction,
-                    );
-                }
-                "rev64" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need source register");
-
-                    let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
-                    let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-
-                    dest.kind = src.kind.clone();
-                    for i in 0..16 {
-                        let (base, offset) = src.get_byte(15 - i);
-                        dest.set_byte(i, base, offset);
-                    }
-                }
-                "ins" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let mut reg2 = instruction.r2.clone().expect("Need source register");
-
-                    // vector, element
-                    if reg2.contains("v") {
-                        let left_brac = reg2.find("[").expect("need left bracket");
-                        let right_brac = reg2.find("]").expect("need right bracket");
-                        let index_string = reg2
-                            .get((left_brac + 1)..right_brac)
-                            .expect("need brackets");
-                        let index = index_string
-                            .parse::<usize>()
-                            .expect("index into vector must be an integer");
-
-                        reg2 = reg2.split_at(left_brac).0.to_string();
-                        if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                assert!(arrangement1.contains(arrangement2));
-                                let src = self.simd_registers
-                                    [get_register_index(vector2.to_string())]
-                                .clone();
-                                let dest = &mut self.simd_registers
-                                    [get_register_index(vector1.to_string())];
-
-                                match arrangement2 {
-                                    "b" => {
-                                        let (base, offset) = src.get_byte(index);
-                                        dest.set_byte(index, base, offset);
-                                    }
-                                    "h" => {
-                                        let (base, offset) = src.get_halfword(index);
-                                        dest.set_halfword(index, base, offset);
-                                    }
-                                    "s" => {
-                                        let (base, offset) = src.get_word(index);
-                                        dest.set_word(index, base, offset);
-                                    }
-                                    "d" => {
-                                        let (base, offset) = src.get_double(index);
-                                        dest.set_double(index, base, offset);
-                                    }
-                                    _ => log::error!(
-                                        "Not a valid vector arrangement {:?}",
-                                        arrangement1
-                                    ),
-                                }
+                                _ => todo!("unsupported shl vector type"),
                             }
                         }
-                    // vector, general
-                    } else {
-                        todo!("vector general ins unsupported");
                     }
-                }
-                "pmull" | "pmull2" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need first source register");
-                    let reg3 = instruction.r3.clone().expect("Need second source register");
+                    "ushr" | "sshr" => {
+                        // FIX figure out how to do sshr over byte strings
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need source register");
+                        let reg3 = instruction.r3.clone().expect("Need immediate");
+                        let imm = self.operand(reg3);
 
-                    if let Some((vector1, _)) = reg1.split_once(".") {
-                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                assert_eq!(arrangement2, arrangement3);
-
-                                let src1 = self.simd_registers
-                                    [get_register_index(vector2.to_string())]
-                                .clone();
-                                let src2 = self.simd_registers
-                                    [get_register_index(vector3.to_string())]
-                                .clone();
-                                let dest = &mut self.simd_registers
-                                    [get_register_index(vector1.to_string())];
-
-                                match arrangement2 {
-                                    "8b" => {
-                                        for i in 0..8 {
-                                            let base = generate_expression_from_options(
-                                                "*",
-                                                src1.get_byte(i).0,
-                                                src2.get_byte(i).0,
-                                            );
-                                            let offset = src1.get_byte(i).1 * src2.get_byte(i).1;
-
-                                            dest.set_byte(i, base, offset);
-                                        }
+                        if let Some((_, arrange)) = reg1.split_once(".") {
+                            match arrange {
+                                "2d" => {
+                                    for i in 0..2 {
+                                        let (bases, offsets) = self.simd_registers
+                                            [get_register_index(reg2.clone())]
+                                        .get_double(i);
+                                        let mut offset = u64::from_be_bytes(offsets);
+                                        (offset, _) = offset.overflowing_shr(
+                                            imm.offset.try_into().expect("computer22"),
+                                        );
+                                        // TODO: figure out best way to modify bases
+                                        let dest = &mut self.simd_registers
+                                            [get_register_index(reg1.clone())];
+                                        dest.set_double(i, bases, offset.to_be_bytes());
                                     }
-                                    "4h" => {
-                                        for i in 0..8 {
-                                            let (bases1, offsets1) = self.simd_registers
-                                                [get_register_index(reg2.clone())]
-                                            .get_halfword(i);
+                                }
+                                "4s" => {
+                                    for i in 0..4 {
+                                        let (bases, offsets) = self.simd_registers
+                                            [get_register_index(reg2.clone())]
+                                        .get_word(i);
+                                        let mut offset = u32::from_be_bytes(offsets);
+                                        (offset, _) = offset.overflowing_shr(
+                                            imm.offset.try_into().expect("computer23"),
+                                        );
+                                        // TODO: figure out best way to modify bases
+                                        let dest = &mut self.simd_registers
+                                            [get_register_index(reg1.clone())];
+                                        dest.set_word(i, bases, offset.to_be_bytes());
+                                    }
+                                }
+                                _ => todo!("unsupported ushr vector type"),
+                            }
+                        }
+                    }
+                    "ext" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need source register");
+                        let reg3 = instruction.r3.clone().expect("Need immediate");
+                        let reg4 = instruction.r4.clone().expect("Need immediate");
+                        let imm = self.operand(reg4);
 
-                                            let (bases2, offsets2) = self.simd_registers
-                                                [get_register_index(reg3.clone())]
-                                            .get_halfword(i);
-                                            let a = u16::from_be_bytes(offsets1);
-                                            let b = u16::from_be_bytes(offsets2);
-                                            let offset = a * b;
+                        if let Some((_, arrange)) = reg1.split_once(".") {
+                            match arrange {
+                                "8b" => {
+                                    let amt = imm.offset as usize;
+                                    assert!(amt < 8);
+                                    for i in 0..amt {
+                                        let (base, offset) = self.simd_registers
+                                            [get_register_index(reg2.clone())]
+                                        .get_byte(i);
+                                        let dest = &mut self.simd_registers
+                                            [get_register_index(reg1.clone())];
+                                        dest.set_byte(i, base.clone(), offset);
+                                    }
+                                    for i in amt..8 {
+                                        let (base, offset) = self.simd_registers
+                                            [get_register_index(reg3.clone())]
+                                        .get_byte(i);
+                                        let dest = &mut self.simd_registers
+                                            [get_register_index(reg1.clone())];
+                                        dest.set_byte(i, base.clone(), offset);
+                                    }
+                                }
+                                "16b" => {
+                                    let amt = imm.offset as usize;
+                                    assert!(amt < 16);
+                                    for i in 0..amt {
+                                        let (base, offset) = self.simd_registers
+                                            [get_register_index(reg2.clone())]
+                                        .get_byte(i);
+                                        let dest = &mut self.simd_registers
+                                            [get_register_index(reg1.clone())];
+                                        dest.set_byte(i, base.clone(), offset);
+                                    }
+                                    for i in amt..16 {
+                                        let (base, offset) = self.simd_registers
+                                            [get_register_index(reg3.clone())]
+                                        .get_byte(i);
+                                        let dest = &mut self.simd_registers
+                                            [get_register_index(reg1.clone())];
+                                        dest.set_byte(i, base.clone(), offset);
+                                    }
+                                }
+                                _ => todo!("unsupported ext vector type"),
+                            }
+                        }
+                    }
+                    "dup" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let mut reg2 = instruction.r2.clone().expect("Need source register");
+                        if reg2.contains("[") {
+                            let left_brac = reg2.find("[").expect("need left bracket");
+                            let right_brac = reg2.find("]").expect("need right bracket");
+                            let index_string = reg2
+                                .get((left_brac + 1)..right_brac)
+                                .expect("need brackets");
+                            let index = index_string
+                                .parse::<usize>()
+                                .expect("index into vector must be an integer");
 
-                                            let mut new_bases = [BASE_INIT; 2];
+                            reg2 = reg2.split_at(left_brac).0.to_string();
+                            if let Some((vector1, arrangement1)) = reg1.split_once(".") {
+                                if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                                    assert!(arrangement1.contains(arrangement2));
+                                    let src = self.simd_registers
+                                        [get_register_index(vector2.to_string())]
+                                    .clone();
+                                    let dest = &mut self.simd_registers
+                                        [get_register_index(vector1.to_string())];
+
+                                    match arrangement2 {
+                                        "b" => {
+                                            let elem = src.get_byte(index);
+                                            for i in 0..16 {
+                                                dest.set_byte(i, elem.0.clone(), elem.1);
+                                            }
+                                        }
+                                        "h" => {
+                                            let elem = src.get_halfword(index);
+                                            for i in 0..8 {
+                                                dest.set_halfword(i, elem.0.clone(), elem.1);
+                                            }
+                                        }
+                                        "s" => {
+                                            let elem = src.get_word(index);
+                                            for i in 0..4 {
+                                                dest.set_word(i, elem.0.clone(), elem.1);
+                                            }
+                                        }
+                                        "d" => {
+                                            let elem = src.get_double(index);
                                             for i in 0..2 {
-                                                new_bases[i] = generate_expression_from_options(
+                                                dest.set_double(i, elem.0.clone(), elem.1);
+                                            }
+                                        }
+                                        _ => log::error!(
+                                            "Not a valid vector arrangement {:?}",
+                                            arrangement1
+                                        ),
+                                    }
+                                }
+                            };
+                        } else {
+                            todo!("unsupported dup from general purpose") // from general purpose register
+                        }
+                    }
+                    "and" => {
+                        self.vector_arithmetic(
+                            "&",
+                            &|x, y| x & y,
+                            &|x, y| x & y,
+                            &|x, y| x & y,
+                            &|x, y| x & y,
+                            instruction,
+                        );
+                    }
+                    "orr" => {
+                        self.vector_arithmetic(
+                            "|",
+                            &|x, y| x | y,
+                            &|x, y| x | y,
+                            &|x, y| x | y,
+                            &|x, y| x | y,
+                            instruction,
+                        );
+                    }
+                    "eor" => {
+                        self.vector_arithmetic(
+                            "^",
+                            &|x, y| x ^ y,
+                            &|x, y| x ^ y,
+                            &|x, y| x ^ y,
+                            &|x, y| x ^ y,
+                            instruction,
+                        );
+                    }
+                    "rev64" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need source register");
+
+                        let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+                        dest.kind = src.kind.clone();
+                        for i in 0..16 {
+                            let (base, offset) = src.get_byte(15 - i);
+                            dest.set_byte(i, base, offset);
+                        }
+                    }
+                    "ins" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let mut reg2 = instruction.r2.clone().expect("Need source register");
+
+                        // vector, element
+                        if reg2.contains("v") {
+                            let left_brac = reg2.find("[").expect("need left bracket");
+                            let right_brac = reg2.find("]").expect("need right bracket");
+                            let index_string = reg2
+                                .get((left_brac + 1)..right_brac)
+                                .expect("need brackets");
+                            let index = index_string
+                                .parse::<usize>()
+                                .expect("index into vector must be an integer");
+
+                            reg2 = reg2.split_at(left_brac).0.to_string();
+                            if let Some((vector1, arrangement1)) = reg1.split_once(".") {
+                                if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                                    assert!(arrangement1.contains(arrangement2));
+                                    let src = self.simd_registers
+                                        [get_register_index(vector2.to_string())]
+                                    .clone();
+                                    let dest = &mut self.simd_registers
+                                        [get_register_index(vector1.to_string())];
+
+                                    match arrangement2 {
+                                        "b" => {
+                                            let (base, offset) = src.get_byte(index);
+                                            dest.set_byte(index, base, offset);
+                                        }
+                                        "h" => {
+                                            let (base, offset) = src.get_halfword(index);
+                                            dest.set_halfword(index, base, offset);
+                                        }
+                                        "s" => {
+                                            let (base, offset) = src.get_word(index);
+                                            dest.set_word(index, base, offset);
+                                        }
+                                        "d" => {
+                                            let (base, offset) = src.get_double(index);
+                                            dest.set_double(index, base, offset);
+                                        }
+                                        _ => log::error!(
+                                            "Not a valid vector arrangement {:?}",
+                                            arrangement1
+                                        ),
+                                    }
+                                }
+                            }
+                        // vector, general
+                        } else {
+                            todo!("vector general ins unsupported");
+                        }
+                    }
+                    "pmull" | "pmull2" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need first source register");
+                        let reg3 = instruction.r3.clone().expect("Need second source register");
+
+                        if let Some((vector1, _)) = reg1.split_once(".") {
+                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                    assert_eq!(arrangement2, arrangement3);
+
+                                    let src1 = self.simd_registers
+                                        [get_register_index(vector2.to_string())]
+                                    .clone();
+                                    let src2 = self.simd_registers
+                                        [get_register_index(vector3.to_string())]
+                                    .clone();
+                                    let dest = &mut self.simd_registers
+                                        [get_register_index(vector1.to_string())];
+
+                                    match arrangement2 {
+                                        "8b" => {
+                                            for i in 0..8 {
+                                                let base = generate_expression_from_options(
                                                     "*",
-                                                    bases1[i].clone(),
-                                                    bases2[i].clone(),
+                                                    src1.get_byte(i).0,
+                                                    src2.get_byte(i).0,
+                                                );
+                                                let offset =
+                                                    src1.get_byte(i).1 * src2.get_byte(i).1;
+
+                                                dest.set_byte(i, base, offset);
+                                            }
+                                        }
+                                        "4h" => {
+                                            for i in 0..8 {
+                                                let (bases1, offsets1) = self.simd_registers
+                                                    [get_register_index(reg2.clone())]
+                                                .get_halfword(i);
+
+                                                let (bases2, offsets2) = self.simd_registers
+                                                    [get_register_index(reg3.clone())]
+                                                .get_halfword(i);
+                                                let a = u16::from_be_bytes(offsets1);
+                                                let b = u16::from_be_bytes(offsets2);
+                                                let offset = a * b;
+
+                                                let mut new_bases = [BASE_INIT; 2];
+                                                for i in 0..2 {
+                                                    new_bases[i] = generate_expression_from_options(
+                                                        "*",
+                                                        bases1[i].clone(),
+                                                        bases2[i].clone(),
+                                                    );
+                                                }
+
+                                                let dest = &mut self.simd_registers
+                                                    [get_register_index(reg1.clone())];
+                                                dest.set_halfword(
+                                                    i,
+                                                    new_bases,
+                                                    offset.to_be_bytes(),
                                                 );
                                             }
-
-                                            let dest = &mut self.simd_registers
-                                                [get_register_index(reg1.clone())];
-                                            dest.set_halfword(i, new_bases, offset.to_be_bytes());
                                         }
+                                        _ => todo!("pmull unsupported vector access"),
                                     }
-                                    _ => todo!("pmull unsupported vector access"),
                                 }
                             }
                         }
                     }
-                }
-                "zip1" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need first source register");
-                    let reg3 = instruction.r3.clone().expect("Need second source register");
+                    "zip1" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need first source register");
+                        let reg3 = instruction.r3.clone().expect("Need second source register");
 
-                    if let Some((vector1, _)) = reg1.split_once(".") {
-                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                assert_eq!(arrangement2, arrangement3);
+                        if let Some((vector1, _)) = reg1.split_once(".") {
+                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                    assert_eq!(arrangement2, arrangement3);
 
-                                let src1 = self.simd_registers
-                                    [get_register_index(vector2.to_string())]
-                                .clone();
-                                let src2 = self.simd_registers
-                                    [get_register_index(vector3.to_string())]
-                                .clone();
-                                let dest = &mut self.simd_registers
-                                    [get_register_index(vector1.to_string())];
+                                    let src1 = self.simd_registers
+                                        [get_register_index(vector2.to_string())]
+                                    .clone();
+                                    let src2 = self.simd_registers
+                                        [get_register_index(vector3.to_string())]
+                                    .clone();
+                                    let dest = &mut self.simd_registers
+                                        [get_register_index(vector1.to_string())];
 
-                                match arrangement2 {
-                                    "2d" => {
-                                        let elem = src1.get_double(0);
-                                        dest.set_double(0, elem.0, elem.1);
+                                    match arrangement2 {
+                                        "2d" => {
+                                            let elem = src1.get_double(0);
+                                            dest.set_double(0, elem.0, elem.1);
 
-                                        let elem = src2.get_double(0);
-                                        dest.set_double(1, elem.0, elem.1);
+                                            let elem = src2.get_double(0);
+                                            dest.set_double(1, elem.0, elem.1);
+                                        }
+                                        _ => todo!("zip1 unsupported vector access"),
                                     }
-                                    _ => todo!("zip1 unsupported vector access"),
                                 }
                             }
                         }
                     }
-                }
-                "zip2" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need first source register");
-                    let reg3 = instruction.r3.clone().expect("Need second source register");
+                    "zip2" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need first source register");
+                        let reg3 = instruction.r3.clone().expect("Need second source register");
 
-                    if let Some((vector1, _)) = reg1.split_once(".") {
-                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                assert_eq!(arrangement2, arrangement3);
+                        if let Some((vector1, _)) = reg1.split_once(".") {
+                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                    assert_eq!(arrangement2, arrangement3);
 
-                                let src1 = self.simd_registers
-                                    [get_register_index(vector2.to_string())]
-                                .clone();
-                                let src2 = self.simd_registers
-                                    [get_register_index(vector3.to_string())]
-                                .clone();
-                                let dest = &mut self.simd_registers
-                                    [get_register_index(vector1.to_string())];
+                                    let src1 = self.simd_registers
+                                        [get_register_index(vector2.to_string())]
+                                    .clone();
+                                    let src2 = self.simd_registers
+                                        [get_register_index(vector3.to_string())]
+                                    .clone();
+                                    let dest = &mut self.simd_registers
+                                        [get_register_index(vector1.to_string())];
 
-                                match arrangement2 {
-                                    "2d" => {
-                                        let elem = src1.get_double(1);
-                                        dest.set_double(0, elem.0, elem.1);
+                                    match arrangement2 {
+                                        "2d" => {
+                                            let elem = src1.get_double(1);
+                                            dest.set_double(0, elem.0, elem.1);
 
-                                        let elem = src2.get_double(1);
-                                        dest.set_double(1, elem.0, elem.1);
+                                            let elem = src2.get_double(1);
+                                            dest.set_double(1, elem.0, elem.1);
+                                        }
+                                        _ => todo!("zip2 unsupported vector access"),
                                     }
-                                    _ => todo!("zip2 unsupported vector access"),
                                 }
                             }
                         }
                     }
-                }
-                "aese" | "aesmc" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need first source register");
+                    "aese" | "aesmc" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need first source register");
 
-                    let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
-                    let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+                        let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
 
-                    match (src.kind.clone(), dest.kind.clone()) {
-                        (RegisterKind::Number, RegisterKind::Number) => {
-                            // don't need to do anything
-                            ()
+                        match (src.kind.clone(), dest.kind.clone()) {
+                            (RegisterKind::Number, RegisterKind::Number) => {
+                                // don't need to do anything
+                                ()
+                            }
+                            _ => todo!(),
                         }
-                        _ => todo!(),
                     }
-                }
-                "trn1" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need first source register");
-                    let reg3 = instruction.r3.clone().expect("Need second source register");
+                    "trn1" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need first source register");
+                        let reg3 = instruction.r3.clone().expect("Need second source register");
 
-                    if let Some((vector1, _)) = reg1.split_once(".") {
-                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                assert_eq!(arrangement2, arrangement3);
+                        if let Some((vector1, _)) = reg1.split_once(".") {
+                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                    assert_eq!(arrangement2, arrangement3);
 
-                                let src1 = self.simd_registers
-                                    [get_register_index(vector2.to_string())]
-                                .clone();
-                                let src2 = self.simd_registers
-                                    [get_register_index(vector3.to_string())]
-                                .clone();
-                                let dest = &mut self.simd_registers
-                                    [get_register_index(vector1.to_string())];
+                                    let src1 = self.simd_registers
+                                        [get_register_index(vector2.to_string())]
+                                    .clone();
+                                    let src2 = self.simd_registers
+                                        [get_register_index(vector3.to_string())]
+                                    .clone();
+                                    let dest = &mut self.simd_registers
+                                        [get_register_index(vector1.to_string())];
 
-                                match arrangement2 {
-                                    "2d" => {
-                                        let elem = src1.get_double(0);
-                                        dest.set_double(0, elem.0, elem.1);
+                                    match arrangement2 {
+                                        "2d" => {
+                                            let elem = src1.get_double(0);
+                                            dest.set_double(0, elem.0, elem.1);
 
-                                        let elem = src2.get_double(0);
-                                        dest.set_double(1, elem.0, elem.1);
+                                            let elem = src2.get_double(0);
+                                            dest.set_double(1, elem.0, elem.1);
+                                        }
+                                        _ => todo!("trn1 unsupported vector access"),
                                     }
-                                    _ => todo!("trn1 unsupported vector access"),
                                 }
                             }
                         }
                     }
-                }
-                "trn2" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need first source register");
-                    let reg3 = instruction.r3.clone().expect("Need second source register");
+                    "trn2" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need first source register");
+                        let reg3 = instruction.r3.clone().expect("Need second source register");
 
-                    if let Some((vector1, _)) = reg1.split_once(".") {
-                        if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                            if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                assert_eq!(arrangement2, arrangement3);
+                        if let Some((vector1, _)) = reg1.split_once(".") {
+                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+                                    assert_eq!(arrangement2, arrangement3);
 
-                                let src1 = self.simd_registers
-                                    [get_register_index(vector2.to_string())]
-                                .clone();
-                                let src2 = self.simd_registers
-                                    [get_register_index(vector3.to_string())]
-                                .clone();
-                                let dest = &mut self.simd_registers
-                                    [get_register_index(vector1.to_string())];
+                                    let src1 = self.simd_registers
+                                        [get_register_index(vector2.to_string())]
+                                    .clone();
+                                    let src2 = self.simd_registers
+                                        [get_register_index(vector3.to_string())]
+                                    .clone();
+                                    let dest = &mut self.simd_registers
+                                        [get_register_index(vector1.to_string())];
 
-                                match arrangement2 {
-                                    "2d" => {
-                                        let elem = src1.get_double(1);
-                                        dest.set_double(0, elem.0, elem.1);
+                                    match arrangement2 {
+                                        "2d" => {
+                                            let elem = src1.get_double(1);
+                                            dest.set_double(0, elem.0, elem.1);
 
-                                        let elem = src2.get_double(1);
-                                        dest.set_double(1, elem.0, elem.1);
+                                            let elem = src2.get_double(1);
+                                            dest.set_double(1, elem.0, elem.1);
+                                        }
+                                        _ => todo!("trn2 unsupported vector access"),
                                     }
-                                    _ => todo!("trn2 unsupported vector access"),
                                 }
                             }
                         }
                     }
-                }
-                _ => {
-                    log::warn!("SIMD instruction not supported {:?}", instruction);
-                    todo!("unsupported vector operation {:?}", instruction);
+                    _ => {
+                        log::warn!("SIMD instruction not supported {:?}", instruction);
+                        todo!("unsupported vector operation {:?}", instruction);
+                    }
                 }
             }
         }
@@ -2084,7 +2152,7 @@ impl<'ctx> ARMCORTEXA<'_> {
      */
     fn load(&mut self, t: String, address: RegisterValue) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
-            address.base.clone().expect("Need a name for region}"),
+            address.base.clone().expect("Need a name for region"),
             address.offset,
             RegionType::READ,
         );

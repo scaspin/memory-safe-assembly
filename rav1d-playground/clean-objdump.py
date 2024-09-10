@@ -16,7 +16,7 @@ def clean_objdump(objdump_output):
             continue
 
         line = re.sub(address_pattern, '', line)
-        line = re.sub(label_pattern, ".globl _" + r'\1' + ":", line)
+        line = re.sub(label_pattern, "_" + r'\1' + ":", line)
         line = re.sub(inline_label_pattern, r'\1', line)
 
         cleaned_lines.append(line.strip())

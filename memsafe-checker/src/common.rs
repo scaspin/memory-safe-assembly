@@ -561,15 +561,18 @@ impl Instruction {
             } else if i.contains("v") {
                 return true;
             }
-        } else if let Some(i) = &self.r2 {
+        }
+        if let Some(i) = &self.r2 {
             if i.contains("v") {
                 return true;
             }
-        } else if let Some(i) = &self.r3 {
+        }
+        if let Some(i) = &self.r3 {
             if i.contains("v") {
                 return true;
             }
-        } else if let Some(i) = &self.r4 {
+        }
+        if let Some(i) = &self.r4 {
             if i.contains("v") {
                 return true;
             }
