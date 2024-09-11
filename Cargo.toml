@@ -4,5 +4,5 @@ members = [
   "memsafe-checker",
   "crypto-playground"
 ]
-
+exclude = ["scrape-asm"]
 resolver = "2"
