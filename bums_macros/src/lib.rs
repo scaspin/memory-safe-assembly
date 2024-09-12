@@ -63,13 +63,13 @@ fn calculate_size_of(ty: String) -> usize {
 }
 
 fn calculate_size_of_array(a: &TypeArray) -> usize {
-    let mut elem: String = String::new();
+    let elem: String;
     let len;
     match &*a.elem {
         Type::Path(b) => {
             elem = b.path.segments[0].ident.to_string();
         }
-        _ => (),
+        _ => todo!("calculate size of array that is not given using path"),
     }
     match &a.len {
         Expr::Lit(b) => match &b.lit {
@@ -88,23 +88,23 @@ fn calculate_size_of_array(a: &TypeArray) -> usize {
 }
 
 fn calculate_type_of_array_ptr(a: &TypeArray) -> String {
-    let mut elem: String = String::new();
+    let elem: String;
     match &*a.elem {
         Type::Path(b) => {
             elem = b.path.segments[0].ident.to_string();
         }
-        _ => (),
+        _ => todo!("calculate type of array not with path"),
     }
     return elem;
 }
 
 fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
-    let mut elem: String = String::new();
+    let elem: String;
     match &*a.elem {
         Type::Path(b) => {
             elem = b.path.segments[0].ident.to_string();
         }
-        _ => (),
+        _ => todo!("calculate type of slice"),
     }
     return elem;
 }
@@ -156,12 +156,12 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
         },
         Expr::Binary(b) => return binary_to_abstract_expression(b),
         Expr::MethodCall(c) => {
-            let mut var_name: String = String::new();
+            let mut var_name: String;
             match *c.receiver.clone() {
                 Expr::Path(a) => {
                     var_name = a.path.segments[0].ident.to_string();
                 }
-                _ => (),
+                _ => todo!("method matching to get name"),
             }
             match c.method.to_string().as_str() {
                 "len" => {
@@ -173,7 +173,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
                 "as_mut_ptr" => {
                     var_name = var_name + "_as_mut_ptr";
                 }
-                _ => (),
+                _ => todo!("method matching"),
             };
             return AbstractExpression::Abstract(var_name);
         }
@@ -265,9 +265,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         });
                         arguments_to_pass.push(w);
                     }
-                    _ => (),
+                    _ => todo!("non-ident name"),
                 },
-                _ => (),
+                _ => todo!("non-typed name"),
             }
         }
     } else {
@@ -275,12 +275,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             match i {
                 FnArg::Typed(pat_type) => {
                     // get name
-                    let mut name = String::new();
+                    let name;
                     match &*pat_type.pat {
                         Pat::Ident(b) => {
                             name = b.ident.clone().to_string();
                         }
-                        _ => (),
+                        _ => todo!("non-ident typed name in inputs"),
                     }
                     let ty = &*pat_type.ty;
                     input_types.insert(name.clone(), ty);
@@ -406,14 +406,17 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         for i in attributes.argument_list {
             match i {
                 Expr::MethodCall(a) => {
-                    let mut var_name: String = String::new();
+                    let var_name: String;
                     match *a.receiver {
                         Expr::Path(a) => {
                             var_name = a.path.segments[0].ident.to_string();
                             span = a.path.segments[0].ident.span();
                         }
-                        _ => (),
-                    }
+                        Expr::MethodCall(a) => {
+                            todo!("handle nested method calls {:?}", a)
+                        }
+                        _ => todo!("non-path receiver of a method call {:?}", a),
+                    };
                     match a.method.to_string().as_str() {
                         "len" => {
                             let n = Ident::new(&(var_name + "_len"), span.into());
@@ -449,7 +452,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 new_args.push(parse_quote! {#n: *mut usize});
                             }
                         }
-                        _ => (),
+                        _ => todo!("method call in new args"),
                     };
                 }
                 Expr::Reference(_) => {
@@ -499,7 +502,69 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         new_args.push(parse_quote! {#n : #ty});
                     }
                 }
-                _ => todo!("Arg list type"),
+                Expr::Field(f) => {
+                    let var_name: String;
+                    match &*f.base {
+                        Expr::Path(p) => {
+                            var_name = p.path.segments[0].ident.to_string();
+                        }
+                        Expr::MethodCall(m) => {
+                            match &*m.receiver {
+                                Expr::Path(a) => {
+                                    var_name = a.path.segments[0].ident.to_string();
+                                    span = a.path.segments[0].ident.span();
+                                }
+                                Expr::MethodCall(a) => {
+                                    todo!("handle nested method calls {:?}", a)
+                                }
+                                _ => todo!("non-path receiver of a method call {:?}", m),
+                            };
+                        }
+                        _ => todo!("name of field expr types {:?}", f.base),
+                    }
+                    match *f.base {
+                        Expr::MethodCall(ref m) => match m.method.to_string().as_str() {
+                            "as_ptr_range" => {
+                                let pointer_size = pointer_sizes
+                                    .get(&var_name)
+                                    .expect("can't find size of  slice");
+                                let pointer_type = Ident::new(&pointer_size.clone(), span.into());
+                                match f.member {
+                                    syn::Member::Named(name) => match name.to_string().as_str() {
+                                        "end" => {
+                                            let n = Ident::new(
+                                                &(var_name.clone() + "_end_ptr_range"),
+                                                span.into(),
+                                            );
+                                            new_args.push(parse_quote! {#n : *const #pointer_type});
+                                        }
+                                        _ => todo!("more subfields of range"),
+                                    },
+                                    syn::Member::Unnamed(i) => match i.index {
+                                        0 => {
+                                            let n = Ident::new(
+                                                &(var_name.clone() + "_start_ptr_range"),
+                                                span.into(),
+                                            );
+                                            new_args.push(parse_quote! {#n : _});
+                                        }
+                                        1 => {
+                                            let n = Ident::new(
+                                                &(var_name.clone() + "_end_ptr_range"),
+                                                span.into(),
+                                            );
+                                            new_args.push(parse_quote! {#n : _});
+                                        }
+                                        _ => todo!("irrelevant for this type"),
+                                    },
+                                }
+                            }
+                            _ => todo!("match on fields of the results of more methods"),
+                        },
+                        _ => todo!("match on fields of more methods"),
+                    }
+                }
+                _ => todo!("Arg list type {:?}", i),
             }
         }
         for a in &new_args {
@@ -611,12 +676,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                         //derive memory safe region based on length
                         let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
-                        let no_suffix = no_mut_name.strip_suffix("_as_ptr").unwrap_or(no_mut_name);
+                        let no_range = name.strip_suffix("_end_ptr_range").unwrap_or(&no_mut_name);
+                        let no_suffix = no_range.strip_suffix("_as_ptr").unwrap_or(no_range);
 
                         match &*a.elem {
                             Type::Path(p) => {
                                 // if pointer to a macro-defined struct
-
                                 if p.path.segments[0].ident.to_string().contains("struct") {
                                     // add the whole region covered by the tuple
                                     if let Some(bound) = input_sizes.get(no_suffix) {
@@ -684,6 +749,31 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                         }
                                         i = i + 1;
                                     }
+                                    continue;
+                                }
+
+                                // if pointing to end of array
+                                if name.contains("_end_ptr_range") {
+                                    // add the whole region covered by the tuple
+                                    let bound = no_suffix.to_owned() + "_len";
+                                    let pointer_name = no_suffix.to_owned() + "_as_ptr";
+
+                                    engine.add_region(
+                                        RegionType::READ,
+                                        pointer_name.clone(),
+                                        AbstractExpression::Abstract(bound.clone()),
+                                    );
+
+                                    //overwrite
+                                    engine.add_abstract_expression_from(
+                                        i,
+                                        generate_expression(
+                                            "+",
+                                            AbstractExpression::Abstract(pointer_name),
+                                            AbstractExpression::Abstract(bound),
+                                        ),
+                                    );
+
                                     continue;
                                 }
 
