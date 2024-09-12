@@ -441,8 +441,34 @@ impl Eq for MemoryAccess {}
 
 #[derive(Debug, Clone)]
 pub enum FlagValue {
-    ABSTRACT(AbstractComparison),
-    REAL(bool),
+    Abstract(AbstractComparison),
+    Real(bool),
+}
+
+impl FlagValue {
+    pub fn to_abstract_expression(&self) -> AbstractComparison {
+        match self {
+            Self::Abstract(a) => return a.clone(),
+            Self::Real(r) => match r {
+                true => {
+                    generate_comparison("==", AbstractExpression::Empty, AbstractExpression::Empty)
+                }
+                false => {
+                    generate_comparison("!=", AbstractExpression::Empty, AbstractExpression::Empty)
+                }
+            },
+        }
+    }
+}
+
+impl PartialEq for FlagValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (FlagValue::Abstract(a), FlagValue::Abstract(b)) => return a == b,
+            (FlagValue::Real(a), FlagValue::Real(b)) => return a == b,
+            _ => return false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

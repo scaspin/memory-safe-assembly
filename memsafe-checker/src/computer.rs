@@ -484,7 +484,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     );
                 }
                 "adcs" => match self.carry.clone().expect("Need carry flag set") {
-                    FlagValue::REAL(b) => {
+                    FlagValue::Real(b) => {
                         if b == true {
                             self.arithmetic(
                                 "+",
@@ -505,13 +505,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                             );
                         }
                     }
-                    FlagValue::ABSTRACT(_) => {
+                    FlagValue::Abstract(_) => {
                         log::error!("Can't support this yet :)");
                         todo!("Abstract flag expressions");
                     }
                 },
                 "sbcs" => match self.carry.clone().expect("Need carry flag set") {
-                    FlagValue::REAL(b) => {
+                    FlagValue::Real(b) => {
                         if b == true {
                             self.arithmetic(
                                 "-",
@@ -532,7 +532,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             );
                         }
                     }
-                    FlagValue::ABSTRACT(_) => {
+                    FlagValue::Abstract(_) => {
                         log::error!("Can't support this yet :)");
                         todo!("Abstract flag expression 2");
                     }
@@ -602,7 +602,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         .as_str()
                     {
                         "cs" => match self.carry.clone().expect("Need carry flag set") {
-                            FlagValue::REAL(b) => {
+                            FlagValue::Real(b) => {
                                 if b == true {
                                     self.set_register(
                                         instruction.r1.clone().expect("need dst register"),
@@ -619,13 +619,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     );
                                 }
                             }
-                            FlagValue::ABSTRACT(_) => {
+                            FlagValue::Abstract(_) => {
                                 log::error!("Can't support this yet :)");
                                 todo!("Abstract Flag Expression3");
                             }
                         },
                         "cc" => match self.carry.clone().expect("Need carry flag set") {
-                            FlagValue::REAL(b) => {
+                            FlagValue::Real(b) => {
                                 if b == false {
                                     self.set_register(
                                         instruction.r1.clone().expect("need dst register"),
@@ -642,7 +642,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     );
                                 }
                             }
-                            FlagValue::ABSTRACT(_) => {
+                            FlagValue::Abstract(_) => {
                                 log::error!("Can't support this yet :)");
                                 todo!("Abstract flag expressions 4");
                             }
@@ -680,14 +680,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                     match &self.zero {
                                 // if zero is set to false, then cmp -> not equal and we branch
                         Some(flag) => match flag {
-                            FlagValue::REAL(b) => {
+                            FlagValue::Real(b) => {
                                 if !b {
                                     return Ok(Some((None, instruction.r1.clone(), None)));
                                 } else {
                                     return Ok(None);
                                 }
                             }
-                            FlagValue::ABSTRACT(s) => {
+                            FlagValue::Abstract(s) => {
                                 return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
                             }
                         },
@@ -699,24 +699,48 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "b.eq" => {
                     match &self.zero {
-                // if zero is set to false, then cmp -> not equal and we branch
-                Some(flag) => match flag {
-                    FlagValue::REAL(b) => {
-                        if *b {
-                            return Ok(Some((None, instruction.r1.clone(), None)));
-                        } else {
-                            return Ok(None);
-                        }
+                        // if zero is set to false, then cmp -> not equal and we branch
+                        Some(flag) => match flag {
+                            FlagValue::Real(b) => {
+                                if *b {
+                                    return Ok(Some((None, instruction.r1.clone(), None)));
+                                } else {
+                                    return Ok(None);
+                                }
+                            }
+                            FlagValue::Abstract(s) => {
+                                return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
+                            }
+                        },
+                        None => return Err(
+                            "Flag cannot be branched on since it has not been set within the program yet"
+                                .to_string(),
+                        ),
                     }
-                    FlagValue::ABSTRACT(s) => {
-                        return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
+                }
+                "b.gt" => {
+                    match (&self.zero, &self.neg, &self.overflow) {
+                        (Some(zero), Some(neg), Some(ove)) => {
+                            if let (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) = (zero, neg, ove) {
+                               if !z && n == v {  // Z = 0 AND N = V
+                                    return Ok(Some((None, instruction.r1.clone(), None)))
+                               } else {
+                                    return Ok(None)
+                               }
+                            } else {
+                                if neg == ove {
+                                    return Ok(Some((Some(zero.to_abstract_expression()), instruction.r1.clone(), None)))
+                                } else {
+                                    return Ok(Some((Some(zero.to_abstract_expression()), instruction.r1.clone(), None)))
+                                }
+                                // return Ok(Some((Some(comparison), instruction.r1.clone(), None)));
+                            }
+                        },
+                        (_, _, _) => return Err(
+                            "Flag cannot be branched on since it has not been set within the program yet"
+                                .to_string(),
+                        ),
                     }
-                },
-                None => return Err(
-                    "Flag cannot be branched on since it has not been set within the program yet"
-                        .to_string(),
-                ),
-            }
                 }
                 "ret" => {
                     if instruction.r1.is_none() {
@@ -983,6 +1007,51 @@ impl<'ctx> ARMCORTEXA<'_> {
                             match res {
                                 Err(e) => return Err(e.to_string()),
                                 _ => (),
+                            }
+                        }
+                        "st1" => {
+                            // TODO: fix parser because instruction gets parsed like this:
+                            // Instruction { op: "st1.d", r1: Some("{"), r2: Some("v0"), r3: Some("[1], [x0"), r4: Some("[1], [x0"), r5: Some("x4"), r6: None }
+                            let reg2 = instruction.r2.clone().expect("Need src register");
+                            let reg3 = instruction.r3.clone().expect("Need index and dest");
+
+                            let mut parts = reg3.split(",");
+                            let _index = parts
+                                .next()
+                                .expect("expecting index")
+                                .strip_prefix('[')
+                                .expect("something")
+                                .strip_suffix("]")
+                                .expect("something else")
+                                .parse::<i32>()
+                                .expect("expected int");
+
+                            let dest = get_register_name_string(
+                                parts
+                                    .next()
+                                    .expect("need another reg")
+                                    .strip_prefix(" [")
+                                    .expect("storage dest")
+                                    .to_string(),
+                            );
+                            let address = self.registers[get_register_index(dest.clone())].clone();
+
+                            // TODO: use offset to grab only low/high parts of vector
+                            let res = self.store_vector(reg2, address.clone());
+                            match res {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+
+                            if let Some(reg5) = instruction.r5.clone() {
+                                let offset = self.operand(reg5);
+
+                                self.set_register(
+                                    dest,
+                                    address.kind,
+                                    address.base,
+                                    address.offset + offset.offset,
+                                );
                             }
                         }
                         _ => todo!("support simd operation with notation {:?}", instruction),
@@ -1918,25 +1987,25 @@ impl<'ctx> ARMCORTEXA<'_> {
                 RegisterKind::RegisterBase => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset < r2.offset {
-                            Some(FlagValue::REAL(true))
+                            Some(FlagValue::Real(true))
                         } else {
-                            Some(FlagValue::REAL(false))
+                            Some(FlagValue::Real(false))
                         };
                         self.zero = if r1.offset == r2.offset {
-                            Some(FlagValue::REAL(true))
+                            Some(FlagValue::Real(true))
                         } else {
-                            Some(FlagValue::REAL(false))
+                            Some(FlagValue::Real(false))
                         };
                         // signed vs signed distinction, maybe make offset generic to handle both?
                         self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(FlagValue::REAL(true))
+                            Some(FlagValue::Real(true))
                         } else {
-                            Some(FlagValue::REAL(false))
+                            Some(FlagValue::Real(false))
                         };
                         self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(FlagValue::REAL(true))
+                            Some(FlagValue::Real(true))
                         } else {
-                            Some(FlagValue::REAL(false))
+                            Some(FlagValue::Real(false))
                         };
                     } else {
                         let expression = AbstractExpression::Expression(
@@ -1944,23 +2013,23 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Box::new(AbstractExpression::Register(Box::new(r1))),
                             Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
-                        self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
-                        self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
                             "==",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
                         // FIX carry + overflow
-                        self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MIN),
                         )));
-                        self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
                             expression,
                             AbstractExpression::Immediate(std::i64::MIN),
@@ -1972,25 +2041,25 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
-                        Some(FlagValue::REAL(true))
+                        Some(FlagValue::Real(true))
                     } else {
-                        Some(FlagValue::REAL(false))
+                        Some(FlagValue::Real(false))
                     };
                     self.zero = if r1.offset == r2.offset {
-                        Some(FlagValue::REAL(true))
+                        Some(FlagValue::Real(true))
                     } else {
-                        Some(FlagValue::REAL(false))
+                        Some(FlagValue::Real(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(FlagValue::REAL(true))
+                        Some(FlagValue::Real(true))
                     } else {
-                        Some(FlagValue::REAL(false))
+                        Some(FlagValue::Real(false))
                     };
                     self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(FlagValue::REAL(true))
+                        Some(FlagValue::Real(true))
                     } else {
-                        Some(FlagValue::REAL(false))
+                        Some(FlagValue::Real(false))
                     };
                 }
             }
@@ -2000,23 +2069,23 @@ impl<'ctx> ARMCORTEXA<'_> {
                 Box::new(AbstractExpression::Register(Box::new(r1))),
                 Box::new(AbstractExpression::Register(Box::new(r2))),
             );
-            self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+            self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+            self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
                 "==",
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
             // FIX carry + overflow
-            self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+            self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
                 expression.clone(),
                 AbstractExpression::Immediate(std::i64::MIN),
             )));
-            self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+            self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
                 expression,
                 AbstractExpression::Immediate(std::i64::MIN),
@@ -2033,24 +2102,24 @@ impl<'ctx> ARMCORTEXA<'_> {
                 RegisterKind::RegisterBase => {
                     if r1.base.eq(&r2.base) {
                         self.neg = if r1.offset + r2.offset < 0 {
-                            Some(FlagValue::REAL(true))
+                            Some(FlagValue::Real(true))
                         } else {
-                            Some(FlagValue::REAL(false))
+                            Some(FlagValue::Real(false))
                         };
                         self.zero = if r1.offset + r2.offset == 0 {
-                            Some(FlagValue::REAL(true))
+                            Some(FlagValue::Real(true))
                         } else {
-                            Some(FlagValue::REAL(false))
+                            Some(FlagValue::Real(false))
                         };
                         self.carry = if r2.offset + r1.offset > std::i64::MAX {
-                            Some(FlagValue::REAL(true))
+                            Some(FlagValue::Real(true))
                         } else {
-                            Some(FlagValue::REAL(false))
+                            Some(FlagValue::Real(false))
                         };
                         self.overflow = if r2.offset + r1.offset > std::i64::MAX {
-                            Some(FlagValue::REAL(true))
+                            Some(FlagValue::Real(true))
                         } else {
-                            Some(FlagValue::REAL(false))
+                            Some(FlagValue::Real(false))
                         };
                     } else {
                         let expression = AbstractExpression::Expression(
@@ -2058,23 +2127,23 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Box::new(AbstractExpression::Register(Box::new(r1))),
                             Box::new(AbstractExpression::Register(Box::new(r2))),
                         );
-                        self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
-                        self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
                             "==",
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
                         // FIX carry + overflow
-                        self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MAX),
                         )));
-                        self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+                        self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
                             expression,
                             AbstractExpression::Immediate(std::i64::MAX),
@@ -2086,25 +2155,25 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset + r2.offset < 0 {
-                        Some(FlagValue::REAL(true))
+                        Some(FlagValue::Real(true))
                     } else {
-                        Some(FlagValue::REAL(false))
+                        Some(FlagValue::Real(false))
                     };
                     self.zero = if r1.offset + r2.offset == 0 {
-                        Some(FlagValue::REAL(true))
+                        Some(FlagValue::Real(true))
                     } else {
-                        Some(FlagValue::REAL(false))
+                        Some(FlagValue::Real(false))
                     };
                     // signed vs signed distinction, maybe make offset generic to handle both?
                     self.carry = if r2.offset + r1.offset > std::i64::MAX {
-                        Some(FlagValue::REAL(true))
+                        Some(FlagValue::Real(true))
                     } else {
-                        Some(FlagValue::REAL(false))
+                        Some(FlagValue::Real(false))
                     };
                     self.overflow = if r2.offset + r1.offset > std::i64::MAX {
-                        Some(FlagValue::REAL(true))
+                        Some(FlagValue::Real(true))
                     } else {
-                        Some(FlagValue::REAL(false))
+                        Some(FlagValue::Real(false))
                     };
                 }
             }
@@ -2114,23 +2183,23 @@ impl<'ctx> ARMCORTEXA<'_> {
                 Box::new(AbstractExpression::Register(Box::new(r1))),
                 Box::new(AbstractExpression::Register(Box::new(r2))),
             );
-            self.neg = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+            self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            self.zero = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+            self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
                 "==",
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
             // FIX carry + overflow
-            self.carry = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+            self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
                 expression.clone(),
                 AbstractExpression::Immediate(std::i64::MIN),
             )));
-            self.overflow = Some(FlagValue::ABSTRACT(AbstractComparison::new(
+            self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
                 expression,
                 AbstractExpression::Immediate(std::i64::MIN),
