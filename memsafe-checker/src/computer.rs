@@ -428,6 +428,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                         instruction.r4.clone(),
                     );
                 }
+                "orn" => {
+                    self.arithmetic(
+                        &instruction.op,
+                        &|x, y: i64| x | !y,
+                        instruction.r1.clone().expect("Need dst register"),
+                        instruction.r2.clone().expect("Need one operand"),
+                        instruction.r3.clone().expect("Need two operand"),
+                        instruction.r4.clone(),
+                    );
+                }
                 "eor" => {
                     self.arithmetic(
                         &instruction.op,
@@ -991,12 +1001,27 @@ impl<'ctx> ARMCORTEXA<'_> {
                         );
                     }
                 }
-                "mov" => {
+                "mov" | "movz" => {
                     let reg1 = instruction.r1.clone().expect("Need dst reg");
                     let reg2 = instruction.r2.clone().expect("Need src reg");
 
                     let src = self.operand(reg2);
                     self.set_register(reg1, src.kind, src.base, src.offset);
+                }
+                "movk" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst reg");
+                    let reg2 = instruction.r2.clone().expect("Need src reg");
+
+                    let src = self.operand(reg1.clone());
+                    let mut offset = self.operand(reg2).offset;
+
+                    if let Some(op) = instruction.r3.clone() {
+                        match op.as_str() {
+                            "lsl" => offset = offset << 16,
+                            _ => todo!("implement more shifting strategies for movk"),
+                        }
+                    }
+                    self.set_register(reg1, src.kind, src.base, src.offset + offset);
                 }
                 "rev" => {
                     let reg1 = instruction.r1.clone().expect("Need dst register");
