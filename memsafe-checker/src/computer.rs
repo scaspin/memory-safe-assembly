@@ -650,6 +650,48 @@ impl<'ctx> ARMCORTEXA<'_> {
                         _ => todo!("unsupported comparison type {:?}", instruction.r2),
                     }
                 }
+                "csel" => {
+                    // match on condition based on flags
+                    match instruction
+                        .r4
+                        .clone()
+                        .expect("Need to provide a condition")
+                        .as_str()
+                    {
+                        "cc" | "lo" => match self.carry.clone().expect("Need carry flag set") {
+                            FlagValue::Real(b) => {
+                                if b == true {
+                                    let register = self.registers[get_register_index(
+                                        instruction.r2.clone().expect("Need first source register"),
+                                    )]
+                                    .clone();
+                                    self.set_register(
+                                        instruction.r1.clone().expect("need dst register"),
+                                        register.kind,
+                                        register.base,
+                                        register.offset,
+                                    );
+                                } else {
+                                    let register = self.registers[get_register_index(
+                                        instruction.r3.clone().expect("Need first source register"),
+                                    )]
+                                    .clone();
+                                    self.set_register(
+                                        instruction.r1.clone().expect("need dst register"),
+                                        register.kind,
+                                        register.base,
+                                        register.offset,
+                                    );
+                                }
+                            }
+                            FlagValue::Abstract(_) => {
+                                log::error!("Can't support this yet :)");
+                                todo!("Abstract flag expressions 4");
+                            }
+                        },
+                        _ => todo!("unsupported comparison type for csel {:?}", instruction.r2),
+                    }
+                }
                 "cmp" => {
                     self.cmp(
                         instruction.r1.clone().expect("need register to compare"),
@@ -956,6 +998,20 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let src = self.operand(reg2);
                     self.set_register(reg1, src.kind, src.base, src.offset);
                 }
+                "rev" => {
+                    let reg1 = instruction.r1.clone().expect("Need dst register");
+                    let reg2 = instruction.r2.clone().expect("Need source register");
+
+                    let mut src = self.operand(reg2);
+
+                    if let Some(base) = src.base {
+                        src.base =
+                            Some(generate_expression("rev", base, AbstractExpression::Empty));
+                    }
+
+                    src.offset = src.offset.swap_bytes();
+                    self.set_register(reg1, src.kind, src.base, src.offset);
+                }
                 _ => {
                     log::warn!("Instruction not supported {:?}", instruction);
                     todo!("Instruction not implement {:?}", instruction)
@@ -992,7 +1048,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             }
                         }
                         "ld1" => {
-                            // TODO: fix parster to not consider { as register
+                            // TODO: fix parser to not consider { as register
                             // using 2 and 4 because instruction gets parsed like this:
                             // Instruction { op: "ld1.8h", r1: Some("{"), r2: Some("v0"), r3: Some("}"), r4: Some("[x1"), r5: None, r6: None }
                             let reg2 = instruction.r2.clone().expect("Need dst register");

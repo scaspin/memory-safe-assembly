@@ -63,6 +63,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
             if text.is_empty() {
                 continue;
+            } else if text.starts_with("# ") {
+                continue;
             } else if text.starts_with('.') {
                 defs.push(text);
             } else {
