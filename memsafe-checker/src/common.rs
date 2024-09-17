@@ -584,22 +584,24 @@ impl Instruction {
         if let Some(i) = &self.r1 {
             if i.contains("_") {
                 return false;
-            } else if i.contains("v") {
+            } else if (i.contains("v") && !i.contains("<"))
+                && (self.op.contains(".") || i.contains("."))
+            {
                 return true;
             }
         }
         if let Some(i) = &self.r2 {
-            if i.contains("v") {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
         }
         if let Some(i) = &self.r3 {
-            if i.contains("v") {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
         }
         if let Some(i) = &self.r4 {
-            if i.contains("v") {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
         }

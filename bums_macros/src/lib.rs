@@ -823,7 +823,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     for i in invariants {
         engine.add_invariant(i);
     }
-    let label = "_".to_owned() + &vars.item_fn.ident.to_string();
+    let label = vars.item_fn.ident.to_string();
     let res = engine.start(label);
 
     match res {

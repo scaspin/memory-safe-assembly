@@ -80,7 +80,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 // code.push(text.clone());
 
                 if text.ends_with(":") && !text.contains(".") {
-                    let label = text.strip_suffix(":").expect("engine1");
+                    let mut label = text.strip_suffix(":").expect("engine1");
+                    label = text.strip_prefix("_").unwrap_or(label);
                     labels.push((label.to_string(), line_number));
                     // if text == start {
                     //     pc = line_number;
@@ -251,6 +252,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     match some {
                         None => {
                             pc = pc + 1;
+
                             continue;
                         }
                         Some(jump) => {
@@ -265,7 +267,37 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                     match self.get_linenumber_of_label(label.clone()) {
                                         Some(i) => jump_dest = i,
                                         None => {
-                                            return Err(Error::new(ErrorKind::Other, "No label"))
+                                            if label.contains("+") {
+                                                let mut parts = label.split("+");
+                                                let l = parts
+                                                    .next()
+                                                    .expect("Need base label for jump targer");
+                                                let offset = parts
+                                                    .next()
+                                                    .expect("Need offset for jump target with +");
+
+                                                match self.get_linenumber_of_label(l.to_string()) {
+                                                    Some(i) => {
+                                                        let parsed_offset = usize::from_str_radix(
+                                                            offset.trim_start_matches("0x"),
+                                                            16,
+                                                        )
+                                                        .expect("unable to parse label offset");
+                                                        jump_dest = i + (parsed_offset / 4);
+                                                    }
+                                                    None => {
+                                                        return Err(Error::new(
+                                                            ErrorKind::Other,
+                                                            format!("No label found: {:?}", l),
+                                                        ))
+                                                    }
+                                                }
+                                            } else {
+                                                return Err(Error::new(
+                                                    ErrorKind::Other,
+                                                    format!("No label found: {:?}", label),
+                                                ));
+                                            }
                                         }
                                     }
 
