@@ -83,7 +83,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 if text.ends_with(":") && !text.contains(".") {
                     let mut label = text.strip_suffix(":").expect("engine1");
-                    label = text.strip_prefix("_").unwrap_or(label);
+                    label = label.strip_prefix("_").unwrap_or(label);
                     labels.push((label.to_string(), line_number));
                     // if text == start {
                     //     pc = line_number;
@@ -589,8 +589,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     fn get_linenumber_of_label(&self, label: String) -> Option<usize> {
+        let label = label.strip_prefix("_").unwrap_or(&label);
         for l in self.program.labels.iter() {
-            if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
+            if l.0.contains(&label) && label.contains(&l.0.clone()) {
                 return Some(l.1);
             }
         }

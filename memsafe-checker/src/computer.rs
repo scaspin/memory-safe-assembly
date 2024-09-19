@@ -696,7 +696,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             }
                             FlagValue::Abstract(_) => {
                                 log::error!("Can't support this yet :)");
-                                todo!("Abstract flag expressions 4");
+                                todo!("Abstract flag expressions 5");
                             }
                         },
                         _ => todo!("unsupported comparison type for csel {:?}", instruction.r2),
