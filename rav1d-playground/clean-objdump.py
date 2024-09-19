@@ -4,7 +4,7 @@ import sys
 def clean_objdump(objdump_output):
     address_pattern = re.compile(r'^\s*[0-9a-fA-F]+:\s+[0-9a-fA-F]+\s+')
     label_pattern = re.compile(r'^\s*[0-9a-fA-F]+(?:\s+<([^>]+)>)?:')
-    inline_label_pattern = re.compile(r'0x[0-9a-fA-F]+ <([^+]+)[^\>]*>')
+    inline_label_pattern = re.compile(r'\s+0x[0-9a-fA-F]+\s+<([^>]+)>')
 
     cleaned_lines = []
 
@@ -16,8 +16,8 @@ def clean_objdump(objdump_output):
             continue
 
         line = re.sub(address_pattern, '', line)
-        line = re.sub(label_pattern, "_" + r'\1' + ":", line)
-        line = re.sub(inline_label_pattern, r'\1', line)
+        line = re.sub(label_pattern, r'\1' + ":", line)
+        line = re.sub(inline_label_pattern, r' \1', line)
 
         cleaned_lines.append(line.strip())
 

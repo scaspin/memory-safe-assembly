@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 use z3::ast::Ast;
 use z3::*;
@@ -18,7 +18,7 @@ struct Program {
 pub struct ExecutionEngine<'ctx> {
     program: Program,
     computer: ARMCORTEXA<'ctx>,
-    abstracts: HashMap<String, String>,
+    // abstracts: HashMap<String, String>,
     in_loop: bool,
     jump_history: Vec<(
         usize,              // pc
@@ -82,7 +82,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 // code.push(text.clone());
 
                 if text.ends_with(":") && !text.contains(".") {
-                    let label = text.strip_suffix(":").expect("engine1");
+                    let mut label = text.strip_suffix(":").expect("engine1");
+                    label = text.strip_prefix("_").unwrap_or(label);
                     labels.push((label.to_string(), line_number));
                     // if text == start {
                     //     pc = line_number;
@@ -144,7 +145,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             computer,
             jump_history: Vec::new(),
             in_loop: false,
-            abstracts: HashMap::new(),
+            // abstracts: HashMap::new(),
             fail_fast: true,
         };
     }
@@ -253,6 +254,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     match some {
                         None => {
                             pc = pc + 1;
+
                             continue;
                         }
                         Some(jump) => {
@@ -267,7 +269,37 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                     match self.get_linenumber_of_label(label.clone()) {
                                         Some(i) => jump_dest = i,
                                         None => {
-                                            return Err(Error::new(ErrorKind::Other, "No label"))
+                                            if label.contains("+") {
+                                                let mut parts = label.split("+");
+                                                let l = parts
+                                                    .next()
+                                                    .expect("Need base label for jump targer");
+                                                let offset = parts
+                                                    .next()
+                                                    .expect("Need offset for jump target with +");
+
+                                                match self.get_linenumber_of_label(l.to_string()) {
+                                                    Some(i) => {
+                                                        let parsed_offset = usize::from_str_radix(
+                                                            offset.trim_start_matches("0x"),
+                                                            16,
+                                                        )
+                                                        .expect("unable to parse label offset");
+                                                        jump_dest = i + (parsed_offset / 4);
+                                                    }
+                                                    None => {
+                                                        return Err(Error::new(
+                                                            ErrorKind::Other,
+                                                            format!("No label found: {:?}", l),
+                                                        ))
+                                                    }
+                                                }
+                                            } else {
+                                                return Err(Error::new(
+                                                    ErrorKind::Other,
+                                                    format!("No label found: {:?}", label),
+                                                ));
+                                            }
                                         }
                                     }
 
@@ -349,14 +381,50 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                                     pc = n;
                                                 }
                                                 None => {
-                                                    log::error!(
-                                                        "No label line for label {}",
-                                                        label
-                                                    );
-                                                    return Err(Error::new(
-                                                        ErrorKind::Other,
-                                                        "No label",
-                                                    ));
+                                                    if label.contains("+") {
+                                                        let mut parts = label.split("+");
+                                                        let l = parts.next().expect(
+                                                            "Need base label for jump targer",
+                                                        );
+                                                        let offset = parts.next().expect(
+                                                            "Need offset for jump target with +",
+                                                        );
+
+                                                        match self
+                                                            .get_linenumber_of_label(l.to_string())
+                                                        {
+                                                            Some(i) => {
+                                                                let parsed_offset = usize::from_str_radix(
+                                                                    offset.trim_start_matches("0x"),
+                                                                    16,
+                                                                )
+                                                                .expect("unable to parse label offset");
+                                                                self.computer.clear_rw_queue();
+                                                                self.add_constraint(
+                                                                    condition, true,
+                                                                );
+                                                                pc = i + (parsed_offset / 4);
+                                                            }
+                                                            None => {
+                                                                return Err(Error::new(
+                                                                    ErrorKind::Other,
+                                                                    format!(
+                                                                        "No label found: {:?}",
+                                                                        l
+                                                                    ),
+                                                                ))
+                                                            }
+                                                        }
+                                                    } else {
+                                                        log::error!(
+                                                            "No label line for label {}",
+                                                            label
+                                                        );
+                                                        return Err(Error::new(
+                                                            ErrorKind::Other,
+                                                            format!("No label 2 {:?}", label),
+                                                        ));
+                                                    }
                                                 }
                                             }
                                         }
@@ -480,7 +548,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                         }
                                         None => {
                                             log::error!("No label line for label {}", label);
-                                            return Err(Error::new(ErrorKind::Other, "No label"));
+                                            return Err(Error::new(ErrorKind::Other, "No label 1"));
                                         }
                                     }
                                 }
@@ -585,24 +653,40 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 let (last_jump_label, branch_decision, _, last_rw_list, last_state) = j;
                 if last_jump_label == pc && last_rw_list.len() == rw_list.len() {
                     // JUMP TO Kth ITERATION
+                    let one = ast::Int::from_i64(self.computer.context, 1);
+                    let two = ast::Int::from_i64(self.computer.context, 2);
 
                     self.computer.solver.push();
                     let loop_var_name = (pc.to_string()) + "_loop_?";
                     let q = ast::Int::new_const(self.computer.context, loop_var_name.clone());
+                    self.computer.solver.assert(&q.gt(&two));
 
                     // find the variable that the loop estimates
                     let simplified = comparison_to_ast(self.computer.context, expression.clone())
                         .expect("engine8")
                         .simplify();
-                    for a in self.abstracts.keys() {
-                        if simplified.to_string().contains(a) {
+
+                    let some_multiple =
+                        ast::Int::new_const(self.computer.context, "multiple".to_string());
+                    self.computer.solver.assert(&some_multiple.gt(&one));
+
+                    for a in expression.get_abstracts() {
+                        if simplified.to_string().contains(&a) {
                             let original_abstract =
                                 ast::Int::new_const(self.computer.context, a.to_string());
-                            self.computer.solver.assert(&q.ge(&original_abstract));
-                            self.computer.solver.assert(&q.le(&original_abstract));
+
+                            let relation =
+                                ast::Int::mul(self.computer.context, &[&q, &some_multiple]);
+                            self.computer
+                                .solver
+                                .assert(&original_abstract.ge(&relation));
+                            self.computer
+                                .solver
+                                .assert(&original_abstract.le(&relation));
                         }
                     }
 
+                    let mut max_diff = 0;
                     let current_state = self.computer.get_state();
                     for i in 0..(last_state.0.len()) {
                         let last = &last_state.0[i];
@@ -636,8 +720,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             };
 
                             self.computer.registers[i] = new_reg;
+
+                            if diff > max_diff {
+                                max_diff = diff;
+                            }
                         }
                     }
+
+                    let diff = ast::Int::from_i64(self.computer.context, max_diff);
+                    self.computer.solver.assert(&some_multiple.ge(&diff));
+                    self.computer.solver.assert(&some_multiple.le(&diff));
 
                     // for i in 0..(last_state.1.len()) {
                     //     let last = &last_state.1[i];
@@ -716,16 +808,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     for i in 0..(last_state.0.len()) {
                         let last = &last_state.0[i];
                         let cur = &current_state.0[i];
-                        let diff: i64 = match cur.kind {
-                            RegisterKind::RegisterBase | RegisterKind::Number => {
-                                if last.base == cur.base {
-                                    cur.offset - last.offset
-                                } else {
-                                    0
-                                }
-                            }
-                            RegisterKind::Immediate => cur.offset - last.offset,
-                        };
+                        let diff: i64 = cur.offset - last.offset;
 
                         // check diff matches, if not BAD
                         // if does, reset for k+1
@@ -747,6 +830,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
 
+                    break;
+                    // todo!();
                     // for i in 0..(last_state.1.len()) {
                     //     let last = &last_state.1[i];
                     //     let cur = &current_state.1[i];
@@ -801,7 +886,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     //     }
                     // }
                 }
-                return Some(branch_decision);
             }
             return None;
         }

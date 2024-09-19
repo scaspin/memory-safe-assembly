@@ -124,7 +124,8 @@ fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
         BinOp::Sub(_) => return generate_expression("-", left_expr, right_expr),
         BinOp::Div(_) => return generate_expression("/", left_expr, right_expr),
         BinOp::Mul(_) => return generate_expression("*", left_expr, right_expr),
-        _ => todo!("expression todo"),
+        BinOp::Rem(_) => return generate_expression("%", left_expr, right_expr),
+        _ => todo!("expression binary to abstract {:?}", input.op),
     }
 }
 
@@ -823,7 +824,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     for i in invariants {
         engine.add_invariant(i);
     }
-    let label = "_".to_owned() + &vars.item_fn.ident.to_string();
+    let label = vars.item_fn.ident.to_string();
     let res = engine.start(label);
 
     match res {

@@ -773,19 +773,20 @@ impl<'ctx> ARMCORTEXA<'_> {
                 "b.gt" => {
                     match (&self.zero, &self.neg, &self.overflow) {
                         (Some(zero), Some(neg), Some(ove)) => {
-                            if let (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) = (zero, neg, ove) {
+                            match  (zero, neg, ove) {
+                            (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
                                if !z && n == v {  // Z = 0 AND N = V
                                     return Ok(Some((None, instruction.r1.clone(), None)))
                                } else {
                                     return Ok(None)
                                }
-                            } else {
-                                if neg == ove {
-                                    return Ok(Some((Some(zero.to_abstract_expression()), instruction.r1.clone(), None)))
-                                } else {
-                                    return Ok(Some((Some(zero.to_abstract_expression()), instruction.r1.clone(), None)))
-                                }
+                            },
+                            (FlagValue::Abstract(z) , _, _ ) =>  {
+                                let expression = generate_comparison(">", *z.left.clone(), *z.right.clone());
+                                return Ok(Some((Some(expression), instruction.r1.clone(), None)))
                                 // return Ok(Some((Some(comparison), instruction.r1.clone(), None)));
+                            },
+                            (_,_,_) => todo!("match on undefined flags!")
                             }
                         },
                         (_, _, _) => return Err(

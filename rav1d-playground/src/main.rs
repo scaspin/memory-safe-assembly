@@ -25,10 +25,10 @@ pub struct DynPixel(c_void);
 // }
 // fn reverse(dst: *mut DynPixel, src: *const DynPixel, n: c_int) -> ();
 
-#[bums::check_mem_safe("ipred.S", dst.as_mut_ptr(), src.as_ptr_range().end, src.len(), [src.len() == dst.len(), src.len() >= 16])]
+#[bums::check_mem_safe("ipred.S", dst.as_mut_ptr(), src.as_ptr_range().end, src.len(), [src.len() == dst.len(), src.len() >= 16, src.len()%16==0])]
 fn ipred_reverse_8bpc_neon(dst: &mut [u8], src: &[u8]);
 
-#[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), src.as_ptr_range().end ,src.len(), [src.len() == dst.len(), src.len() >= 16])]
+#[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), src.as_ptr_range().end ,src.len()/2, [src.len() == dst.len(), src.len() >= 16, src.len()%16==0])]
 fn ipred_reverse_16bpc_neon(dst: &mut [u16], src: &[u16]);
 
 pub trait CallReverse {

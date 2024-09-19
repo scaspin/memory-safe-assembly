@@ -402,6 +402,32 @@ impl AbstractComparison {
         }
     }
 
+    pub fn not(&self) -> Self {
+        let left = *self.left.clone();
+        let right = *self.right.clone();
+        match self.op.as_str() {
+            "<" => {
+                return Self::new(">", left, right);
+            }
+            ">" => {
+                return Self::new("<", left, right);
+            }
+            ">=" => {
+                return Self::new("<=", left, right);
+            }
+            "<=" => {
+                return Self::new(">=", left, right);
+            }
+            "==" => {
+                return Self::new("!=", left, right);
+            }
+            "!=" => {
+                return Self::new("==", left, right);
+            }
+            _ => todo!("unsupported op {:?}", self.op),
+        }
+    }
+
     pub fn reduce_solution(&self) -> (AbstractExpression, AbstractExpression) {
         todo!()
     }
@@ -457,6 +483,13 @@ impl FlagValue {
                     generate_comparison("!=", AbstractExpression::Empty, AbstractExpression::Empty)
                 }
             },
+        }
+    }
+
+    pub fn not(&self) -> Self {
+        match self {
+            Self::Abstract(a) => return Self::Abstract(a.clone().not()),
+            Self::Real(r) => return Self::Real(!r),
         }
     }
 }
@@ -584,22 +617,24 @@ impl Instruction {
         if let Some(i) = &self.r1 {
             if i.contains("_") {
                 return false;
-            } else if i.contains("v") && (self.op.contains(".") || i.contains(".")) {
+            } else if (i.contains("v") && !i.contains("<"))
+                && (self.op.contains(".") || i.contains("."))
+            {
                 return true;
             }
         }
         if let Some(i) = &self.r2 {
-            if i.contains("v") && (self.op.contains(".") || i.contains(".")) {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
         }
         if let Some(i) = &self.r3 {
-            if i.contains("v") && (self.op.contains(".") || i.contains(".")) {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
         }
         if let Some(i) = &self.r4 {
-            if i.contains("v") && (self.op.contains(".") || i.contains(".")) {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
         }
@@ -847,8 +882,9 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                     let divisor = new2.div(&two);
                     return Some(new1.div(&divisor));
                 }
+                "%" => return Some(new1.modulo(&new2)),
                 _ => {
-                    return None;
+                    todo!("expression to AST {:?}", op)
                 }
             }
         }
