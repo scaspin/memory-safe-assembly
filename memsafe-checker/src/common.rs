@@ -874,7 +874,7 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                 "/" => return Some(new1.div(&new2)),
                 "lsl" => {
                     let two = ast::Int::from_i64(context, 2);
-                    let multiplier = new2.power(&two).to_int();
+                    let multiplier = two.power(&new2).to_int();
                     return Some(ast::Int::mul(context, &[&new1, &multiplier]));
                 }
                 ">>" | "lsr" => {

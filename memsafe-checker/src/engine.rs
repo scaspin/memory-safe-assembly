@@ -602,7 +602,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let c = comparison_to_ast(self.computer.context, constraint)
             .expect("engine6")
             .simplify();
-
         if decision {
             self.computer.solver.assert(&c);
         } else {
@@ -676,8 +675,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             let original_abstract =
                                 ast::Int::new_const(self.computer.context, a.to_string());
 
+                            let kplus = ast::Int::add(self.computer.context, &[&q, &one]);
                             let relation =
-                                ast::Int::mul(self.computer.context, &[&q, &some_multiple]);
+                                ast::Int::mul(self.computer.context, &[&kplus, &some_multiple]);
                             self.computer
                                 .solver
                                 .assert(&original_abstract.ge(&relation));

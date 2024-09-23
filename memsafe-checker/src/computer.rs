@@ -730,7 +730,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "b.ne" | "bne" => {
                     match &self.zero {
-                                // if zero is set to false, then cmp -> not equal and we branch
+                        // if zero is set to false, then cmp -> not equal and we branch
                         Some(flag) => match flag {
                             FlagValue::Real(b) => {
                                 if !b {
@@ -740,7 +740,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 }
                             }
                             FlagValue::Abstract(s) => {
-                                return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
+                                return Ok(Some((Some(s.not()), instruction.r1.clone(), None)));
                             }
                         },
                         None => return Err(
