@@ -648,6 +648,29 @@ impl<'ctx> ExecutionEngine<'ctx> {
         log::info!("jump condition: {}", expression.clone());
         log::info!("memory accesses: {:?}", rw_list.clone());
 
+        if expression.get_abstracts().is_empty() {
+            match (
+                self.computer.solver.check_assumptions(&[comparison_to_ast(
+                    self.computer.context,
+                    expression.clone(),
+                )
+                .expect(
+                    "need result of conversion of comparison to ast for evaluation at jump 0",
+                )]),
+                self.computer.solver.check_assumptions(&[comparison_to_ast(
+                    self.computer.context,
+                    expression.clone().not(),
+                )
+                .expect(
+                    "need result of conversion of comparison to ast for evaluation at jump 0",
+                )]),
+            ) {
+                (SatResult::Sat, SatResult::Unsat) => return Some(true),
+                (SatResult::Unsat, SatResult::Sat) => return Some(false),
+                _ => (),
+            }
+        }
+
         if !self.in_loop {
             for j in self.jump_history.clone().into_iter().rev() {
                 let (last_jump_label, branch_decision, _, last_rw_list, last_state) = j;
@@ -666,8 +689,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         .expect("engine8")
                         .simplify();
 
-                    let some_multiple =
-                        ast::Int::new_const(self.computer.context, "multiple".to_string());
+                    let some_multiple = ast::Int::new_const(
+                        self.computer.context,
+                        ("multiple_".to_owned() + &pc.to_string()).to_string(),
+                    );
                     self.computer.solver.assert(&some_multiple.gt(&one));
 
                     for a in expression.get_abstracts() {

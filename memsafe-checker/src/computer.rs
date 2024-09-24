@@ -1,6 +1,7 @@
 use crate::common::*;
 use std::collections::HashMap;
 use std::fmt;
+use z3::ast::Ast;
 use z3::*;
 
 fn get_register_index(reg_name: String) -> usize {
@@ -383,6 +384,21 @@ impl<'ctx> ARMCORTEXA<'_> {
                         instruction.r4.clone(),
                     );
                 }
+                "adds" => {
+                    self.cmn(
+                        instruction.r2.clone().expect("need register to compare"),
+                        instruction.r3.clone().expect("need register to compare"),
+                    );
+
+                    self.arithmetic(
+                        "+",
+                        &|x, y| x + y,
+                        instruction.r1.clone().expect("Need dst register"),
+                        instruction.r2.clone().expect("Need one operand"),
+                        instruction.r3.clone().expect("Need two operand"),
+                        instruction.r4.clone(),
+                    );
+                }
                 "sub" => {
                     self.arithmetic(
                         "-",
@@ -662,6 +678,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "csel" => {
                     // match on condition based on flags
+                    let register2 = self.registers
+                        [get_register_index(instruction.r2.clone().expect("Need one register"))]
+                    .clone();
+                    let register3 = self.registers
+                        [get_register_index(instruction.r3.clone().expect("Need one register"))]
+                    .clone();
+
                     match instruction
                         .r4
                         .clone()
@@ -694,12 +717,106 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     );
                                 }
                             }
-                            FlagValue::Abstract(_) => {
-                                log::error!("Can't support this yet :)");
-                                todo!("Abstract flag expressions 5");
+                            FlagValue::Abstract(a) => {
+                                // TODO: match eq logic
+                                let condition = comparison_to_ast(self.context, a.clone()).expect("something").simplify();
+                                let not_condition = comparison_to_ast(self.context, a.not()).expect("something").simplify();
+                                let select = ast::Int::new_const(self.context, "select_cc");
+                                let opt1 = ast::Int::from_i64(self.context, register2.offset);
+                                let opt2 = ast::Int::from_i64(self.context, register3.offset);
+
+                                let first = ast::Bool::and(self.context, &[&select.le(&opt1), &select.ge(&opt1)]);
+                                let second = ast::Bool::and(self.context, &[&select.le(&opt2), &select.ge(&opt2)]);
+
+                                let or = ast::Bool::and(self.context, &[&condition.implies(&first), &not_condition.implies(&second)]);
+                                self.solver.assert(&or);
+
+                                self.set_register(
+                                    instruction.r1.clone().expect("need dst register"),
+                                    RegisterKind::RegisterBase,
+                                    Some(AbstractExpression::Abstract("select_cc".to_string())),
+                                    0,
+                                );
+                                // todo!("Abstract flag expressions 5");
                             }
                         },
-                        _ => todo!("unsupported comparison type for csel {:?}", instruction.r2),
+                        "eq" => {
+                            match self.zero.clone().expect("Need zero flag set") {
+                                FlagValue::Real(z) => {
+                                    if z == true {
+                                        let register = self.registers[get_register_index(
+                                            instruction.r2.clone().expect("Need first source register"),
+                                        )]
+                                        .clone();
+                                        self.set_register(
+                                            instruction.r1.clone().expect("need dst register"),
+                                            register.kind,
+                                            register.base,
+                                            register.offset,
+                                        );
+                                    } else {
+                                        let register = self.registers[get_register_index(
+                                            instruction.r3.clone().expect("Need first source register"),
+                                        )]
+                                        .clone();
+                                        self.set_register(
+                                            instruction.r1.clone().expect("need dst register"),
+                                            register.kind,
+                                            register.base,
+                                            register.offset,
+                                        );
+                                    }
+                                }
+                                FlagValue::Abstract(z) => {
+                                    let condition = comparison_to_ast(self.context, z.clone()).expect("something").simplify();
+                                    let not_condition = comparison_to_ast(self.context, z.not()).expect("something").simplify();
+
+                                    match (self.solver.check_assumptions(&[condition.clone()]), self.solver.check_assumptions(&[not_condition.clone()])) {
+                                        (SatResult::Sat, SatResult::Unsat) => {
+                                            let register = self.registers[get_register_index(
+                                                instruction.r2.clone().expect("Need first source register"),
+                                            )].clone();
+                                            self.set_register(
+                                                instruction.r1.clone().expect("need dst register"),
+                                                register.kind,
+                                                register.base,
+                                                register.offset,
+                                            );
+                                            todo!();
+                                        }
+                                        (SatResult::Unsat, SatResult::Sat) => {
+                                            let register = self.registers[get_register_index(
+                                                instruction.r3.clone().expect("Need first source register"),
+                                            )].clone();
+                                            self.set_register(
+                                                instruction.r1.clone().expect("need dst register"),
+                                                register.kind,
+                                                register.base,
+                                                register.offset,
+                                            );
+                                        }
+                                        (_,_) => {
+                                            let select = ast::Int::new_const(self.context, "select_eq");
+                                            let opt1 = ast::Int::from_i64(self.context, register2.offset);
+                                            let opt2 = ast::Int::from_i64(self.context, register3.offset);
+
+                                            let first = ast::Bool::and(self.context, &[&select.le(&opt1), &select.ge(&opt1)]);
+                                            let second = ast::Bool::and(self.context, &[&select.le(&opt2), &select.ge(&opt2)]);
+                                            let or = ast::Bool::or(self.context, &[&condition.implies(&first), &not_condition.implies(&second)]);
+                                            self.solver.assert(&or);
+
+                                            self.set_register(
+                                                instruction.r1.clone().expect("need dst register"),
+                                                RegisterKind::RegisterBase,
+                                                Some(AbstractExpression::Abstract("select_eq".to_string())),
+                                                0,
+                                            );
+                                        }
+                                    }
+                                }
+                            };
+                        },
+                        _ => todo!("unsupported comparison type for csel {:?}", instruction.r4),
                     }
                 }
                 "cmp" => {
@@ -770,7 +887,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         ),
                     }
                 }
-                "b.gt" => {
+                "bt" | "b.gt" => {
                     match (&self.zero, &self.neg, &self.overflow) {
                         (Some(zero), Some(neg), Some(ove)) => {
                             match  (zero, neg, ove) {
@@ -790,6 +907,53 @@ impl<'ctx> ARMCORTEXA<'_> {
                             }
                         },
                         (_, _, _) => return Err(
+                            "Flag cannot be branched on since it has not been set within the program yet"
+                                .to_string(),
+                        ),
+                    }
+                }
+                "b.ls" => {
+                    match (&self.zero, &self.carry) {
+                        (Some(zero), Some(carry)) => {
+                            match  (zero, carry) {
+                            (FlagValue::Real(z), FlagValue::Real(c)) => {
+                               if !z && *c {
+                                    return Ok(Some((None, instruction.r1.clone(), None)))
+                               } else {
+                                    return Ok(None)
+                               }
+                            },
+                            (FlagValue::Abstract(z) , _ ) | (_, FlagValue::Abstract(z) ) =>  {
+                                let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
+                                return Ok(Some((Some(expression), instruction.r1.clone(), None)))
+                                // return Ok(Some((Some(comparison), instruction.r1.clone(), None)));
+                            },
+                            }
+                        },
+                        (_, _) => return Err(
+                            "Flag cannot be branched on since it has not been set within the program yet"
+                                .to_string(),
+                        ),
+                    }
+                }
+                "b.cs" | "b.hs" => {
+                    match&self.carry{
+                        Some(carry) => {
+                            match  carry {
+                            FlagValue::Real(c) => {
+                               if *c {
+                                    return Ok(Some((None, instruction.r1.clone(), None)))
+                               } else {
+                                    return Ok(None)
+                               }
+                            },
+                            FlagValue::Abstract(c) =>  {
+                                let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
+                                return Ok(Some((Some(expression), instruction.r1.clone(), None)))
+                            },
+                            }
+                        },
+                        None => return Err(
                             "Flag cannot be branched on since it has not been set within the program yet"
                                 .to_string(),
                         ),
@@ -2176,8 +2340,8 @@ impl<'ctx> ARMCORTEXA<'_> {
     }
 
     fn cmn(&mut self, reg1: String, reg2: String) {
-        let r1 = self.registers[get_register_index(reg1.clone())].clone();
-        let r2 = self.registers[get_register_index(reg2.clone())].clone();
+        let r1 = self.operand(reg1.clone()).clone();
+        let r2 = self.operand(reg2.clone()).clone();
 
         if r1.kind == r2.kind {
             match r1.kind {
