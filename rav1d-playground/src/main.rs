@@ -1,13 +1,9 @@
 use bums_macros as bums;
-use std::ffi::c_void;
 
 #[allow(dead_code)]
 #[allow(unexpected_cfgs)]
 mod rav1dsrc;
 use rav1dsrc::bitdepth::{BitDepth, BitDepth16, BitDepth8};
-
-#[repr(transparent)]
-pub struct DynPixel(c_void);
 
 // https://github.com/memorysafety/rav1d/blob/7d7240943d519288fdc9f2b9532b750bd494bf2f/src/ipred.rs#L1595
 // wrap_fn_ptr!(unsafe extern "C" fn reverse(
@@ -56,4 +52,34 @@ pub fn call_reverse<BD: BitDepth + CallReverse>(dst: &mut [BD::Pixel], src: &[BD
 
 fn main() {
     println!("Hello world!");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    extern "C" {
+        #[link_name = "rav1d_1_0_0_ipred_reverse_8bpc_neon"]
+        fn rav1d_ipred_reverse_8bpc_neon(dest: *mut u8, src: *const u8, num: usize);
+    }
+
+    #[test]
+    fn test_reverse_asm_impls() {
+        let pixel_src: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7];
+        let pixel_dest_us: &mut [u8] = &mut [0; 8];
+        let pixel_dest_them: &mut [u8] = &mut [0; 8];
+
+        let us = {
+            ipred_reverse_8bpc_neon(pixel_dest_us, pixel_src);
+            pixel_dest_us
+        };
+        let them = {
+            unsafe {
+                rav1d_ipred_reverse_8bpc_neon(pixel_dest_them.as_mut_ptr(), pixel_src.as_ptr(), 6);
+                pixel_dest_them
+            }
+        };
+
+        assert_eq!(us, them);
+    }
 }
