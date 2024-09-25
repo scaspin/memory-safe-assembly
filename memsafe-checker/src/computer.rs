@@ -371,7 +371,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         &mut self,
         pc: usize,
         instruction: &Instruction,
-    ) -> Result<Option<(Option<AbstractComparison>, Option<String>, Option<u128>)>, String> {
+    ) -> Result<ExecuteReturnType, String> {
         if !instruction.is_simd() {
             match instruction.op.as_str() {
                 "add" => {
@@ -580,19 +580,18 @@ impl<'ctx> ARMCORTEXA<'_> {
                         || register.base.clone().expect("computer2") == AbstractExpression::Empty)
                         && register.offset == 0
                     {
-                        return Ok(None);
+                        return Ok(ExecuteReturnType::Next);
                     } else if register.kind == RegisterKind::RegisterBase {
-                        return Ok(Some((
-                            Some(AbstractComparison::new(
+                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                            AbstractComparison::new(
                                 "!=",
                                 AbstractExpression::Immediate(0),
                                 AbstractExpression::Register(Box::new(register)),
-                            )),
-                            instruction.r2.clone(),
-                            None,
-                        )));
+                            ),
+                            instruction.r2.clone().expect("need jump label 1 "),
+                        ));
                     } else {
-                        return Ok(Some((None, instruction.r2.clone(), None)));
+                        return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 2")));
                     }
                 }
                 "cbz" => {
@@ -604,19 +603,18 @@ impl<'ctx> ARMCORTEXA<'_> {
                         || register.base.clone().expect("computer3") == AbstractExpression::Empty)
                         && register.offset == 0
                     {
-                        return Ok(Some((None, instruction.r2.clone(), None)));
+                        return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 3")));
                     } else if register.kind == RegisterKind::RegisterBase {
-                        return Ok(Some((
-                            Some(AbstractComparison::new(
+                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                            AbstractComparison::new(
                                 "==",
                                 AbstractExpression::Immediate(0),
                                 AbstractExpression::Register(Box::new(register)),
-                            )),
-                            instruction.r2.clone(),
-                            None,
-                        )));
+                            ),
+                            instruction.r2.clone().expect("need jump label 4"),
+                        ));
                     } else {
-                        return Ok(None);
+                        return Ok(ExecuteReturnType::Next);
                     }
                 }
                 "cset" => {
@@ -834,7 +832,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     );
                 }
                 "b" => {
-                    return Ok(Some((None, instruction.r1.clone(), None)));
+                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 5")));
                 }
                 "bl" => {
                     let label = instruction
@@ -843,7 +841,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         .expect("need label to jump")
                         .to_string();
                     self.set_register("x30".to_string(), RegisterKind::Immediate, None, pc as i64);
-                    return Ok(Some((None, Some(label), None)));
+                    return Ok(ExecuteReturnType::JumpLabel(label));
                 }
                 "b.ne" | "bne" => {
                     match &self.zero {
@@ -851,13 +849,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                         Some(flag) => match flag {
                             FlagValue::Real(b) => {
                                 if !b {
-                                    return Ok(Some((None, instruction.r1.clone(), None)));
+                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 7")));
                                 } else {
-                                    return Ok(None);
+                                    return Ok(ExecuteReturnType::Next);
                                 }
                             }
                             FlagValue::Abstract(s) => {
-                                return Ok(Some((Some(s.not()), instruction.r1.clone(), None)));
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(s.not(), instruction.r1.clone().expect("need jump label 8")));
                             }
                         },
                         None => return Err(
@@ -872,13 +870,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                         Some(flag) => match flag {
                             FlagValue::Real(b) => {
                                 if *b {
-                                    return Ok(Some((None, instruction.r1.clone(), None)));
+                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 9")));
                                 } else {
-                                    return Ok(None);
+                                    return Ok(ExecuteReturnType::Next);
                                 }
                             }
                             FlagValue::Abstract(s) => {
-                                return Ok(Some((Some(s.clone()), instruction.r1.clone(), None)));
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), instruction.r1.clone().expect("need jump label 10")));
                             }
                         },
                         None => return Err(
@@ -893,15 +891,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                             match  (zero, neg, ove) {
                             (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
                                if !z && n == v {  // Z = 0 AND N = V
-                                    return Ok(Some((None, instruction.r1.clone(), None)))
+                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 11")))
                                } else {
-                                    return Ok(None)
+                                    return Ok(ExecuteReturnType::Next)
                                }
                             },
                             (FlagValue::Abstract(z) , _, _ ) =>  {
                                 let expression = generate_comparison(">", *z.left.clone(), *z.right.clone());
-                                return Ok(Some((Some(expression), instruction.r1.clone(), None)))
-                                // return Ok(Some((Some(comparison), instruction.r1.clone(), None)));
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, instruction.r1.clone().expect("need jump label 12")));
                             },
                             (_,_,_) => todo!("match on undefined flags!")
                             }
@@ -918,15 +915,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                             match  (zero, carry) {
                             (FlagValue::Real(z), FlagValue::Real(c)) => {
                                if !z && *c {
-                                    return Ok(Some((None, instruction.r1.clone(), None)))
+                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 13")));
                                } else {
-                                    return Ok(None)
+                                    return Ok(ExecuteReturnType::Next)
                                }
                             },
                             (FlagValue::Abstract(z) , _ ) | (_, FlagValue::Abstract(z) ) =>  {
                                 let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
-                                return Ok(Some((Some(expression), instruction.r1.clone(), None)))
-                                // return Ok(Some((Some(comparison), instruction.r1.clone(), None)));
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 14")));
                             },
                             }
                         },
@@ -942,14 +938,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                             match  carry {
                             FlagValue::Real(c) => {
                                if *c {
-                                    return Ok(Some((None, instruction.r1.clone(), None)))
+                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 15")));
                                } else {
-                                    return Ok(None)
+                                    return Ok(ExecuteReturnType::Next)
                                }
                             },
                             FlagValue::Abstract(c) =>  {
                                 let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
-                                return Ok(Some((Some(expression), instruction.r1.clone(), None)))
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 16")));
                             },
                             }
                         },
@@ -965,18 +961,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                         if x30.kind == RegisterKind::RegisterBase {
                             if let Some(AbstractExpression::Abstract(address)) = x30.base {
                                 if address == "return" && x30.offset == 0 {
-                                    return Ok(Some((None, Some("return".to_string()), None)));
+                                    return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
                                 } else {
-                                    return Ok(Some((None, Some(address.to_string()), None)));
+                                    return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
                                 }
                             }
-                            return Ok(Some((
-                                None,
-                                None,
-                                Some(x30.offset.try_into().expect("computer4")),
-                            )));
+                            return Ok(ExecuteReturnType::JumpAddress(x30.offset.try_into().expect("computer4")));
                         } else {
-                            return Ok(Some((None, Some("return".to_string()), None)));
+                            return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
                         }
                     } else {
                         let _r1 = &self.registers[get_register_index(
@@ -1946,7 +1938,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
             }
         }
-        Ok(None)
+        Ok(ExecuteReturnType::Next)
     }
 
     fn arithmetic(

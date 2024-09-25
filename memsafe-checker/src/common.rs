@@ -923,3 +923,13 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
         _ => todo!("unsupported op {:?}", expression.op),
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExecuteReturnType {
+    Next,
+    JumpLabel(String),
+    JumpAddress(u128),
+    ConditionalJumpLabel(AbstractComparison, String),
+    ConditionalJumpAddress(AbstractComparison, u128),
+    Select(AbstractComparison, String, RegisterValue, RegisterValue),
+}
