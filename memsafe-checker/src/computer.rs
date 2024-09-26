@@ -1,7 +1,6 @@
 use crate::common::*;
 use std::collections::HashMap;
 use std::fmt;
-use z3::ast::Ast;
 use z3::*;
 
 fn get_register_index(reg_name: String) -> usize {
@@ -210,7 +209,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         );
     }
 
-    fn set_register(
+    pub fn set_register(
         &mut self,
         name: String,
         kind: RegisterKind,
@@ -676,13 +675,6 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "csel" => {
                     // match on condition based on flags
-                    let register2 = self.registers
-                        [get_register_index(instruction.r2.clone().expect("Need one register"))]
-                    .clone();
-                    let register3 = self.registers
-                        [get_register_index(instruction.r3.clone().expect("Need one register"))]
-                    .clone();
-
                     match instruction
                         .r4
                         .clone()
@@ -716,26 +708,17 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 }
                             }
                             FlagValue::Abstract(a) => {
-                                // TODO: match eq logic
-                                let condition = comparison_to_ast(self.context, a.clone()).expect("something").simplify();
-                                let not_condition = comparison_to_ast(self.context, a.not()).expect("something").simplify();
-                                let select = ast::Int::new_const(self.context, "select_cc");
-                                let opt1 = ast::Int::from_i64(self.context, register2.offset);
-                                let opt2 = ast::Int::from_i64(self.context, register3.offset);
+                                let opt1 = self.registers[get_register_index(
+                                    instruction.r2.clone().expect("Need first source register"),
+                                )]
+                                .clone();
 
-                                let first = ast::Bool::and(self.context, &[&select.le(&opt1), &select.ge(&opt1)]);
-                                let second = ast::Bool::and(self.context, &[&select.le(&opt2), &select.ge(&opt2)]);
+                                let opt2 = self.registers[get_register_index(
+                                    instruction.r3.clone().expect("Need second source register"),
+                                )]
+                                .clone();
 
-                                let or = ast::Bool::and(self.context, &[&condition.implies(&first), &not_condition.implies(&second)]);
-                                self.solver.assert(&or);
-
-                                self.set_register(
-                                    instruction.r1.clone().expect("need dst register"),
-                                    RegisterKind::RegisterBase,
-                                    Some(AbstractExpression::Abstract("select_cc".to_string())),
-                                    0,
-                                );
-                                // todo!("Abstract flag expressions 5");
+                                return Ok(ExecuteReturnType::Select(a, instruction.r1.clone().expect("need dst register"), opt1, opt2));
                             }
                         },
                         "eq" => {
@@ -766,51 +749,15 @@ impl<'ctx> ARMCORTEXA<'_> {
                                     }
                                 }
                                 FlagValue::Abstract(z) => {
-                                    let condition = comparison_to_ast(self.context, z.clone()).expect("something").simplify();
-                                    let not_condition = comparison_to_ast(self.context, z.not()).expect("something").simplify();
-
-                                    match (self.solver.check_assumptions(&[condition.clone()]), self.solver.check_assumptions(&[not_condition.clone()])) {
-                                        (SatResult::Sat, SatResult::Unsat) => {
-                                            let register = self.registers[get_register_index(
-                                                instruction.r2.clone().expect("Need first source register"),
-                                            )].clone();
-                                            self.set_register(
-                                                instruction.r1.clone().expect("need dst register"),
-                                                register.kind,
-                                                register.base,
-                                                register.offset,
-                                            );
-                                            todo!();
-                                        }
-                                        (SatResult::Unsat, SatResult::Sat) => {
-                                            let register = self.registers[get_register_index(
-                                                instruction.r3.clone().expect("Need first source register"),
-                                            )].clone();
-                                            self.set_register(
-                                                instruction.r1.clone().expect("need dst register"),
-                                                register.kind,
-                                                register.base,
-                                                register.offset,
-                                            );
-                                        }
-                                        (_,_) => {
-                                            let select = ast::Int::new_const(self.context, "select_eq");
-                                            let opt1 = ast::Int::from_i64(self.context, register2.offset);
-                                            let opt2 = ast::Int::from_i64(self.context, register3.offset);
-
-                                            let first = ast::Bool::and(self.context, &[&select.le(&opt1), &select.ge(&opt1)]);
-                                            let second = ast::Bool::and(self.context, &[&select.le(&opt2), &select.ge(&opt2)]);
-                                            let or = ast::Bool::or(self.context, &[&condition.implies(&first), &not_condition.implies(&second)]);
-                                            self.solver.assert(&or);
-
-                                            self.set_register(
-                                                instruction.r1.clone().expect("need dst register"),
-                                                RegisterKind::RegisterBase,
-                                                Some(AbstractExpression::Abstract("select_eq".to_string())),
-                                                0,
-                                            );
-                                        }
-                                    }
+                                    let opt1 = self.registers[get_register_index(
+                                        instruction.r2.clone().expect("Need first source register"),
+                                    )]
+                                    .clone();
+                                    let opt2 = self.registers[get_register_index(
+                                        instruction.r3.clone().expect("Need second source register"),
+                                    )]
+                                    .clone();
+                                    return Ok(ExecuteReturnType::Select(z, instruction.r1.clone().expect("need dst register"), opt1, opt2));
                                 }
                             };
                         },
@@ -849,13 +796,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                         Some(flag) => match flag {
                             FlagValue::Real(b) => {
                                 if !b {
-                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 7")));
+                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 7")));
                                 } else {
                                     return Ok(ExecuteReturnType::Next);
                                 }
                             }
                             FlagValue::Abstract(s) => {
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(s.not(), instruction.r1.clone().expect("need jump label 8")));
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), instruction.r1.clone().expect("need jump label 8")));
                             }
                         },
                         None => return Err(
@@ -944,7 +891,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                }
                             },
                             FlagValue::Abstract(c) =>  {
-                                let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
+                                let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
                                 return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 16")));
                             },
                             }
@@ -1196,7 +1143,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 _ => {
                     log::warn!("Instruction not supported {:?}", instruction);
-                    todo!("Instruction not implement {:?}", instruction)
+                    todo!("Instruction not implemented {:?}", instruction)
                 }
             }
         } else {
@@ -2377,12 +2324,12 @@ impl<'ctx> ARMCORTEXA<'_> {
                         )));
                         // FIX carry + overflow
                         self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
+                            ">",
                             expression.clone(),
                             AbstractExpression::Immediate(std::i64::MAX),
                         )));
                         self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
+                            ">",
                             expression,
                             AbstractExpression::Immediate(std::i64::MAX),
                         )));
@@ -2433,14 +2380,14 @@ impl<'ctx> ARMCORTEXA<'_> {
             )));
             // FIX carry + overflow
             self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
+                ">",
                 expression.clone(),
-                AbstractExpression::Immediate(std::i64::MIN),
+                AbstractExpression::Immediate(std::i64::MAX),
             )));
             self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
+                ">",
                 expression,
-                AbstractExpression::Immediate(std::i64::MIN),
+                AbstractExpression::Immediate(std::i64::MAX),
             )));
         }
     }

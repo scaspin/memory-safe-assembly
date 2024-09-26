@@ -525,8 +525,78 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             }
                         }
                     }
-                    ExecuteReturnType::Select(comparison, register, option1, option2) => {
-                        todo!();
+                    ExecuteReturnType::Select(condition, register, option1, option2) => {
+                        match (
+                        self.computer.solver.check_assumptions(&[comparison_to_ast(
+                            self.computer.context,
+                            condition.clone(),
+                        )
+                        .expect(
+                            "need result of conversion of comparison to ast for evaluation at jump 0",
+                        )]),
+                        self.computer.solver.check_assumptions(&[comparison_to_ast(
+                            self.computer.context,
+                            condition.clone().not(),
+                        )
+                        .expect(
+                            "need result of conversion of comparison to ast for evaluation at jump 0",
+                        )]),
+                    ) {
+                        (SatResult::Sat, SatResult::Unsat) => {
+                            self.add_constraint(condition.clone(), true);
+                            self.computer.set_register(
+                                register.clone(),
+                                option1.kind,
+                                option1.base,
+                                option1.offset,
+                            );
+                            pc = pc+1;
+                        }
+                        (SatResult::Unsat, SatResult::Sat) => {
+                            self.add_constraint(condition.clone(), false);
+                            self.computer.set_register(
+                                register.clone(),
+                                option2.kind,
+                                option2.base,
+                                option2.offset,
+                            );
+                            pc = pc+1;
+                        }
+                        _ => {
+                            let clone = &mut self.clone();
+
+                            self.add_constraint(condition.clone(), true);
+                            self.computer.set_register(
+                                register.clone(),
+                                option1.kind,
+                                option1.base,
+                                option1.offset,
+                            );
+                            let res1 = self.run(pc + 1);
+
+                            clone.add_constraint(condition, false);
+                            self.computer.set_register(
+                                register,
+                                option2.kind,
+                                option2.base,
+                                option2.offset,
+                            );
+                            let res2 = clone.run(pc + 1);
+                            match (res1, res2) {
+                                (Ok(_), Ok(_)) => return Ok(()),
+                                (Err(err), Ok(_)) | (Ok(_), Err(err)) => {
+                                    log::error!("{:?}: {:?}", pc, err);
+                                    return Err(Error::new(ErrorKind::Other, err));
+                                }
+                                (Err(e1), Err(e2)) => {
+                                    return Err(Error::new(
+                                        ErrorKind::Other,
+                                        e1.to_string() + &e2.to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
                     }
                 },
                 Err(err) => {
@@ -577,7 +647,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
     fn looping_too_deep(&self) -> bool {
         // jump out if too deep in tree
 
-        if self.jump_history.len() > 10 {
+        if self.jump_history.len() > 30 {
             let mut loop_count = 0;
             let pc = self.jump_history.last().expect("engine7").0;
             for h in self.jump_history.clone() {
@@ -587,7 +657,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     loop_count = loop_count + 1;
                 }
             }
-            if loop_count > 7 {
+            if loop_count > 20 {
+                log::error!(
+                    // FIX: infinite loops not technically an error, just need to handle them better
+                    "stuck in an infinite loop: {:?}",
+                    self.jump_history
+                        .clone()
+                        .into_iter()
+                        .map(|(c, _, _, _, _)| -> usize { c })
+                        .collect::<Vec<usize>>()
+                );
                 return true;
             }
         }
@@ -606,27 +685,48 @@ impl<'ctx> ExecutionEngine<'ctx> {
         log::info!("jump condition: {}", expression.clone());
         log::info!("memory accesses: {:?}", rw_list.clone());
 
-        if expression.get_abstracts().is_empty() {
-            match (
-                self.computer.solver.check_assumptions(&[comparison_to_ast(
-                    self.computer.context,
-                    expression.clone(),
-                )
-                .expect(
-                    "need result of conversion of comparison to ast for evaluation at jump 0",
-                )]),
-                self.computer.solver.check_assumptions(&[comparison_to_ast(
-                    self.computer.context,
-                    expression.clone().not(),
-                )
-                .expect(
-                    "need result of conversion of comparison to ast for evaluation at jump 0",
-                )]),
-            ) {
-                (SatResult::Sat, SatResult::Unsat) => return Some(true),
-                (SatResult::Unsat, SatResult::Sat) => return Some(false),
-                _ => (),
+        // check whether both branches are valid, only take valid branch
+        match (
+            self.computer.solver.check_assumptions(&[comparison_to_ast(
+                self.computer.context,
+                expression.clone(),
+            )
+            .expect("need result of conversion of comparison to ast for evaluation at jump 0")]),
+            self.computer.solver.check_assumptions(&[comparison_to_ast(
+                self.computer.context,
+                expression.clone().not(),
+            )
+            .expect("need result of conversion of comparison to ast for evaluation at jump 1")]),
+        ) {
+            (SatResult::Sat, SatResult::Unsat) => return Some(true),
+            (SatResult::Unsat, SatResult::Sat) => return Some(false),
+            (SatResult::Sat, SatResult::Sat) => (), // normal! explore both!
+            (a, b) => todo!(
+                "{:?} {:?} handle impossibility expression evaluation {:#?}",
+                a,
+                b,
+                comparison_to_ast(self.computer.context, expression)?.simplify()
+            ), // TODO: shouldn't happen, deal with this
+                                                     // todo!(
+                                                     //     "here {:?} {:#?} {:#?} {:#?}",
+                                                     //     pc,
+                                                     //     comparison_to_ast(self.computer.context,expression.clone())?.simplify(),
+                                                     //     self.computer.solver.get_assertions(),
+                                                     //     self.computer.solver.get_unsat_core()
+                                                     // ),
+        }
+
+        //check if loop can be resolved without loop protocol
+        // i.e. there are explicit lower and upper bounds
+        let mut is_abstract = false;
+        for a in expression.get_abstracts() {
+            if a.contains("len") || a.contains("loop") {
+                is_abstract = true;
             }
+        }
+
+        if !is_abstract {
+            return None;
         }
 
         if !self.in_loop {
@@ -784,7 +884,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     self.computer.solver.assert(&condition.simplify());
                     self.in_loop = false;
                     return Some(!branch_decision);
-                } else {
+                } else if last_jump_label == pc {
                     // JUMP after Kth STEP -- need to check loop advanced ok for first iteration
                     let last_state = last_state;
                     let current_state = self.computer.get_state();
@@ -814,7 +914,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
 
-                    break;
+                    return Some(branch_decision);
                     // todo!();
                     // for i in 0..(last_state.1.len()) {
                     //     let last = &last_state.1[i];

@@ -336,7 +336,7 @@ impl AbstractExpression {
                 abstracts.append(&mut arg1.get_abstracts());
                 abstracts.append(&mut arg2.get_abstracts());
             }
-            _ => (),
+            AbstractExpression::Empty | AbstractExpression::Immediate(_) => (),
         }
         abstracts
     }
@@ -407,16 +407,16 @@ impl AbstractComparison {
         let right = *self.right.clone();
         match self.op.as_str() {
             "<" => {
-                return Self::new(">", left, right);
+                return Self::new(">=", left, right);
             }
             ">" => {
-                return Self::new("<", left, right);
-            }
-            ">=" => {
                 return Self::new("<=", left, right);
             }
+            ">=" => {
+                return Self::new("<", left, right);
+            }
             "<=" => {
-                return Self::new(">=", left, right);
+                return Self::new(">", left, right);
             }
             "==" => {
                 return Self::new("!=", left, right);
