@@ -802,7 +802,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 }
                             }
                             FlagValue::Abstract(s) => {
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), instruction.r1.clone().expect("need jump label 8")));
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone().not(), instruction.r1.clone().expect("need jump label 8")));
                             }
                         },
                         None => return Err(

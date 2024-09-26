@@ -699,21 +699,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
             .expect("need result of conversion of comparison to ast for evaluation at jump 1")]),
         ) {
             (SatResult::Sat, SatResult::Unsat) => return Some(true),
-            (SatResult::Unsat, SatResult::Sat) => return Some(false),
             (SatResult::Sat, SatResult::Sat) => (), // normal! explore both!
-            (a, b) => todo!(
-                "{:?} {:?} handle impossibility expression evaluation {:#?}",
-                a,
-                b,
-                comparison_to_ast(self.computer.context, expression)?.simplify()
-            ), // TODO: shouldn't happen, deal with this
-                                                     // todo!(
-                                                     //     "here {:?} {:#?} {:#?} {:#?}",
-                                                     //     pc,
-                                                     //     comparison_to_ast(self.computer.context,expression.clone())?.simplify(),
-                                                     //     self.computer.solver.get_assertions(),
-                                                     //     self.computer.solver.get_unsat_core()
-                                                     // ),
+            (SatResult::Unsat, _) => return Some(false),
+            (_, _) => todo!(), // not sure how this would happen!
         }
 
         //check if loop can be resolved without loop protocol
@@ -886,7 +874,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     return Some(!branch_decision);
                 } else if last_jump_label == pc {
                     // JUMP after Kth STEP -- need to check loop advanced ok for first iteration
-                    let last_state = last_state;
                     let current_state = self.computer.get_state();
                     let loop_var_name = (pc.to_string()) + "_loop_?";
                     for i in 0..(last_state.0.len()) {
