@@ -24,13 +24,18 @@ fn get_register_index(reg_name: String) -> usize {
                 .expect(format!("Invalid register value 2 {:?}", reg_name).as_str());
         }
     } else {
-        let mut r = name.strip_prefix("x").unwrap_or(&name);
+        let clean = name.replace(
+            &['(', ')', ',', '\"', '.', ';', ':', '\'', '#', ']', '['][..],
+            "",
+        );
+        let mut r = clean.strip_prefix("x").unwrap_or(&clean);
         r = r.strip_prefix("w").unwrap_or(&r);
+
         return r
             .strip_prefix("d")
             .unwrap_or(&r)
             .parse::<usize>()
-            .expect(format!("Invalid register value 3 {:?}", reg_name).as_str());
+            .expect(format!("Invalid register value 3 {:?}", name).as_str());
     }
 }
 
@@ -43,6 +48,7 @@ pub struct ARMCORTEXA<'ctx> {
     carry: Option<FlagValue>,
     overflow: Option<FlagValue>,
     memory: HashMap<String, MemorySafeRegion>,
+    pub memory_labels: HashMap<String, i64>,
     rw_queue: Vec<MemoryAccess>,
     alignment: i64,
     pub context: &'ctx Context,
@@ -157,6 +163,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             carry: None,
             overflow: None,
             memory,
+            memory_labels: HashMap::new(),
             rw_queue: Vec::new(),
             alignment: 4,
             context,
@@ -336,7 +343,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 base: reg.base,
                 offset: reg.offset,
             };
-        } else if v.contains('[') && v.contains(',') && v.contains('#') {
+        } else if v.contains('[') && v.contains(',') && v.contains('#') && !v.contains('@') {
             let a = v.split_once(',').expect("computer1");
             let reg = self.registers[get_register_index(a.0.trim_matches('[').to_string())].clone();
             return RegisterValue {
@@ -345,12 +352,15 @@ impl<'ctx> ARMCORTEXA<'_> {
                 offset: reg.offset + string_to_int(a.1.trim_matches(']')),
             };
         } else if v.contains("@") {
+            let parts = v
+                .split_once("@")
+                .expect("Need two parts on either side of @");
             // TODO : expand functionality
-            if v.contains("OFF") {
+            if parts.1.contains("OFF") || parts.1.contains("PAGE") {
                 return RegisterValue {
                     kind: RegisterKind::Immediate,
-                    base: None,
-                    offset: self.alignment,
+                    base: Some(AbstractExpression::Abstract(parts.0.to_string())),
+                    offset: 0,
                 };
             } else {
                 // TODO: use label as memory key
@@ -432,6 +442,32 @@ impl<'ctx> ARMCORTEXA<'_> {
                         instruction.r3.clone().expect("Need two operand"),
                         instruction.r4.clone(),
                     );
+                }
+                "tst" | "ands" => {
+                    let r1 = self.operand(instruction.r1.clone().expect("need src"));
+                    let mut r2 = self.operand(instruction.r2.clone().expect("need imm"));
+
+                    if let Some(op) = instruction.r3.clone() {
+                        match op.as_str() {
+                            "<<" => {
+                                let imm = instruction.r4.clone().expect("need shft amt in tst/ands").replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "").parse::<i64>().expect("expected valid number from parse");
+                                r2.offset =  r2.offset << imm;
+                            }
+                            _ => todo!("tst/ands op on imm {:?}", op),
+                        }
+                    }
+
+                    self.zero = if r1.offset == r2.offset {
+                        Some(FlagValue::Real(true))
+                    } else {
+                        Some(FlagValue::Abstract(AbstractComparison::new(
+                            "==",
+                            AbstractExpression::Abstract("true".to_string()),
+                            AbstractExpression::Abstract("HW_SUPPORT".to_string()),
+                        )))
+                    };
+
+                    // TODO: this is a really bad way to do this, get expressions from include/arm_arch.h
                 }
                 "orr" => {
                     self.arithmetic(
@@ -936,8 +972,13 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     // pre-index increment
                     if reg2.contains(",") {
-                        base_add_reg = self.operand(reg2.clone().trim_end_matches("!").to_string());
-                        // with writeback
+                        if let Some((base, offset)) = reg2.split_once(",") {
+                            base_add_reg = self.operand(base.to_string());
+                            base_add_reg.offset = self.operand(offset.to_string()).offset;
+                        } else {
+                            base_add_reg = self.operand(reg2.clone());
+                        }
+
                         if reg2.contains("!") {
                             let new_reg = base_add_reg.clone();
                             self.set_register(
@@ -2405,11 +2446,12 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = address.base {
+                let (region_name, offset) = self.get_memory_pointer(base.clone(), address.offset);
                 let region = self
                     .memory
-                    .get(&base)
-                    .expect("Need memory region to load from");
-                match region.get(address.offset) {
+                    .get(&region_name)
+                    .expect(format!("Need memory region to load from {:?}", region_name).as_str());
+                match region.get(offset) {
                     Some(v) => {
                         self.set_register(t, v.kind.clone(), v.base.clone(), v.offset);
                         self.rw_queue.push(MemoryAccess {
@@ -2458,11 +2500,12 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = address.base {
+                let (region_name, offset) = self.get_memory_pointer(base.clone(), address.offset);
                 let region = self
                     .memory
-                    .get(&base)
-                    .expect("Need memory region to load from");
-                match region.get(address.offset) {
+                    .get(&region_name)
+                    .expect(format!("Need memory region to load from {:?}", region_name).as_str());
+                match region.get(offset) {
                     Some(v) => {
                         self.set_register(t, v.kind.clone(), v.base, v.offset);
                         self.rw_queue.push(MemoryAccess {
@@ -2516,9 +2559,11 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = region.clone() {
-                let region = self.memory.get_mut(&base.clone()).expect("No region");
+                let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
+
+                let region = self.memory.get_mut(&region).expect("No region");
                 let register = &self.registers[get_register_index(register)];
-                region.insert(address.offset.clone(), register.clone());
+                region.insert(offset.clone(), register.clone());
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -2562,9 +2607,11 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = region.clone() {
-                let region = self.memory.get_mut(&base.clone()).expect("No region");
-                let register = &self.simd_registers[get_register_index(register)];
-                region.insert(address.offset.clone(), register.get_as_register());
+                let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
+
+                let region = self.memory.get_mut(&region).expect("No region");
+                let register = &self.registers[get_register_index(register)];
+                region.insert(offset.clone(), register.clone());
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -2594,19 +2641,42 @@ impl<'ctx> ARMCORTEXA<'_> {
         }
     }
 
+    fn get_memory_pointer(&self, base: String, offset: i64) -> (String, i64) {
+        if let Some(_) = self.memory.get(&base) {
+            return (base, offset);
+        } else {
+            if let Some(address) = self.memory_labels.get(&base) {
+                return ("memory".to_string(), address + offset);
+            } else {
+                return ("memory".to_string(), offset);
+            }
+        }
+    }
+
     // SAFETY CHECKS
     fn mem_safe_access(
         &self,
         base_expr: AbstractExpression,
-        offset: i64,
+        mut offset: i64,
         ty: RegionType,
     ) -> Result<(), MemorySafetyError> {
         let mut symbolic_base = false;
         let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => (
-                self.memory
-                    .get(&regbase.clone())
-                    .expect(&format!("Region not in memory 1 {}", regbase.clone())),
+                {
+                    if let Some(region) = self.memory.get(&regbase.clone()) {
+                        region
+                    } else {
+                        if let Some(address) = self.memory_labels.get(&regbase.clone()) {
+                            offset = offset + address;
+                            self.memory
+                                .get(&"memory".to_string())
+                                .expect("memory should exist")
+                        } else {
+                            todo!("memory regions in access check");
+                        }
+                    }
+                },
                 ast::Int::new_const(self.context, regbase.clone()),
                 ast::Int::new_const(self.context, regbase),
             ),

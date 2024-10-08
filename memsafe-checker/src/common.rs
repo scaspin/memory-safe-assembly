@@ -791,7 +791,8 @@ pub fn string_to_int(s: &str) -> i64 {
         value = i128::from_str_radix(v.strip_prefix("0x").expect("common4"), 16).expect("common5")
             as i64;
     } else {
-        value = v.parse::<i64>().expect("common6");
+        let clean = &v.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "");
+        value = clean.parse::<i64>().expect("common6");
     }
 
     return value;

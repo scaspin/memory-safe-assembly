@@ -85,6 +85,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     let mut label = text.strip_suffix(":").expect("engine1");
                     label = label.strip_prefix("_").unwrap_or(label);
                     labels.push((label.to_string(), line_number));
+                    defs.push(text.to_string());
                     // if text == start {
                     //     pc = line_number;
                     // }
@@ -132,6 +133,12 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     // heap grows down
                     address = address + 4;
                 }
+            } else if v[0] == ".globl" || v[0] == ".private_extern" {
+                computer.memory_labels.insert(v[1].to_string(), address);
+            } else if def.contains(":") {
+                computer
+                    .memory_labels
+                    .insert(def.strip_suffix(":").unwrap_or(def).to_string(), address);
             }
         }
 
