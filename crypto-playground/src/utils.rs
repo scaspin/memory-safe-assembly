@@ -23,6 +23,14 @@ pub fn convert(data: &[u32; 8]) -> [u8; 32] {
     res
 }
 
+pub fn convert_5(data: &[u32; 5]) -> [u8; 20] {
+    let mut res = [0; 20];
+    for i in 0..5 {
+        res[4 * i..][..4].copy_from_slice(&data[i].to_be_bytes());
+    }
+    res
+}
+
 #[inline]
 pub fn ms_addc_u64(x: u64, y: u64, carry_in: bool) -> (u64, bool) {
     // nightly option: x.carrying_add(y, carry_in)

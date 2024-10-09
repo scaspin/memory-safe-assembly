@@ -3,7 +3,7 @@
 
 /// Retrieve the FIPS module service status.
 #[allow(dead_code)] // appease clippy
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 pub(crate) fn get_fips_service_status() -> FipsServiceStatus<()> {
     if let Some(status) = indicator::get_status() {
         if status {
@@ -18,18 +18,18 @@ pub(crate) fn get_fips_service_status() -> FipsServiceStatus<()> {
 
 #[inline]
 pub(crate) fn set_fips_service_status_unapproved() {
-    #[cfg(all(feature = "fips", debug_assertions))]
+    #[cfg(all(debug_assertions))]
     indicator::set_unapproved();
 }
 
 #[allow(dead_code)]
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 #[inline]
 pub(crate) fn clear_fips_service_status() {
     indicator::clear();
 }
 
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 pub(crate) mod indicator {
     use core::cell::Cell;
 
@@ -60,21 +60,29 @@ pub(crate) mod indicator {
     }
 }
 
-#[cfg(all(feature = "fips", debug_assertions))]
-#[inline]
-pub(crate) fn service_indicator_before_call() -> u64 {
-    unsafe { aws_lc::FIPS_service_indicator_before_call() }
+extern "C" {
+    #[link_name = "aws_lc_0_14_1_FIPS_service_indicator_before_call"]
+    fn FIPS_service_indicator_before_call() -> u64;
+
+    #[link_name = "aws_lc_0_14_1_FIPS_service_indicator_after_call"]
+    fn FIPS_service_indicator_after_call() -> u64;
 }
 
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
+#[inline]
+pub(crate) fn service_indicator_before_call() -> u64 {
+    unsafe { FIPS_service_indicator_before_call() }
+}
+
+#[cfg(all(debug_assertions))]
 #[inline]
 pub(crate) fn service_indicator_after_call() -> u64 {
-    unsafe { aws_lc::FIPS_service_indicator_after_call() }
+    unsafe { FIPS_service_indicator_after_call() }
 }
 
 /// The FIPS Module Service Status
 #[allow(dead_code)] // appease clippy
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FipsServiceStatus<R> {
@@ -91,7 +99,7 @@ pub(crate) enum FipsServiceStatus<R> {
     Unset(R),
 }
 
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 impl<R> FipsServiceStatus<R> {
     /// Maps a `ServiceStatus<R>` to a `ServiceStatus<S>` by applying a function to a contained value.
     #[allow(dead_code)]
@@ -109,21 +117,23 @@ impl<R> FipsServiceStatus<R> {
 
 macro_rules! indicator_check {
     ($function:expr) => {{
-        #[cfg(all(feature = "fips", debug_assertions))]
+        #[cfg(all(debug_assertions))]
         {
-            use crate::fips::{service_indicator_after_call, service_indicator_before_call};
+            use crate::aes::tests::cipher::fips::{
+                service_indicator_after_call, service_indicator_before_call,
+            };
             let before = service_indicator_before_call();
             let result = $function;
             let after = service_indicator_after_call();
             if before == after {
-                crate::fips::indicator::set_unapproved();
+                crate::aes::tests::cipher::fips::indicator::set_unapproved();
                 result
             } else {
-                crate::fips::indicator::set_approved();
+                crate::aes::tests::cipher::fips::indicator::set_approved();
                 result
             }
         }
-        #[cfg(any(not(feature = "fips"), not(debug_assertions)))]
+        #[cfg(any(not(debug_assertions)))]
         {
             $function
         }
@@ -133,7 +143,7 @@ macro_rules! indicator_check {
 pub(crate) use indicator_check;
 
 #[allow(unused_macros)]
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 macro_rules! check_fips_service_status {
     ($function:expr) => {{
         // Clear the current indicator status first by retrieving it
@@ -147,11 +157,11 @@ macro_rules! check_fips_service_status {
 }
 
 #[allow(unused_imports)]
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 pub(crate) use check_fips_service_status;
 
 #[allow(unused_macros)]
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 macro_rules! assert_fips_status_indicator {
     ($function:expr, $expect:path) => {
         assert_fips_status_indicator!($function, $expect, "unexpected service indicator")
@@ -165,16 +175,16 @@ macro_rules! assert_fips_status_indicator {
 }
 
 #[allow(unused_imports)]
-#[cfg(all(feature = "fips", debug_assertions))]
+#[cfg(all(debug_assertions))]
 pub(crate) use assert_fips_status_indicator;
 
 #[cfg(test)]
 mod tests {
 
-    #[cfg(all(feature = "fips", debug_assertions))]
+    #[cfg(all(debug_assertions))]
     #[test]
     fn test_service_status() {
-        use crate::fips::FipsServiceStatus;
+        use crate::aes::tests::cipher::fips::FipsServiceStatus;
 
         assert_eq!(
             FipsServiceStatus::Approved(true),

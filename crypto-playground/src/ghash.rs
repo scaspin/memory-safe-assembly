@@ -5,7 +5,7 @@ fn gcm_init_neon(htable: &mut [u128; 16], h: &[u64; 2]);
 fn gcm_gmult_neon(context: &mut [u8; 16], h: &[u128; 16]);
 
 // length in bits, not bytes
-#[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len()*8, [buf.len() > 32])]
+#[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len(), [buf.len() >= 16, buf.len()%16==0])]
 fn gcm_ghash_neon(context: &mut [u8; 16], h: &[u128; 16], buf: &[u8]);
 
 #[cfg(test)]
