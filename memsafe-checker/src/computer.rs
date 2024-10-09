@@ -974,7 +974,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     if reg2.contains(",") {
                         if let Some((base, offset)) = reg2.split_once(",") {
                             base_add_reg = self.operand(base.to_string());
-                            base_add_reg.offset = self.operand(offset.to_string()).offset;
+                            base_add_reg.offset = base_add_reg.offset + self.operand(offset.to_string()).offset;
                         } else {
                             base_add_reg = self.operand(reg2.clone());
                         }
@@ -1162,13 +1162,13 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     if let Some(op) = instruction.r3.clone() {
                         match op.as_str() {
-                            "lsl" => offset = offset << 16,
-                            _ => todo!("implement more shifting strategies for movk"),
+                            "lsl" | "lsl#16" => offset = offset << 16,
+                            _ => todo!("implement more shifting strategies for movk: {:?}", op),
                         }
                     }
                     self.set_register(reg1, src.kind, src.base, src.offset + offset);
                 }
-                "rev" => {
+                "rev" | "rev32" => { //TODO: reimpl rev32
                     let reg1 = instruction.r1.clone().expect("Need dst register");
                     let reg2 = instruction.r2.clone().expect("Need source register");
 
@@ -1368,6 +1368,25 @@ impl<'ctx> ARMCORTEXA<'_> {
                                         base_add_reg.offset + new_imm.offset,
                                     );
                                 }
+                            } else if reg3.contains("#") {
+                                let base_name = get_register_name_string(reg2.clone());
+                                let base_add_reg =
+                                    self.registers[get_register_index(base_name.clone())].clone();
+
+                                let res = self.load_vector(reg1, base_add_reg.clone());
+                                match res {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+
+                                //post index
+                                let imm = self.operand(reg3.to_string());
+                                self.set_register(
+                                    base_name,
+                                    base_add_reg.kind,
+                                    base_add_reg.base,
+                                    base_add_reg.offset + imm.offset,
+                                );
                             } else {
                                 let imm = self.operand(reg3.to_string());
                                 let base_name = get_register_name_string(reg2.clone());
@@ -1615,6 +1634,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                             instruction,
                         );
                     }
+                    "add" => {
+                        self.vector_arithmetic(
+                            "+",
+                            &|x, y| x + y,
+                            &|x, y| x + y,
+                            &|x, y| x + y,
+                            &|x, y| x + y,
+                            instruction,
+                        );
+                    }
                     "orr" => {
                         self.vector_arithmetic(
                             "|",
@@ -1644,6 +1673,24 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                         dest.kind = src.kind.clone();
                         for i in 0..16 {
+                            let (base, offset) = src.get_byte(15 - i);
+                            dest.set_byte(i, base, offset);
+                        }
+                    }
+                    "rev32" => {
+                        let reg1 = instruction.r1.clone().expect("Need dst register");
+                        let reg2 = instruction.r2.clone().expect("Need source register");
+
+                        let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+                        dest.kind = src.kind.clone();
+                        for i in 0..8 {
+                            let (base, offset) = src.get_byte(7 - i);
+                            dest.set_byte(i, base, offset);
+                        }
+
+                        for i in 8..16 {
                             let (base, offset) = src.get_byte(15 - i);
                             dest.set_byte(i, base, offset);
                         }
