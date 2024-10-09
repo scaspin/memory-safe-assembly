@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn test_final_step() {
+    fn test_sha256_final_step() {
         let mut ctx = aws_lc_sys::SHA256_CTX::default();
         let mut my_ctx = SHA256_CTX::init();
 

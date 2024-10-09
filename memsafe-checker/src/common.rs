@@ -336,7 +336,7 @@ impl AbstractExpression {
                 abstracts.append(&mut arg1.get_abstracts());
                 abstracts.append(&mut arg2.get_abstracts());
             }
-            _ => (),
+            AbstractExpression::Empty | AbstractExpression::Immediate(_) => (),
         }
         abstracts
     }
@@ -402,6 +402,32 @@ impl AbstractComparison {
         }
     }
 
+    pub fn not(&self) -> Self {
+        let left = *self.left.clone();
+        let right = *self.right.clone();
+        match self.op.as_str() {
+            "<" => {
+                return Self::new(">=", left, right);
+            }
+            ">" => {
+                return Self::new("<=", left, right);
+            }
+            ">=" => {
+                return Self::new("<", left, right);
+            }
+            "<=" => {
+                return Self::new(">", left, right);
+            }
+            "==" => {
+                return Self::new("!=", left, right);
+            }
+            "!=" => {
+                return Self::new("==", left, right);
+            }
+            _ => todo!("unsupported op {:?}", self.op),
+        }
+    }
+
     pub fn reduce_solution(&self) -> (AbstractExpression, AbstractExpression) {
         todo!()
     }
@@ -441,8 +467,41 @@ impl Eq for MemoryAccess {}
 
 #[derive(Debug, Clone)]
 pub enum FlagValue {
-    ABSTRACT(AbstractComparison),
-    REAL(bool),
+    Abstract(AbstractComparison),
+    Real(bool),
+}
+
+impl FlagValue {
+    pub fn to_abstract_expression(&self) -> AbstractComparison {
+        match self {
+            Self::Abstract(a) => return a.clone(),
+            Self::Real(r) => match r {
+                true => {
+                    generate_comparison("==", AbstractExpression::Empty, AbstractExpression::Empty)
+                }
+                false => {
+                    generate_comparison("!=", AbstractExpression::Empty, AbstractExpression::Empty)
+                }
+            },
+        }
+    }
+
+    pub fn not(&self) -> Self {
+        match self {
+            Self::Abstract(a) => return Self::Abstract(a.clone().not()),
+            Self::Real(r) => return Self::Real(!r),
+        }
+    }
+}
+
+impl PartialEq for FlagValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (FlagValue::Abstract(a), FlagValue::Abstract(b)) => return a == b,
+            (FlagValue::Real(a), FlagValue::Real(b)) => return a == b,
+            _ => return false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -558,19 +617,24 @@ impl Instruction {
         if let Some(i) = &self.r1 {
             if i.contains("_") {
                 return false;
-            } else if i.contains("v") {
+            } else if (i.contains("v") && !i.contains("<"))
+                && (self.op.contains(".") || i.contains("."))
+            {
                 return true;
             }
-        } else if let Some(i) = &self.r2 {
-            if i.contains("v") {
+        }
+        if let Some(i) = &self.r2 {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
-        } else if let Some(i) = &self.r3 {
-            if i.contains("v") {
+        }
+        if let Some(i) = &self.r3 {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
-        } else if let Some(i) = &self.r4 {
-            if i.contains("v") {
+        }
+        if let Some(i) = &self.r4 {
+            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
                 return true;
             }
         }
@@ -727,7 +791,8 @@ pub fn string_to_int(s: &str) -> i64 {
         value = i128::from_str_radix(v.strip_prefix("0x").expect("common4"), 16).expect("common5")
             as i64;
     } else {
-        value = v.parse::<i64>().expect("common6");
+        let clean = &v.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "");
+        value = clean.parse::<i64>().expect("common6");
     }
 
     return value;
@@ -810,7 +875,7 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                 "/" => return Some(new1.div(&new2)),
                 "lsl" => {
                     let two = ast::Int::from_i64(context, 2);
-                    let multiplier = new2.power(&two).to_int();
+                    let multiplier = two.power(&new2).to_int();
                     return Some(ast::Int::mul(context, &[&new1, &multiplier]));
                 }
                 ">>" | "lsr" => {
@@ -818,8 +883,9 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                     let divisor = new2.div(&two);
                     return Some(new1.div(&divisor));
                 }
+                "%" => return Some(new1.modulo(&new2)),
                 _ => {
-                    return None;
+                    todo!("expression to AST {:?}", op)
                 }
             }
         }
@@ -857,4 +923,14 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
         }
         _ => todo!("unsupported op {:?}", expression.op),
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExecuteReturnType {
+    Next,
+    JumpLabel(String),
+    JumpAddress(u128),
+    ConditionalJumpLabel(AbstractComparison, String),
+    ConditionalJumpAddress(AbstractComparison, u128),
+    Select(AbstractComparison, String, RegisterValue, RegisterValue),
 }
