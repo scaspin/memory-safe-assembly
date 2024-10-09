@@ -558,7 +558,7 @@ mod tests {
 
         let mut program = Vec::new();
         program.push("start:".to_string());
-        program.push("add x1,x0,x1,lsl#4".to_string());
+        program.push("add x1,x0,x1".to_string());
         program.push("loop:".to_string());
         program.push("cmp x0,x1".to_string());
         program.push("b.eq end".to_string());

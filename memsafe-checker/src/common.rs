@@ -336,7 +336,7 @@ impl AbstractExpression {
                 abstracts.append(&mut arg1.get_abstracts());
                 abstracts.append(&mut arg2.get_abstracts());
             }
-            _ => (),
+            AbstractExpression::Empty | AbstractExpression::Immediate(_) => (),
         }
         abstracts
     }
@@ -407,16 +407,16 @@ impl AbstractComparison {
         let right = *self.right.clone();
         match self.op.as_str() {
             "<" => {
-                return Self::new(">", left, right);
+                return Self::new(">=", left, right);
             }
             ">" => {
-                return Self::new("<", left, right);
-            }
-            ">=" => {
                 return Self::new("<=", left, right);
             }
+            ">=" => {
+                return Self::new("<", left, right);
+            }
             "<=" => {
-                return Self::new(">=", left, right);
+                return Self::new(">", left, right);
             }
             "==" => {
                 return Self::new("!=", left, right);
@@ -791,7 +791,8 @@ pub fn string_to_int(s: &str) -> i64 {
         value = i128::from_str_radix(v.strip_prefix("0x").expect("common4"), 16).expect("common5")
             as i64;
     } else {
-        value = v.parse::<i64>().expect("common6");
+        let clean = &v.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "");
+        value = clean.parse::<i64>().expect("common6");
     }
 
     return value;
@@ -874,7 +875,7 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                 "/" => return Some(new1.div(&new2)),
                 "lsl" => {
                     let two = ast::Int::from_i64(context, 2);
-                    let multiplier = new2.power(&two).to_int();
+                    let multiplier = two.power(&new2).to_int();
                     return Some(ast::Int::mul(context, &[&new1, &multiplier]));
                 }
                 ">>" | "lsr" => {
@@ -922,4 +923,14 @@ pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> O
         }
         _ => todo!("unsupported op {:?}", expression.op),
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExecuteReturnType {
+    Next,
+    JumpLabel(String),
+    JumpAddress(u128),
+    ConditionalJumpLabel(AbstractComparison, String),
+    ConditionalJumpAddress(AbstractComparison, u128),
+    Select(AbstractComparison, String, RegisterValue, RegisterValue),
 }

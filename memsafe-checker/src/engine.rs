@@ -63,6 +63,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
             if text.is_empty() {
                 continue;
+            } else if text.starts_with("# ") {
+                continue;
             } else if text.starts_with('.') {
                 defs.push(text);
             } else {
@@ -81,8 +83,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                 if text.ends_with(":") && !text.contains(".") {
                     let mut label = text.strip_suffix(":").expect("engine1");
-                    label = text.strip_prefix("_").unwrap_or(label);
+                    label = label.strip_prefix("_").unwrap_or(label);
                     labels.push((label.to_string(), line_number));
+                    defs.push(text.to_string());
                     // if text == start {
                     //     pc = line_number;
                     // }
@@ -130,6 +133,12 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     // heap grows down
                     address = address + 4;
                 }
+            } else if v[0] == ".globl" || v[0] == ".private_extern" {
+                computer.memory_labels.insert(v[1].to_string(), address);
+            } else if def.contains(":") {
+                computer
+                    .memory_labels
+                    .insert(def.strip_suffix(":").unwrap_or(def).to_string(), address);
             }
         }
 
@@ -248,327 +257,355 @@ impl<'ctx> ExecutionEngine<'ctx> {
             let execute_result = self.computer.execute(pc, &instruction);
 
             match execute_result {
-                Ok(some) => {
-                    match some {
-                        None => {
-                            pc = pc + 1;
+                Ok(res) => match res {
+                    ExecuteReturnType::Next => {
+                        pc = pc + 1;
 
-                            continue;
+                        continue;
+                    }
+                    ExecuteReturnType::JumpLabel(label) => {
+                        log::info!("jumping to: {}", pc);
+                        if &label == "return" {
+                            break;
                         }
-                        Some(jump) => {
-                            if self.looping_too_deep() {
-                                return Err(Error::new(ErrorKind::Other, "could not resolve loop"));
+                        let newline = self.get_linenumber_of_label(label.clone());
+                        match newline {
+                            Some(n) => {
+                                log::info!("jumping to: {}", n);
+                                pc = n;
                             }
-                            match jump {
-                                // (condition, label to jump to, line number to jump to)
-                                (Some(condition), Some(label), None) => {
-                                    let jump_dest;
-                                    let rw_list = self.computer.read_rw_queue();
-                                    match self.get_linenumber_of_label(label.clone()) {
-                                        Some(i) => jump_dest = i,
-                                        None => {
-                                            if label.contains("+") {
-                                                let mut parts = label.split("+");
-                                                let l = parts
-                                                    .next()
-                                                    .expect("Need base label for jump targer");
-                                                let offset = parts
-                                                    .next()
-                                                    .expect("Need offset for jump target with +");
+                            None => {
+                                log::error!("No label line for label {}", label);
+                                return Err(Error::new(ErrorKind::Other, "No label 1"));
+                            }
+                        }
+                    }
+                    ExecuteReturnType::JumpAddress(address) => {
+                        pc = address as usize;
+                    }
+                    ExecuteReturnType::ConditionalJumpLabel(condition, label) => {
+                        if self.looping_too_deep() {
+                            return Err(Error::new(ErrorKind::Other, "could not resolve loop"));
+                        }
+                        let jump_dest;
+                        let rw_list = self.computer.read_rw_queue();
+                        match self.get_linenumber_of_label(label.clone()) {
+                            Some(i) => jump_dest = i,
+                            None => {
+                                if label.contains("+") {
+                                    let mut parts = label.split("+");
+                                    let l = parts.next().expect("Need base label for jump targer");
+                                    let offset =
+                                        parts.next().expect("Need offset for jump target with +");
 
-                                                match self.get_linenumber_of_label(l.to_string()) {
-                                                    Some(i) => {
-                                                        let parsed_offset = usize::from_str_radix(
-                                                            offset.trim_start_matches("0x"),
-                                                            16,
-                                                        )
-                                                        .expect("unable to parse label offset");
-                                                        jump_dest = i + (parsed_offset / 4);
-                                                    }
-                                                    None => {
-                                                        return Err(Error::new(
-                                                            ErrorKind::Other,
-                                                            format!("No label found: {:?}", l),
-                                                        ))
-                                                    }
-                                                }
-                                            } else {
-                                                return Err(Error::new(
-                                                    ErrorKind::Other,
-                                                    format!("No label found: {:?}", label),
-                                                ));
-                                            }
+                                    match self.get_linenumber_of_label(l.to_string()) {
+                                        Some(i) => {
+                                            let parsed_offset = usize::from_str_radix(
+                                                offset.trim_start_matches("0x"),
+                                                16,
+                                            )
+                                            .expect("unable to parse label offset");
+                                            jump_dest = i + (parsed_offset / 4);
+                                        }
+                                        None => {
+                                            return Err(Error::new(
+                                                ErrorKind::Other,
+                                                format!("No label found: {:?}", l),
+                                            ))
                                         }
                                     }
+                                } else {
+                                    return Err(Error::new(
+                                        ErrorKind::Other,
+                                        format!("No label found: {:?}", label),
+                                    ));
+                                }
+                            }
+                        }
 
-                                    match self.evaluate_branch_condition(
-                                        pc.clone(),
-                                        condition.clone(),
-                                        rw_list.clone(),
-                                    ) {
-                                        None => {
-                                            let clone = &mut self.clone();
-                                            self.jump_history.push((
-                                                pc,
-                                                true,
-                                                condition.clone(),
-                                                rw_list.clone(),
-                                                self.computer.get_state(),
-                                            ));
-                                            self.computer.clear_rw_queue();
-                                            log::info!(
-                                                "exploring jump branch starting line: {:?}",
-                                                jump_dest
-                                            );
+                        match self.evaluate_branch_condition(
+                            pc.clone(),
+                            condition.clone(),
+                            rw_list.clone(),
+                        ) {
+                            None => {
+                                let clone = &mut self.clone();
+                                self.jump_history.push((
+                                    pc,
+                                    true,
+                                    condition.clone(),
+                                    rw_list.clone(),
+                                    self.computer.get_state(),
+                                ));
+                                self.computer.clear_rw_queue();
+                                log::info!("exploring jump branch starting line: {:?}", jump_dest);
 
-                                            self.computer.solver.push();
-                                            self.add_constraint(condition.clone(), true);
-                                            let res1 = self.run(jump_dest);
-                                            self.computer.solver.pop(1);
+                                self.computer.solver.push();
+                                self.add_constraint(condition.clone(), true);
+                                let res1 = self.run(jump_dest);
+                                self.computer.solver.pop(1);
 
-                                            clone.jump_history.push((
-                                                pc,
-                                                false,
-                                                condition.clone(),
-                                                rw_list,
-                                                self.computer.get_state(),
-                                            ));
-                                            clone.computer.clear_rw_queue();
-                                            log::info!(
-                                                "exploring non-jump branch starting line: {:?}",
-                                                pc + 1
-                                            );
+                                clone.jump_history.push((
+                                    pc,
+                                    false,
+                                    condition.clone(),
+                                    rw_list,
+                                    self.computer.get_state(),
+                                ));
+                                clone.computer.clear_rw_queue();
+                                log::info!("exploring non-jump branch starting line: {:?}", pc + 1);
 
-                                            self.computer.solver.push();
-                                            clone.add_constraint(condition, false);
-                                            let res2 = clone.run(pc + 1);
-                                            self.computer.solver.pop(1);
+                                self.computer.solver.push();
+                                clone.add_constraint(condition, false);
+                                let res2 = clone.run(pc + 1);
+                                self.computer.solver.pop(1);
 
-                                            match (res1, res2) {
-                                                (Ok(_), Ok(_)) => return Ok(()),
-                                                (Err(err), Ok(_)) => {
-                                                    log::error!("{:?}: {:?}", pc, err);
-                                                    return Err(Error::new(ErrorKind::Other, err));
-                                                }
-                                                (Ok(_), Err(err)) => {
-                                                    log::error!("{:?}: {:?}", pc, err);
-                                                    return Err(Error::new(ErrorKind::Other, err));
-                                                }
-                                                (Err(e1), Err(e2)) => {
-                                                    return Err(Error::new(
-                                                        ErrorKind::Other,
-                                                        e1.to_string() + &e2.to_string(),
-                                                    ));
-                                                }
-                                            }
-                                        }
-                                        Some(true) => {
-                                            let linenum =
-                                                self.get_linenumber_of_label(label.clone());
-                                            match linenum {
-                                                Some(n) => {
-                                                    self.jump_history.push((
-                                                        pc,
-                                                        true,
-                                                        condition.clone(),
-                                                        self.computer.read_rw_queue(),
-                                                        self.computer.get_state(),
-                                                    ));
+                                match (res1, res2) {
+                                    (Ok(_), Ok(_)) => return Ok(()),
+                                    (Err(err), Ok(_)) => {
+                                        log::error!("{:?}: {:?}", pc, err);
+                                        return Err(Error::new(ErrorKind::Other, err));
+                                    }
+                                    (Ok(_), Err(err)) => {
+                                        log::error!("{:?}: {:?}", pc, err);
+                                        return Err(Error::new(ErrorKind::Other, err));
+                                    }
+                                    (Err(e1), Err(e2)) => {
+                                        return Err(Error::new(
+                                            ErrorKind::Other,
+                                            e1.to_string() + &e2.to_string(),
+                                        ));
+                                    }
+                                }
+                            }
+                            Some(true) => {
+                                let linenum = self.get_linenumber_of_label(label.clone());
+                                match linenum {
+                                    Some(n) => {
+                                        self.jump_history.push((
+                                            pc,
+                                            true,
+                                            condition.clone(),
+                                            self.computer.read_rw_queue(),
+                                            self.computer.get_state(),
+                                        ));
+                                        self.computer.clear_rw_queue();
+                                        self.add_constraint(condition, true);
+                                        pc = n;
+                                    }
+                                    None => {
+                                        if label.contains("+") {
+                                            let mut parts = label.split("+");
+                                            let l = parts
+                                                .next()
+                                                .expect("Need base label for jump targer");
+                                            let offset = parts
+                                                .next()
+                                                .expect("Need offset for jump target with +");
+
+                                            match self.get_linenumber_of_label(l.to_string()) {
+                                                Some(i) => {
+                                                    let parsed_offset = usize::from_str_radix(
+                                                        offset.trim_start_matches("0x"),
+                                                        16,
+                                                    )
+                                                    .expect("unable to parse label offset");
                                                     self.computer.clear_rw_queue();
                                                     self.add_constraint(condition, true);
-                                                    pc = n;
+                                                    pc = i + (parsed_offset / 4);
                                                 }
                                                 None => {
-                                                    if label.contains("+") {
-                                                        let mut parts = label.split("+");
-                                                        let l = parts.next().expect(
-                                                            "Need base label for jump targer",
-                                                        );
-                                                        let offset = parts.next().expect(
-                                                            "Need offset for jump target with +",
-                                                        );
-
-                                                        match self
-                                                            .get_linenumber_of_label(l.to_string())
-                                                        {
-                                                            Some(i) => {
-                                                                let parsed_offset = usize::from_str_radix(
-                                                                    offset.trim_start_matches("0x"),
-                                                                    16,
-                                                                )
-                                                                .expect("unable to parse label offset");
-                                                                self.computer.clear_rw_queue();
-                                                                self.add_constraint(
-                                                                    condition, true,
-                                                                );
-                                                                pc = i + (parsed_offset / 4);
-                                                            }
-                                                            None => {
-                                                                return Err(Error::new(
-                                                                    ErrorKind::Other,
-                                                                    format!(
-                                                                        "No label found: {:?}",
-                                                                        l
-                                                                    ),
-                                                                ))
-                                                            }
-                                                        }
-                                                    } else {
-                                                        log::error!(
-                                                            "No label line for label {}",
-                                                            label
-                                                        );
-                                                        return Err(Error::new(
-                                                            ErrorKind::Other,
-                                                            format!("No label 2 {:?}", label),
-                                                        ));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        Some(false) => {
-                                            self.jump_history.push((
-                                                pc,
-                                                false,
-                                                condition.clone(),
-                                                self.computer.read_rw_queue(),
-                                                self.computer.get_state(),
-                                            ));
-                                            self.computer.clear_rw_queue();
-                                            log::info!("exploring line: {}", pc + 1);
-                                            self.add_constraint(condition, false);
-                                            pc = pc + 1;
-                                        }
-                                    }
-                                }
-                                (Some(condition), None, Some(address)) => {
-                                    let jump_dest = address.try_into().unwrap();
-                                    let rw_list = self.computer.read_rw_queue();
-                                    match self.evaluate_branch_condition(
-                                        pc.clone(),
-                                        condition.clone(),
-                                        rw_list.clone(),
-                                    ) {
-                                        None => {
-                                            let mut clone = self.clone();
-                                            self.jump_history.push((
-                                                pc,
-                                                true,
-                                                condition.clone(),
-                                                rw_list.clone(),
-                                                self.computer.get_state(),
-                                            ));
-                                            self.computer.clear_rw_queue();
-                                            log::info!(
-                                                "exploring jump branch starting line: {:?}",
-                                                jump_dest
-                                            );
-
-                                            self.computer.solver.push();
-                                            self.add_constraint(condition.clone(), true);
-                                            let res1 = self.run(jump_dest);
-                                            self.computer.solver.pop(1);
-
-                                            clone.jump_history.push((
-                                                pc,
-                                                false,
-                                                condition.clone(),
-                                                rw_list,
-                                                self.computer.get_state(),
-                                            ));
-                                            clone.computer.clear_rw_queue();
-                                            log::info!(
-                                                "exploring non-jump branch starting line: {:?}",
-                                                pc + 1
-                                            );
-                                            self.computer.solver.push();
-                                            clone.add_constraint(condition, false);
-                                            let res2 = clone.run(pc + 1);
-                                            self.computer.solver.pop(1);
-
-                                            match (res1, res2) {
-                                                (Ok(_), Ok(_)) => return Ok(()),
-                                                (Err(err), Ok(_)) => {
-                                                    log::error!("{:?}: {:?}", pc, err);
-                                                    return Err(Error::new(ErrorKind::Other, err));
-                                                }
-                                                (Ok(_), Err(err)) => {
-                                                    log::error!("{:?}: {:?}", pc, err);
-                                                    return Err(Error::new(ErrorKind::Other, err));
-                                                }
-                                                (Err(e1), Err(e2)) => {
                                                     return Err(Error::new(
                                                         ErrorKind::Other,
-                                                        e1.to_string() + &e2.to_string(),
-                                                    ));
+                                                        format!("No label found: {:?}", l),
+                                                    ))
                                                 }
                                             }
-                                        }
-                                        Some(true) => {
-                                            self.jump_history.push((
-                                                pc,
-                                                true,
-                                                condition.clone(),
-                                                self.computer.read_rw_queue(),
-                                                self.computer.get_state(),
-                                            ));
-                                            self.computer.clear_rw_queue();
-                                            self.add_constraint(condition, true);
-                                            pc = jump_dest;
-                                            continue;
-                                        }
-                                        Some(false) => {
-                                            self.jump_history.push((
-                                                pc,
-                                                false,
-                                                condition.clone(),
-                                                self.computer.read_rw_queue(),
-                                                self.computer.get_state(),
-                                            ));
-                                            self.computer.clear_rw_queue();
-                                            log::info!("exploring line: {}", pc + 1);
-                                            self.add_constraint(condition, false);
-                                            pc = pc + 1;
-                                            continue;
-                                        }
-                                    }
-                                }
-                                (None, Some(label), None) => {
-                                    log::info!("returning: {}", pc);
-                                    if &label == "return" {
-                                        break;
-                                    }
-                                    let newline = self.get_linenumber_of_label(label.clone());
-                                    match newline {
-                                        Some(n) => {
-                                            log::info!("jumping to: {}", n);
-                                            pc = n;
-                                        }
-                                        None => {
+                                        } else {
                                             log::error!("No label line for label {}", label);
-                                            return Err(Error::new(ErrorKind::Other, "No label 1"));
+                                            return Err(Error::new(
+                                                ErrorKind::Other,
+                                                format!("No label 2 {:?}", label),
+                                            ));
                                         }
                                     }
                                 }
-                                (None, None, Some(address)) => {
-                                    pc = address as usize;
-                                }
-                                (Some(_), None, None)
-                                | (None, None, None)
-                                | (None, Some(_), Some(_))
-                                | (Some(_), Some(_), Some(_)) => {
-                                    log::error!(
-                                    "Execute did not return valid response for jump or continue"
-                                );
-                                    return Err(Error::new(
-                                    ErrorKind::Other,
-                                    "Execute did not return valid response for jump or continue",
+                            }
+                            Some(false) => {
+                                self.jump_history.push((
+                                    pc,
+                                    false,
+                                    condition.clone(),
+                                    self.computer.read_rw_queue(),
+                                    self.computer.get_state(),
                                 ));
+                                self.computer.clear_rw_queue();
+                                log::info!("exploring line: {}", pc + 1);
+                                self.add_constraint(condition, false);
+                                pc = pc + 1;
+                            }
+                        }
+                    }
+                    ExecuteReturnType::ConditionalJumpAddress(condition, address) => {
+                        let jump_dest = address.try_into().unwrap();
+                        let rw_list = self.computer.read_rw_queue();
+                        match self.evaluate_branch_condition(
+                            pc.clone(),
+                            condition.clone(),
+                            rw_list.clone(),
+                        ) {
+                            None => {
+                                let mut clone = self.clone();
+                                self.jump_history.push((
+                                    pc,
+                                    true,
+                                    condition.clone(),
+                                    rw_list.clone(),
+                                    self.computer.get_state(),
+                                ));
+                                self.computer.clear_rw_queue();
+                                log::info!("exploring jump branch starting line: {:?}", jump_dest);
+
+                                self.computer.solver.push();
+                                self.add_constraint(condition.clone(), true);
+                                let res1 = self.run(jump_dest);
+                                self.computer.solver.pop(1);
+
+                                clone.jump_history.push((
+                                    pc,
+                                    false,
+                                    condition.clone(),
+                                    rw_list,
+                                    self.computer.get_state(),
+                                ));
+                                clone.computer.clear_rw_queue();
+                                log::info!("exploring non-jump branch starting line: {:?}", pc + 1);
+                                self.computer.solver.push();
+                                clone.add_constraint(condition, false);
+                                let res2 = clone.run(pc + 1);
+                                self.computer.solver.pop(1);
+
+                                match (res1, res2) {
+                                    (Ok(_), Ok(_)) => return Ok(()),
+                                    (Err(err), Ok(_)) => {
+                                        log::error!("{:?}: {:?}", pc, err);
+                                        return Err(Error::new(ErrorKind::Other, err));
+                                    }
+                                    (Ok(_), Err(err)) => {
+                                        log::error!("{:?}: {:?}", pc, err);
+                                        return Err(Error::new(ErrorKind::Other, err));
+                                    }
+                                    (Err(e1), Err(e2)) => {
+                                        return Err(Error::new(
+                                            ErrorKind::Other,
+                                            e1.to_string() + &e2.to_string(),
+                                        ));
+                                    }
+                                }
+                            }
+                            Some(true) => {
+                                self.jump_history.push((
+                                    pc,
+                                    true,
+                                    condition.clone(),
+                                    self.computer.read_rw_queue(),
+                                    self.computer.get_state(),
+                                ));
+                                self.computer.clear_rw_queue();
+                                self.add_constraint(condition, true);
+                                pc = jump_dest;
+                                continue;
+                            }
+                            Some(false) => {
+                                self.jump_history.push((
+                                    pc,
+                                    false,
+                                    condition.clone(),
+                                    self.computer.read_rw_queue(),
+                                    self.computer.get_state(),
+                                ));
+                                self.computer.clear_rw_queue();
+                                log::info!("exploring line: {}", pc + 1);
+                                self.add_constraint(condition, false);
+                                pc = pc + 1;
+                                continue;
+                            }
+                        }
+                    }
+                    ExecuteReturnType::Select(condition, register, option1, option2) => {
+                        match (
+                        self.computer.solver.check_assumptions(&[comparison_to_ast(
+                            self.computer.context,
+                            condition.clone(),
+                        )
+                        .expect(
+                            "need result of conversion of comparison to ast for evaluation at jump 0",
+                        )]),
+                        self.computer.solver.check_assumptions(&[comparison_to_ast(
+                            self.computer.context,
+                            condition.clone().not(),
+                        )
+                        .expect(
+                            "need result of conversion of comparison to ast for evaluation at jump 0",
+                        )]),
+                    ) {
+                        (SatResult::Sat, SatResult::Unsat) => {
+                            self.add_constraint(condition.clone(), true);
+                            self.computer.set_register(
+                                register.clone(),
+                                option1.kind,
+                                option1.base,
+                                option1.offset,
+                            );
+                            pc = pc+1;
+                        }
+                        (SatResult::Unsat, SatResult::Sat) => {
+                            self.add_constraint(condition.clone(), false);
+                            self.computer.set_register(
+                                register.clone(),
+                                option2.kind,
+                                option2.base,
+                                option2.offset,
+                            );
+                            pc = pc+1;
+                        }
+                        _ => {
+                            let clone = &mut self.clone();
+
+                            self.add_constraint(condition.clone(), true);
+                            self.computer.set_register(
+                                register.clone(),
+                                option1.kind,
+                                option1.base,
+                                option1.offset,
+                            );
+                            let res1 = self.run(pc + 1);
+
+                            clone.add_constraint(condition, false);
+                            self.computer.set_register(
+                                register,
+                                option2.kind,
+                                option2.base,
+                                option2.offset,
+                            );
+                            let res2 = clone.run(pc + 1);
+                            match (res1, res2) {
+                                (Ok(_), Ok(_)) => return Ok(()),
+                                (Err(err), Ok(_)) | (Ok(_), Err(err)) => {
+                                    log::error!("{:?}: {:?}", pc, err);
+                                    return Err(Error::new(ErrorKind::Other, err));
+                                }
+                                (Err(e1), Err(e2)) => {
+                                    return Err(Error::new(
+                                        ErrorKind::Other,
+                                        e1.to_string() + &e2.to_string(),
+                                    ));
                                 }
                             }
                         }
                     }
-                }
+                    }
+                },
                 Err(err) => {
                     log::error!(
                         "At line {:?} instruction {:?} error {:?}",
@@ -587,8 +624,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     fn get_linenumber_of_label(&self, label: String) -> Option<usize> {
+        let label = label.strip_prefix("_").unwrap_or(&label);
         for l in self.program.labels.iter() {
-            if l.0.contains(&label.clone()) && label.contains(&l.0.clone()) {
+            if l.0.contains(&label) && label.contains(&l.0.clone()) {
                 return Some(l.1);
             }
         }
@@ -599,7 +637,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let c = comparison_to_ast(self.computer.context, constraint)
             .expect("engine6")
             .simplify();
-
         if decision {
             self.computer.solver.assert(&c);
         } else {
@@ -617,7 +654,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
     fn looping_too_deep(&self) -> bool {
         // jump out if too deep in tree
 
-        if self.jump_history.len() > 10 {
+        if self.jump_history.len() > 30 {
             let mut loop_count = 0;
             let pc = self.jump_history.last().expect("engine7").0;
             for h in self.jump_history.clone() {
@@ -627,7 +664,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     loop_count = loop_count + 1;
                 }
             }
-            if loop_count > 7 {
+            if loop_count > 20 {
+                log::error!(
+                    // FIX: infinite loops not technically an error, just need to handle them better
+                    "stuck in an infinite loop: {:?}",
+                    self.jump_history
+                        .clone()
+                        .into_iter()
+                        .map(|(c, _, _, _, _)| -> usize { c })
+                        .collect::<Vec<usize>>()
+                );
                 return true;
             }
         }
@@ -645,6 +691,38 @@ impl<'ctx> ExecutionEngine<'ctx> {
     ) -> Option<bool> {
         log::info!("jump condition: {}", expression.clone());
         log::info!("memory accesses: {:?}", rw_list.clone());
+
+        // check whether both branches are valid, only take valid branch
+        match (
+            self.computer.solver.check_assumptions(&[comparison_to_ast(
+                self.computer.context,
+                expression.clone(),
+            )
+            .expect("need result of conversion of comparison to ast for evaluation at jump 0")]),
+            self.computer.solver.check_assumptions(&[comparison_to_ast(
+                self.computer.context,
+                expression.clone().not(),
+            )
+            .expect("need result of conversion of comparison to ast for evaluation at jump 1")]),
+        ) {
+            (SatResult::Sat, SatResult::Unsat) => return Some(true),
+            (SatResult::Sat, SatResult::Sat) => (), // normal! explore both!
+            (SatResult::Unsat, _) => return Some(false),
+            (_, _) => todo!(), // not sure how this would happen!
+        }
+
+        //check if loop can be resolved without loop protocol
+        // i.e. there are explicit lower and upper bounds
+        let mut is_abstract = false;
+        for a in expression.get_abstracts() {
+            if a.contains("len") || a.contains("loop") {
+                is_abstract = true;
+            }
+        }
+
+        if !is_abstract {
+            return None;
+        }
 
         if !self.in_loop {
             for j in self.jump_history.clone().into_iter().rev() {
@@ -664,8 +742,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         .expect("engine8")
                         .simplify();
 
-                    let some_multiple =
-                        ast::Int::new_const(self.computer.context, "multiple".to_string());
+                    let some_multiple = ast::Int::new_const(
+                        self.computer.context,
+                        ("multiple_".to_owned() + &pc.to_string()).to_string(),
+                    );
                     self.computer.solver.assert(&some_multiple.gt(&one));
 
                     for a in expression.get_abstracts() {
@@ -673,8 +753,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             let original_abstract =
                                 ast::Int::new_const(self.computer.context, a.to_string());
 
+                            let kplus = ast::Int::add(self.computer.context, &[&q, &one]);
                             let relation =
-                                ast::Int::mul(self.computer.context, &[&q, &some_multiple]);
+                                ast::Int::mul(self.computer.context, &[&kplus, &some_multiple]);
                             self.computer
                                 .solver
                                 .assert(&original_abstract.ge(&relation));
@@ -798,9 +879,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     self.computer.solver.assert(&condition.simplify());
                     self.in_loop = false;
                     return Some(!branch_decision);
-                } else {
+                } else if last_jump_label == pc {
                     // JUMP after Kth STEP -- need to check loop advanced ok for first iteration
-                    let last_state = last_state;
                     let current_state = self.computer.get_state();
                     let loop_var_name = (pc.to_string()) + "_loop_?";
                     for i in 0..(last_state.0.len()) {
@@ -828,7 +908,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
 
-                    break;
+                    return Some(branch_decision);
                     // todo!();
                     // for i in 0..(last_state.1.len()) {
                     //     let last = &last_state.1[i];
