@@ -60,16 +60,24 @@ pub(crate) mod indicator {
     }
 }
 
+extern "C" {
+    #[link_name = "aws_lc_0_14_1_FIPS_service_indicator_before_call"]
+    fn FIPS_service_indicator_before_call() -> u64;
+
+    #[link_name = "aws_lc_0_14_1_FIPS_service_indicator_after_call"]
+    fn FIPS_service_indicator_after_call() -> u64;
+}
+
 #[cfg(all(debug_assertions))]
 #[inline]
 pub(crate) fn service_indicator_before_call() -> u64 {
-    unsafe { aws_lc::FIPS_service_indicator_before_call() }
+    unsafe { FIPS_service_indicator_before_call() }
 }
 
 #[cfg(all(debug_assertions))]
 #[inline]
 pub(crate) fn service_indicator_after_call() -> u64 {
-    unsafe { aws_lc::FIPS_service_indicator_after_call() }
+    unsafe { FIPS_service_indicator_after_call() }
 }
 
 /// The FIPS Module Service Status
@@ -111,15 +119,17 @@ macro_rules! indicator_check {
     ($function:expr) => {{
         #[cfg(all(debug_assertions))]
         {
-            use crate::fips::{service_indicator_after_call, service_indicator_before_call};
+            use crate::aes::tests::cipher::fips::{
+                service_indicator_after_call, service_indicator_before_call,
+            };
             let before = service_indicator_before_call();
             let result = $function;
             let after = service_indicator_after_call();
             if before == after {
-                crate::fips::indicator::set_unapproved();
+                crate::aes::tests::cipher::fips::indicator::set_unapproved();
                 result
             } else {
-                crate::fips::indicator::set_approved();
+                crate::aes::tests::cipher::fips::indicator::set_approved();
                 result
             }
         }
@@ -174,7 +184,7 @@ mod tests {
     #[cfg(all(debug_assertions))]
     #[test]
     fn test_service_status() {
-        use crate::fips::FipsServiceStatus;
+        use crate::aes::tests::cipher::fips::FipsServiceStatus;
 
         assert_eq!(
             FipsServiceStatus::Approved(true),
