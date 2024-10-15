@@ -197,7 +197,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
     }
 }
 
-fn tuple_to_struct(name: String, tuple: TypeTuple) -> ItemStruct {
+fn tuple_to_struct(name: String, tuple: TypeTuple, fn_name: String) -> ItemStruct {
     let span = Span::call_site().into();
 
     // Creating fields for the struct
@@ -208,7 +208,7 @@ fn tuple_to_struct(name: String, tuple: TypeTuple) -> ItemStruct {
         fields.push(field.clone());
     }
 
-    let struct_name = syn::Ident::new(&(name + "_struct"), span);
+    let struct_name = syn::Ident::new(&(name + "_struct_" + &fn_name), span);
     parse_quote! { #[repr(C)] struct #struct_name { #fields }}
 }
 
@@ -219,6 +219,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
     let mut attributes = parse_macro_input!(attr as AttributeList);
     let fn_name = &vars.item_fn.ident;
+    let alias = syn::Ident::new(
+        &(fn_name.to_string() + "_alias"),
+        proc_macro2::Span::call_site().into(),
+    );
     let output = &vars.item_fn.output;
 
     let mut invariants: Vec<AbstractComparison> = Vec::new();
@@ -305,8 +309,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                             Type::Tuple(t) => {
                                 let mut size = 0;
-                                new_structs
-                                    .insert(name.clone(), tuple_to_struct(name.clone(), t.clone()));
+                                new_structs.insert(
+                                    name.clone(),
+                                    tuple_to_struct(name.clone(), t.clone(), fn_name.to_string()),
+                                );
                                 for e in &t.elems {
                                     match e {
                                         Type::Array(a) => {
@@ -367,7 +373,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
 
                 let real_struct_name = Ident::new(
-                    &(struct_name + "_struct"),
+                    &(struct_name + "_struct_" + &fn_name.to_string()),
                     proc_macro2::Span::call_site().into(),
                 );
                 arguments_to_pass
@@ -381,7 +387,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     // extract name of function being invoked to pass to invocation
     let mut q = Punctuated::new();
     q.push(PathSegment {
-        ident: fn_name.clone(),
+        ident: alias.clone(),
         arguments: PathArguments::None,
     });
 
@@ -400,7 +406,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let mut extern_fn = vars.item_fn.clone();
-    extern_fn.ident = fn_name.clone();
+    extern_fn.ident = alias.clone();
     if !attributes.argument_list.is_empty() {
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
         let mut span = proc_macro2::Span::call_site();
@@ -493,8 +499,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     let ty = c.ty.clone();
                     if let Type::Ptr(p) = *ty.clone() {
                         if let Type::Infer(_) = *p.elem {
-                            let struct_name =
-                                Ident::new(&(var_name.clone() + "_struct"), span.into());
+                            let struct_name = Ident::new(
+                                &(var_name.clone() + "_struct_" + &fn_name.to_string()),
+                                span.into(),
+                            );
                             new_args.push(parse_quote! {#n : *const #struct_name});
                         } else {
                             new_args.push(parse_quote! {#n : #ty});
@@ -571,7 +579,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         for a in &new_args {
             arguments_to_memory_safe_regions.push(a.clone());
         }
-        extern_fn = parse_quote! {fn #fn_name(#new_args)};
+        extern_fn = parse_quote! {fn #alias(#new_args)};
     }
 
     let mut struct_decs = quote! {};
@@ -580,28 +588,35 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             #struct_decs
 
-            #i;
+            #i
         };
     }
 
     let original_fn_call = vars.item_fn.clone();
+    let fn_name_as_string = fn_name.to_string();
+
+    let extern_block: Stmt = parse_quote! {
+        extern "C" {
+            #[link_name = #fn_name_as_string]
+            #extern_fn #output;
+        }
+    };
+
     let unsafe_block: Stmt = parse_quote! {
         #original_fn_call {
-
             #asserts;
-
-            #struct_decs;
-
-            extern "C" {
-                #extern_fn #output;
-            }
             unsafe {
                 return #invocation;
             }
         }
     };
 
-    let token_stream = quote!(#unsafe_block).into();
+    let token_stream = quote! {
+        #struct_decs
+        #extern_block
+        #unsafe_block
+    }
+    .into();
 
     // compile file
     // make this path
