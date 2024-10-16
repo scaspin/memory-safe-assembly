@@ -313,10 +313,10 @@ mod tests {
     use aws_lc_sys;
 
     extern "C" {
-        #[link_name = "aws_lc_0_14_1_bn_add_words"]
+        #[link_name = "aws_lc_0_22_0_bn_add_words"]
         fn aws_bn_add_words(output: *mut u8, a: *const u8, b: *const u8, len: usize);
 
-        #[link_name = "aws_lc_0_14_1_bn_sub_words"]
+        #[link_name = "aws_lc_0_22_0_bn_sub_words"]
         fn aws_bn_sub_words(output: *mut u8, a: *const u8, b: *const u8, len: usize);
     }
 

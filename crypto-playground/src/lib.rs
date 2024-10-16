@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "nightly", feature(test))]
+
 pub mod aes;
 pub mod awslc;
 pub mod bn;

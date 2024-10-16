@@ -111,8 +111,11 @@ fn sha1_final(out: &mut [u8], ctx: &mut Sha1Context) -> Result<(), ()> {
     Ok(())
 }
 
-#[bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+#[bums_macros::check_mem_safe("sha1-armv8-old.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
 fn sha1_block_data_order(context: &mut [u32; 5], input: &[u8]);
+
+#[bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+fn sha1_block_data_order_nohw(context: &mut [u32; 5], input: &[u8]);
 
 #[cfg(test)]
 mod tests {
@@ -121,8 +124,8 @@ mod tests {
     use aws_lc_rs::digest::SHA1_FOR_LEGACY_USE_ONLY as SHA1;
 
     extern "C" {
-        #[link_name = "aws_lc_0_14_1_sha1_block_data_order"]
-        fn aws_sha1_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
+        #[link_name = "aws_lc_0_22_0_sha1_block_data_order_nohw"]
+        fn aws_sha1_block_data_order_nohw(context: *mut u32, input: *const u8, input_len: usize);
     }
 
     #[test]
@@ -139,7 +142,7 @@ mod tests {
         let theirs = {
             let input = [0xee; 128];
             unsafe {
-                aws_sha1_block_data_order(
+                aws_sha1_block_data_order_nohw(
                     context_them.as_mut_ptr(),
                     input.as_ptr(),
                     input.len() / 64,
@@ -221,5 +224,73 @@ mod tests {
         let mut output: &mut [u8] = v.as_mut_slice();
         sha1_digest(&message, &mut output);
         assert_eq!(output, digest(&SHA1, message).as_ref());
+    }
+
+    #[cfg(feature = "nightly")]
+    extern crate test;
+
+    #[cfg(feature = "nightly")]
+    use rand::Rng;
+    #[cfg(feature = "nightly")]
+    use test::Bencher;
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_sha1_aws_assembly(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 100];
+            let mut context: [u32; 5] =
+                [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+            unsafe {
+                //aws_sha1_block_data_order(
+                aws_sha1_block_data_order_nohw(
+                    context.as_mut_ptr(),
+                    message.as_ptr(),
+                    message.len() / 64,
+                );
+            }
+            return context;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_sha1_clams_assembly(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 100];
+            let mut context: [u32; 5] =
+                [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+
+            sha1_block_data_order_nohw(&mut context, &message);
+            return context;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    fn bench_sha1_clams_full_impl(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 100];
+            let mut v = vec![0; 20];
+            let mut output: &mut [u8] = v.as_mut_slice();
+            sha1_digest(&message, &mut output);
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    fn bench_sha1_aws_full_impl(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 100];
+            return digest(&SHA1, &message);
+        })
     }
 }

@@ -7,7 +7,7 @@ mod tests {
     // use aws_lc_rs::digest::{MD5};
 
     extern "C" {
-        #[link_name = "aws_lc_0_14_1_md5_block_asm_data_order"]
+        #[link_name = "aws_lc_0_22_0_md5_block_asm_data_order"]
         fn aws_md5_block_asm_data_order(context: *mut u32, input: *const u8, input_len: usize);
     }
 

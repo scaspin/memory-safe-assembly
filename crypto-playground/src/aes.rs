@@ -365,7 +365,7 @@ mod tests {
     mod cipher;
 
     extern "C" {
-        #[link_name = "aws_lc_0_14_1_aes_hw_ctr32_encrypt_blocks"]
+        #[link_name = "aws_lc_0_22_0_aes_hw_ctr32_encrypt_blocks"]
         fn aws_aes_hw_ctr32_encrypt_blocks(
             input_as_ptr: *const u8,
             output_as_mut_ptr: *mut u8,
@@ -374,7 +374,7 @@ mod tests {
             ivec_as_mut_ptr: *mut u8,
         );
 
-        #[link_name = "aws_lc_0_14_1_vpaes_ctr32_encrypt_blocks"]
+        #[link_name = "aws_lc_0_22_0_vpaes_ctr32_encrypt_blocks"]
         fn aws_vpaes_ctr32_encrypt_blocks(
             input_as_ptr: *const u8,
             output_as_mut_ptr: *mut u8,
@@ -383,14 +383,14 @@ mod tests {
             ivec_as_mut_ptr: *mut u8,
         );
 
-        #[link_name = "aws_lc_0_14_1_vpaes_encrypt"]
+        #[link_name = "aws_lc_0_22_0_vpaes_encrypt"]
         fn aws_vpaes_encrypt(
             input_as_ptr: *const u8,
             output_as_mut_ptr: *mut u8,
             keys_as_mut_ptr: *const AesKey,
         );
 
-        #[link_name = "aws_lc_0_14_1_AES_encrypt"]
+        #[link_name = "aws_lc_0_22_0_AES_encrypt"]
         fn aws_AES_ctr128_encrypt(
             input_as_ptr: *const u8,
             output_as_mut_ptr: *mut u8,

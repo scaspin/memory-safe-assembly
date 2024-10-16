@@ -61,10 +61,10 @@ pub(crate) mod indicator {
 }
 
 extern "C" {
-    #[link_name = "aws_lc_0_14_1_FIPS_service_indicator_before_call"]
+    #[link_name = "aws_lc_0_22_0_FIPS_service_indicator_before_call"]
     fn FIPS_service_indicator_before_call() -> u64;
 
-    #[link_name = "aws_lc_0_14_1_FIPS_service_indicator_after_call"]
+    #[link_name = "aws_lc_0_22_0_FIPS_service_indicator_after_call"]
     fn FIPS_service_indicator_after_call() -> u64;
 }
 
