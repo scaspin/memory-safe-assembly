@@ -582,4 +582,148 @@ mod tests {
         assert_eq!(ours, theirs);
         assert!(ours != [0xee; 128]);
     }
+
+    #[cfg(feature = "nightly")]
+    extern crate test;
+
+    #[cfg(feature = "nightly")]
+    use rand::Rng;
+    #[cfg(feature = "nightly")]
+    use test::Bencher;
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_aes_hw_ctr32_aws_assembly(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let input = vec![rng.gen::<u8>(); 128];
+            let mut output = [0; 128];
+            let key = AesKey::new();
+            let mut ivec: [u8; 16] = [0xfc; 16];
+
+            unsafe {
+                aws_aes_hw_ctr32_encrypt_blocks(
+                    input.as_ptr(),
+                    output.as_mut_ptr(),
+                    input.len() / 16,
+                    &key as *const AesKey,
+                    ivec.as_mut_ptr(),
+                );
+            }
+            return output;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_aes_hw_ctr32_clams_assembly(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let input = vec![rng.gen::<u8>(); 128];
+            let mut output = [0; 128];
+            let key = AesKey::new();
+            let mut ivec: [u8; 16] = [0xfc; 16];
+
+            aes_hw_ctr32_encrypt_blocks(&input, &mut output, &(key.rd_key, key.rounds), &mut ivec);
+            return output;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_vpaes_aws_assembly(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let input = vec![rng.gen::<u8>(); 128];
+            let mut output = [0; 128];
+            let key = AesKey::new();
+            let mut ivec: [u8; 16] = [0xfc; 16];
+
+            unsafe {
+                aws_vpaes_ctr32_encrypt_blocks(
+                    input.as_ptr(),
+                    output.as_mut_ptr(),
+                    input.len() / 16,
+                    &key as *const AesKey,
+                    ivec.as_mut_ptr(),
+                );
+            }
+            return output;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_vpaes_clams_assembly(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let input = vec![rng.gen::<u8>(); 128];
+            let mut output = [0; 128];
+            let key = AesKey::new();
+            let mut ivec: [u8; 16] = [0xfc; 16];
+
+            vpaes_ctr32_encrypt_blocks(&input, &mut output, &(key.rd_key, key.rounds), &mut ivec);
+            return output;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    fn bench_aes_ctr_clams_full_impl(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        use crate::aes::tests::cipher::{
+            EncryptingKey, EncryptionContext, UnboundCipherKey, AES_128,
+        };
+        use aws_lc_rs::test::from_hex;
+
+        b.iter(|| {
+            let key_string = "000102030405060708090a0b0c0d0e0f";
+            let key = from_hex(key_string).unwrap();
+            let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
+            let mut encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
+            let context = encrypting_key
+                .algorithm()
+                .new_encryption_context(encrypting_key.mode())
+                .expect("expect context");
+
+            let key_bytes = encrypting_key.key.key();
+            let key = &mut AesKey::new_from_bytes(key_bytes);
+            let input: &mut [u8] = &mut vec![rng.gen::<u8>(); 128];
+
+            let im = match context {
+                EncryptionContext::Iv128(ref v) => v.as_ref(),
+            };
+            let mut ivec = im.clone();
+            let block_buffer: &mut [u8; 16] = &mut [0; 16];
+            AES_ctr128_encrypt(key, &mut ivec, block_buffer, input);
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    fn bench_aes_ctr_aws_full_impl(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        use crate::aes::tests::cipher::{EncryptingKey, UnboundCipherKey, AES_128};
+        use aws_lc_rs::test::from_hex;
+
+        b.iter(|| {
+            let key_string = "000102030405060708090a0b0c0d0e0f";
+            let key = from_hex(key_string).unwrap();
+            let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
+            let encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
+            let context = encrypting_key
+                .algorithm()
+                .new_encryption_context(encrypting_key.mode())
+                .expect("expect context");
+
+            let input: &mut [u8] = &mut vec![rng.gen::<u8>(); 128];
+            let _ = encrypting_key.less_safe_encrypt(input, context);
+        })
+    }
 }
