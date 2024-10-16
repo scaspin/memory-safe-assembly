@@ -892,6 +892,30 @@ impl<'ctx> ARMCORTEXA<'_> {
                         ),
                     }
                 }
+                "b.lt" => {
+                    match (&self.neg, &self.overflow) {
+                        (Some(neg), Some(ove)) => {
+                            match  (neg, ove) {
+                            (FlagValue::Real(n), FlagValue::Real(v)) => {
+                               if n != v {  // V != N
+                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 11")))
+                               } else {
+                                    return Ok(ExecuteReturnType::Next)
+                               }
+                            },
+                            (FlagValue::Abstract(n), _ ) =>  {
+                                let expression = generate_comparison("<", *n.left.clone(), *n.right.clone());
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, instruction.r1.clone().expect("need jump label 12")));
+                            },
+                            (_,_) => todo!("match on undefined flags!")
+                            }
+                        },
+                        (_, _) => return Err(
+                            "Flag cannot be branched on since it has not been set within the program yet"
+                                .to_string(),
+                        ),
+                    }
+                }
                 "b.ls" => {
                     match (&self.zero, &self.carry) {
                         (Some(zero), Some(carry)) => {

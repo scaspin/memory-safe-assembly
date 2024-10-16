@@ -7,12 +7,18 @@ edition = "2021"
 bums_macros = { path = "../bums_macros" }
 byteorder = "*"
 num-traits = "0.2.18"
+rand = "0.8.5"
 zeroize = "1.8.1"
+cc = "1.0.90"
 
 [dev-dependencies]
 aws-lc-rs = "*"
-aws-lc-sys = "0.14.1"
+aws-lc-sys = "0.22.0"
 
 [build-dependencies]
+rustc_version = "0.4.1"
 bums_macros = { path = "../bums_macros" }
 cc = "1.0.90"
+
+[features]
+nightly = []

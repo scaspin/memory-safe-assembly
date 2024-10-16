@@ -1,3 +1,5 @@
+use rustc_version;
+use rustc_version::{version_meta, Channel};
 use std::{env, fs::File, io::Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,5 +47,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     build.include("include").compile("linkedasms");
     println!("cargo:rustc-link-lib=linkedasms");
+
+    match version_meta().unwrap().channel {
+        Channel::Nightly => {
+            println!("cargo:rustc-cfg=feature=\"nightly\"");
+        }
+        _ => (),
+    }
     Ok(())
 }
