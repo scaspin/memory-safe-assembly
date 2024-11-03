@@ -124,15 +124,40 @@ pub fn sha256_digest(msg: &[u8], output: &mut [u8]) {
     sha256(msg, msg.len(), output);
 }
 
-#[bums_macros::check_mem_safe("sha256-armv8-old.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+#[bums_macros::check_mem_safe("sha256-armv8-old.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64, input.len()%64==0])]
 fn sha256_block_data_order(context: &mut [u32; 8], input: &[u8]);
 
-#[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+#[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64, input.len()%64==0])]
 fn sha256_block_data_order_nohw(context: &mut [u32; 8], input: &[u8]);
+
+// fn sha256_block_data_order_nohw(context: &mut [u32; 8], input: &[u8]) {
+//     unsafe { sha256_block_data_order_hw(context.as_mut_ptr(), input.as_ptr(), input.len()/64) }
+// }
+
+fn sha256_hw(context: &mut [u32; 8], input: &[u8]) {
+    unsafe { sha256_block_data_order_hw(context.as_mut_ptr(), input.as_ptr(), input.len() / 64) }
+}
+extern "C" {
+    fn sha256_block_data_order_hw(context: *mut u32, input: *const u8, input_len: usize);
+    #[link_name = "aws_lc_0_22_0_sha256_block_data_order_hw"]
+    fn aws_sha256_block_data_order_hw(context: *mut u32, input: *const u8, input_len: usize);
+}
+
+// #[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+// fn sha256_block_data_order_hw(context: &mut [u32; 8], input: &[u8]);
 
 pub fn sha256_assembly(context: &mut [u32; 8], input: &[u8]) {
     sha256_block_data_order_nohw(context, input);
 }
+
+// pub fn shai(msg: &[u8]) -> [u32;8] {
+//     let context = &mut [
+//         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+//         0x5be0cd19,
+//     ];
+//     sha256_assembly(context, msg);
+//     return *context;
+// }
 
 #[cfg(test)]
 mod tests {
@@ -142,6 +167,7 @@ mod tests {
     extern "C" {
         #[link_name = "aws_lc_0_22_0_sha256_block_data_order_nohw"]
         fn aws_sha256_block_data_order_nohw(context: *mut u32, input: *const u8, input_len: usize);
+
     }
 
     #[test]
@@ -214,7 +240,7 @@ mod tests {
         assert_eq!(ctx.num, my_ctx.num);
         assert_eq!(ctx.md_len, my_ctx.md_len);
 
-        let msg = [123; 100];
+        let msg = [123; 128];
         unsafe {
             aws_lc_sys::SHA256_Update(&mut ctx, msg.as_ptr() as *const _, msg.len());
         }
@@ -259,11 +285,11 @@ mod tests {
 
     #[cfg(feature = "nightly")]
     #[bench]
-    pub fn bench_sha256_aws_assembly(b: &mut Bencher) {
+    pub fn bench_sha256_nohw_aws_assembly(b: &mut Bencher) {
         let mut rng = rand::thread_rng();
 
         b.iter(|| {
-            let message = vec![rng.gen::<u8>(); 100];
+            let message = vec![rng.gen::<u8>(); 128];
             let mut context = [
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
                 0x5be0cd19,
@@ -282,11 +308,34 @@ mod tests {
 
     #[cfg(feature = "nightly")]
     #[bench]
-    pub fn bench_sha256_clams_assembly(b: &mut Bencher) {
+    pub fn bench_sha256_hw_aws_assembly(b: &mut Bencher) {
         let mut rng = rand::thread_rng();
 
         b.iter(|| {
-            let message = vec![rng.gen::<u8>(); 100];
+            let message = vec![rng.gen::<u8>(); 128];
+            let mut context = [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
+            ];
+            unsafe {
+                //aws_sha256_block_data_order(
+                aws_sha256_block_data_order_hw(
+                    context.as_mut_ptr(),
+                    message.as_ptr(),
+                    message.len() / 64,
+                );
+            }
+            return context;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_sha256_nohw_clams_assembly(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 128];
             let mut context = [
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
                 0x5be0cd19,
@@ -299,11 +348,28 @@ mod tests {
 
     #[cfg(feature = "nightly")]
     #[bench]
-    fn bench_sha256_clams_full_impl(b: &mut Bencher) {
+    pub fn bench_sha256_hw_clams_assembly(b: &mut Bencher) {
         let mut rng = rand::thread_rng();
 
         b.iter(|| {
             let message = vec![rng.gen::<u8>(); 100];
+            let mut context = [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
+            ];
+
+            sha256_hw(&mut context, &message);
+            return context;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    fn bench_sha256_clams_full_impl(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 128];
             let mut v = vec![0; 32];
             let mut output: &mut [u8] = v.as_mut_slice();
             sha256_digest(&message, &mut output);
@@ -316,7 +382,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         b.iter(|| {
-            let message = vec![rng.gen::<u8>(); 100];
+            let message = vec![rng.gen::<u8>(); 128];
             return digest(&SHA256, &message);
         })
     }

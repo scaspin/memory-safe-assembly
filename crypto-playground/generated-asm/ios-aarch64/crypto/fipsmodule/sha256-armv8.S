@@ -1046,7 +1046,6 @@ LK256:
 .align	2
 .align	2
 .text
-#ifndef	__KERNEL__
 .globl	_sha256_block_data_order_hw
 .private_extern	_sha256_block_data_order_hw
 
@@ -1196,5 +1195,4 @@ Loop_hw:
 	ldr	x29,[sp],#16
 	ret
 
-#endif
 #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__APPLE__)
