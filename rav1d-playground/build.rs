@@ -1,3 +1,6 @@
+use std::env;
+use std::fs;
+use std::path::Path;
 use std::process::Command;
 use std::{fs::File, io::Write};
 
@@ -49,6 +52,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     command.output().expect("Failed to execute command");
+
+    let out_dir = env::var("OUT_DIR").unwrap();
+
+    // Define the source file and the destination path
+    let src_file = "src/edited-ipred.S"; // Replace with your file path
+    let dest_file = Path::new(&out_dir).join("edited-ipred.S");
+    println!("des {:?}", dest_file);
+
+    // Copy the file from src to the build target directory
+    fs::copy(src_file, &dest_file).expect("Failed to copy file");
+
+    // Ensure Cargo rebuilds if the source file changes
+    println!("cargo:rerun-if-changed={}", src_file);
 
     Ok(())
 }
