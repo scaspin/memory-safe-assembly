@@ -1343,6 +1343,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                             // _ => todo!("support more ld1r types")
                             //    }
                         }
+                        "dup" | "neg" | "shl" => {
+                            println!("here");
+                        }
                         _ => todo!("support simd operation with notation {:?}", instruction),
                     }
                 }

@@ -55,15 +55,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let out_dir = env::var("OUT_DIR").unwrap();
 
-    // Define the source file and the destination path
-    let src_file = "src/edited-ipred.S"; // Replace with your file path
+    // copy edited files
+    let src_file = "src/edited-ipred.S";
     let dest_file = Path::new(&out_dir).join("edited-ipred.S");
     println!("des {:?}", dest_file);
-
-    // Copy the file from src to the build target directory
     fs::copy(src_file, &dest_file).expect("Failed to copy file");
-
-    // Ensure Cargo rebuilds if the source file changes
     println!("cargo:rerun-if-changed={}", src_file);
 
     Ok(())
