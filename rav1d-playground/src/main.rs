@@ -149,8 +149,8 @@ pub fn call_reverse<BD: BitDepth + CallReverse>(dst: &mut [BD::Pixel], src: &[BD
 // #[bums::check_mem_safe("ipred.S", ac.as_ptr(), y, w_pad, h_pad, cw, ch)]
 // fn ipred_cfl_ac_420_8bpc_neon(ac: &mut [i16; 1024], y: isize, w_pad: i32, h_pad: i32, cw: i32, ch: i32);
 
-#[bums::check_mem_safe("edited-ipred.S", out.as_mut_ptr(), 4, in_0.as_ptr(), in_0.len(), 8, [ in_0.len() >= 16, in_0.len()%16==0, out.len() == in_0.len()])]
-fn ipred_z1_upsample_edge_8bpc_neon(out: &mut [u8], in_0: &[u8]) -> ();
+#[bums::check_mem_safe("edited-ipred.S", out.as_mut_ptr(), out.len(), in_0.as_ptr(), in_0.len(), 8, [in_0.len() == out.len() * 2 + 1, out.len()>=4, out.len()<=16, out.len()%4==0])]
+fn ipred_z1_upsample_edge_8bpc_neon(out: &mut [usize], in_0: &[usize]) -> ();
 
 // #[bums::check_mem_safe("edited-ipred.S", out.as_mut_ptr(), 4, in_0.as_ptr(), in_0.len(), [ in_0.len() >= 18, in_0.len()%18==0])]
 // fn ipred_z1_filter_edge_8bpc_neon(out: &mut [u8], in_0: &mut [u8], strength: i32);
@@ -159,8 +159,8 @@ fn ipred_z1_upsample_edge_8bpc_neon(out: &mut [u8], in_0: &[u8]) -> ();
 // fn pal_pred_8bpc_neon(dst: &mut [u8], stride: usize, pal: &[u8; 8], idx: u8, w: u32, h: u32);
 
 // Here, sz is 4 or 8, and we produce 2*sz+1 output elements.
-#[bums::check_mem_safe("edited-ipred.S", out.as_mut_ptr(), 4, in_0.as_ptr(), 8, [ in_0.len() >= 16, in_0.len()%16==0])]
-fn ipred_z2_upsample_edge_8bpc_neon(out: &mut [u8; 9], in_0: &mut [u8]);
+#[bums::check_mem_safe("edited-ipred.S", out.as_mut_ptr(), out.len() , in_0.as_ptr(),  in_0.len(), [in_0.len() == out.len() * 2 + 1, out.len()>=4, out.len()<=8, out.len()%4==0])]
+fn ipred_z2_upsample_edge_8bpc_neon(out: &mut [usize], in_0: &mut [usize]);
 
 // fn avg(
 //     dst_ptr: *mut DynPixel,

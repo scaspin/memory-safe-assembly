@@ -443,6 +443,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u32" => new_args.push(parse_quote! {#n: *const u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *const u64}),
                                     "u128" => new_args.push(parse_quote! {#n: *const u128}),
+                                    "usize" => new_args.push(parse_quote! {#n: *const usize}),
                                     _ => todo!("ptr array size 1"),
                                 }
                             } else {
@@ -458,6 +459,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
                                     "u128" => new_args.push(parse_quote! {#n: *mut u128}),
+                                    "usize" => new_args.push(parse_quote! {#n: *mut usize}),
                                     _ => todo!("ptr array size 2"),
                                 }
                             } else {
