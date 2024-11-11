@@ -859,7 +859,7 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
 }
 
 pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> Option<ast::Int> {
-    match expression {
+    match expression.clone() {
         AbstractExpression::Immediate(num) => {
             return Some(ast::Int::from_i64(context, num));
         }
@@ -895,7 +895,7 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                 }
                 "%" => return Some(new1.modulo(&new2)),
                 _ => {
-                    todo!("expression to AST {:?}", op)
+                    todo!("expression to AST {:?} {:?}", op, expression)
                 }
             }
         }

@@ -42,17 +42,20 @@ fn sha512_block_data_order(context: &mut [u32; 16], input: &[u8]);
 // #[bums_macros::check_mem_safe("chacha-armv8.S", out.as_mut_ptr(), in_0.as_ptr(), in_0.len(), keys.as_ptr(), counter.as_ptr())]
 // fn ChaCha20_ctr32(out: &mut [u8], in_0: &[u8], keys: [u32;8], counter: &[u32;4]);
 
-#[bums_macros::check_mem_safe("p256-armv8-asm.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len())]
+#[bums_macros::check_mem_safe("p256-armv8-asm.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr())]
 fn ecp_nistz256_sub(output: &mut [u64; 4], a: &[u64; 4], b: &[u64; 4]) -> bool;
 
 #[bums_macros::check_mem_safe("p256-armv8-asm.S", x0.as_mut_ptr(), x1.as_ptr())]
 fn ecp_nistz256_div_by_2(x0: &mut [u64; 4], x1: &[u64; 4]) -> bool;
 
-#[bums_macros::check_mem_safe("keccak1600-armv8.S", a.as_mut_ptr(), inp.as_ptr(), inp.len(), r, [inp.len() >= 4, inp.len()%4==0, r<=1600])]
-fn SHA3_Absorb_hw(a: &mut [u64; 25], inp: &[u8], r: usize);
+// #[bums_macros::check_mem_safe("p256_beeu-armv8-asm.S", out.as_ptr(), a.as_ptr(), n.as_ptr())]
+// fn beeu_mod_inverse_vartime(out: &[u64;4], a:&[u64;4], n:&[u64;4]);
 
-#[bums_macros::check_mem_safe("keccak1600-armv8.S", a.as_mut_ptr(), inp.as_mut_ptr(), inp.len(), r, padded, [inp.len() >= 4, inp.len()%4==0, r<=1600])]
-fn SHA3_Squeeze_hw(a: &mut [u64; 25], inp: &mut [u8], r: usize, padded: i64);
+#[bums_macros::check_mem_safe("keccak1600-armv8.S", a.as_mut_ptr(), inp.as_mut_ptr(), inp.len(), r, [inp.len()>=4, inp.len()%4==0, inp.len()>=r])]
+fn SHA3_Absorb_hw(a: &mut [u64; 25], inp: &mut [u8], r: usize);
+
+#[bums_macros::check_mem_safe("keccak1600-armv8.S", a.as_mut_ptr(), inp.as_mut_ptr(), inp.len(), rounds, padd)]
+fn SHA3_Squeeze_hw(a: &mut [u64;25], inp: &mut [u8], rounds: usize, padd: i64);
 
 #[cfg(test)]
 mod tests {
