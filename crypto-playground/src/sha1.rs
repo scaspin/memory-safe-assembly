@@ -335,4 +335,17 @@ mod tests {
             return digest(&SHA1, &message);
         })
     }
+
+    use sha1::{Sha1, Digest};
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    fn bench_sha1_rustcrypto_full_impl(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 100];
+            return Sha1::digest(message);
+        })
+    }
 }

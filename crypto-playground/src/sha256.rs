@@ -229,20 +229,6 @@ fn sha256_block_data_order_hw(context: &mut [u32; 8], input: &[u8]);
 //     unsafe { sha256_block_data_order_hw(context.as_mut_ptr(), input.as_ptr(), input.len() / 64) }
 // }
 
-fn sha256_nohw_unsafe(context: &mut [u32; 8], input: &[u8]) {
-    unsafe {
-        aws_sha256_block_data_order_nohw(context.as_mut_ptr(), input.as_ptr(), input.len() / 64)
-    }
-}
-
-extern "C" {
-    // fn sha256_block_data_order_hw(context: *mut u32, input: *const u8, input_len: usize);
-    #[link_name = "aws_lc_0_22_0_sha256_block_data_order_hw"]
-    fn aws_sha256_block_data_order_hw(context: *mut u32, input: *const u8, input_len: usize);
-
-    #[link_name = "aws_lc_0_22_0_sha256_block_data_order_nohw"]
-    fn aws_sha256_block_data_order_nohw(context: *mut u32, input: *const u8, input_len: usize);
-}
 
 pub fn sha256_assembly(context: &mut [u32; 8], input: &[u8]) {
     sha256_block_data_order_nohw(context, input);
@@ -495,6 +481,19 @@ mod tests {
         b.iter(|| {
             let message = vec![rng.gen::<u8>(); 128];
             return digest(&SHA256, &message);
+        })
+    }
+
+    use sha2::{Sha256, Digest};
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    fn bench_sha256_rustcrypto_full_impl(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 100];
+            return Sha256::digest(message);
         })
     }
 }

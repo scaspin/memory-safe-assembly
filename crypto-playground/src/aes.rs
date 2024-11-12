@@ -726,4 +726,29 @@ mod tests {
             let _ = encrypting_key.less_safe_encrypt(input, context);
         })
     }
+
+
+    use aes::Aes128;
+    use aes::cipher::{KeyInit, BlockEncrypt, generic_array::GenericArray};
+
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    fn bench_aes_ctr_rustcrypto_full_impl(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let mut block = GenericArray::from([rng.gen::<u8>(); 16]);
+            let key = GenericArray::from([0u8; 16]);
+            let mut block = GenericArray::from([42u8; 16]);
+            
+            // Initialize cipher
+            let cipher = Aes128::new(&key);
+            
+            let block_copy = block.clone();
+
+            let mut blocks = [block; 8];
+            let res = cipher.encrypt_blocks(&mut blocks);
+        })
+    }
 }
