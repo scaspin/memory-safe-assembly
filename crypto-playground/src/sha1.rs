@@ -57,7 +57,7 @@ fn sha1_update(ctx: &mut Sha1Context, msg: &[u8], len: usize) -> Result<(), ()> 
     if n != 0 {
         if len > SHA1_CBLOCK || len + n >= SHA1_CBLOCK {
             ms_memcpy(&mut ctx.data[n..], msg, SHA1_CBLOCK - n);
-            sha1_block_data_order(&mut ctx.h, &ctx.data);
+            sha1_block_data_order_hw(&mut ctx.h, &ctx.data);
             n = SHA1_CBLOCK - n;
             msg = &msg[n..];
             len = len - n;
@@ -72,7 +72,7 @@ fn sha1_update(ctx: &mut Sha1Context, msg: &[u8], len: usize) -> Result<(), ()> 
 
     n = len / SHA1_CBLOCK;
     if n > 0 {
-        sha1_block_data_order(&mut ctx.h, msg);
+        sha1_block_data_order_hw(&mut ctx.h, msg);
         n = n * SHA1_CBLOCK;
         msg = &msg[n..];
         len = len - n;
@@ -96,7 +96,7 @@ fn sha1_final(out: &mut [u8], ctx: &mut Sha1Context) -> Result<(), ()> {
     if n > (SHA1_CBLOCK - 8) {
         ms_memset(&mut ctx.data[n..], 0, SHA1_CBLOCK - n);
         n = 0;
-        sha1_block_data_order(&mut ctx.h, &ctx.data[0..64]);
+        sha1_block_data_order_hw(&mut ctx.h, &ctx.data[0..64]);
     }
     ms_memset(&mut ctx.data[n..], 0, SHA1_CBLOCK - 8 - n);
     // Append a 64-bit length to the block and process it.
@@ -104,7 +104,7 @@ fn sha1_final(out: &mut [u8], ctx: &mut Sha1Context) -> Result<(), ()> {
     byteorder::BE::write_u32(&mut ctx.data[(SHA1_CBLOCK - 8)..], ctx.nh);
     byteorder::BE::write_u32(&mut ctx.data[(SHA1_CBLOCK - 4)..], ctx.nl);
 
-    sha1_block_data_order(&mut ctx.h, &ctx.data[0..64]);
+    sha1_block_data_order_hw(&mut ctx.h, &ctx.data[0..64]);
     ms_memset(&mut ctx.data, 0, SHA1_CBLOCK);
 
     out.copy_from_slice(&convert_5(&ctx.h));
@@ -113,6 +113,9 @@ fn sha1_final(out: &mut [u8], ctx: &mut Sha1Context) -> Result<(), ()> {
 
 #[bums_macros::check_mem_safe("sha1-armv8-old.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
 fn sha1_block_data_order(context: &mut [u32; 5], input: &[u8]);
+
+#[bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+fn sha1_block_data_order_hw(context: &mut [u32; 5], input: &[u8]);
 
 #[bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
 fn sha1_block_data_order_nohw(context: &mut [u32; 5], input: &[u8]);
@@ -126,6 +129,9 @@ mod tests {
     extern "C" {
         #[link_name = "aws_lc_0_22_0_sha1_block_data_order_nohw"]
         fn aws_sha1_block_data_order_nohw(context: *mut u32, input: *const u8, input_len: usize);
+
+        #[link_name = "aws_lc_0_22_0_sha1_block_data_order_hw"]
+        fn aws_sha1_block_data_order_hw(context: *mut u32, input: *const u8, input_len: usize);
     }
 
     #[test]
@@ -245,7 +251,7 @@ mod tests {
                 [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
             unsafe {
                 //aws_sha1_block_data_order(
-                aws_sha1_block_data_order_nohw(
+                aws_sha1_block_data_order_hw(
                     context.as_mut_ptr(),
                     message.as_ptr(),
                     message.len() / 64,
@@ -258,6 +264,42 @@ mod tests {
     #[cfg(feature = "nightly")]
     #[bench]
     pub fn bench_sha1_clams_assembly(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 100];
+            let mut context: [u32; 5] =
+                [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+
+            sha1_block_data_order_hw(&mut context, &message);
+            return context;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_sha1_aws_assembly_nohw(b: &mut Bencher) {
+        let mut rng = rand::thread_rng();
+
+        b.iter(|| {
+            let message = vec![rng.gen::<u8>(); 100];
+            let mut context: [u32; 5] =
+                [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+            unsafe {
+                //aws_sha1_block_data_order(
+                aws_sha1_block_data_order_nohw(
+                    context.as_mut_ptr(),
+                    message.as_ptr(),
+                    message.len() / 64,
+                );
+            }
+            return context;
+        })
+    }
+
+    #[cfg(feature = "nightly")]
+    #[bench]
+    pub fn bench_sha1_clams_assembly_nohw(b: &mut Bencher) {
         let mut rng = rand::thread_rng();
 
         b.iter(|| {

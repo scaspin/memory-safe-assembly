@@ -547,6 +547,14 @@ impl MemorySafeRegion {
     }
     pub fn insert(&mut self, address: i64, value: RegisterValue) {
         self.content.insert(address, value);
+        match self.length {
+            AbstractExpression::Immediate(i) => {
+                if address > i {
+                    self.length = AbstractExpression::Immediate(address);
+                }
+            }
+            _ => (),
+        }
     }
 
     pub fn get(&self, address: i64) -> Option<RegisterValue> {
@@ -558,12 +566,7 @@ impl MemorySafeRegion {
     }
 
     pub fn get_length(&self) -> AbstractExpression {
-        match self.length {
-            AbstractExpression::Immediate(_) => {
-                return AbstractExpression::Immediate((self.content.len() * 4) as i64)
-            }
-            _ => self.length.clone(),
-        }
+        return self.length.clone();
     }
 }
 
@@ -783,8 +786,15 @@ pub fn string_to_int(s: &str) -> i64 {
     if v.contains('*') {
         let parts = v.split('*');
         for part in parts {
-            let m = part.parse::<i64>().expect("common3");
+            let m = string_to_int(part);
             value = value * m;
+        }
+    } else if v.contains('-') {
+        value = 0;
+        let parts = v.split('-');
+        for part in parts {
+            let m = string_to_int(part);
+            value = value - m;
         }
     } else if v.contains("x") {
         // FIX: store as two if i128 is needed
@@ -792,7 +802,7 @@ pub fn string_to_int(s: &str) -> i64 {
             as i64;
     } else {
         let clean = &v.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "");
-        value = clean.parse::<i64>().expect("common6");
+        value = clean.parse::<i64>().unwrap_or(0);
     }
 
     return value;

@@ -1437,15 +1437,47 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                     "st1" => {
                         let reg1 = instruction.r1.clone().expect("computer19");
-                        let reg2 = instruction.r2.clone().expect("computer20");
+                        if let Some(reg3) = instruction.r3.clone() {
+                            if reg3.contains("#") {
+                                let reg2 = instruction.r2.clone().expect("computer20");
+                                let reg2base = get_register_name_string(reg2.clone());
+                                let mut base_add_reg =
+                                    self.registers[get_register_index(reg2base.clone())].clone();
 
-                        let reg2base = get_register_name_string(reg2.clone());
-                        let base_add_reg =
-                            self.registers[get_register_index(reg2base.clone())].clone();
-                        let res = self.store_vector(reg1, base_add_reg.clone());
-                        match res {
-                            Err(e) => return Err(e.to_string()),
-                            _ => (),
+                                let imm = string_to_int(&reg3);
+                                base_add_reg.offset = base_add_reg.offset + imm;
+                                let res = self.store_vector(reg1, base_add_reg.clone());
+                                match res {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+                                self.set_register(
+                                    reg2,
+                                    base_add_reg.kind,
+                                    base_add_reg.base,
+                                    base_add_reg.offset,
+                                );
+                            } else {
+                                let reg3base = get_register_name_string(reg3.clone());
+                                let base_add_reg =
+                                    self.registers[get_register_index(reg3base.clone())].clone();
+                                let res = self.store_vector(reg1, base_add_reg.clone());
+                                match res {
+                                    Err(e) => return Err(e.to_string()),
+                                    _ => (),
+                                }
+                            }
+                        } else {
+                            let reg2 = instruction.r2.clone().expect("computer20");
+
+                            let reg2base = get_register_name_string(reg2.clone());
+                            let base_add_reg =
+                                self.registers[get_register_index(reg2base.clone())].clone();
+                            let res = self.store_vector(reg1, base_add_reg.clone());
+                            match res {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
                         }
                     }
                     "movi" => {
@@ -2018,7 +2050,11 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let parts = expr
                     .split_once('#')
                     .expect(&format!("computer24 {:?}", expr).to_string());
-                r2 = shift_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
+                if parts.0.is_empty() {
+                    r2.offset = r2.offset + string_to_int(parts.1);
+                } else {
+                    r2 = shift_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
+                }
             }
         }
 
@@ -2744,7 +2780,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 .get(&"memory".to_string())
                                 .expect("memory should exist")
                         } else {
-                            todo!("memory regions in access check");
+                            todo!("memory regions in access check {:?}", regbase);
                         }
                     }
                 },
@@ -2787,8 +2823,8 @@ impl<'ctx> ARMCORTEXA<'_> {
 
         if ty == RegionType::WRITE && region.kind == RegionType::READ {
             return Err(MemorySafetyError::new(&format!(
-                "Access does not match region type {:#?} {:?} {:?}",
-                region.kind, ty, base_expr
+                "Access does not match region type {:#?} {:?} {:?} {:?}",
+                region.kind, ty, base_expr, offset
             )));
         }
 
@@ -2835,8 +2871,10 @@ impl<'ctx> ARMCORTEXA<'_> {
         }
         return Err(MemorySafetyError::new(
             format!(
-                "Accessing address outside allowable memory regions {:?}, {:?}",
-                base_expr, offset
+                "Accessing address outside allowable memory regions {:?}, {:?}, {:?}",
+                base_expr,
+                offset,
+                region.get_length()
             )
             .as_str(),
         ));

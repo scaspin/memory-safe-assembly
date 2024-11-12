@@ -34,8 +34,8 @@ extern "C" {
     // fn ecp_nistz256_select_w5();
     // fn ecp_nistz256_select_w7();
 
-    pub fn sha1_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
-    pub fn sha512_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
+    // pub fn sha1_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
+    // pub fn sha512_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
 }
 
 #[cfg(test)]

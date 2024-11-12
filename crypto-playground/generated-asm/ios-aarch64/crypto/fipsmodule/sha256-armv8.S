@@ -1175,7 +1175,7 @@ Loop_hw:
 
 	ld1	{v17.4s},[x3]
 	add	v16.4s,v16.4s,v6.4s
-	sub	x3,x3,#64*4-16	// rewind
+	sub	x3,x3,#240	// rewind
 	orr	v2.16b,v0.16b,v0.16b
 .long	0x5e104020	//sha256h v0.16b,v1.16b,v16.4s
 .long	0x5e105041	//sha256h2 v1.16b,v2.16b,v16.4s

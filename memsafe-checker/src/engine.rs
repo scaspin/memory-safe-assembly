@@ -89,6 +89,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     // if text == start {
                     //     pc = line_number;
                     // }
+                    defs.push("".to_string());
                     code.push(Instruction::new(text))
                 } else {
                     let parsed = text.parse::<Instruction>();
@@ -110,13 +111,13 @@ impl<'ctx> ExecutionEngine<'ctx> {
         let mut computer = ARMCORTEXA::new(context);
 
         // load computer static memory
-        let mut address = 4;
+        let mut address = 0;
         for def in defs.iter() {
             let v: Vec<&str> = def.split(|c| c == '\t' || c == ',' || c == ' ').collect();
             if v[0] == ".align" {
                 //let alignment = v[1].parse::<usize>().expect("engine");
                 // do nothing for now
-            } else if v[0] == ".byte" || v[0] == ".long" || v[0] == ".quad" {
+            } else if v[0] == ".long" {
                 for i in v.iter().skip(1) {
                     let num: i64;
                     if i.contains("x") {
@@ -131,7 +132,41 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     computer.add_memory_value("memory".to_string(), address, num);
                     // address = address + (alignment as i64);
                     // heap grows down
-                    address = address + 4;
+                    address = address + 16;
+                }
+            } else if v[0] == ".quad" {
+                for i in v.iter().skip(1) {
+                    let num: i64;
+                    if i.contains("x") {
+                        num = u64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
+                            .expect("engine3") as i64;
+                    } else {
+                        if i.is_empty() {
+                            continue;
+                        }
+                        num = i.parse::<i64>().expect("engine4");
+                    }
+                    computer.add_memory_value("memory".to_string(), address, num);
+                    // address = address + (alignment as i64);
+                    // heap grows down
+                    address = address + 32;
+                }
+            } else if v[0] == ".byte" {
+                for i in v.iter().skip(1) {
+                    let num: i64;
+                    if i.contains("x") {
+                        num = u64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
+                            .expect("engine3") as i64;
+                    } else {
+                        if i.is_empty() {
+                            continue;
+                        }
+                        num = i.parse::<i64>().expect("engine4");
+                    }
+                    computer.add_memory_value("memory".to_string(), address, num);
+                    // address = address + (alignment as i64);
+                    // heap grows down
+                    address = address + 8;
                 }
             } else if v[0] == ".globl" || v[0] == ".private_extern" {
                 computer.memory_labels.insert(v[1].to_string(), address);
@@ -139,6 +174,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 computer
                     .memory_labels
                     .insert(def.strip_suffix(":").unwrap_or(def).to_string(), address);
+            } else {
+                address = address + 16;
             }
         }
 
@@ -799,7 +836,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             };
 
                             self.computer.registers[i] = new_reg;
-
                             if diff > max_diff {
                                 max_diff = diff;
                             }
