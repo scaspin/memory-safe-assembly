@@ -728,9 +728,14 @@ mod tests {
     }
 
 
-    use aes::Aes128;
-    use aes::cipher::{KeyInit, BlockEncrypt, generic_array::GenericArray};
 
+    type Aes128Ctr32 = ctr::Ctr32BE<Aes128>;
+    use ctr::cipher::KeyIvInit;
+    use ctr::cipher::StreamCipher;
+
+    use aes::Aes128;
+    use aes::cipher::{generic_array::GenericArray};
+    use aws_lc_rs::test::from_hex;
 
     #[cfg(feature = "nightly")]
     #[bench]
@@ -738,17 +743,24 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         b.iter(|| {
-            let mut block = GenericArray::from([rng.gen::<u8>(); 16]);
-            let key = GenericArray::from([0u8; 16]);
-            let mut block = GenericArray::from([42u8; 16]);
+            let mut blocks = GenericArray::from([rng.gen::<u8>(); 128]);
             
             // Initialize cipher
-            let cipher = Aes128::new(&key);
+            let key_string = "000102030405060708090a0b0c0d0e0f";
+            let key_vec = from_hex(key_string).expect("something");
+            let key_slice = key_vec.as_slice();
+            let key_arr : [u8;16] = key_slice.try_into().expect("something");
+            let key = GenericArray::from(key_arr);
             
-            let block_copy = block.clone();
+            let iv_string = "000102030405060708090a0b0c0d0e0f";
+            let iv_vec = from_hex(iv_string).expect("something");
+            let iv_slice = iv_vec.as_slice();
+            let iv_arr : [u8;16] = iv_slice.try_into().expect("something");
+            let iv = GenericArray::from(iv_arr);
+            let mut cipher = Aes128Ctr32::new((&key).into(), (&iv).into());
 
-            let mut blocks = [block; 8];
-            let res = cipher.encrypt_blocks(&mut blocks);
+            let _ = cipher.apply_keystream(&mut blocks);
+            // res = cipher.encrypt_blocks(&mut blocks);
         })
     }
 }
