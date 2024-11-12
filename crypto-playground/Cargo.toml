@@ -18,12 +18,12 @@ ctr = "0.9.2"
 
 [dev-dependencies]
 aws-lc-rs = "*"
-aws-lc-sys = "0.22.0"
+#aws-lc-sys = "0.22.0"
 
 [build-dependencies]
-rustc_version = "0.4.1"
-bums_macros = { path = "../bums_macros" }
-cc = "1.0.90"
+#rustc_version = "0.4.1"
+#bums_macros = { path = "../bums_macros" }
+#cc = "1.0.90"
 
 [features]
 nightly = []

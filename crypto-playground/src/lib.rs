@@ -1,13 +1,14 @@
-#![cfg_attr(feature = "nightly", feature(test))]
+#![feature(test)]
 
 pub mod aes;
-pub mod awslc;
-pub mod bn;
-pub mod ghash;
-pub mod md5;
-pub mod sha1;
-pub mod sha256;
-mod utils;
+//pub mod awslc;
+//pub mod bn;
+//pub mod ghash;
+//pub mod md5;
+//pub mod sha1;
+//pub mod sha256;
+//mod utils;
+
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 // TODO(alevy): This should be computed as in AWS-LC's 'crypto/fipsmodule/cpucap'

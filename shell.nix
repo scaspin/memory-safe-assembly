@@ -5,6 +5,7 @@ pkgsCross.aarch64-multiplatform.callPackage ({ mkShell, pkgs }: mkShell {
   nativeBuildInputs = [
     rustup
     clang
+    gcc
   ];
 
   buildInputs = [
