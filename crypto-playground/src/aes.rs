@@ -381,8 +381,8 @@ mod tests {
             let context = EncryptionContext::Iv128(unsafe { std::mem::transmute([0u8; 16]) });
 
             let input: &mut [u8] = &mut vec![0xdeu8; 16 * 1024];
-            let _ = cipher.encrypt(input);
-            //let _ = cipher.less_safe_encrypt(input, context);
+            //let _ = cipher.encrypt(input);
+            let _ = cipher.less_safe_encrypt(input, context);
         })
     }
 
@@ -406,7 +406,13 @@ mod tests {
 
         b.iter(|| {
             let cipher = Aes128::new(&key);
+            let mut ctr = [GenericArray::from([0x0; 16]); 1024];
             let _res = cipher.encrypt_blocks(&mut blocks);
+            for (block, ctr) in blocks.iter_mut().zip(ctr.iter()) {
+                for (b,c) in block.iter_mut().zip(ctr.iter()) {
+                    *b = *b ^ *c;
+                }
+            }
         })
     }
 }
