@@ -681,25 +681,31 @@ mod tests {
         };
         use aws_lc_rs::test::from_hex;
 
+        let key_string = "000102030405060708090a0b0c0d0e0f";
+        let key = from_hex(key_string).unwrap();
+        let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
+        let mut encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
+        let context = encrypting_key
+            .algorithm()
+            .new_encryption_context(encrypting_key.mode())
+            .expect("expect context");
+
+        let key_bytes = encrypting_key.key.key();
+        let key = &mut AesKey::new_from_bytes(key_bytes);
+
+        let im = match context {
+            EncryptionContext::Iv128(ref v) => v.as_ref(),
+        };
+        let mut ivec = im.clone();
+        let block_buffer: &mut [u8; 16] = &mut [0; 16];
+
         b.iter(|| {
-            let key_string = "000102030405060708090a0b0c0d0e0f";
-            let key = from_hex(key_string).unwrap();
-            let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
-            let mut encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
             let context = encrypting_key
-                .algorithm()
-                .new_encryption_context(encrypting_key.mode())
-                .expect("expect context");
-
-            let key_bytes = encrypting_key.key.key();
-            let key = &mut AesKey::new_from_bytes(key_bytes);
+            .algorithm()
+            .new_encryption_context(encrypting_key.mode())
+            .expect("expect context");
+            
             let input: &mut [u8] = &mut vec![rng.gen::<u8>(); 128];
-
-            let im = match context {
-                EncryptionContext::Iv128(ref v) => v.as_ref(),
-            };
-            let mut ivec = im.clone();
-            let block_buffer: &mut [u8; 16] = &mut [0; 16];
             AES_ctr128_encrypt(key, &mut ivec, block_buffer, input);
         })
     }
@@ -711,16 +717,16 @@ mod tests {
 
         use crate::aes::tests::cipher::{EncryptingKey, UnboundCipherKey, AES_128};
         use aws_lc_rs::test::from_hex;
+        let key_string = "000102030405060708090a0b0c0d0e0f";
+        let key = from_hex(key_string).unwrap();
+        let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
+        let encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
 
         b.iter(|| {
-            let key_string = "000102030405060708090a0b0c0d0e0f";
-            let key = from_hex(key_string).unwrap();
-            let cipher_key = UnboundCipherKey::new(&AES_128, key.as_slice()).unwrap();
-            let encrypting_key = EncryptingKey::ctr(cipher_key).unwrap();
             let context = encrypting_key
-                .algorithm()
-                .new_encryption_context(encrypting_key.mode())
-                .expect("expect context");
+            .algorithm()
+            .new_encryption_context(encrypting_key.mode())
+            .expect("expect context");
 
             let input: &mut [u8] = &mut vec![rng.gen::<u8>(); 128];
             let _ = encrypting_key.less_safe_encrypt(input, context);
@@ -742,25 +748,16 @@ mod tests {
     fn bench_aes_ctr_rustcrypto_full_impl(b: &mut Bencher) {
         let mut rng = rand::thread_rng();
 
-        b.iter(|| {
-            let mut blocks = GenericArray::from([rng.gen::<u8>(); 128]);
-            
-            // Initialize cipher
-            let key_string = "000102030405060708090a0b0c0d0e0f";
-            let key_vec = from_hex(key_string).expect("something");
-            let key_slice = key_vec.as_slice();
-            let key_arr : [u8;16] = key_slice.try_into().expect("something");
-            let key = GenericArray::from(key_arr);
-            
-            let iv_string = "000102030405060708090a0b0c0d0e0f";
-            let iv_vec = from_hex(iv_string).expect("something");
-            let iv_slice = iv_vec.as_slice();
-            let iv_arr : [u8;16] = iv_slice.try_into().expect("something");
-            let iv = GenericArray::from(iv_arr);
-            let mut cipher = Aes128Ctr32::new((&key).into(), (&iv).into());
+        let key_slice = b"0001020304050607";
+        let iv_slice = b"1020304050607892";
+        let _ = from_hex("0001020304050607").unwrap();
+        let key = GenericArray::from(*key_slice);
+        let iv = GenericArray::from(*iv_slice);
 
-            let _ = cipher.apply_keystream(&mut blocks);
-            // res = cipher.encrypt_blocks(&mut blocks);
+        b.iter(|| {
+            let mut cipher = Aes128Ctr32::new(&key.into(), &iv.into());
+            let mut input = GenericArray::from([rng.gen::<u8>(); 128]);
+            cipher.apply_keystream(&mut input);
         })
     }
 }

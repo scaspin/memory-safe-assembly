@@ -75,28 +75,31 @@ def plot_group_asm(df, title, filename):
 def plot_group_full(df, title, filename):
     # df.sort_values(by="mean", inplace=True)
     x = np.arange(3)
-    width = 0.3
+    width = 0.2
 
     patterns = [ "/", "/", "o","+", "*" ]
 
     plt.bar(0-0.3, df['mean'].values[0], width, yerr=df["std_dev"].values[0],capsize=5,  color='#ff7f0e',  hatch=patterns[1])
-    plt.bar(0, df['mean'].values[1], width, yerr=df["std_dev"].values[1],capsize=5,  color='#1f77b4', hatch=patterns[2])
-    plt.bar(0+0.3, df['mean'].values[2], width, yerr=df["std_dev"].values[2],capsize=5,  color='#B7410E', hatch=patterns[3])  
+    plt.bar(0-0.1, df['mean'].values[1], width, yerr=df["std_dev"].values[1],capsize=5,  color='#1f77b4', hatch=patterns[2])
+    plt.bar(0+0.1, df['mean'].values[2], width, yerr=df["std_dev"].values[2],capsize=5,  color='#B7410E', hatch=patterns[3])
+    plt.bar(0+0.3, df['mean'].values[3], width, yerr=df["std_dev"].values[2],capsize=5,  color='green', hatch=patterns[4])   
 
-    plt.bar(1-0.3, df['mean'].values[3], width,yerr=df["std_dev"].values[4], capsize=5, color='#ff7f0e', hatch=patterns[1])
-    plt.bar(1, df['mean'].values[4], width, yerr=df["std_dev"].values[4], capsize=5, color='#1f77b4', hatch=patterns[2])
-    plt.bar(1+0.3, df['mean'].values[5], width, yerr=df["std_dev"].values[5],capsize=5,  color='#B7410E', hatch=patterns[3])    
+    plt.bar(1-0.3, df['mean'].values[4], width,yerr=df["std_dev"].values[4], capsize=5, color='#ff7f0e', hatch=patterns[1])
+    plt.bar(1-0.1, df['mean'].values[5], width, yerr=df["std_dev"].values[4], capsize=5, color='#1f77b4', hatch=patterns[2])
+    plt.bar(1+0.1, df['mean'].values[6], width, yerr=df["std_dev"].values[5],capsize=5,  color='#B7410E', hatch=patterns[3])    
+    plt.bar(1+0.3, df['mean'].values[7], width, yerr=df["std_dev"].values[2],capsize=5,  color='green', hatch=patterns[4])  
 
-    plt.bar(2-0.3, df['mean'].values[6], width,yerr=df["std_dev"].values[6], capsize=5, color='#ff7f0e', hatch=patterns[1])
-    plt.bar(2, df['mean'].values[8], width,yerr=df["std_dev"].values[8], capsize=5, color='#1f77b4', hatch=patterns[2]) 
-    plt.bar(2+0.3, df['mean'].values[9], width, yerr=df["std_dev"].values[9],capsize=5,  color='#B7410E', hatch=patterns[3])   
+    plt.bar(2-0.3, df['mean'].values[8], width,yerr=df["std_dev"].values[6], capsize=5, color='#ff7f0e', hatch=patterns[1])
+    plt.bar(2-0.1, df['mean'].values[10], width,yerr=df["std_dev"].values[8], capsize=5, color='#1f77b4', hatch=patterns[2]) 
+    plt.bar(2+0.1, df['mean'].values[11], width, yerr=df["std_dev"].values[9],capsize=5,  color='#B7410E', hatch=patterns[3]) 
+    plt.bar(2+0.3, df['mean'].values[12], width, yerr=df["std_dev"].values[2],capsize=5,  color='green', hatch=patterns[4])    
     plt.ylabel("Execution Time (ns)")  
 
     print(df)
 
     plt.xticks(x, ['AES', 'SHA1', 'SHA256']) 
     plt.xlabel("Algorithms")  
-    plt.legend(["aws-lc", "CLAMS", "RustCrypto"],fontsize=15, loc='upper right')
+    plt.legend(["aws-lc", "CLAMS", "RustCrypto Safe", "RustCrypto w/hw"],fontsize=15, loc='upper right')
     plt.tight_layout()
     plt.savefig(filename, format='png')
     plt.close()

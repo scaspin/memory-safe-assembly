@@ -316,11 +316,11 @@ mod tests {
     #[bench]
     fn bench_sha1_clams_full_impl(b: &mut Bencher) {
         let mut rng = rand::thread_rng();
+        let mut v = vec![0; 20];
+        let mut output: &mut [u8] = v.as_mut_slice();
 
         b.iter(|| {
             let message = vec![rng.gen::<u8>(); 100];
-            let mut v = vec![0; 20];
-            let mut output: &mut [u8] = v.as_mut_slice();
             sha1_digest(&message, &mut output);
         })
     }

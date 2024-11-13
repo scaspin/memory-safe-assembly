@@ -124,7 +124,7 @@ pub fn sha256_digest(msg: &[u8], output: &mut [u8]) {
     sha256(msg, msg.len(), output);
 }
 
-fn sha256_update_unsafeasm(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Result<(), ()> {
+fn sha256_update_hw(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Result<(), ()> {
     //call to crypt_md32_update
     let mut len = len;
     let mut msg = msg;
@@ -173,7 +173,7 @@ fn sha256_update_unsafeasm(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Resu
     Ok(())
 }
 
-fn sha256_final_unsafeasm(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), ()> {
+fn sha256_final_hw(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), ()> {
     // call to crypto_md32_final
     let mut n = ctx.num as usize;
     assert!(n < SHA256_CBLOCK);
@@ -202,17 +202,17 @@ fn sha256_final_unsafeasm(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), ()
     Ok(())
 }
 
-fn sha256_unsafeasm(data: &[u8], len: usize, out: &mut [u8]) {
+fn sha256_hw(data: &[u8], len: usize, out: &mut [u8]) {
     let mut ctx = SHA256_CTX::init();
 
-    sha256_update_unsafeasm(&mut ctx, data, len).expect("Update");
-    sha256_final_unsafeasm(out, &mut ctx).expect("Final");
+    sha256_update_hw(&mut ctx, data, len).expect("Update");
+    sha256_final_hw(out, &mut ctx).expect("Final");
 }
 
 // straight out of aws-cl-rs
 // https://github.com/aws/aws-lc-rs/blob/0d8ef6cf53429cfabadbde73a986bd3528054178/aws-lc-rs/src/digest/sha.rs#L212
-pub fn sha256_digest_unsafeasm(msg: &[u8], output: &mut [u8]) {
-    sha256_unsafeasm(msg, msg.len(), output);
+pub fn sha256_digest_hw(msg: &[u8], output: &mut [u8]) {
+    sha256_hw(msg, msg.len(), output);
 }
 
 #[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64, input.len()%64==0])]
@@ -472,12 +472,12 @@ mod tests {
     #[bench]
     fn bench_sha256_clams_full_impl_hw(b: &mut Bencher) {
         let mut rng = rand::thread_rng();
+        let mut v = vec![0; 32];
+        let mut output: &mut [u8] = v.as_mut_slice();
 
         b.iter(|| {
             let message = vec![rng.gen::<u8>(); 128];
-            let mut v = vec![0; 32];
-            let mut output: &mut [u8] = v.as_mut_slice();
-            sha256_digest_unsafeasm(&message, &mut output);
+            sha256_digest_hw(&message, &mut output);
         })
     }
 
