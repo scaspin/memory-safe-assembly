@@ -262,6 +262,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "aws-lc-rs",
+ "aws-lc-sys",
  "block-modes",
  "bums_macros",
  "byteorder",

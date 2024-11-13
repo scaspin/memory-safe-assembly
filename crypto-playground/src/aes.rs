@@ -371,7 +371,7 @@ mod tests {
     fn bench_aes_ctr_aws_full_impl(b: &mut Bencher) {
         use aws_lc_rs::cipher::{EncryptionContext, EncryptingKey, UnboundCipherKey, AES_128};
 
-        let mut blocks = [[0xde; 16]; 1024];
+        let mut input = [0xdeu8; 16 * 1024];
         // Initialize cipher
         let key = b"0001020304050607";
 
@@ -380,17 +380,16 @@ mod tests {
             let cipher = EncryptingKey::ctr(key).unwrap();
             let context = EncryptionContext::Iv128(unsafe { std::mem::transmute([0u8; 16]) });
 
-            let input: &mut [u8] = &mut vec![0xdeu8; 16 * 1024];
             //let _ = cipher.encrypt(input);
-            let _ = cipher.less_safe_encrypt(input, context);
+            let _ = cipher.less_safe_encrypt(&mut input, context);
         })
     }
 
 
 
-    //type Aes128Ctr32 = ctr::Ctr32BE<Aes128>;
-    //use ctr::cipher::KeyIvInit;
-    //use ctr::cipher::StreamCipher;
+    type Aes128Ctr64 = ctr::Ctr64LE<Aes128>;
+    use ctr::cipher::KeyIvInit;
+    use ctr::cipher::StreamCipher;
 
     use aes::Aes128;
     use aes::cipher::{KeyInit, BlockEncrypt, generic_array::GenericArray};
@@ -398,21 +397,13 @@ mod tests {
 
     #[bench]
     fn bench_aes_ctr_rustcrypto_full_impl(b: &mut Bencher) {
-        let mut blocks = [GenericArray::from([0xde; 16]); 1024];
-        // Initialize cipher
-        let key_slice = b"0001020304050607";
-        let key = GenericArray::from(*key_slice);
-
+        let key = [42; 16];
+        let iv = [0; 16];
+        let mut input = [0xdeu8; 16 * 1024];
 
         b.iter(|| {
-            let cipher = Aes128::new(&key);
-            let mut ctr = [GenericArray::from([0x0; 16]); 1024];
-            let _res = cipher.encrypt_blocks(&mut blocks);
-            for (block, ctr) in blocks.iter_mut().zip(ctr.iter()) {
-                for (b,c) in block.iter_mut().zip(ctr.iter()) {
-                    *b = *b ^ *c;
-                }
-            }
+            let mut cipher = Aes128Ctr64::new(&key.into(), &iv.into());
+            cipher.apply_keystream(&mut input);
         })
     }
 }

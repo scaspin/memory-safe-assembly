@@ -15,10 +15,12 @@ sha1 = "0.10.6"
 aes = "0.8.4"
 block-modes = "0.9.1"
 ctr = "0.9.2"
+aws-lc-rs = "*"
+aws-lc-sys = "*"
 
 [dev-dependencies]
 aws-lc-rs = "*"
-#aws-lc-sys = "0.22.0"
+aws-lc-sys = "*"
 
 [build-dependencies]
 #rustc_version = "0.4.1"
