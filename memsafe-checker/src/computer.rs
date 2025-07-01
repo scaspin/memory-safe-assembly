@@ -523,7 +523,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             RegisterKind::Immediate,
                             None,
                             0,
-                        ); 
+                        );
                     } else {
                         self.arithmetic(
                             &instruction.op,
@@ -706,7 +706,6 @@ impl<'ctx> ARMCORTEXA<'_> {
                     );
                 }
                 "adr" => {
-                "adrp" | "adr" => {
                     let address = self.operand(instruction.r2.clone().expect("Need address label"));
                     self.set_register(
                         instruction.r1.clone().expect("need dst register"),
@@ -1974,11 +1973,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                             };
                         } else {
                             if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-                                    let dest = &mut self.simd_registers
-                                        [get_register_index(vector1.to_string())];
-                                    let src = &mut self.registers[get_register_index(reg2)]; 
+                                let dest = &mut self.simd_registers
+                                    [get_register_index(vector1.to_string())];
+                                let src = &mut self.registers[get_register_index(reg2)];
 
-                                    dest.set_register(arrangement1.to_string(), src.kind.clone(), src.base.clone(), src.offset as u128);
+                                dest.set_register(
+                                    arrangement1.to_string(),
+                                    src.kind.clone(),
+                                    src.base.clone(),
+                                    src.offset as u128,
+                                );
                             };
                         }
                     }

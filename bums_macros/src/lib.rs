@@ -57,7 +57,7 @@ fn calculate_size_of(ty: String) -> usize {
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
         "u128" => std::mem::size_of::<u128>(),
-        "usize" => std::mem::size_of::<u128>(),        
+        "usize" => std::mem::size_of::<u128>(),
         "isize" => std::mem::size_of::<isize>(),
         p => {
             if let Ok(v) = p.parse::<usize>() {

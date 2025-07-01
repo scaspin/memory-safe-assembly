@@ -1,0 +1,58 @@
+
+running 50 tests
+test aes::tests::test_aes_against_aws_lc_low_level ... ignored
+test aes::tests::test_aes_against_aws_lc_rs_aes_encrypt_public ... ignored
+test aes::tests::test_aes_deterministic ... ignored
+test aes::tests::test_aes_hw_ctr32_encrypt_blocks_asm_impl ... ignored
+test aes::tests::test_vpaes_ctr32_encrypt_blocks_asm_impl ... ignored
+test aes::tests::test_vpaes_encrypt_asm_impl ... ignored
+test awslc::tests::test_gcm_init_v8_call_to_asm ... ignored
+test awslc::tests::test_md5_block_asm_data_order_call_to_asm ... ignored
+test bn::tests::test_add_asm_works ... ignored
+test bn::tests::test_add_impl ... ignored
+test bn::tests::test_bn_add_asm_impls ... ignored
+test bn::tests::test_bn_sub_asm_impls ... ignored
+test bn::tests::test_sub_asm_works ... ignored
+test bn::tests::test_sub_impl ... ignored
+test ghash::tests::test_gcm_neon_ghash_call_to_asm ... ignored
+test ghash::tests::test_gcm_neon_gmult_call_to_asm ... ignored
+test ghash::tests::test_gcm_neon_init_call_to_asm ... ignored
+test md5::tests::test_md5_asm_impls ... ignored
+test sha1::tests::test_sha1_asm_impls ... ignored
+test sha1::tests::test_sha1_final_step ... ignored
+test sha1::tests::test_sha1_full ... ignored
+test sha1::tests::test_sha1_steps ... ignored
+test sha256::tests::test_sha256_asm_impls ... ignored
+test sha256::tests::test_sha256_final_step ... ignored
+test sha256::tests::test_sha256_full ... ignored
+test sha256::tests::test_sha256_steps ... ignored
+test aes::tests::bench_aes_ctr_aws_full_impl          ... bench:         421.35 ns/iter (+/- 21.51)
+test aes::tests::bench_aes_ctr_clams_full_impl        ... bench:         493.47 ns/iter (+/- 42.85)
+test aes::tests::bench_aes_ctr_rustcrypto_full_impl   ... bench:         911.50 ns/iter (+/- 42.31)
+test aes::tests::bench_aes_ctr_rustcrypto_full_impl_hw   ... bench:         124.61 ns/iter (+/- 1.30)
+test aes::tests::bench_aes_hw_ctr32_aws_assembly      ... bench:          43.98 ns/iter (+/- 1.11)
+test aes::tests::bench_aes_hw_ctr32_clams_assembly    ... bench:          45.55 ns/iter (+/- 0.12)
+test aes::tests::bench_vpaes_aws_assembly             ... bench:         334.56 ns/iter (+/- 3.74)
+test aes::tests::bench_vpaes_clams_assembly           ... bench:         335.94 ns/iter (+/- 1.99)
+test md5::tests::bench_md5_aws_assembly               ... bench:         204.47 ns/iter (+/- 9.26)
+test md5::tests::bench_md5_clams_assembly             ... bench:         204.37 ns/iter (+/- 3.41)
+test sha1::tests::bench_sha1_aws_assembly             ... bench:          46.75 ns/iter (+/- 0.40)
+test sha1::tests::bench_sha1_aws_assembly_nohw        ... bench:          98.34 ns/iter (+/- 0.62)
+test sha1::tests::bench_sha1_aws_full_impl            ... bench:          82.20 ns/iter (+/- 3.71)
+test sha1::tests::bench_sha1_clams_assembly           ... bench:          46.71 ns/iter (+/- 1.64)
+test sha1::tests::bench_sha1_clams_assembly_nohw      ... bench:          98.38 ns/iter (+/- 0.76)
+test sha1::tests::bench_sha1_clams_full_impl          ... bench:          77.75 ns/iter (+/- 0.41)
+test sha1::tests::bench_sha1_rustcrypto_full_impl     ... bench:         158.91 ns/iter (+/- 0.91)
+test sha1::tests::bench_sha1_rustcrypto_full_impl_hw     ... bench:         158.94 ns/iter (+/- 1.52)
+test sha256::tests::bench_sha256_aws_full_impl        ... bench:         101.06 ns/iter (+/- 2.43)
+test sha256::tests::bench_sha256_clams_full_impl      ... bench:         538.07 ns/iter (+/- 5.18)
+test sha256::tests::bench_sha256_clams_full_impl_hw   ... bench:          97.30 ns/iter (+/- 4.09)
+test sha256::tests::bench_sha256_hw_aws_assembly      ... bench:          66.20 ns/iter (+/- 1.78)
+test sha256::tests::bench_sha256_hw_clams_assembly    ... bench:          64.55 ns/iter (+/- 0.42)
+test sha256::tests::bench_sha256_nohw_aws_assembly    ... bench:         344.91 ns/iter (+/- 3.48)
+test sha256::tests::bench_sha256_nohw_clams_assembly  ... bench:         344.91 ns/iter (+/- 1.77)
+test sha256::tests::bench_sha256_rustcrypto_full_impl ... bench:         568.91 ns/iter (+/- 20.30)
+test sha256::tests::bench_sha256_rustcrypto_full_impl_hw ... bench:         105.87 ns/iter (+/- 0.65)
+
+test result: ok. 0 passed; 0 failed; 26 ignored; 24 measured; 0 filtered out; finished in 6.59s
+

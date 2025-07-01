@@ -74,7 +74,6 @@ fn sha256_update(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Result<(), ()>
         len = len - n;
     }
 
-
     if len != 0 {
         ctx.num = len as u32;
         ms_memcpy(&mut ctx.data, msg, len);
@@ -139,7 +138,11 @@ fn sha256_update_unsafe_asm(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Res
     if n != 0 {
         if len > SHA256_CBLOCK || len + n >= SHA256_CBLOCK {
             ms_memcpy(&mut ctx.data[n..], msg, SHA256_CBLOCK - n);
-            sha256_block_data_order_unsafe_asm(ctx.h.as_mut_ptr(), ctx.data.as_ptr(), ctx.data.len()/64);
+            sha256_block_data_order_unsafe_asm(
+                ctx.h.as_mut_ptr(),
+                ctx.data.as_ptr(),
+                ctx.data.len() / 64,
+            );
             n = SHA256_CBLOCK - n;
             msg = &msg[n..];
             len = len - n;
@@ -154,12 +157,11 @@ fn sha256_update_unsafe_asm(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Res
 
     n = len / SHA256_CBLOCK;
     if n > 0 {
-        sha256_block_data_order_unsafe_asm(ctx.h.as_mut_ptr(), msg.as_ptr(), msg.len()/64);
+        sha256_block_data_order_unsafe_asm(ctx.h.as_mut_ptr(), msg.as_ptr(), msg.len() / 64);
         n = n * SHA256_CBLOCK;
         msg = &msg[n..];
         len = len - n;
     }
-    
 
     if len != 0 {
         ctx.num = len as u32;
@@ -225,7 +227,7 @@ extern "C" {
 
 fn sha256_block_data_order_unsafe_asm(context: *mut u32, input: *const u8, input_len: usize) {
     unsafe {
-        aws_sha256_block_data_order(context, input, input_len); 
+        aws_sha256_block_data_order(context, input, input_len);
     }
 }
 
