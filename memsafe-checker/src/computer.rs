@@ -568,7 +568,8 @@ impl<'ctx> ARMCORTEXA<'_> {
                         instruction.r3.clone().expect("Need two operand"),
                     );
                 }
-                "adcs" | "adc" => match self.carry.clone() {
+                "adcs" | "adc" => {
+                    match self.carry.clone() {
                     Some(FlagValue::Real(b)) => {
                         if b == true {
                             self.arithmetic(
@@ -623,6 +624,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                             AbstractExpression::Immediate(1)),
                          instruction.r1.clone().expect("need dst register"), opt1, opt2));
                     }
+                    }
+                    //update flags
+                    self.cmn(instruction.r1.clone().expect("need register to compare"),instruction.r2.clone().expect("need register to compare"), );
                 },
                 "sbcs" | "sbc" => match self.carry.clone() { // FIX: split
                     Some(FlagValue::Real(b)) => {
@@ -751,7 +755,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         .expect("Need to provide a condition")
                         .as_str()
                     {
-                        "cs" => match self.carry.clone().expect("Need carry flag set") {
+                        "cs" => match self.carry.clone().expect("Need carry flag set cset cs") {
                             FlagValue::Real(b) => {
                                 if b == true {
                                     self.set_register(
@@ -774,7 +778,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 todo!("Abstract Flag Expression3");
                             }
                         },
-                        "cc" | "lo" => match self.carry.clone().expect("Need carry flag set") {
+                        "cc" | "lo" => match self.carry.clone().expect("Need carry flag set cset cc") {
                             FlagValue::Real(b) => {
                                 if b == false {
                                     self.set_register(
@@ -808,7 +812,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         .expect("Need to provide a condition")
                         .as_str()
                     {
-                        "cc" | "lo" => match self.carry.clone().expect("Need carry flag set") {
+                        "cc" | "lo" => match self.carry.clone().expect("Need carry flag set csel cc") {
                             FlagValue::Real(b) => {
                                 if b == true {
                                     let register = self.registers[get_register_index(
@@ -941,6 +945,50 @@ impl<'ctx> ARMCORTEXA<'_> {
                             };
                         },
                         _ => todo!("unsupported comparison type for csel {:?}", instruction.r4),
+                    }
+                }
+                "csetm" => {
+                    // match on condition based on flags
+                    match instruction
+                        .r2
+                        .clone()
+                        .expect("Need to provide a condition")
+                        .as_str()
+                    {
+                        "eq" => match self.zero.clone().expect("Need zero flag set") {
+                            FlagValue::Real(b) => {
+                                if b == true {
+                                    self.set_register(
+                                        instruction.r1.clone().expect("need dst register"),
+                                        RegisterKind::Immediate,
+                                        None,
+                                        1,
+                                    );
+                                } else {
+                                    self.set_register(
+                                        instruction.r1.clone().expect("need dst register"),
+                                        RegisterKind::Immediate,
+                                        None,
+                                        0,
+                                    );
+                                }
+                            }
+                            FlagValue::Abstract(a) => {
+                                let opt1 = RegisterValue {
+                                    kind: RegisterKind::Immediate,
+                                    base: None,
+                                    offset: 1,
+                                };
+                                let opt2= RegisterValue {
+                                    kind: RegisterKind::Immediate,
+                                    base: None,
+                                    offset: 1,
+                                };
+
+                                return Ok(ExecuteReturnType::Select(a, instruction.r1.clone().expect("need dst register"), opt1, opt2));
+                            }
+                        },
+                        _ => todo!("unsupported comparison type {:?}", instruction.r2),
                     }
                 }
                 "cmp" => {
@@ -1862,7 +1910,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 }
                             };
                         } else {
-                            todo!("unsupported dup from general purpose") // from general purpose register
+                            if let Some((vector1, arrangement1)) = reg1.split_once(".") {
+                                    let dest = &mut self.simd_registers
+                                        [get_register_index(vector1.to_string())];
+                                    let src = &mut self.registers[get_register_index(reg2)]; 
+
+                                    dest.set_register(arrangement1.to_string(), src.kind.clone(), src.base.clone(), src.offset as u128);
+                            };
                         }
                     }
                     "and" => {
@@ -2206,7 +2260,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 }
                             }
                         }
-                    }
+                    } 
+                    // "bit" => {
+                    // }
                     _ => {
                         log::warn!("SIMD instruction not supported {:?}", instruction);
                         todo!("unsupported vector operation {:?}", instruction);
@@ -2961,7 +3017,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 .get(&"memory".to_string())
                                 .expect("memory should exist")
                         } else {
-                            todo!("memory regions in access check");
+                            todo!("memory regions in access check {:?}", regbase);
                         }
                     }
                 },
