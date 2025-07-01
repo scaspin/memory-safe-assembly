@@ -58,7 +58,13 @@ fn calculate_size_of(ty: String) -> usize {
         "u64" => std::mem::size_of::<u64>(),
         "u128" => std::mem::size_of::<u128>(),
         "usize" => std::mem::size_of::<u128>(),
-        _ => todo!("size of type"),
+        p => {
+            if let Ok(v) = p.parse::<usize>() {
+                return v;
+            } else {
+                todo!("size of undefined type")
+            }
+        }
     }
 }
 
@@ -93,7 +99,25 @@ fn calculate_type_of_array_ptr(a: &TypeArray) -> String {
         Type::Path(b) => {
             elem = b.path.segments[0].ident.to_string();
         }
-        _ => todo!("calculate type of array not with path"),
+        Type::Array(r) => {
+            let inner;
+            let size;
+            match &*r.elem {
+                Type::Path(p) => {
+                    inner = p.path.segments[0].ident.to_string();
+                }
+                _ => todo!("calculate type of array not with path {:?}", r),
+            }
+            match &r.len {
+                Expr::Lit(l) => match &l.lit {
+                    Lit::Int(i) => size = i.to_string(),
+                    _ => todo!(),
+                },
+                _ => todo!(),
+            }
+            elem = "[".to_owned() + &inner + &";" + &size + "]";
+        }
+        _ => todo!("calculate type of array not with path {:?}", a),
     }
     return elem;
 }
@@ -447,7 +471,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
                                     "u128" => new_args.push(parse_quote! {#n: *mut u128}),
-                                    _ => todo!("ptr array size 2"),
+                                    "[u64;5]" => new_args.push(parse_quote! {#n: *mut [u64;5]}), // TODO: automate
+                                    _ => todo!("ptr array size 2 {:?}", size),
                                 }
                             } else {
                                 new_args.push(parse_quote! {#n: *mut usize});

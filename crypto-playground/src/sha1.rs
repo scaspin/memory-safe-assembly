@@ -119,6 +119,7 @@ mod tests {
     use super::*;
     use aws_lc_rs::digest::digest;
     use aws_lc_rs::digest::SHA1_FOR_LEGACY_USE_ONLY as SHA1;
+    
 
     extern "C" {
         #[link_name = "aws_lc_0_14_1_sha1_block_data_order"]
