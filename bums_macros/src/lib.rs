@@ -57,7 +57,8 @@ fn calculate_size_of(ty: String) -> usize {
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
         "u128" => std::mem::size_of::<u128>(),
-        "usize" => std::mem::size_of::<u128>(),
+        "usize" => std::mem::size_of::<u128>(),        
+        "isize" => std::mem::size_of::<isize>(),
         p => {
             if let Ok(v) = p.parse::<usize>() {
                 return v;
@@ -167,6 +168,14 @@ fn binary_to_abstract_comparison(input: &ExprBinary) -> AbstractComparison {
         _ => todo!("comparison conversion"),
     }
 }
+fn unary_to_abstract_expression(input: &ExprUnary) -> AbstractExpression {
+    let expr = syn_expr_to_abstract_expression(&input.expr);
+    match input.op {
+        UnOp::Not(_) => return generate_expression("!", expr, AbstractExpression::Empty),
+        UnOp::Neg(_) => return generate_expression("-", expr, AbstractExpression::Empty),
+        _ => todo!("unary conversion"),
+    }
+}
 
 fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
     match &input {
@@ -180,6 +189,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
             _ => todo!("Input Literal type"),
         },
         Expr::Binary(b) => return binary_to_abstract_expression(b),
+        Expr::Unary(b) => return unary_to_abstract_expression(b),
         Expr::MethodCall(c) => {
             let mut var_name: String;
             match *c.receiver.clone() {
@@ -453,9 +463,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 match size.as_str() {
                                     "u8" => new_args.push(parse_quote! {#n: *const u8}),
                                     "u16" => new_args.push(parse_quote! {#n: *const u16}),
+                                    "i16" => new_args.push(parse_quote! {#n: *const i16}),
                                     "u32" => new_args.push(parse_quote! {#n: *const u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *const u64}),
                                     "u128" => new_args.push(parse_quote! {#n: *const u128}),
+                                    "usize" => new_args.push(parse_quote! {#n: *const usize}),
                                     _ => todo!("ptr array size 1"),
                                 }
                             } else {
@@ -472,7 +484,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
                                     "u128" => new_args.push(parse_quote! {#n: *mut u128}),
                                     "[u64;5]" => new_args.push(parse_quote! {#n: *mut [u64;5]}), // TODO: automate
-                                    _ => todo!("ptr array size 2 {:?}", size),
+                                    "usize" => new_args.push(parse_quote! {#n: *mut usize}),
+                                    _ => todo!("ptr array size 2"),
                                 }
                             } else {
                                 new_args.push(parse_quote! {#n: *mut usize});
@@ -491,14 +504,27 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         new_args.push(parse_quote! {#i: #ty});
                     }
                 }
-                Expr::Binary(b) => {
+                Expr::Binary(ref b) => {
                     let exp = quote! {#b}.to_string();
                     let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
-                    input_expressions.insert(name.clone(), b);
+                    input_expressions.insert(name.clone(), i);
                     let n = Ident::new(&name, span.into());
                     new_args.push(parse_quote! {#n : usize});
                 }
-                Expr::Lit(l) => new_args.push(parse_quote! {#l: usize}),
+                Expr::Unary(ref b) => {
+                    let exp = quote! {#b}.to_string();
+                    let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
+                    input_expressions.insert(name.clone(), i);
+                    let n = Ident::new(&name, span.into());
+                    new_args.push(parse_quote! {#n : isize});
+                }
+                Expr::Lit(ref b) => {
+                    let exp = quote! {#b}.to_string();
+                    let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
+                    input_expressions.insert(name.clone(), i);
+                    let n = Ident::new(&name, span.into());
+                    new_args.push(parse_quote! {#n : usize});
+                }
                 Expr::Cast(c) => {
                     let var_name: String;
                     match &*c.expr {
@@ -671,18 +697,29 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                     Pat::Lit(l) => match &l.lit {
                         Lit::Str(s) => name = s.value(),
-                        _ => todo!("Regions literal pattern"),
+                        Lit::Int(i) => name = i.base10_digits().to_string(),
+                        _ => todo!("Regions literal pattern {:?}", l),
                     },
                     _ => todo!("Regions pattern pattern"),
                 }
                 //get type to get size
                 match &*pat_type.ty {
                     Type::Path(_) => {
-                        if let Some(binary) = input_expressions.get(&name) {
-                            engine.add_abstract_expression_from(
-                                i,
-                                binary_to_abstract_expression(binary),
-                            );
+                        if let Some(binary) = input_expressions.get(&name).clone() {
+                            match binary {
+                                Expr::Binary(b) => {
+                                    engine.add_abstract_expression_from(
+                                        i,
+                                        binary_to_abstract_expression(&b),
+                                    );
+                                }
+                                _ => {
+                                    engine.add_abstract_expression_from(
+                                        i,
+                                        syn_expr_to_abstract_expression(binary),
+                                    );
+                                }
+                            }
                         } else {
                             engine.add_abstract_from(i, name.clone());
                         }

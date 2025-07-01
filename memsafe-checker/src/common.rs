@@ -525,7 +525,7 @@ impl fmt::Display for RegionType {
 pub struct MemorySafeRegion {
     pub kind: RegionType,
     length: AbstractExpression, // length of region in BYTES
-    content: HashMap<i64, RegisterValue>,
+    pub content: HashMap<i64, RegisterValue>,
 }
 
 impl MemorySafeRegion {
@@ -614,6 +614,9 @@ impl Instruction {
     }
 
     pub fn is_simd(&self) -> bool {
+        if self.op.starts_with("b.") {
+            return false;
+        }
         if let Some(i) = &self.r1 {
             if i.contains("_") {
                 return false;
