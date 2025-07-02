@@ -5,15 +5,15 @@ use std::process::Command;
 use std::{fs::File, io::Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("cargo::rerun-if-changed=disassemble-dir.sh");
-    println!("cargo::rerun-if-changed=clean-objdump.py");
+    // println!("cargo::rerun-if-changed=disassemble-dir.sh");
+    // println!("cargo::rerun-if-changed=clean-objdump.py");
 
     let mut build = cc::Build::new();
 
     for entry in std::fs::read_dir("include/src/arm/64")? {
         match entry {
             Ok(entry) => {
-                println!("cargo::rerun-if-changed={}", entry.path().display());
+                // println!("cargo::rerun-if-changed={}", entry.path().display());
                 let mut processed_path = std::env::var_os("OUT_DIR")
                     .map(std::path::PathBuf::from)
                     .ok_or(std::io::Error::last_os_error())?;

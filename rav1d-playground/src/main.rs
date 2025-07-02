@@ -116,10 +116,10 @@ use rav1dsrc::bitdepth::{BitDepth, BitDepth16, BitDepth8};
 //     ) -> ();
 // }
 
-#[bums::check_mem_safe("ipred.S", dst.as_mut_ptr(), src.as_ptr_range().end, src.len(), [src.len() == dst.len(), src.len() >= 16, src.len()%16==0])]
+#[bums::check_mem_safe("ipred.S", dst.as_mut_ptr(), src.as_ptr_range().end, 1, [src.len() == dst.len(), src.len() >= 32, src.len()%32==0])]
 fn ipred_reverse_8bpc_neon(dst: &mut [u8], src: &[u8]);
 
-#[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), src.as_ptr_range().end ,src.len()/2, [src.len() == dst.len(), src.len() >= 16, src.len()%16==0])]
+#[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), src.as_ptr_range().end , src.len()/4, [src.len() == dst.len(), src.len() >= 32, src.len()%32==0])]
 fn ipred_reverse_16bpc_neon(dst: &mut [u16], src: &[u16]);
 
 pub trait CallReverse {
@@ -197,19 +197,24 @@ mod tests {
         fn rav1d_ipred_reverse_8bpc_neon(dest: *mut u8, src: *const u8, num: usize);
     }
 
+    #[allow(unreachable_code)]
     #[test]
     fn test_reverse_asm_impls() {
-        let pixel_src: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7];
-        let pixel_dest_us: &mut [u8] = &mut [0; 8];
-        let pixel_dest_them: &mut [u8] = &mut [0; 8];
+        todo!();
+        // TODO: figure out why this fails, what the actual length computation is
+
+        let pixel_src: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let pixel_dest_us: &mut [u8] = &mut [0; 16];
+        let pixel_dest_them: &mut [u8] = &mut [0; 16];
 
         let us = {
             ipred_reverse_8bpc_neon(pixel_dest_us, pixel_src);
             pixel_dest_us
         };
+
         let them = {
             unsafe {
-                rav1d_ipred_reverse_8bpc_neon(pixel_dest_them.as_mut_ptr(), pixel_src.as_ptr(), 6);
+                rav1d_ipred_reverse_8bpc_neon(pixel_dest_them.as_mut_ptr(), pixel_src.as_ptr(), 4);
                 pixel_dest_them
             }
         };
