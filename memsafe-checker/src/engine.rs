@@ -40,6 +40,11 @@ pub struct ExecutionEngine<'ctx> {
 
 impl<'ctx> ExecutionEngine<'ctx> {
     pub fn new(lines: Vec<String>, context: &'ctx Context) -> ExecutionEngine<'ctx> {
+        // let _ = env_logger::try_init();
+        // log::info!("--------");
+        // log::info!("NEW EXEC");
+        // log::info!("-------");
+
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
         let mut code: Vec<Instruction> = Vec::new();

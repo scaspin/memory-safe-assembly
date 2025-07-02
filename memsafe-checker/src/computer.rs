@@ -736,6 +736,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 2")));
                     }
                 }
+                // Compare and Branch on Zero compares the value in a register with zero, and conditionally branches to a label at a PC-relative offset if the comparison is equal. It provides a hint that this is not a subroutine call or return. This instruction does not affect condition flags.
                 "cbz" => {
                     let register = self.registers
                         [get_register_index(instruction.r1.clone().expect("Need one register"))]
@@ -2682,6 +2683,14 @@ impl<'ctx> ARMCORTEXA<'_> {
         let r1 = self.operand(reg1.clone()).clone();
         let r2 = self.operand(reg2.clone()).clone();
 
+        if r1 == r2 {
+            self.neg = Some(FlagValue::Real(false));
+            self.zero = Some(FlagValue::Real(true));
+            self.carry = Some(FlagValue::Real(false));
+            self.overflow = Some(FlagValue::Real(false));
+            return;
+        }
+
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
@@ -2796,6 +2805,15 @@ impl<'ctx> ARMCORTEXA<'_> {
     fn cmn(&mut self, reg1: String, reg2: String) {
         let r1 = self.operand(reg1.clone()).clone();
         let r2 = self.operand(reg2.clone()).clone();
+
+        if r1 == r2 {
+            self.neg = Some(FlagValue::Real(false));
+            self.zero = Some(FlagValue::Real(true));
+            self.carry = Some(FlagValue::Real(false));
+            self.overflow = Some(FlagValue::Real(false));
+
+            return;
+        }
 
         if r1.kind == r2.kind {
             match r1.kind {
