@@ -307,6 +307,9 @@ fn bn_add_words(output: &mut [u64], a: &[u64], b: &[u64]) -> bool;
 #[bums_macros::check_mem_safe("bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len(), [output.len() == a.len(), output.len() == b.len()])]
 fn bn_sub_words(output: &mut [u64], a: &[u64], b: &[u64]) -> bool;
 
+// #[bums_macros::check_mem_safe("armv8-mont.S", rp.as_mut_ptr(), ap.as_ptr(),  bp.as_ptr(), np.as_ptr(), n0.as_ptr(), rp.len(), [rp.len() == ap.len(), rp.len() == bp.len(), rp.len() == np.len(), rp.len()==n0.len(), rp.len() >= 512])]
+// fn bn_mul_mont(rp: &mut [u64], ap: &[u64], bp: &[u64], np: &[u64], n0: &[u64]) -> bool;
+
 #[cfg(test)]
 mod tests {
     use super::*;

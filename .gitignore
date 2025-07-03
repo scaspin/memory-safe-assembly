@@ -1,1 +1,8 @@
-/target
+target/
+.DS_Store
+.vscode/
+scrape-asm/bin
+scrape-asm/lib
+scrape-asm/hashes
+crypto-playground/bin
+crypto-playground/lib

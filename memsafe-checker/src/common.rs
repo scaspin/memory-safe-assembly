@@ -525,7 +525,7 @@ impl fmt::Display for RegionType {
 pub struct MemorySafeRegion {
     pub kind: RegionType,
     length: AbstractExpression, // length of region in BYTES
-    content: HashMap<i64, RegisterValue>,
+    pub content: HashMap<i64, RegisterValue>,
 }
 
 impl MemorySafeRegion {
@@ -560,7 +560,7 @@ impl MemorySafeRegion {
     pub fn get_length(&self) -> AbstractExpression {
         match self.length {
             AbstractExpression::Immediate(_) => {
-                return AbstractExpression::Immediate((self.content.len() * 4) as i64)
+                return AbstractExpression::Immediate((self.content.len() * 8) as i64)
             }
             _ => self.length.clone(),
         }
@@ -614,6 +614,9 @@ impl Instruction {
     }
 
     pub fn is_simd(&self) -> bool {
+        if self.op.starts_with("b.") {
+            return false;
+        }
         if let Some(i) = &self.r1 {
             if i.contains("_") {
                 return false;
@@ -779,12 +782,22 @@ pub fn get_register_name_string(r: String) -> String {
 
 pub fn string_to_int(s: &str) -> i64 {
     let mut value = 1;
-    let v = s.trim_matches(' ').trim_matches('#');
+    let v = s
+        .trim_matches(' ')
+        .trim_matches('#')
+        .trim_matches('(')
+        .trim_matches(')');
     if v.contains('*') {
         let parts = v.split('*');
         for part in parts {
-            let m = part.parse::<i64>().expect("common3");
+            let m = string_to_int(part);
             value = value * m;
+        }
+    } else if v.contains('+') {
+        let parts = v.split('+');
+        for part in parts {
+            let m = string_to_int(part);
+            value = value + m;
         }
     } else if v.contains("x") {
         // FIX: store as two if i128 is needed
@@ -849,7 +862,7 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
 }
 
 pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> Option<ast::Int> {
-    match expression {
+    match expression.clone() {
         AbstractExpression::Immediate(num) => {
             return Some(ast::Int::from_i64(context, num));
         }
@@ -885,7 +898,7 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
                 }
                 "%" => return Some(new1.modulo(&new2)),
                 _ => {
-                    todo!("expression to AST {:?}", op)
+                    todo!("expression to AST {:?} {:?}", op, expression)
                 }
             }
         }
