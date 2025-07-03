@@ -1,4 +1,5 @@
 use crate::common::*;
+use crate::parser::*;
 use std::collections::HashMap;
 use std::fmt;
 use z3::*;
@@ -318,6 +319,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.alignment
     }
 
+    // TODO: hopefully parser rewrite makes this less awful
     // handle different addressing modes
     fn operand(&self, v: String) -> RegisterValue {
         if !v.contains('[') && v.contains('#') {

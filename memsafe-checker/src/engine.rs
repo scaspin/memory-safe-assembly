@@ -5,6 +5,7 @@ use z3::*;
 
 use crate::common::*;
 use crate::computer::*;
+use crate::parser::*;
 
 #[derive(Clone)]
 struct Program {
