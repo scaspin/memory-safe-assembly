@@ -17,8 +17,8 @@ use std::str::FromStr;
 pub enum Operand {
     Register(String),
     Immediate(i64),
+    Address(String), // for relative addresses, i.e. LK256@PAGEOFF
     Memory(String, Option<i64>, Option<bool>), // like [x0, #16] // bool to represent pre/post index 0 = false, 1 = true
-    TAATMemory(String, String, Option<i64>, Option<bool>), // like [x0, x1]
     Bitwise(String, i64),                      // like lsl#2
     SVERegister(String),                       // for SVE registers
     SIMDRegister(String),                      // for SIMD registers
@@ -50,6 +50,10 @@ fn operand_from_string(a: String) -> Operand {
         if let Ok(n) = a.trim_start_matches("#").parse::<i64>() {
             return Operand::Immediate(n);
         }
+    }
+
+    if a.contains('@') {
+        return Operand::Address(a);
     }
 
     // is a shift indicator (if it has # but is not a number, should fall into this)
@@ -91,15 +95,19 @@ fn operand_from_string(a: String) -> Operand {
         return Operand::Memory(base, offset, indexing);
     }
 
+    if !a.is_empty() {
+        return Operand::Label(a);
+    }
+
     return Operand::Other;
 }
 
-// (potentially) FIX: assumes everything after the first bracket is part of the same operand
 fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
     let mut result = Vec::new();
 
     for i in 0..parts.len() {
-        if parts[i].contains('[') {
+        if parts[i].starts_with('[') {
+            // ignores SIMD/SVE indexing like v1.d[1]
             let rest = parts[i..].join(",");
             result.push(rest);
             break;
@@ -209,6 +217,22 @@ mod tests {
 
         assert_eq!(
             NewInstruction::new("add x0,x0,#2,lsl#12".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_add_address() {
+        let good_result = NewInstruction {
+            opcode: String::from("add"),
+            operands: Vec::from([
+                Operand::Register(String::from("x30")),
+                Operand::Register(String::from("x30")),
+                Operand::Address(String::from("LK256@PAGEOFF")),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("add	x30,x30,LK256@PAGEOFF".to_string()),
             good_result
         );
     }
@@ -334,6 +358,102 @@ mod tests {
             NewInstruction::new("stp x29,x30,[x0,#-128]!".to_string()),
             good_result
         );
+    }
+
+    // TODO: copy str/stp tests for ldr/ldp
+
+    #[test]
+    fn test_parse_cmp_register_immediate() {
+        let good_result = NewInstruction {
+            opcode: String::from("cmp"),
+            operands: Vec::from([Operand::Register(String::from("x0")), Operand::Immediate(2)]),
+        };
+        assert_eq!(NewInstruction::new("cmp x0,#2".to_string()), good_result);
+    }
+
+    #[test]
+    fn test_parse_cmp_register() {
+        let good_result = NewInstruction {
+            opcode: String::from("cmp"),
+            operands: Vec::from([
+                Operand::Register(String::from("x0")),
+                Operand::Register(String::from("x1")),
+            ]),
+        };
+        assert_eq!(NewInstruction::new("cmp x0,x1".to_string()), good_result);
+    }
+
+    #[test]
+    fn test_parse_cmp_shifted_register() {
+        let good_result = NewInstruction {
+            opcode: String::from("cmp"),
+            operands: Vec::from([
+                Operand::Register(String::from("x0")),
+                Operand::Register(String::from("x1")),
+                Operand::Bitwise(String::from("lsr"), 2),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("cmp x0,x1,lsr#2".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_adrp() {
+        let good_result = NewInstruction {
+            opcode: String::from("adrp"),
+            operands: Vec::from([
+                Operand::Register(String::from("x30")),
+                Operand::Address(String::from("LK256@PAGE")),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("adrp x30,LK256@PAGE".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_b_condition_bne() {
+        let good_result = NewInstruction {
+            opcode: String::from("b.ne"),
+            operands: Vec::from([Operand::Label(String::from("Loop"))]),
+        };
+        assert_eq!(NewInstruction::new("b.ne Loop".to_string()), good_result);
+    }
+
+    #[test]
+    fn test_parse_b() {
+        let good_result = NewInstruction {
+            opcode: String::from("b"),
+            operands: Vec::from([Operand::Label(String::from("Loop"))]),
+        };
+        assert_eq!(NewInstruction::new("b Loop".to_string()), good_result);
+    }
+
+    #[test]
+    fn test_parse_cbnz() {
+        let good_result = NewInstruction {
+            opcode: String::from("cbnz"),
+            operands: Vec::from([
+                Operand::Register(String::from("w19")),
+                Operand::Label(String::from("Loop_16_xx")),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("cbnz w19,Loop_16_xx".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_ret() {
+        let good_result = NewInstruction {
+            opcode: String::from("ret"),
+            operands: Vec::new(),
+        };
+        assert_eq!(NewInstruction::new("ret".to_string()), good_result);
     }
 }
 
