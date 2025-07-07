@@ -81,13 +81,7 @@ fn operand_from_string(a: String) -> Operand {
         }
 
         if let Some(o) = parts.next() {
-            println!("Offset part: {}", o);
-            offset = Some(
-                o.trim_matches(&['[', ']', ',', '#', '!'])
-                    .to_string()
-                    .parse::<i64>()
-                    .unwrap_or(0),
-            );
+            offset = Some(string_to_int(o.trim_matches(&['[', ']', ',', '#', '!'])));
         }
 
         if a.contains("!") {
@@ -100,31 +94,20 @@ fn operand_from_string(a: String) -> Operand {
     return Operand::Other;
 }
 
-//TODO: find a more efficient way to do this
-fn combine_elems_between_brackets(parts: Vec<String>) -> Vec<String> {
-    let mut inside_brackets = false;
-    let mut bracket_content = Vec::new();
-    let mut combined_parts = Vec::new();
+// (potentially) FIX: assumes everything after the first bracket is part of the same operand
+fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
+    let mut result = Vec::new();
 
-    for p in parts {
-        if inside_brackets {
-            bracket_content.push(p.clone());
-            if p.contains("]") {
-                combined_parts.push(bracket_content.join(","));
-                bracket_content.clear();
-                inside_brackets = false;
-            }
-        } else if p.contains("[") && p.contains("]") {
-            combined_parts.push(p.clone());
-        } else if p.contains("[") {
-            inside_brackets = true;
-            bracket_content.push(p.clone());
+    for i in 0..parts.len() {
+        if parts[i].contains('[') {
+            let rest = parts[i..].join(",");
+            result.push(rest);
+            break;
         } else {
-            combined_parts.push(p.clone());
+            result.push(parts[i].clone());
         }
     }
-
-    return combined_parts;
+    return result;
 }
 
 impl NewInstruction {
@@ -136,7 +119,7 @@ impl NewInstruction {
             .filter(|x| !x.is_empty());
         let opcode = parts.next().unwrap_or("").to_string();
         let combine_brackets =
-            combine_elems_between_brackets(parts.into_iter().map(|s| s.to_string()).collect());
+            combine_addressing_modes_operands(parts.into_iter().map(|s| s.to_string()).collect());
         let operands = combine_brackets
             .into_iter()
             .map(|s| operand_from_string(s.to_string()))
