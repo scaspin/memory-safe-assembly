@@ -1,5 +1,5 @@
 use crate::common::*;
-use crate::parser::*;
+use crate::instruction_parser::*;
 use std::collections::HashMap;
 use std::fmt;
 use z3::*;

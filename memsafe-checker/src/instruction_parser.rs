@@ -3,7 +3,7 @@ use std::str::FromStr;
 // #[derive(Debug, Clone, PartialEq)]
 // enum InstructionType {
 //     Arithmetic,
-//     MultiArithmetic, //SIMD or FP
+//     MultiArithmetic, //SIMD or FP Note: may need a type that contains lane config for instructions like ushll.8h
 //     Logical,        // Move, shift, anything with one input register
 //     Memory,
 //     MultiMemory,
@@ -14,15 +14,50 @@ use std::str::FromStr;
 // }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Arrangement {
+    B8,
+    B16,
+    H4,
+    H8,
+    S2,
+    S4,
+    D2,
+    D,
+    S,
+    H,
+    B,
+}
+
+impl Arrangement {
+    pub fn from_string(s: &str) -> Arrangement {
+        match s {
+            "8b" => Arrangement::B8,
+            "16b" => Arrangement::B16,
+            "4h" => Arrangement::H4,
+            "8h" => Arrangement::H8,
+            "2s" => Arrangement::S2,
+            "4s" => Arrangement::S4,
+            "2d" => Arrangement::D2,
+            "d" => Arrangement::D,
+            "s" => Arrangement::S,
+            "h" => Arrangement::H,
+            "b" => Arrangement::B,
+            _ => panic!("Invalid arrangement string {:?}", s),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operand {
     Register(String),
     Immediate(i64),
-    Address(String), // for relative addresses, i.e. LK256@PAGEOFF
-    Memory(String, Option<i64>, Option<bool>), // like [x0, #16] // bool to represent pre/post index 0 = false, 1 = true
-    Bitwise(String, i64),                      // like lsl#2
-    SVERegister(String),                       // for SVE registers
-    SIMDRegister(String),                      // for SIMD registers
-    Label(String), // strings, potentially label addresses (i.e. @) for branching and jumping
+    Memory(String, Option<i64>, Option<String>, Option<bool>), // like [x0, #16] // bool to represent pre/post index 0 = false, 1 = true
+    Bitwise(String, i64),                                      // like lsl#2
+    VectorRegister(String),
+    Vector(String, Arrangement),
+    VectorAccess(String, Arrangement, i64), // like v1.d[1] or v2.b[3]
+    Label(String),
+    Address(String, i64), // for relative addresses, i.e. LK256@PAGEOFF
     Other,
 }
 
@@ -49,26 +84,62 @@ fn operand_from_string(a: String) -> Operand {
     if a.starts_with("#") {
         if let Ok(n) = a.trim_start_matches("#").parse::<i64>() {
             return Operand::Immediate(n);
+        } else {
+            return Operand::Immediate(string_to_int(&a));
         }
     }
 
     if a.contains('@') {
-        return Operand::Address(a);
+        // TODO: extrapolate offset based on context
+        return Operand::Address(a, 0);
     }
 
-    // is a shift indicator (if it has # but is not a number, should fall into this)
+    // is a shift indicator (if it has # but is not just a number, should fall into this)
     // FIX: potential issue with this that can be fixed by checking shift indicator matches expected ones, i.e. lsl, lsr, asr, ror
     if a.contains("#") & !a.contains("[") {
         let mut parts = a.split('#').peekable();
-        if !parts.peek().unwrap_or(&"").is_empty() {
+        if !parts
+            .peek()
+            .expect("need some strings in shift parsing")
+            .is_empty()
+        {
             return Operand::Bitwise(
-                parts.next().unwrap_or("").to_string(),
+                parts
+                    .next()
+                    .expect("need part before # in shift parsing")
+                    .to_string(),
                 parts
                     .next()
                     .and_then(|s| s.parse::<i64>().ok())
-                    .unwrap_or(0),
+                    .expect("need part after # in shift parsing"),
             );
         }
+    }
+
+    if a.contains("v") {
+        if a.contains(".") {
+            let mut parts = a.split('.').into_iter();
+            let base = parts
+                .next()
+                .expect("require base register for simd register");
+            let arrangement = parts.next().expect("require a valid simd arrangement");
+            if arrangement.contains("[") {
+                let mut parts = arrangement.split(&['[', ']']).into_iter();
+                println!("{:?}", parts);
+                let a = Arrangement::from_string(
+                    parts
+                        .next()
+                        .expect("size indication required for index into vector"),
+                );
+                let index = string_to_int(parts.next().expect("index required"));
+                // TODO: maybe runtime check index is valid for arrangement?
+                return Operand::VectorAccess(base.to_string(), a, index);
+            } else {
+                let a = Arrangement::from_string(arrangement);
+                return Operand::Vector(base.to_string(), a);
+            }
+        }
+        return Operand::VectorRegister(a);
     }
 
     if a.contains("[") || a.contains("]") {
@@ -92,7 +163,8 @@ fn operand_from_string(a: String) -> Operand {
             indexing = Some(false);
         }
 
-        return Operand::Memory(base, offset, indexing);
+        // TODO: include shift
+        return Operand::Memory(base, offset, None, indexing);
     }
 
     if !a.is_empty() {
@@ -121,11 +193,14 @@ fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
 impl NewInstruction {
     pub fn new(input: String) -> Self {
         let mut parts = input
-            .split(|c| c == '\t' || c == ',' || c == ' ')
+            .split(|c| c == '\t' || c == ',' || c == ' ' || c == '{' || c == '}')
             .collect::<Vec<&str>>()
             .into_iter()
             .filter(|x| !x.is_empty());
-        let opcode = parts.next().unwrap_or("").to_string();
+        let opcode = parts
+            .next()
+            .expect("Require opcode for instruction")
+            .to_string();
         let combine_brackets =
             combine_addressing_modes_operands(parts.into_iter().map(|s| s.to_string()).collect());
         let operands = combine_brackets
@@ -138,7 +213,9 @@ impl NewInstruction {
 
     pub fn is_simd(&self) -> bool {
         self.operands.iter().any(|op| match op {
-            Operand::SIMDRegister(_) => true,
+            Operand::VectorRegister(_) => true,
+            Operand::Vector(_, _) => true,
+            Operand::VectorAccess(_, _, _) => true,
             _ => false,
         })
     }
@@ -228,7 +305,7 @@ mod tests {
             operands: Vec::from([
                 Operand::Register(String::from("x30")),
                 Operand::Register(String::from("x30")),
-                Operand::Address(String::from("LK256@PAGEOFF")),
+                Operand::Address(String::from("LK256@PAGEOFF"), 0),
             ]),
         };
         assert_eq!(
@@ -243,7 +320,7 @@ mod tests {
             opcode: String::from("str"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
-                Operand::Memory(String::from("x29"), None, None),
+                Operand::Memory(String::from("x29"), None, None, None),
             ]),
         };
         assert_eq!(NewInstruction::new("str x0,[x29]".to_string()), good_result);
@@ -255,7 +332,7 @@ mod tests {
             opcode: String::from("str"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
-                Operand::Memory(String::from("x29"), Some(112), None),
+                Operand::Memory(String::from("x29"), Some(112), None, None),
             ]),
         };
         assert_eq!(
@@ -271,7 +348,7 @@ mod tests {
             operands: Vec::from([
                 Operand::Register(String::from("x20")),
                 Operand::Register(String::from("x21")),
-                Operand::Memory(String::from("x0"), None, None),
+                Operand::Memory(String::from("x0"), None, None, None),
             ]),
         };
         assert_eq!(
@@ -287,7 +364,7 @@ mod tests {
             operands: Vec::from([
                 Operand::Register(String::from("x22")),
                 Operand::Register(String::from("x23")),
-                Operand::Memory(String::from("x0"), Some(8), None),
+                Operand::Memory(String::from("x0"), Some(8), None, None),
             ]),
         };
         assert_eq!(
@@ -303,7 +380,7 @@ mod tests {
             operands: Vec::from([
                 Operand::Register(String::from("x22")),
                 Operand::Register(String::from("x23")),
-                Operand::Memory(String::from("x0"), Some(8), None),
+                Operand::Memory(String::from("x0"), Some(8), None, None),
             ]),
         };
         assert_eq!(
@@ -319,7 +396,7 @@ mod tests {
             operands: Vec::from([
                 Operand::Register(String::from("x22")),
                 Operand::Register(String::from("x23")),
-                Operand::Memory(String::from("x0"), Some(8), Some(true)),
+                Operand::Memory(String::from("x0"), Some(8), None, Some(true)),
             ]),
         };
         assert_eq!(
@@ -335,7 +412,7 @@ mod tests {
             operands: Vec::from([
                 Operand::Register(String::from("x22")),
                 Operand::Register(String::from("x23")),
-                Operand::Memory(String::from("x0"), Some(8), Some(true)),
+                Operand::Memory(String::from("x0"), Some(8), None, Some(true)),
             ]),
         };
         assert_eq!(
@@ -351,7 +428,7 @@ mod tests {
             operands: Vec::from([
                 Operand::Register(String::from("x29")),
                 Operand::Register(String::from("x30")),
-                Operand::Memory(String::from("x0"), Some(-128), Some(false)),
+                Operand::Memory(String::from("x0"), Some(-128), None, Some(false)),
             ]),
         };
         assert_eq!(
@@ -405,7 +482,7 @@ mod tests {
             opcode: String::from("adrp"),
             operands: Vec::from([
                 Operand::Register(String::from("x30")),
-                Operand::Address(String::from("LK256@PAGE")),
+                Operand::Address(String::from("LK256@PAGE"), 0),
             ]),
         };
         assert_eq!(
@@ -454,6 +531,146 @@ mod tests {
             operands: Vec::new(),
         };
         assert_eq!(NewInstruction::new("ret".to_string()), good_result);
+    }
+
+    #[test]
+    fn test_parse_simd_ld1() {
+        let good_result = NewInstruction {
+            opcode: String::from("ld1"),
+            operands: Vec::from([
+                Operand::Vector(String::from("v0"), Arrangement::B16),
+                Operand::Memory(String::from("x16"), None, None, None),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("ld1 { v0.16b }, [x16]".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_simd_st1() {
+        let good_result = NewInstruction {
+            opcode: String::from("st1"),
+            operands: Vec::from([
+                Operand::Vector(String::from("v5"), Arrangement::H8),
+                Operand::Memory(String::from("x0"), None, None, None),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("st1 { v5.8h }, [x0]".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_simd_movi() {
+        let good_result = NewInstruction {
+            opcode: String::from("movi"),
+            operands: Vec::from([
+                Operand::Vector(String::from("v19"), Arrangement::B16),
+                Operand::Immediate(0xe1),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("movi v19.16b, #0xe1".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_simd_aese() {
+        let good_result = NewInstruction {
+            opcode: String::from("aese"),
+            operands: Vec::from([
+                Operand::Vector(String::from("v0"), Arrangement::B16),
+                Operand::Vector(String::from("v18"), Arrangement::B16),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("aese v0.16b, v18.16b".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_simd_fmov() {
+        let good_result = NewInstruction {
+            opcode: String::from("fmov"),
+            operands: Vec::from([
+                Operand::VectorAccess(String::from("v1"), Arrangement::D, 1),
+                Operand::Register(String::from("x9")),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("fmov v1.d[1], x9".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_simd_ext() {
+        let good_result = NewInstruction {
+            opcode: String::from("ext"),
+            operands: Vec::from([
+                Operand::Vector(String::from("v14"), Arrangement::B16),
+                Operand::Vector(String::from("v14"), Arrangement::B16),
+                Operand::Vector(String::from("v14"), Arrangement::B16),
+                Operand::Immediate(8),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("ext v14.16b, v14.16b, v14.16b, #8".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_simd_arithmetic() {
+        let good_result = NewInstruction {
+            opcode: String::from("eor"),
+            operands: Vec::from([
+                Operand::Vector(String::from("v1"), Arrangement::B16),
+                Operand::Vector(String::from("v1"), Arrangement::B16),
+                Operand::Vector(String::from("v31"), Arrangement::B16),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("eor v1.16b, v1.16b, v31.16b".to_string()),
+            good_result
+        );
+    }
+
+    // this is what the SIMD used in rav1d looks like, may change with different decompilation pipeline
+    #[test]
+    fn test_parse_simd_st1_8h() {
+        let good_result = NewInstruction {
+            opcode: String::from("st1.8h"),
+            operands: Vec::from([
+                Operand::VectorRegister(String::from("v30")),
+                Operand::VectorRegister(String::from("v31")),
+                Operand::Memory(String::from("x0"), Some(32), None, Some(true)),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("st1.8h { v30, v31 }, [x0], #32".to_string()),
+            good_result
+        );
+    }
+    #[test]
+    fn test_parse_simd_ushll() {
+        let good_result = NewInstruction {
+            opcode: String::from("ushll.8h"),
+            operands: Vec::from([
+                Operand::VectorRegister(String::from("v2")),
+                Operand::VectorRegister(String::from("v2")),
+                Operand::Immediate(0),
+            ]),
+        };
+        assert_eq!(
+            NewInstruction::new("ushll.8h v2, v2, #0".to_string()),
+            good_result
+        );
     }
 }
 
@@ -640,6 +857,7 @@ impl FromStr for Instruction {
     }
 }
 
+// FIX: try to retire this function since errors are sometimes confusing
 pub fn string_to_int(s: &str) -> i64 {
     let mut value = 1;
     let v = s

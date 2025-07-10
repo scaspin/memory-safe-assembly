@@ -1,4 +1,4 @@
 pub mod common;
 pub mod computer;
 pub mod engine;
-pub mod parser;
+pub mod instruction_parser;
