@@ -29,6 +29,14 @@ impl RegisterValue {
         }
     }
 
+    pub fn new_imm(num: i64) -> Self {
+        Self {
+            kind: RegisterKind::Immediate,
+            base: None,
+            offset: num,
+        }
+    }
+
     pub fn set(&mut self, kind: RegisterKind, base: Option<AbstractExpression>, offset: i64) {
         self.kind = kind;
         self.base = base;

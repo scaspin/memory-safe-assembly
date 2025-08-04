@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::fmt;
 use z3::*;
 
-fn get_register_index(reg_name: String) -> usize {
-    let name = reg_name.clone();
+fn get_register_index(reg_name: &str) -> usize {
+    let name = reg_name;
     if reg_name == "sp" {
         return 31;
     }
@@ -193,11 +193,11 @@ impl<'ctx> ARMCORTEXA<'_> {
     }
 
     pub fn set_immediate(&mut self, register: String, value: u64) {
-        self.set_register(register, RegisterKind::Immediate, None, value as i64);
+        self.set_register(&register, RegisterKind::Immediate, None, value as i64);
     }
 
     pub fn set_abstract(&mut self, register: String, value: AbstractExpression) {
-        self.set_register(register, RegisterKind::RegisterBase, Some(value), 0);
+        self.set_register(&register, RegisterKind::RegisterBase, Some(value), 0);
     }
 
     pub fn set_stack_element(
@@ -219,32 +219,40 @@ impl<'ctx> ARMCORTEXA<'_> {
 
     pub fn set_register(
         &mut self,
-        name: String,
+        name: &str,
         kind: RegisterKind,
         base: Option<AbstractExpression>,
         offset: i64,
     ) {
         if name.contains("w") {
-            self.registers[get_register_index(name.clone())].set(kind, base, (offset as i32) as i64)
+            self.registers[get_register_index(name)].set(kind, base, (offset as i32) as i64)
         } else if name.contains("x") {
-            self.registers[get_register_index(name.clone())].set(kind, base, offset as i64)
+            self.registers[get_register_index(name)].set(kind, base, offset as i64)
         } else if name.contains("v") {
             if let Some((_, arrangement)) = name.split_once(".") {
-                self.simd_registers[get_register_index(name.clone())].set_register(
+                self.simd_registers[get_register_index(name)].set_register(
                     arrangement.to_string(),
                     kind,
                     base,
                     offset as u128,
                 );
             }
+        // TODO: include next case in above case
         } else if name.contains("d") {
-            self.simd_registers[get_register_index(name.clone())].set_register(
+            self.simd_registers[get_register_index(name)].set_register(
                 "2d".to_string(),
                 kind,
                 base,
                 offset as u128,
             );
         }
+    }
+
+    pub fn get_register(&mut self, name: &str) -> RegisterValue {
+        if name.contains("v") {
+            return self.simd_registers[get_register_index(name)].get_as_register();
+        }
+        return self.registers[get_register_index(name)].clone();
     }
 
     pub fn add_memory_value(&mut self, region: String, address: i64, value: i64) {
@@ -319,81 +327,81 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.alignment
     }
 
-    // TODO: hopefully parser rewrite makes this less awful
-    // handle different addressing modes
-    fn operand(&self, v: String) -> RegisterValue {
-        if !v.contains('[') && v.contains('#') {
-            let mut base: Option<AbstractExpression> = None;
-            let mut offset: &str = &v;
+    // // TODO: hopefully parser rewrite makes this less awful
+    // // handle different addressing modes
+    // fn operand(&self, v: String) -> RegisterValue {
+    //     if !v.contains('[') && v.contains('#') {
+    //         let mut base: Option<AbstractExpression> = None;
+    //         let mut offset: &str = &v;
 
-            if v.contains("ror") {
-                base = Some(AbstractExpression::Abstract("ror".to_string()));
-                offset = v.strip_prefix("ror#").unwrap_or("0");
-            }
+    //         if v.contains("ror") {
+    //             base = Some(AbstractExpression::Abstract("ror".to_string()));
+    //             offset = v.strip_prefix("ror#").unwrap_or("0");
+    //         }
 
-            return RegisterValue {
-                kind: RegisterKind::Immediate,
-                base: base,
-                offset: string_to_int(&offset),
-            };
+    //         return RegisterValue {
+    //             kind: RegisterKind::Immediate,
+    //             base: base,
+    //             offset: string_to_int(&offset),
+    //         };
 
-        // address within register
-        } else if v.contains('[') && !v.contains(',') {
-            let reg = self.registers[get_register_index(v.trim_matches('[').to_string())].clone();
-            return RegisterValue {
-                kind: RegisterKind::RegisterBase,
-                base: reg.base,
-                offset: reg.offset,
-            };
-        } else if v.contains('[') && v.contains(',') && v.contains('#') && !v.contains('@') {
-            let a = v.split_once(',').expect("computer1");
-            let reg = self.registers[get_register_index(a.0.trim_matches('[').to_string())].clone();
-            return RegisterValue {
-                kind: RegisterKind::RegisterBase,
-                base: reg.base,
-                offset: reg.offset + string_to_int(a.1.trim_matches(']')),
-            };
-        } else if v.contains("@") {
-            let parts = v
-                .split_once("@")
-                .expect("Need two parts on either side of @");
-            // TODO : expand functionality
-            if parts.1.contains("OFF") || parts.1.contains("PAGE") {
-                return RegisterValue {
-                    kind: RegisterKind::Immediate,
-                    base: Some(AbstractExpression::Abstract(parts.0.to_string())),
-                    offset: 0,
-                };
-            } else {
-                // TODO: use label as memory key
-                return RegisterValue {
-                    kind: RegisterKind::RegisterBase,
-                    base: Some(AbstractExpression::Abstract("memory".to_string())),
-                    offset: 0,
-                };
-            }
-        } else if v.contains('+') {
-            if let Some((base, offset)) = v.clone().split_once('+') {
-                let off: i64 = i64::from_str_radix(offset.trim_start_matches("0x"), 16)
-                    .expect("unable to parse label offset");
-                return RegisterValue {
-                    kind: RegisterKind::RegisterBase,
-                    base: Some(AbstractExpression::Abstract(base.to_string())),
-                    offset: off,
-                };
-            } else {
-                todo!("something wrong")
-            }
-        } else if v.ends_with(&['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
-            return self.registers[get_register_index(v)].clone();
-        } else {
-            return RegisterValue {
-                kind: RegisterKind::Number,
-                base: Some(AbstractExpression::Abstract(v)),
-                offset: 0,
-            };
-        }
-    }
+    //     // address within register
+    //     } else if v.contains('[') && !v.contains(',') {
+    //         let reg = self.registers[get_register_index(v.trim_matches('[').to_string())].clone();
+    //         return RegisterValue {
+    //             kind: RegisterKind::RegisterBase,
+    //             base: reg.base,
+    //             offset: reg.offset,
+    //         };
+    //     } else if v.contains('[') && v.contains(',') && v.contains('#') && !v.contains('@') {
+    //         let a = v.split_once(',').expect("computer1");
+    //         let reg = self.registers[get_register_index(a.0.trim_matches('[').to_string())].clone();
+    //         return RegisterValue {
+    //             kind: RegisterKind::RegisterBase,
+    //             base: reg.base,
+    //             offset: reg.offset + string_to_int(a.1.trim_matches(']')),
+    //         };
+    //     } else if v.contains("@") {
+    //         let parts = v
+    //             .split_once("@")
+    //             .expect("Need two parts on either side of @");
+    //         // TODO : expand functionality
+    //         if parts.1.contains("OFF") || parts.1.contains("PAGE") {
+    //             return RegisterValue {
+    //                 kind: RegisterKind::Immediate,
+    //                 base: Some(AbstractExpression::Abstract(parts.0.to_string())),
+    //                 offset: 0,
+    //             };
+    //         } else {
+    //             // TODO: use label as memory key
+    //             return RegisterValue {
+    //                 kind: RegisterKind::RegisterBase,
+    //                 base: Some(AbstractExpression::Abstract("memory".to_string())),
+    //                 offset: 0,
+    //             };
+    //         }
+    //     } else if v.contains('+') {
+    //         if let Some((base, offset)) = v.clone().split_once('+') {
+    //             let off: i64 = i64::from_str_radix(offset.trim_start_matches("0x"), 16)
+    //                 .expect("unable to parse label offset");
+    //             return RegisterValue {
+    //                 kind: RegisterKind::RegisterBase,
+    //                 base: Some(AbstractExpression::Abstract(base.to_string())),
+    //                 offset: off,
+    //             };
+    //         } else {
+    //             todo!("something wrong")
+    //         }
+    //     } else if v.ends_with(&['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
+    //         return self.registers[get_register_index(v)].clone();
+    //     } else {
+    //         return RegisterValue {
+    //             kind: RegisterKind::Number,
+    //             base: Some(AbstractExpression::Abstract(v)),
+    //             offset: 0,
+    //         };
+    //     }
+    // }
 
     pub fn execute(
         &mut self,
@@ -401,2003 +409,2001 @@ impl<'ctx> ARMCORTEXA<'_> {
         instruction: &Instruction,
     ) -> Result<ExecuteReturnType, String> {
         if !instruction.is_simd() {
-            match instruction.op.as_str() {
-                "add" => {
-                    self.arithmetic(
-                        "+",
-                        &|x, y| x + y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "mul" | "umulh" => { // separate
-                    self.arithmetic(
-                        "*",
-                        &|x, y| x * y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "adds" => {
-                    self.cmn(
-                        instruction.r2.clone().expect("need register to compare"),
-                        instruction.r3.clone().expect("need register to compare"),
-                    );
-
-                    self.arithmetic(
-                        "+",
-                        &|x, y| x + y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "sub" => {
-                    self.arithmetic(
-                        "-",
-                        &|x, y| x - y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "subs" => {
-                    self.cmp(
-                        instruction.r2.clone().expect("need register to compare"),
-                        instruction.r3.clone().expect("need register to compare"),
-                    );
-
-                    self.arithmetic(
-                        "-",
-                        &|x, y| x - y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "and" => {
-                    self.arithmetic(
-                        &instruction.op,
-                        &|x, y| x & y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "tst" | "ands" => {
-                    let r1 = self.operand(instruction.r1.clone().expect("need src"));
-                    let mut r2 = self.operand(instruction.r2.clone().expect("need imm"));
-
-                    if let Some(op) = instruction.r3.clone() {
-                        match op.as_str() {
-                            "<<" => {
-                                let imm = instruction.r4.clone().expect("need shft amt in tst/ands").replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "").parse::<i64>().expect("expected valid number from parse");
-                                r2.offset =  r2.offset << imm;
-                            }
-                            _ => todo!("tst/ands op on imm {:?}", op),
-                        }
-                    }
-
-                    self.zero = if r1.offset == r2.offset {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Abstract(AbstractComparison::new(
-                            "==",
-                            AbstractExpression::Abstract("true".to_string()),
-                            AbstractExpression::Abstract("HW_SUPPORT".to_string()),
-                        )))
-                    };
-
-                    // TODO: this is a really bad way to do this, get expressions from include/arm_arch.h
-                }
-                "orr" => {
-                    self.arithmetic(
-                        &instruction.op,
-                        &|x, y| x | y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "orn" => {
-                    self.arithmetic(
-                        &instruction.op,
-                        &|x, y: i64| x | !y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "eor" => {
-                    if instruction.r2.clone() == instruction.r3.clone() {
-                        self.set_register(
-                            instruction.r1.clone().expect("Need destination register"),
-                            RegisterKind::Immediate,
-                            None,
-                            0,
-                        );
-                    } else {
-                        self.arithmetic(
-                            &instruction.op,
-                            &|x, y| x ^ y,
-                            instruction.r1.clone().expect("Need dst register"),
-                            instruction.r2.clone().expect("Need one operand"),
-                            instruction.r3.clone().expect("Need two operand"),
-                            instruction.r4.clone(),
-                        );
-                    }
-                }
-                "bic" => {
-                    self.arithmetic(
-                        &instruction.op,
-                        &|x, y: i64| x & !y,
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                        instruction.r4.clone(),
-                    );
-                }
-                "lsr" | "lsl" => {
-                    let r2 = self.registers
-                        [get_register_index(instruction.r2.clone().expect("Need register"))]
-                    .clone();
-                    let shift = self
-                        .operand(instruction.r3.clone().expect("Need shift amt"))
-                        .offset;
-                    let new_offset = r2.offset >> shift;
-                    if new_offset == 0 {
-                        self.set_register(
-                            instruction.r1.clone().expect("Need destination register"),
-                            r2.clone().kind,
-                            None,
-                            new_offset,
-                        );
-                    } else {
-                        self.set_register(
-                            instruction.r1.clone().expect("Need destination register"),
-                            r2.clone().kind,
-                            Some(generate_expression(
-                                "lsr",
-                                r2.base.unwrap_or(AbstractExpression::Empty),
-                                AbstractExpression::Immediate(new_offset),
-                            )),
-                            new_offset,
-                        );
-                    }
-                }
-                "ror" => {
-                    self.shift_reg(
-                        instruction.r1.clone().expect("Need dst register"),
-                        instruction.r2.clone().expect("Need one operand"),
-                        instruction.r3.clone().expect("Need two operand"),
-                    );
-                }
-                "adcs" | "adc" => {
-                    match self.carry.clone() {
-                    Some(FlagValue::Real(b)) => {
-                        if b == true {
-                            self.arithmetic(
-                                "+",
-                                &|x, y| x + y,
-                                instruction.r1.clone().expect("Need dst register"),
-                                instruction.r2.clone().expect("Need one operand"),
-                                instruction.r2.clone().expect("Need one operand"),
-                                Some("#1".to_string()),
-                            );
-                        } else {
-                            self.arithmetic(
-                                "+",
-                                &|x, y| x + y,
-                                instruction.r1.clone().expect("Need dst register"),
-                                instruction.r2.clone().expect("Need one operand"),
-                                instruction.r2.clone().expect("Need one operand"),
-                                Some("#0".to_string()),
-                            );
-                        }
-                    }
-                    Some(FlagValue::Abstract(c)) => {
-                        let opt1 = self.registers[get_register_index(
-                            instruction.r2.clone().expect("Need first source register"),
-                        )]
-                        .clone();
-
-                        let mut opt2 = self.registers[get_register_index(
-                            instruction.r3.clone().expect("Need second source register"),
-                        )]
-                        .clone();
-                        opt2.offset = opt2.offset + 1;
-
-                        return Ok(ExecuteReturnType::Select(c,
-                         instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                    }
-                    None => {
-                        let opt1 = self.registers[get_register_index(
-                            instruction.r2.clone().expect("Need first source register"),
-                        )]
-                        .clone();
-
-                        let mut opt2 = self.registers[get_register_index(
-                            instruction.r3.clone().expect("Need second source register"),
-                        )]
-                        .clone();
-                        opt2.offset = opt2.offset + 1;
-
-                        return Ok(ExecuteReturnType::Select(AbstractComparison::new(
-                            "==",
-                            AbstractExpression::Abstract("carry".to_string()),
-                            AbstractExpression::Immediate(1)),
-                         instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                    }
-                    }
-                    //update flags
-                    self.cmn(instruction.r1.clone().expect("need register to compare"),instruction.r2.clone().expect("need register to compare"), );
-                },
-                "sbcs" | "sbc" => match self.carry.clone() { // FIX: split
-                    Some(FlagValue::Real(b)) => {
-                        if b == true {
-                            self.arithmetic(
-                                "-",
-                                &|x, y| x - y,
-                                instruction.r1.clone().expect("Need dst register"),
-                                instruction.r2.clone().expect("Need one operand"),
-                                instruction.r2.clone().expect("Need one operand"),
-                                Some("#1".to_string()),
-                            );
-                        } else {
-                            self.arithmetic(
-                                "-",
-                                &|x, y| x - y,
-                                instruction.r1.clone().expect("Need dst register"),
-                                instruction.r2.clone().expect("Need one operand"),
-                                instruction.r2.clone().expect("Need one operand"),
-                                Some("#0".to_string()),
-                            );
-                        }
-                    }
-                    Some(FlagValue::Abstract(a)) => {
-                        let opt1 = self.registers[get_register_index(
-                            instruction.r2.clone().expect("Need first source register"),
-                        )]
-                        .clone();
-
-                        let mut opt2 = self.registers[get_register_index(
-                            instruction.r3.clone().expect("Need second source register"),
-                        )]
-                        .clone();
-                        opt2.offset = opt2.offset + 1;
-
-                        return Ok(ExecuteReturnType::Select(a,
-                         instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                    }
-                    None => {
-                        let opt1 = self.registers[get_register_index(
-                            instruction.r2.clone().expect("Need first source register"),
-                        )]
-                        .clone();
-
-                        let mut opt2 = self.registers[get_register_index(
-                            instruction.r3.clone().expect("Need second source register"),
-                        )]
-                        .clone();
-                        opt2.offset = opt2.offset -1 ;
-
-                        return Ok(ExecuteReturnType::Select(AbstractComparison::new(
-                            "==",
-                            AbstractExpression::Abstract("carry".to_string()),
-                            AbstractExpression::Immediate(1)),
-                            instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                    }
-                },
-                "adrp"=> {
-                    let address = self.operand(instruction.r2.clone().expect("Need address label"));
-                    self.set_register(
-                        instruction.r1.clone().expect("need dst register"),
-                        RegisterKind::RegisterBase,
-                        address.base,
-                        address.offset,
-                    );
-                }
-                "adr" => {
-                    let address = self.operand(instruction.r2.clone().expect("Need address label"));
-                    self.set_register(
-                        instruction.r1.clone().expect("need dst register"),
-                        RegisterKind::RegisterBase,
-                        address.base,
-                        address.offset,
-                    );
-                }
-                "cbnz" => {
-                    let register = self.registers
-                        [get_register_index(instruction.r1.clone().expect("Need one register"))]
-                    .clone();
-                    if (register.base.is_none()
-                        || register.base.clone().expect("computer2") == AbstractExpression::Empty)
-                        && register.offset == 0
-                    {
-                        return Ok(ExecuteReturnType::Next);
-                    } else if register.kind == RegisterKind::RegisterBase {
-                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                            AbstractComparison::new(
-                                "!=",
-                                AbstractExpression::Immediate(0),
-                                AbstractExpression::Register(Box::new(register)),
-                            ),
-                            instruction.r2.clone().expect("need jump label 1 "),
-                        ));
-                    } else {
-                        return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 2")));
-                    }
-                }
-                // Compare and Branch on Zero compares the value in a register with zero, and conditionally branches to a label at a PC-relative offset if the comparison is equal. It provides a hint that this is not a subroutine call or return. This instruction does not affect condition flags.
-                "cbz" => {
-                    let register = self.registers
-                        [get_register_index(instruction.r1.clone().expect("Need one register"))]
-                    .clone();
-
-                    if (register.base.is_none()
-                        || register.base.clone().expect("computer3") == AbstractExpression::Empty)
-                        && register.offset == 0
-                    {
-                        return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 3")));
-                    } else if register.kind == RegisterKind::RegisterBase {
-                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                            AbstractComparison::new(
-                                "==",
-                                AbstractExpression::Immediate(0),
-                                AbstractExpression::Register(Box::new(register)),
-                            ),
-                            instruction.r2.clone().expect("need jump label 4"),
-                        ));
-                    } else {
-                        return Ok(ExecuteReturnType::Next);
-                    }
-                }
-                "cset" => {
-                    // match on condition based on flags
-                    match instruction
-                        .r2
-                        .clone()
-                        .expect("Need to provide a condition")
-                        .as_str()
-                    {
-                        "cs" => match self.carry.clone().expect("Need carry flag set cset cs") {
-                            FlagValue::Real(b) => {
-                                if b == true {
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        RegisterKind::Immediate,
-                                        None,
-                                        1,
-                                    );
-                                } else {
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        RegisterKind::Immediate,
-                                        None,
-                                        0,
-                                    );
-                                }
-                            }
-                            FlagValue::Abstract(_) => {
-                                log::error!("Can't support this yet :)");
-                                todo!("Abstract Flag Expression3");
-                            }
-                        },
-                        "cc" | "lo" => match self.carry.clone().expect("Need carry flag set cset cc") {
-                            FlagValue::Real(b) => {
-                                if b == false {
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        RegisterKind::Immediate,
-                                        None,
-                                        0,
-                                    );
-                                } else {
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        RegisterKind::Immediate,
-                                        None,
-                                        1,
-                                    );
-                                }
-                            }
-                            FlagValue::Abstract(_) => {
-                                log::error!("Can't support this yet :)");
-                                todo!("Abstract flag expressions 4");
-                            }
-                        },
-                        _ => todo!("unsupported comparison type {:?}", instruction.r2),
-                    }
-                }
-                "csel" => {
-                    // match on condition based on flags
-                    match instruction
-                        .r4
-                        .clone()
-                        .expect("Need to provide a condition")
-                        .as_str()
-                    {
-                        "cc" | "lo" => match self.carry.clone().expect("Need carry flag set csel cc") {
-                            FlagValue::Real(b) => {
-                                if b == true {
-                                    let register = self.registers[get_register_index(
-                                        instruction.r2.clone().expect("Need first source register"),
-                                    )]
-                                    .clone();
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        register.kind,
-                                        register.base,
-                                        register.offset,
-                                    );
-                                } else {
-                                    let register = self.registers[get_register_index(
-                                        instruction.r3.clone().expect("Need first source register"),
-                                    )]
-                                    .clone();
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        register.kind,
-                                        register.base,
-                                        register.offset,
-                                    );
-                                }
-                            }
-                            FlagValue::Abstract(a) => {
-                                let opt1 = self.registers[get_register_index(
-                                    instruction.r2.clone().expect("Need first source register"),
-                                )]
-                                .clone();
-
-                                let opt2 = self.registers[get_register_index(
-                                    instruction.r3.clone().expect("Need second source register"),
-                                )]
-                                .clone();
-
-                                return Ok(ExecuteReturnType::Select(a, instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                            }
-                        },
-                        "cs" => match self.carry.clone() {
-                            Some(FlagValue::Real(b)) => {
-                                if b == false {
-                                    let register = self.registers[get_register_index(
-                                        instruction.r2.clone().expect("Need first source register"),
-                                    )]
-                                    .clone();
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        register.kind,
-                                        register.base,
-                                        register.offset,
-                                    );
-                                } else {
-                                    let register = self.registers[get_register_index(
-                                        instruction.r3.clone().expect("Need first source register"),
-                                    )]
-                                    .clone();
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        register.kind,
-                                        register.base,
-                                        register.offset,
-                                    );
-                                }
-                            }
-                            Some(FlagValue::Abstract(a)) => {
-                                let opt1 = self.registers[get_register_index(
-                                    instruction.r2.clone().expect("Need first source register"),
-                                )]
-                                .clone();
-
-                                let opt2 = self.registers[get_register_index(
-                                    instruction.r3.clone().expect("Need second source register"),
-                                )]
-                                .clone();
-
-                                return Ok(ExecuteReturnType::Select(a.not(), instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                            }
-                            None => {
-                                let opt1 = self.registers[get_register_index(
-                                    instruction.r2.clone().expect("Need first source register"),
-                                )]
-                                .clone();
-
-                                let opt2 = self.registers[get_register_index(
-                                    instruction.r3.clone().expect("Need second source register"),
-                                )]
-                                .clone();
-                                return Ok(ExecuteReturnType::Select(AbstractComparison::new("==", AbstractExpression::Abstract("c_flag".to_string()), AbstractExpression::Immediate(1)), instruction.r1.clone().expect("need dst register"), opt1, opt2)); 
-                            }
-                        },
-                        "eq" => {
-                            match self.zero.clone().expect("Need zero flag set") {
-                                FlagValue::Real(z) => {
-                                    if z == true {
-                                        let register = self.registers[get_register_index(
-                                            instruction.r2.clone().expect("Need first source register"),
-                                        )]
-                                        .clone();
-                                        self.set_register(
-                                            instruction.r1.clone().expect("need dst register"),
-                                            register.kind,
-                                            register.base,
-                                            register.offset,
-                                        );
-                                    } else {
-                                        let register = self.registers[get_register_index(
-                                            instruction.r3.clone().expect("Need first source register"),
-                                        )]
-                                        .clone();
-                                        self.set_register(
-                                            instruction.r1.clone().expect("need dst register"),
-                                            register.kind,
-                                            register.base,
-                                            register.offset,
-                                        );
-                                    }
-                                }
-                                FlagValue::Abstract(z) => {
-                                    let opt1 = self.registers[get_register_index(
-                                        instruction.r2.clone().expect("Need first source register"),
-                                    )]
-                                    .clone();
-                                    let opt2 = self.registers[get_register_index(
-                                        instruction.r3.clone().expect("Need second source register"),
-                                    )]
-                                    .clone();
-                                    return Ok(ExecuteReturnType::Select(z, instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                                }
-                            };
-                        },
-                        _ => todo!("unsupported comparison type for csel {:?}", instruction.r4),
-                    }
-                }
-                "csetm" => {
-                    // match on condition based on flags
-                    match instruction
-                        .r2
-                        .clone()
-                        .expect("Need to provide a condition")
-                        .as_str()
-                    {
-                        "eq" => match self.zero.clone().expect("Need zero flag set") {
-                            FlagValue::Real(b) => {
-                                if b == true {
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        RegisterKind::Immediate,
-                                        None,
-                                        1,
-                                    );
-                                } else {
-                                    self.set_register(
-                                        instruction.r1.clone().expect("need dst register"),
-                                        RegisterKind::Immediate,
-                                        None,
-                                        0,
-                                    );
-                                }
-                            }
-                            FlagValue::Abstract(a) => {
-                                let opt1 = RegisterValue {
-                                    kind: RegisterKind::Immediate,
-                                    base: None,
-                                    offset: 1,
-                                };
-                                let opt2= RegisterValue {
-                                    kind: RegisterKind::Immediate,
-                                    base: None,
-                                    offset: 1,
-                                };
-
-                                return Ok(ExecuteReturnType::Select(a, instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                            }
-                        },
-                        _ => todo!("unsupported comparison type {:?}", instruction.r2),
-                    }
-                }
-                "cmp" => {
-                    self.cmp(
-                        instruction.r1.clone().expect("need register to compare"),
-                        instruction.r2.clone().expect("need register to compare"),
-                    );
-                    // TODO: make branch more general
-                    // https://developer.arm.com/documentation/dui0068/b/ARM-Instruction-Reference/Conditional-execution
-                }
-                "cmn" => {
-                    self.cmn(
-                        instruction.r1.clone().expect("need register to compare"),
-                        instruction.r2.clone().expect("need register to compare"),
-                    );
-                }
-                "b" => {
-                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 5")));
-                }
-                "bl" => {
-                    let label = instruction
-                        .r1
-                        .clone()
-                        .expect("need label to jump")
-                        .to_string();
-                    self.set_register("x30".to_string(), RegisterKind::Immediate, None, pc as i64);
-                    return Ok(ExecuteReturnType::JumpLabel(label));
-                }
-                "b.ne" | "bne" => {
-                    match &self.zero {
-                        // if zero is set to false, then cmp -> not equal and we branch
-                        Some(flag) => match flag {
-                            FlagValue::Real(b) => {
-                                if !b {
-                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 7")));
-                                } else {
-                                    return Ok(ExecuteReturnType::Next);
-                                }
-                            }
-                            FlagValue::Abstract(s) => {
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone().not(), instruction.r1.clone().expect("need jump label 8")));
-                            }
-                        },
-                        None => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
-                }
-                "b.eq" | "beq" => {
-                    match &self.zero {
-                        // if zero is set to false, then cmp -> not equal and we branch
-                        Some(flag) => match flag {
-                            FlagValue::Real(b) => {
-                                if *b {
-                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 9")));
-                                } else {
-                                    return Ok(ExecuteReturnType::Next);
-                                }
-                            }
-                            FlagValue::Abstract(s) => {
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), instruction.r1.clone().expect("need jump label 10")));
-                            }
-                        },
-                        None => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
-                }
-                "bt" | "b.gt" => {
-                    match (&self.zero, &self.neg, &self.overflow) {
-                        (Some(zero), Some(neg), Some(ove)) => {
-                            match  (zero, neg, ove) {
-                            (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
-                               if !z && n == v {  // Z = 0 AND N = V
-                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 11")))
-                               } else {
-                                    return Ok(ExecuteReturnType::Next)
-                               }
-                            },
-                            (FlagValue::Abstract(z) , _, _ ) =>  {
-                                let expression = generate_comparison(">", *z.left.clone(), *z.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, instruction.r1.clone().expect("need jump label 12")));
-                            },
-                            (_,_,_) => todo!("match on undefined flags!")
-                            }
-                        },
-                        (_, _, _) => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
-                }
-                "b.lt" => {
-                    match (&self.zero, &self.neg, &self.overflow) {
-                        (Some(zero), Some(neg), Some(ove)) => {
-                            match  (zero, neg, ove) {
-                            (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
-                               if !z && n != v {  // Z = 0 AND N = V
-                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 11")))
-                               } else {
-                                    return Ok(ExecuteReturnType::Next)
-                               }
-                            },
-                            (FlagValue::Abstract(z) , _, _ ) =>  {
-                                let expression = generate_comparison("<", *z.left.clone(), *z.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, instruction.r1.clone().expect("need jump label 12")));
-                            },
-                            (_,_,_) => todo!("match on undefined flags!")
-                            }
-                        },
-                        (_, _, _) => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
-                }
-                "b.ls" | "b.le" => {
-                    match (&self.zero, &self.carry) {
-                        (Some(zero), Some(carry)) => {
-                            match  (zero, carry) {
-                            (FlagValue::Real(z), FlagValue::Real(c)) => {
-                               if !z && *c {
-                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 13")));
-                               } else {
-                                    return Ok(ExecuteReturnType::Next)
-                               }
-                            },
-                            (FlagValue::Abstract(z) , _ ) | (_, FlagValue::Abstract(z) ) =>  {
-                                let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 14")));
-                            },
-                            }
-                        },
-                        (_, _) => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
-                }
-                "b.cs" | "b.hs" | "bcs" => {
-                    match&self.carry{
-                        Some(carry) => {
-                            match  carry {
-                            FlagValue::Real(c) => {
-                               if *c {
-                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 15")));
-                               } else {
-                                    return Ok(ExecuteReturnType::Next)
-                               }
-                            },
-                            FlagValue::Abstract(c) =>  {
-                                let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 16")));
-                            },
-                            }
-                        },
-                        None => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
-                }
-                "b.cc" | "b.lo" | "blo" => {
-                    match&self.carry{
-                        Some(carry) => {
-                            match  carry {
-                            FlagValue::Real(c) => {
-                               if !*c {
-                                    return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 15")));
-                               } else {
-                                    return Ok(ExecuteReturnType::Next)
-                               }
-                            },
-                            FlagValue::Abstract(c) =>  {
-                                let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 16")));
-                            },
-                            }
-                        },
-                        None => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
-                }
-                "ret" => {
-                    if instruction.r1.is_none() {
-                        let x30 = self.registers[30].clone();
-                        if x30.kind == RegisterKind::RegisterBase {
-                            if let Some(AbstractExpression::Abstract(address)) = x30.base {
-                                if address == "return" && x30.offset == 0 {
-                                    return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                                } else {
-                                    return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
-                                }
-                            }
-                            return Ok(ExecuteReturnType::JumpAddress(x30.offset.try_into().expect("computer4")));
-                        } else {
-                            return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                        }
-                    } else {
-                        let _r1 = &self.registers[get_register_index(
-                            instruction
-                                .r1
-                                .clone()
-                                .expect("provide valid return register"),
-                        )];
-                    }
-                }
-                "ldr" => {
-                    let reg1 = instruction.r1.clone().expect("computer5");
-                    let reg2 = instruction.r2.clone().expect("computer6");
-
-                    let reg2base = get_register_name_string(reg2.clone());
-                    let mut base_add_reg =
-                        self.registers[get_register_index(reg2base.clone())].clone();
-
-                    // pre-index increment
-                    if reg2.contains(",") {
-                        if let Some((base, offset)) = reg2.split_once(",") {
-                            base_add_reg = self.operand(base.to_string());
-                            base_add_reg.offset = base_add_reg.offset + self.operand(offset.to_string()).offset;
-                        } else {
-                            base_add_reg = self.operand(reg2.clone());
-                        }
-
-                        if reg2.contains("!") {
-                            let new_reg = base_add_reg.clone();
-                            self.set_register(
-                                reg2base.clone(),
-                                new_reg.kind,
-                                new_reg.base,
-                                new_reg.offset,
-                            );
-                        }
-                    }
-
-                    let res = self.load(reg1, base_add_reg.clone());
-                    match res {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
-                    }
-
-                    // post-index
-                    if instruction.r3.is_some() {
-                        let new_imm = self.operand(instruction.r3.clone().expect("computer7"));
-                        self.set_register(
-                            reg2base,
-                            base_add_reg.kind,
-                            base_add_reg.base,
-                            base_add_reg.offset + new_imm.offset,
-                        );
-                    }
-                }
-                "ldrb" => {
-                    let reg1 = instruction.r1.clone().expect("computer5");
-                    let reg2 = instruction.r2.clone().expect("computer6");
-
-                    let reg2base = get_register_name_string(reg2.clone());
-                    let mut base_add_reg =
-                        self.registers[get_register_index(reg2base.clone())].clone();
-
-                    // pre-index increment
-                    if reg2.contains(",") {
-                        if let Some((base, offset)) = reg2.split_once(",") {
-                            base_add_reg = self.operand(base.to_string());
-                            base_add_reg.offset = base_add_reg.offset + self.operand(offset.to_string()).offset;
-                        } else {
-                            base_add_reg = self.operand(reg2.clone());
-                        }
-
-                        if reg2.contains("!") {
-                            let new_reg = base_add_reg.clone();
-                            self.set_register(
-                                reg2base.clone(),
-                                new_reg.kind,
-                                new_reg.base,
-                                new_reg.offset,
-                            );
-                        }
-                    }
-
-                    let res = self.load(reg1, base_add_reg.clone());
-                    match res {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
-                    }
-
-                    // post-index
-                    if instruction.r3.is_some() {
-                        let new_imm = self.operand(instruction.r3.clone().expect("computer7"));
-                        self.set_register(
-                            reg2base,
-                            base_add_reg.kind,
-                            base_add_reg.base,
-                            base_add_reg.offset + new_imm.offset,
-                        );
-                    }
-                }
-                "ldp" => {
-                    let reg1 = instruction.r1.clone().expect("computer8");
-                    let reg2 = instruction.r2.clone().expect("computer9");
-                    let reg3 = instruction.r3.clone().expect("computer10");
-
-                    let reg3base = get_register_name_string(reg3.clone());
-                    let mut base_add_reg =
-                        self.registers[get_register_index(reg3base.clone())].clone();
-
-                    // pre-index increment
-                    if reg3.contains(",") {
-                        base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
-                        // with writeback
-                        if reg3.contains("!") {
-                            let new_reg = base_add_reg.clone();
-                            self.set_register(
-                                reg3base.clone(),
-                                new_reg.kind,
-                                new_reg.base,
-                                new_reg.offset,
-                            );
-                        }
-                    }
-
-                    let res1 = self.load(reg1, base_add_reg.clone());
-
-                    let mut next = base_add_reg.clone();
-                    next.offset = next.offset + 8;
-                    let res2 = self.load(reg2, next);
-
-                    // post-index
-                    if instruction.r4.is_some() {
-                        let new_imm = self.operand(instruction.r4.clone().expect("computer11"));
-                        self.set_register(
-                            reg3base,
-                            base_add_reg.kind,
-                            base_add_reg.base,
-                            base_add_reg.offset + new_imm.offset,
-                        );
-                    }
-
-                    match res1 {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
-                    }
-                    match res2 {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
-                    }
-                }
-                "str" | "strb" => { // TODO: split
-                    let reg1 = instruction.r1.clone().expect("computer12");
-                    let reg2 = instruction.r2.clone().expect("computer13");
-
-                    let reg2base = get_register_name_string(reg2.clone());
-                    let mut base_add_reg =
-                        self.registers[get_register_index(reg2base.clone())].clone();
-
-                    // pre-index increment
-                    if reg2.contains(",") {
-                        base_add_reg = self.operand(reg2.clone().trim_end_matches("!").to_string());
-                        // with writeback
-                        if reg2.contains("!") {
-                            let new_reg = base_add_reg.clone();
-                            self.set_register(
-                                reg2base.clone(),
-                                new_reg.kind,
-                                new_reg.base,
-                                new_reg.offset,
-                            );
-                        }
-                    }
-
-                    let reg2base = get_register_name_string(reg2.clone());
-                    let res = self.store(reg1, base_add_reg.clone());
-                    match res {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
-                    }
-
-                    // post-index
-                    if instruction.r3.is_some() {
-                        let new_imm = self.operand(instruction.r3.clone().expect("computer14"));
-                        self.set_register(
-                            reg2base,
-                            base_add_reg.kind,
-                            base_add_reg.base,
-                            base_add_reg.offset + new_imm.offset,
-                        );
-                    }
-                }
-                "stp" => {
-                    let reg1 = instruction.r1.clone().expect("computer15");
-                    let reg2 = instruction.r2.clone().expect("computer16");
-                    let reg3 = instruction.r3.clone().expect("computer17");
-
-                    let reg3base = get_register_name_string(reg3.clone());
-                    let mut base_add_reg =
-                        self.registers[get_register_index(reg3base.clone())].clone();
-
-                    // pre-index increment
-                    if reg3.contains(",") {
-                        base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
-                        // with writeback
-                        if reg3.contains("!") {
-                            let new_reg = base_add_reg.clone();
-                            self.set_register(
-                                reg3base.clone(),
-                                new_reg.kind,
-                                new_reg.base,
-                                new_reg.offset,
-                            );
-                        }
-                    }
-
-                    let res = self.store(reg1, base_add_reg.clone());
-                    match res {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
-                    }
-                    let mut next = base_add_reg.clone();
-                    next.offset = next.offset + 8;
-                    let res = self.store(reg2, next);
-                    match res {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
-                    }
-
-                    // post-index
-                    if instruction.r4.is_some() {
-                        let new_imm = self.operand(instruction.r4.clone().expect("computer18"));
-                        self.set_register(
-                            reg3base,
-                            base_add_reg.kind,
-                            base_add_reg.base,
-                            base_add_reg.offset + new_imm.offset,
-                        );
-                    }
-                }
-                "mov" | "movz" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst reg");
-                    let reg2 = instruction.r2.clone().expect("Need src reg");
-
-                    let src = self.operand(reg2);
-                    self.set_register(reg1, src.kind, src.base, src.offset);
-                }
-                "movk" => {
-                    let reg1 = instruction.r1.clone().expect("Need dst reg");
-                    let reg2 = instruction.r2.clone().expect("Need src reg");
-
-                    let src = self.operand(reg1.clone());
-                    let mut offset = self.operand(reg2).offset;
-
-                    if let Some(op) = instruction.r3.clone() {
-                        match op.as_str() {
-                            "lsl" | "lsl#16" => offset = offset << 16,
-                            _ => todo!("implement more shifting strategies for movk: {:?}", op),
-                        }
-                    }
-                    self.set_register(reg1, src.kind, src.base, src.offset + offset);
-                }
-                "rev" | "rev32" | "rbit" => { //TODO: reimpl rev32
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    let reg2 = instruction.r2.clone().expect("Need source register");
-
-                    let mut src = self.operand(reg2);
-
-                    if let Some(base) = src.base {
-                        src.base =
-                            Some(generate_expression("rev", base, AbstractExpression::Empty));
-                    }
-
-                    src.offset = src.offset.swap_bytes();
-                    self.set_register(reg1, src.kind, src.base, src.offset);
-                }
-                "clz" => {
-                    // TODO: actually count
-                    let reg1 = instruction.r1.clone().expect("Need dst register");
-                    self.set_register(reg1, RegisterKind::Number, None, 0);
-                }
-                _ => {
-                    log::warn!("Instruction not supported {:?}", instruction);
-                    todo!("Instruction not implemented {:?}", instruction)
-                }
-            }
-        } else {
-            // SIMD
-            if instruction.op.contains(".") {
-                if let Some((op, vec)) = instruction.op.split_once(".") {
-                    match op {
-                        "rev64" => {
-                            let reg1 = instruction.r1.clone().expect("Need dst register");
-                            let reg2 = instruction.r2.clone().expect("Need source register");
-
-                            let src =
-                                &self.simd_registers[get_register_index(reg2.clone())].clone();
-                            let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-
-                            dest.kind = src.kind.clone();
-                            match vec {
-                                "8h" => {
-                                    for i in 0..8 {
-                                        let (base, offset) = src.get_halfword(7 - i);
-                                        dest.set_halfword(i, base, offset);
-                                    }
-                                }
-                                "16b" => {
-                                    for i in 0..16 {
-                                        let (base, offset) = src.get_byte(15 - i);
-                                        dest.set_byte(i, base, offset);
-                                    }
-                                }
-                                _ => todo!("rev64 support more vector modes"),
-                            }
-                        }
-                        "ld1" => {
-                            // TODO: fix parser to not consider { as register
-                            // using 2 and 4 because instruction gets parsed like this:
-                            // Instruction { op: "ld1.8h", r1: Some("{"), r2: Some("v0"), r3: Some("}"), r4: Some("[x1"), r5: None, r6: None }
-                            let reg2 = instruction.r2.clone().expect("Need dst register");
-                            let reg4 = instruction.r4.clone().expect("Need source register");
-
-                            let src = &self.registers[get_register_index(
-                                reg4.strip_prefix('[').unwrap_or(&reg4).to_string(),
-                            )]
-                            .clone();
-
-                            let res = self.load_vector(reg2, src.clone());
-                            match res {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                        }
-                        "st1" => {
-                            // TODO: fix parser because instruction gets parsed like this:
-                            // Instruction { op: "st1.d", r1: Some("{"), r2: Some("v0"), r3: Some("[1], [x0"), r4: Some("[1], [x0"), r5: Some("x4"), r6: None }
-                            let reg2 = instruction.r2.clone().expect("Need src register");
-                            let reg3 = instruction.r3.clone().expect("Need index and dest");
-
-                            let mut parts = reg3.split(",");
-                            let _index = parts
-                                .next()
-                                .expect("expecting index")
-                                .strip_prefix('[')
-                                .expect("something")
-                                .strip_suffix("]")
-                                .expect("something else")
-                                .parse::<i32>()
-                                .expect("expected int");
-
-                            let dest = get_register_name_string(
-                                parts
-                                    .next()
-                                    .expect("need another reg")
-                                    .strip_prefix(" [")
-                                    .expect("storage dest")
-                                    .to_string(),
-                            );
-                            let address = self.registers[get_register_index(dest.clone())].clone();
-
-                            // TODO: use offset to grab only low/high parts of vector
-                            let res = self.store_vector(reg2, address.clone());
-                            match res {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-
-                            if let Some(reg5) = instruction.r5.clone() {
-                                let offset = self.operand(reg5);
-
-                                self.set_register(
-                                    dest,
-                                    address.kind,
-                                    address.base,
-                                    address.offset + offset.offset,
-                                );
-                            }
-                        }
-                        "ld1r" => {
-                            let dst = instruction.r2.clone().expect("need dst ld1r") + vec;
-                            let src = instruction.r4.clone().expect("need src ld1r");
-
-                            let address = self.registers[get_register_index(src.clone())].clone();
-                            let _ = self.load(dst, address);
-
-                            //    match vec {
-                            //     "16b" => {
-                            //         for i in 0..15 {
-                            //             set_byte
-                            //         }
-                            // },
-
-                            // _ => todo!("support more ld1r types")
-                            //    }
-                        }
-                        "dup" | "neg" | "shl" => {
-                            println!("here");
-                        }
-                        _ => todo!("support simd operation with notation {:?}", instruction),
-                    }
-                }
-            } else {
-                match instruction.op.as_str() {
-                    "ld1" => {
-                        let reg1 = instruction.r1.clone().expect("Need first source register");
-                        let reg2 = instruction
-                            .r2
-                            .clone()
-                            .expect("Need second source or dst register");
-                        // either two vector registers in r1 and r2, or four in r1-r4, followed by address and potentially followed by immediate increment value
-                        if let Some(reg5) = &instruction.r5 {
-                            let reg3 = instruction.r3.clone().expect("Need 3rd vector");
-                            let reg4 = instruction.r4.clone().expect("Need 4th vector");
-                            if reg4.contains("}") {
-                                let base_name = get_register_name_string(reg5.clone());
-                                let base_add_reg =
-                                    self.registers[get_register_index(base_name.clone())].clone();
-
-                                match self.load_vector(reg1, base_add_reg.clone()) {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                                match self.load_vector(reg2, base_add_reg.clone()) {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                                match self.load_vector(reg3, base_add_reg.clone()) {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                                match self.load_vector(reg4, base_add_reg.clone()) {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-
-                                if let Some(reg6) = &instruction.r6 {
-                                    let new_imm =
-                                        self.operand(get_register_name_string(reg6.clone()));
-                                    let peeled_reg5 =
-                                        reg5.strip_prefix("[").unwrap_or(reg5).to_string();
-                                    self.set_register(
-                                        peeled_reg5,
-                                        base_add_reg.kind,
-                                        base_add_reg.base,
-                                        base_add_reg.offset + new_imm.offset,
-                                    );
-                                }
-                            } else {
-                                let imm = self.operand(reg3.to_string());
-                                let base_name = get_register_name_string(reg2.clone());
-                                let mut base_add_reg =
-                                    self.registers[get_register_index(base_name.clone())].clone();
-
-                                base_add_reg.offset = base_add_reg.offset + imm.offset;
-                                let res = self.load_vector(reg1, base_add_reg.clone());
-                                match res {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                            }
-                        } else if let Some(reg3) = &instruction.r3 {
-                            if reg2.contains("}") {
-                                let base_name = get_register_name_string(reg3.clone());
-                                let base_add_reg =
-                                    self.registers[get_register_index(base_name.clone())].clone();
-
-                                match self.load_vector(reg1, base_add_reg.clone()) {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                                match self.load_vector(reg2, base_add_reg.clone()) {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                                if let Some(reg4) = &instruction.r4 {
-                                    let new_imm =
-                                        self.operand(get_register_name_string(reg4.clone()));
-                                    let peeled_reg3 =
-                                        reg3.strip_prefix("[").unwrap_or(reg3).to_string();
-                                    self.set_register(
-                                        peeled_reg3,
-                                        base_add_reg.kind,
-                                        base_add_reg.base,
-                                        base_add_reg.offset + new_imm.offset,
-                                    );
-                                }
-                            } else if reg3.contains("#") {
-                                let base_name = get_register_name_string(reg2.clone());
-                                let base_add_reg =
-                                    self.registers[get_register_index(base_name.clone())].clone();
-
-                                let res = self.load_vector(reg1, base_add_reg.clone());
-                                match res {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-
-                                //post index
-                                let imm = self.operand(reg3.to_string());
-                                self.set_register(
-                                    base_name,
-                                    base_add_reg.kind,
-                                    base_add_reg.base,
-                                    base_add_reg.offset + imm.offset,
-                                );
-                            } else {
-                                let imm = self.operand(reg3.to_string());
-                                let base_name = get_register_name_string(reg2.clone());
-                                let mut base_add_reg =
-                                    self.registers[get_register_index(base_name.clone())].clone();
-
-                                base_add_reg.offset = base_add_reg.offset + imm.offset;
-                                let res = self.load_vector(reg1, base_add_reg.clone());
-                                match res {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                            }
-                        } else {
-                            let base_name = get_register_name_string(reg2.clone());
-                            let base_add_reg =
-                                self.registers[get_register_index(base_name.clone())].clone();
-                            let res = self.load_vector(reg1, base_add_reg.clone());
-                            match res {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                        }
-                    }
-                    "st1" => {
-                        let reg1 = instruction.r1.clone().expect("computer19");
-                        let reg2 = instruction.r2.clone().expect("computer20");
-                        if let Some(reg3) = instruction.r3.clone() {
-                            if reg3.contains("#") {
-                                let offset = self.operand(reg3).offset;
-                                let reg2base = get_register_name_string(reg2.clone());
-                                let mut base_add_reg =
-                                    self.registers[get_register_index(reg2base.clone())].clone();
-                                base_add_reg.offset = base_add_reg.offset + offset;
-
-                                let res = self.store_vector(reg1, base_add_reg.clone());
-                                match res {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                            } else {
-                                let reg3base = get_register_name_string(reg3.clone());
-                                let base_add_reg =
-                                    self.registers[get_register_index(reg3base.clone())].clone();
-
-                                let res = self.store_vector(reg1, base_add_reg.clone());
-                                match res {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                                let res = self.store_vector(reg2, base_add_reg.clone());
-                                match res {
-                                    Err(e) => return Err(e.to_string()),
-                                    _ => (),
-                                }
-                            }
-                        } else {
-                            let reg2base = get_register_name_string(reg2.clone());
-                            let base_add_reg =
-                                self.registers[get_register_index(reg2base.clone())].clone();
-
-                            let res = self.store_vector(reg1, base_add_reg.clone());
-                            match res {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                        }
-                    }
-                    "movi" => {
-                        let reg1 = instruction.r1.clone().expect("Need first register name");
-                        let reg2 = instruction.r2.clone().expect("Need immediate");
-                        let imm = self.operand(reg2);
-                        self.set_register(reg1, RegisterKind::Immediate, None, imm.offset);
-                    }
-                    "mov" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst reg");
-                        let reg2 = instruction.r2.clone().expect("Need src reg");
-                        let src = self.operand(reg2);
-                        self.set_register(reg1, src.kind, src.base, src.offset);
-                    }
-                    "fmov" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst reg");
-                        let reg2 = instruction.r2.clone().expect("Need src reg");
-                        let src = self.operand(reg2);
-                        self.set_register(reg1, src.kind, src.base, src.offset);
-                    }
-                    "shl" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need source register");
-                        let reg3 = instruction.r3.clone().expect("Need immediate");
-                        let imm = self.operand(reg3);
-
-                        if let Some((_, arrange)) = reg1.split_once(".") {
-                            match arrange {
-                                "2d" => {
-                                    for i in 0..2 {
-                                        let (bases, offsets) = self.simd_registers
-                                            [get_register_index(reg2.clone())]
-                                        .get_double(i);
-                                        let mut offset = u64::from_be_bytes(offsets);
-                                        (offset, _) = offset.overflowing_shl(
-                                            imm.offset.try_into().expect("computer21"),
-                                        );
-                                        // TODO: figure out best way to modify bases
-                                        let dest = &mut self.simd_registers
-                                            [get_register_index(reg1.clone())];
-                                        dest.set_double(i, bases, offset.to_be_bytes());
-                                    }
-                                }
-                                _ => todo!("unsupported shl vector type"),
-                            }
-                        }
-                    }
-                    "ushr" | "sshr" => {
-                        // FIX figure out how to do sshr over byte strings
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need source register");
-                        let reg3 = instruction.r3.clone().expect("Need immediate");
-                        let imm = self.operand(reg3);
-
-                        if let Some((_, arrange)) = reg1.split_once(".") {
-                            match arrange {
-                                "2d" => {
-                                    for i in 0..2 {
-                                        let (bases, offsets) = self.simd_registers
-                                            [get_register_index(reg2.clone())]
-                                        .get_double(i);
-                                        let mut offset = u64::from_be_bytes(offsets);
-                                        (offset, _) = offset.overflowing_shr(
-                                            imm.offset.try_into().expect("computer22"),
-                                        );
-                                        // TODO: figure out best way to modify bases
-                                        let dest = &mut self.simd_registers
-                                            [get_register_index(reg1.clone())];
-                                        dest.set_double(i, bases, offset.to_be_bytes());
-                                    }
-                                }
-                                "4s" => {
-                                    for i in 0..4 {
-                                        let (bases, offsets) = self.simd_registers
-                                            [get_register_index(reg2.clone())]
-                                        .get_word(i);
-                                        let mut offset = u32::from_be_bytes(offsets);
-                                        (offset, _) = offset.overflowing_shr(
-                                            imm.offset.try_into().expect("computer23"),
-                                        );
-                                        // TODO: figure out best way to modify bases
-                                        let dest = &mut self.simd_registers
-                                            [get_register_index(reg1.clone())];
-                                        dest.set_word(i, bases, offset.to_be_bytes());
-                                    }
-                                }
-                                _ => todo!("unsupported ushr vector type"),
-                            }
-                        }
-                    }
-                    "ext" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need source register");
-                        let reg3 = instruction.r3.clone().expect("Need immediate");
-                        let reg4 = instruction.r4.clone().expect("Need immediate");
-                        let imm = self.operand(reg4);
-
-                        if let Some((_, arrange)) = reg1.split_once(".") {
-                            match arrange {
-                                "8b" => {
-                                    let amt = imm.offset as usize;
-                                    assert!(amt < 8);
-                                    for i in 0..amt {
-                                        let (base, offset) = self.simd_registers
-                                            [get_register_index(reg2.clone())]
-                                        .get_byte(i);
-                                        let dest = &mut self.simd_registers
-                                            [get_register_index(reg1.clone())];
-                                        dest.set_byte(i, base.clone(), offset);
-                                    }
-                                    for i in amt..8 {
-                                        let (base, offset) = self.simd_registers
-                                            [get_register_index(reg3.clone())]
-                                        .get_byte(i);
-                                        let dest = &mut self.simd_registers
-                                            [get_register_index(reg1.clone())];
-                                        dest.set_byte(i, base.clone(), offset);
-                                    }
-                                }
-                                "16b" => {
-                                    let amt = imm.offset as usize;
-                                    assert!(amt < 16);
-                                    for i in 0..amt {
-                                        let (base, offset) = self.simd_registers
-                                            [get_register_index(reg2.clone())]
-                                        .get_byte(i);
-                                        let dest = &mut self.simd_registers
-                                            [get_register_index(reg1.clone())];
-                                        dest.set_byte(i, base.clone(), offset);
-                                    }
-                                    for i in amt..16 {
-                                        let (base, offset) = self.simd_registers
-                                            [get_register_index(reg3.clone())]
-                                        .get_byte(i);
-                                        let dest = &mut self.simd_registers
-                                            [get_register_index(reg1.clone())];
-                                        dest.set_byte(i, base.clone(), offset);
-                                    }
-                                }
-                                _ => todo!("unsupported ext vector type"),
-                            }
-                        }
-                    }
-                    "dup" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let mut reg2 = instruction.r2.clone().expect("Need source register");
-                        if reg2.contains("[") {
-                            let left_brac = reg2.find("[").expect("need left bracket");
-                            let right_brac = reg2.find("]").expect("need right bracket");
-                            let index_string = reg2
-                                .get((left_brac + 1)..right_brac)
-                                .expect("need brackets");
-                            let index = index_string
-                                .parse::<usize>()
-                                .expect("index into vector must be an integer");
-
-                            reg2 = reg2.split_at(left_brac).0.to_string();
-                            if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-                                if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                    assert!(arrangement1.contains(arrangement2));
-                                    let src = self.simd_registers
-                                        [get_register_index(vector2.to_string())]
-                                    .clone();
-                                    let dest = &mut self.simd_registers
-                                        [get_register_index(vector1.to_string())];
-
-                                    match arrangement2 {
-                                        "b" => {
-                                            let elem = src.get_byte(index);
-                                            for i in 0..16 {
-                                                dest.set_byte(i, elem.0.clone(), elem.1);
-                                            }
-                                        }
-                                        "h" => {
-                                            let elem = src.get_halfword(index);
-                                            for i in 0..8 {
-                                                dest.set_halfword(i, elem.0.clone(), elem.1);
-                                            }
-                                        }
-                                        "s" => {
-                                            let elem = src.get_word(index);
-                                            for i in 0..4 {
-                                                dest.set_word(i, elem.0.clone(), elem.1);
-                                            }
-                                        }
-                                        "d" => {
-                                            let elem = src.get_double(index);
-                                            for i in 0..2 {
-                                                dest.set_double(i, elem.0.clone(), elem.1);
-                                            }
-                                        }
-                                        _ => log::error!(
-                                            "Not a valid vector arrangement {:?}",
-                                            arrangement1
-                                        ),
-                                    }
-                                }
-                            };
-                        } else {
-                            if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-                                let dest = &mut self.simd_registers
-                                    [get_register_index(vector1.to_string())];
-                                let src = &mut self.registers[get_register_index(reg2)];
-
-                                dest.set_register(
-                                    arrangement1.to_string(),
-                                    src.kind.clone(),
-                                    src.base.clone(),
-                                    src.offset as u128,
-                                );
-                            };
-                        }
-                    }
-                    "and" => {
-                        self.vector_arithmetic(
-                            "&",
-                            &|x, y| x & y,
-                            &|x, y| x & y,
-                            &|x, y| x & y,
-                            &|x, y| x & y,
-                            instruction,
-                        );
-                    }
+            match instruction.ty {
+                InstructionType::Arithmetic => match instruction.opcode.as_str() {
                     "add" => {
-                        self.vector_arithmetic(
-                            "+",
-                            &|x, y| x + y,
-                            &|x, y| x + y,
-                            &|x, y| x + y,
-                            &|x, y| x + y,
-                            instruction,
-                        );
+                        self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
                     }
-                    "orr" => {
-                        self.vector_arithmetic(
-                            "|",
-                            &|x, y| x | y,
-                            &|x, y| x | y,
-                            &|x, y| x | y,
-                            &|x, y| x | y,
-                            instruction,
-                        );
-                    }
-                    "eor" => {
-                        self.vector_arithmetic(
-                            "^",
-                            &|x, y| x ^ y,
-                            &|x, y| x ^ y,
-                            &|x, y| x ^ y,
-                            &|x, y| x ^ y,
-                            instruction,
-                        );
-                    }
-                    "mul" => {
-                        self.vector_arithmetic(
-                            "*",
-                            &|x, y| x * y,
-                            &|x, y| x * y,
-                            &|x, y| x * y,
-                            &|x, y| x * y,
-                            instruction,
-                        );
-                    }
-                    "sub" => {
-                        self.vector_arithmetic(
-                            "-",
-                            &|x, y| x - y,
-                            &|x, y| x - y,
-                            &|x, y| x - y,
-                            &|x, y| x - y,
-                            instruction,
-                        );
-                    }
-                    "rev64" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need source register");
-
-                        let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-
-                        dest.kind = src.kind.clone();
-                        for i in 0..16 {
-                            let (base, offset) = src.get_byte(15 - i);
-                            dest.set_byte(i, base, offset);
-                        }
-                    }
-                    "rev32" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need source register");
-
-                        let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-
-                        dest.kind = src.kind.clone();
-                        for i in 0..8 {
-                            let (base, offset) = src.get_byte(7 - i);
-                            dest.set_byte(i, base, offset);
-                        }
-
-                        for i in 8..16 {
-                            let (base, offset) = src.get_byte(15 - i);
-                            dest.set_byte(i, base, offset);
-                        }
-                    }
-                    "ins" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let mut reg2 = instruction.r2.clone().expect("Need source register");
-
-                        // vector, element
-                        if reg2.contains("v") {
-                            let left_brac = reg2.find("[").expect("need left bracket");
-                            let right_brac = reg2.find("]").expect("need right bracket");
-                            let index_string = reg2
-                                .get((left_brac + 1)..right_brac)
-                                .expect("need brackets");
-                            let index = index_string
-                                .parse::<usize>()
-                                .expect("index into vector must be an integer");
-
-                            reg2 = reg2.split_at(left_brac).0.to_string();
-                            if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-                                if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                    assert!(arrangement1.contains(arrangement2));
-                                    let src = self.simd_registers
-                                        [get_register_index(vector2.to_string())]
-                                    .clone();
-                                    let dest = &mut self.simd_registers
-                                        [get_register_index(vector1.to_string())];
-
-                                    match arrangement2 {
-                                        "b" => {
-                                            let (base, offset) = src.get_byte(index);
-                                            dest.set_byte(index, base, offset);
-                                        }
-                                        "h" => {
-                                            let (base, offset) = src.get_halfword(index);
-                                            dest.set_halfword(index, base, offset);
-                                        }
-                                        "s" => {
-                                            let (base, offset) = src.get_word(index);
-                                            dest.set_word(index, base, offset);
-                                        }
-                                        "d" => {
-                                            let (base, offset) = src.get_double(index);
-                                            dest.set_double(index, base, offset);
-                                        }
-                                        _ => log::error!(
-                                            "Not a valid vector arrangement {:?}",
-                                            arrangement1
-                                        ),
-                                    }
-                                }
-                            }
-                        // vector, general
-                        } else {
-                            todo!("vector general ins unsupported");
-                        }
-                    }
-                    "pmull" | "pmull2" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need first source register");
-                        let reg3 = instruction.r3.clone().expect("Need second source register");
-
-                        if let Some((vector1, _)) = reg1.split_once(".") {
-                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                    assert_eq!(arrangement2, arrangement3);
-
-                                    let src1 = self.simd_registers
-                                        [get_register_index(vector2.to_string())]
-                                    .clone();
-                                    let src2 = self.simd_registers
-                                        [get_register_index(vector3.to_string())]
-                                    .clone();
-                                    let dest = &mut self.simd_registers
-                                        [get_register_index(vector1.to_string())];
-
-                                    match arrangement2 {
-                                        "8b" => {
-                                            for i in 0..8 {
-                                                let base = generate_expression_from_options(
-                                                    "*",
-                                                    src1.get_byte(i).0,
-                                                    src2.get_byte(i).0,
-                                                );
-                                                let offset =
-                                                    src1.get_byte(i).1 * src2.get_byte(i).1;
-
-                                                dest.set_byte(i, base, offset);
-                                            }
-                                        }
-                                        "4h" => {
-                                            for i in 0..8 {
-                                                let (bases1, offsets1) = self.simd_registers
-                                                    [get_register_index(reg2.clone())]
-                                                .get_halfword(i);
-
-                                                let (bases2, offsets2) = self.simd_registers
-                                                    [get_register_index(reg3.clone())]
-                                                .get_halfword(i);
-                                                let a = u16::from_be_bytes(offsets1);
-                                                let b = u16::from_be_bytes(offsets2);
-                                                let offset = a * b;
-
-                                                let mut new_bases = [BASE_INIT; 2];
-                                                for i in 0..2 {
-                                                    new_bases[i] = generate_expression_from_options(
-                                                        "*",
-                                                        bases1[i].clone(),
-                                                        bases2[i].clone(),
-                                                    );
-                                                }
-
-                                                let dest = &mut self.simd_registers
-                                                    [get_register_index(reg1.clone())];
-                                                dest.set_halfword(
-                                                    i,
-                                                    new_bases,
-                                                    offset.to_be_bytes(),
-                                                );
-                                            }
-                                        }
-                                        _ => todo!("pmull unsupported vector access"),
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "zip1" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need first source register");
-                        let reg3 = instruction.r3.clone().expect("Need second source register");
-
-                        if let Some((vector1, _)) = reg1.split_once(".") {
-                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                    assert_eq!(arrangement2, arrangement3);
-
-                                    let src1 = self.simd_registers
-                                        [get_register_index(vector2.to_string())]
-                                    .clone();
-                                    let src2 = self.simd_registers
-                                        [get_register_index(vector3.to_string())]
-                                    .clone();
-                                    let dest = &mut self.simd_registers
-                                        [get_register_index(vector1.to_string())];
-
-                                    match arrangement2 {
-                                        "2d" => {
-                                            let elem = src1.get_double(0);
-                                            dest.set_double(0, elem.0, elem.1);
-
-                                            let elem = src2.get_double(0);
-                                            dest.set_double(1, elem.0, elem.1);
-                                        }
-                                        "16b" => {
-                                            for i in 0..16 {
-                                                if i % 2 == 0 {
-                                                    let elem = src1.get_byte(0);
-                                                    dest.set_byte(i, elem.0, elem.1);
-                                                } else {
-                                                    let elem = src2.get_byte(0);
-                                                    dest.set_byte(i, elem.0, elem.1);
-                                                }
-                                            }
-                                        }
-                                        _ => todo!("zip1 unsupported vector access"),
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "zip2" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need first source register");
-                        let reg3 = instruction.r3.clone().expect("Need second source register");
-
-                        if let Some((vector1, _)) = reg1.split_once(".") {
-                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                    assert_eq!(arrangement2, arrangement3);
-
-                                    let src1 = self.simd_registers
-                                        [get_register_index(vector2.to_string())]
-                                    .clone();
-                                    let src2 = self.simd_registers
-                                        [get_register_index(vector3.to_string())]
-                                    .clone();
-                                    let dest = &mut self.simd_registers
-                                        [get_register_index(vector1.to_string())];
-
-                                    match arrangement2 {
-                                        "2d" => {
-                                            let elem = src1.get_double(1);
-                                            dest.set_double(0, elem.0, elem.1);
-
-                                            let elem = src2.get_double(1);
-                                            dest.set_double(1, elem.0, elem.1);
-                                        }
-                                        "16b" => {
-                                            //FIX
-                                            for i in 0..16 {
-                                                if i % 2 == 1 {
-                                                    let elem = src1.get_byte(0);
-                                                    dest.set_byte(i, elem.0, elem.1);
-                                                } else {
-                                                    let elem = src2.get_byte(0);
-                                                    dest.set_byte(i, elem.0, elem.1);
-                                                }
-                                            }
-                                        }
-                                        _ => todo!("zip2 unsupported vector access"),
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "aese" | "aesmc" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need first source register");
-
-                        let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-
-                        match (src.kind.clone(), dest.kind.clone()) {
-                            (RegisterKind::Number, RegisterKind::Number) => {
-                                // don't need to do anything
-                                ()
-                            }
-                            _ => todo!(),
-                        }
-                    }
-                    "trn1" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need first source register");
-                        let reg3 = instruction.r3.clone().expect("Need second source register");
-
-                        if let Some((vector1, _)) = reg1.split_once(".") {
-                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                    assert_eq!(arrangement2, arrangement3);
-
-                                    let src1 = self.simd_registers
-                                        [get_register_index(vector2.to_string())]
-                                    .clone();
-                                    let src2 = self.simd_registers
-                                        [get_register_index(vector3.to_string())]
-                                    .clone();
-                                    let dest = &mut self.simd_registers
-                                        [get_register_index(vector1.to_string())];
-
-                                    match arrangement2 {
-                                        "2d" => {
-                                            let elem = src1.get_double(0);
-                                            dest.set_double(0, elem.0, elem.1);
-
-                                            let elem = src2.get_double(0);
-                                            dest.set_double(1, elem.0, elem.1);
-                                        }
-                                        _ => todo!("trn1 unsupported vector access"),
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "trn2" => {
-                        let reg1 = instruction.r1.clone().expect("Need dst register");
-                        let reg2 = instruction.r2.clone().expect("Need first source register");
-                        let reg3 = instruction.r3.clone().expect("Need second source register");
-
-                        if let Some((vector1, _)) = reg1.split_once(".") {
-                            if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-                                if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-                                    assert_eq!(arrangement2, arrangement3);
-
-                                    let src1 = self.simd_registers
-                                        [get_register_index(vector2.to_string())]
-                                    .clone();
-                                    let src2 = self.simd_registers
-                                        [get_register_index(vector3.to_string())]
-                                    .clone();
-                                    let dest = &mut self.simd_registers
-                                        [get_register_index(vector1.to_string())];
-
-                                    match arrangement2 {
-                                        "2d" => {
-                                            let elem = src1.get_double(1);
-                                            dest.set_double(0, elem.0, elem.1);
-
-                                            let elem = src2.get_double(1);
-                                            dest.set_double(1, elem.0, elem.1);
-                                        }
-                                        _ => todo!("trn2 unsupported vector access"),
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "ld1r" => {
-                        let dst = instruction.r1.clone().expect("need dst ld1r");
-                        let src = instruction.r2.clone().expect("need src ld1r");
-
-                        let address = self.registers[get_register_index(src.clone())].clone();
-                        let _ = self.load(dst, address);
-                    }
-                    "bit" | "uaddl" | "uaddl2" | "sqrshrun" | "sqrshrun2" | "umull" | "umull2"
-                    | "umlal" | "umlal2" | "rshrn" | "rshrn2" => {
-                        let dest = instruction.r1.clone().expect("need dest");
-                        let reg = &mut self.simd_registers[get_register_index(dest.to_string())];
-                        reg.set(
-                            "16b".to_string(),
-                            RegisterKind::Number,
-                            [BASE_INIT; 16],
-                            [0; 16],
-                        );
-                    }
-                    _ => {
-                        log::warn!("SIMD instruction not supported {:?}", instruction);
-                        todo!("unsupported vector operation {:?}", instruction);
-                    }
-                }
+                    _ => todo!(),
+                },
+                _ => todo!(),
             }
+            //     "mul" | "umulh" => { // separate
+            //         self.arithmetic(
+            //             "*",
+            //             &|x, y| x * y,
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //             instruction.r4.clone(),
+            //         );
+            //     }
+            //     "adds" => {
+            //         self.cmn(
+            //             instruction.r2.clone().expect("need register to compare"),
+            //             instruction.r3.clone().expect("need register to compare"),
+            //         );
+
+            //         self.arithmetic(
+            //             "+",
+            //             &|x, y| x + y,
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //             instruction.r4.clone(),
+            //         );
+            //     }
+            //     "sub" => {
+            //         self.arithmetic(
+            //             "-",
+            //             &|x, y| x - y,
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //             instruction.r4.clone(),
+            //         );
+            //     }
+            //     "subs" => {
+            //         self.cmp(
+            //             instruction.r2.clone().expect("need register to compare"),
+            //             instruction.r3.clone().expect("need register to compare"),
+            //         );
+
+            //         self.arithmetic(
+            //             "-",
+            //             &|x, y| x - y,
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //             instruction.r4.clone(),
+            //         );
+            //     }
+            //     "and" => {
+            //         self.arithmetic(
+            //             &instruction.op,
+            //             &|x, y| x & y,
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //             instruction.r4.clone(),
+            //         );
+            //     }
+            //     "tst" | "ands" => {
+            //         let r1 = self.operand(instruction.r1.clone().expect("need src"));
+            //         let mut r2 = self.operand(instruction.r2.clone().expect("need imm"));
+
+            //         if let Some(op) = instruction.r3.clone() {
+            //             match op.as_str() {
+            //                 "<<" => {
+            //                     let imm = instruction.r4.clone().expect("need shft amt in tst/ands").replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "").parse::<i64>().expect("expected valid number from parse");
+            //                     r2.offset =  r2.offset << imm;
+            //                 }
+            //                 _ => todo!("tst/ands op on imm {:?}", op),
+            //             }
+            //         }
+
+            //         self.zero = if r1.offset == r2.offset {
+            //             Some(FlagValue::Real(true))
+            //         } else {
+            //             Some(FlagValue::Abstract(AbstractComparison::new(
+            //                 "==",
+            //                 AbstractExpression::Abstract("true".to_string()),
+            //                 AbstractExpression::Abstract("HW_SUPPORT".to_string()),
+            //             )))
+            //         };
+
+            //         // TODO: this is a really bad way to do this, get expressions from include/arm_arch.h
+            //     }
+            //     "orr" => {
+            //         self.arithmetic(
+            //             &instruction.op,
+            //             &|x, y| x | y,
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //             instruction.r4.clone(),
+            //         );
+            //     }
+            //     "orn" => {
+            //         self.arithmetic(
+            //             &instruction.op,
+            //             &|x, y: i64| x | !y,
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //             instruction.r4.clone(),
+            //         );
+            //     }
+            //     "eor" => {
+            //         if instruction.r2.clone() == instruction.r3.clone() {
+            //             self.set_register(
+            //                 instruction.r1.clone().expect("Need destination register"),
+            //                 RegisterKind::Immediate,
+            //                 None,
+            //                 0,
+            //             );
+            //         } else {
+            //             self.arithmetic(
+            //                 &instruction.op,
+            //                 &|x, y| x ^ y,
+            //                 instruction.r1.clone().expect("Need dst register"),
+            //                 instruction.r2.clone().expect("Need one operand"),
+            //                 instruction.r3.clone().expect("Need two operand"),
+            //                 instruction.r4.clone(),
+            //             );
+            //         }
+            //     }
+            //     "bic" => {
+            //         self.arithmetic(
+            //             &instruction.op,
+            //             &|x, y: i64| x & !y,
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //             instruction.r4.clone(),
+            //         );
+            //     }
+            //     "lsr" | "lsl" => {
+            //         let r2 = self.registers
+            //             [get_register_index(instruction.r2.clone().expect("Need register"))]
+            //         .clone();
+            //         let shift = self
+            //             .operand(instruction.r3.clone().expect("Need shift amt"))
+            //             .offset;
+            //         let new_offset = r2.offset >> shift;
+            //         if new_offset == 0 {
+            //             self.set_register(
+            //                 instruction.r1.clone().expect("Need destination register"),
+            //                 r2.clone().kind,
+            //                 None,
+            //                 new_offset,
+            //             );
+            //         } else {
+            //             self.set_register(
+            //                 instruction.r1.clone().expect("Need destination register"),
+            //                 r2.clone().kind,
+            //                 Some(generate_expression(
+            //                     "lsr",
+            //                     r2.base.unwrap_or(AbstractExpression::Empty),
+            //                     AbstractExpression::Immediate(new_offset),
+            //                 )),
+            //                 new_offset,
+            //             );
+            //         }
+            //     }
+            //     "ror" => {
+            //         self.shift_reg(
+            //             instruction.r1.clone().expect("Need dst register"),
+            //             instruction.r2.clone().expect("Need one operand"),
+            //             instruction.r3.clone().expect("Need two operand"),
+            //         );
+            //     }
+            //     "adcs" | "adc" => {
+            //         match self.carry.clone() {
+            //         Some(FlagValue::Real(b)) => {
+            //             if b == true {
+            //                 self.arithmetic(
+            //                     "+",
+            //                     &|x, y| x + y,
+            //                     instruction.r1.clone().expect("Need dst register"),
+            //                     instruction.r2.clone().expect("Need one operand"),
+            //                     instruction.r2.clone().expect("Need one operand"),
+            //                     Some("#1".to_string()),
+            //                 );
+            //             } else {
+            //                 self.arithmetic(
+            //                     "+",
+            //                     &|x, y| x + y,
+            //                     instruction.r1.clone().expect("Need dst register"),
+            //                     instruction.r2.clone().expect("Need one operand"),
+            //                     instruction.r2.clone().expect("Need one operand"),
+            //                     Some("#0".to_string()),
+            //                 );
+            //             }
+            //         }
+            //         Some(FlagValue::Abstract(c)) => {
+            //             let opt1 = self.registers[get_register_index(
+            //                 instruction.r2.clone().expect("Need first source register"),
+            //             )]
+            //             .clone();
+
+            //             let mut opt2 = self.registers[get_register_index(
+            //                 instruction.r3.clone().expect("Need second source register"),
+            //             )]
+            //             .clone();
+            //             opt2.offset = opt2.offset + 1;
+
+            //             return Ok(ExecuteReturnType::Select(c,
+            //              instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //         }
+            //         None => {
+            //             let opt1 = self.registers[get_register_index(
+            //                 instruction.r2.clone().expect("Need first source register"),
+            //             )]
+            //             .clone();
+
+            //             let mut opt2 = self.registers[get_register_index(
+            //                 instruction.r3.clone().expect("Need second source register"),
+            //             )]
+            //             .clone();
+            //             opt2.offset = opt2.offset + 1;
+
+            //             return Ok(ExecuteReturnType::Select(AbstractComparison::new(
+            //                 "==",
+            //                 AbstractExpression::Abstract("carry".to_string()),
+            //                 AbstractExpression::Immediate(1)),
+            //              instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //         }
+            //         }
+            //         //update flags
+            //         self.cmn(instruction.r1.clone().expect("need register to compare"),instruction.r2.clone().expect("need register to compare"), );
+            //     },
+            //     "sbcs" | "sbc" => match self.carry.clone() { // FIX: split
+            //         Some(FlagValue::Real(b)) => {
+            //             if b == true {
+            //                 self.arithmetic(
+            //                     "-",
+            //                     &|x, y| x - y,
+            //                     instruction.r1.clone().expect("Need dst register"),
+            //                     instruction.r2.clone().expect("Need one operand"),
+            //                     instruction.r2.clone().expect("Need one operand"),
+            //                     Some("#1".to_string()),
+            //                 );
+            //             } else {
+            //                 self.arithmetic(
+            //                     "-",
+            //                     &|x, y| x - y,
+            //                     instruction.r1.clone().expect("Need dst register"),
+            //                     instruction.r2.clone().expect("Need one operand"),
+            //                     instruction.r2.clone().expect("Need one operand"),
+            //                     Some("#0".to_string()),
+            //                 );
+            //             }
+            //         }
+            //         Some(FlagValue::Abstract(a)) => {
+            //             let opt1 = self.registers[get_register_index(
+            //                 instruction.r2.clone().expect("Need first source register"),
+            //             )]
+            //             .clone();
+
+            //             let mut opt2 = self.registers[get_register_index(
+            //                 instruction.r3.clone().expect("Need second source register"),
+            //             )]
+            //             .clone();
+            //             opt2.offset = opt2.offset + 1;
+
+            //             return Ok(ExecuteReturnType::Select(a,
+            //              instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //         }
+            //         None => {
+            //             let opt1 = self.registers[get_register_index(
+            //                 instruction.r2.clone().expect("Need first source register"),
+            //             )]
+            //             .clone();
+
+            //             let mut opt2 = self.registers[get_register_index(
+            //                 instruction.r3.clone().expect("Need second source register"),
+            //             )]
+            //             .clone();
+            //             opt2.offset = opt2.offset -1 ;
+
+            //             return Ok(ExecuteReturnType::Select(AbstractComparison::new(
+            //                 "==",
+            //                 AbstractExpression::Abstract("carry".to_string()),
+            //                 AbstractExpression::Immediate(1)),
+            //                 instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //         }
+            //     },
+            //     "adrp"=> {
+            //         let address = self.operand(instruction.r2.clone().expect("Need address label"));
+            //         self.set_register(
+            //             instruction.r1.clone().expect("need dst register"),
+            //             RegisterKind::RegisterBase,
+            //             address.base,
+            //             address.offset,
+            //         );
+            //     }
+            //     "adr" => {
+            //         let address = self.operand(instruction.r2.clone().expect("Need address label"));
+            //         self.set_register(
+            //             instruction.r1.clone().expect("need dst register"),
+            //             RegisterKind::RegisterBase,
+            //             address.base,
+            //             address.offset,
+            //         );
+            //     }
+            //     "cbnz" => {
+            //         let register = self.registers
+            //             [get_register_index(instruction.r1.clone().expect("Need one register"))]
+            //         .clone();
+            //         if (register.base.is_none()
+            //             || register.base.clone().expect("computer2") == AbstractExpression::Empty)
+            //             && register.offset == 0
+            //         {
+            //             return Ok(ExecuteReturnType::Next);
+            //         } else if register.kind == RegisterKind::RegisterBase {
+            //             return Ok(ExecuteReturnType::ConditionalJumpLabel(
+            //                 AbstractComparison::new(
+            //                     "!=",
+            //                     AbstractExpression::Immediate(0),
+            //                     AbstractExpression::Register(Box::new(register)),
+            //                 ),
+            //                 instruction.r2.clone().expect("need jump label 1 "),
+            //             ));
+            //         } else {
+            //             return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 2")));
+            //         }
+            //     }
+            //     // Compare and Branch on Zero compares the value in a register with zero, and conditionally branches to a label at a PC-relative offset if the comparison is equal. It provides a hint that this is not a subroutine call or return. This instruction does not affect condition flags.
+            //     "cbz" => {
+            //         let register = self.registers
+            //             [get_register_index(instruction.r1.clone().expect("Need one register"))]
+            //         .clone();
+
+            //         if (register.base.is_none()
+            //             || register.base.clone().expect("computer3") == AbstractExpression::Empty)
+            //             && register.offset == 0
+            //         {
+            //             return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 3")));
+            //         } else if register.kind == RegisterKind::RegisterBase {
+            //             return Ok(ExecuteReturnType::ConditionalJumpLabel(
+            //                 AbstractComparison::new(
+            //                     "==",
+            //                     AbstractExpression::Immediate(0),
+            //                     AbstractExpression::Register(Box::new(register)),
+            //                 ),
+            //                 instruction.r2.clone().expect("need jump label 4"),
+            //             ));
+            //         } else {
+            //             return Ok(ExecuteReturnType::Next);
+            //         }
+            //     }
+            //     "cset" => {
+            //         // match on condition based on flags
+            //         match instruction
+            //             .r2
+            //             .clone()
+            //             .expect("Need to provide a condition")
+            //             .as_str()
+            //         {
+            //             "cs" => match self.carry.clone().expect("Need carry flag set cset cs") {
+            //                 FlagValue::Real(b) => {
+            //                     if b == true {
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             RegisterKind::Immediate,
+            //                             None,
+            //                             1,
+            //                         );
+            //                     } else {
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             RegisterKind::Immediate,
+            //                             None,
+            //                             0,
+            //                         );
+            //                     }
+            //                 }
+            //                 FlagValue::Abstract(_) => {
+            //                     log::error!("Can't support this yet :)");
+            //                     todo!("Abstract Flag Expression3");
+            //                 }
+            //             },
+            //             "cc" | "lo" => match self.carry.clone().expect("Need carry flag set cset cc") {
+            //                 FlagValue::Real(b) => {
+            //                     if b == false {
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             RegisterKind::Immediate,
+            //                             None,
+            //                             0,
+            //                         );
+            //                     } else {
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             RegisterKind::Immediate,
+            //                             None,
+            //                             1,
+            //                         );
+            //                     }
+            //                 }
+            //                 FlagValue::Abstract(_) => {
+            //                     log::error!("Can't support this yet :)");
+            //                     todo!("Abstract flag expressions 4");
+            //                 }
+            //             },
+            //             _ => todo!("unsupported comparison type {:?}", instruction.r2),
+            //         }
+            //     }
+            //     "csel" => {
+            //         // match on condition based on flags
+            //         match instruction
+            //             .r4
+            //             .clone()
+            //             .expect("Need to provide a condition")
+            //             .as_str()
+            //         {
+            //             "cc" | "lo" => match self.carry.clone().expect("Need carry flag set csel cc") {
+            //                 FlagValue::Real(b) => {
+            //                     if b == true {
+            //                         let register = self.registers[get_register_index(
+            //                             instruction.r2.clone().expect("Need first source register"),
+            //                         )]
+            //                         .clone();
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             register.kind,
+            //                             register.base,
+            //                             register.offset,
+            //                         );
+            //                     } else {
+            //                         let register = self.registers[get_register_index(
+            //                             instruction.r3.clone().expect("Need first source register"),
+            //                         )]
+            //                         .clone();
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             register.kind,
+            //                             register.base,
+            //                             register.offset,
+            //                         );
+            //                     }
+            //                 }
+            //                 FlagValue::Abstract(a) => {
+            //                     let opt1 = self.registers[get_register_index(
+            //                         instruction.r2.clone().expect("Need first source register"),
+            //                     )]
+            //                     .clone();
+
+            //                     let opt2 = self.registers[get_register_index(
+            //                         instruction.r3.clone().expect("Need second source register"),
+            //                     )]
+            //                     .clone();
+
+            //                     return Ok(ExecuteReturnType::Select(a, instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //                 }
+            //             },
+            //             "cs" => match self.carry.clone() {
+            //                 Some(FlagValue::Real(b)) => {
+            //                     if b == false {
+            //                         let register = self.registers[get_register_index(
+            //                             instruction.r2.clone().expect("Need first source register"),
+            //                         )]
+            //                         .clone();
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             register.kind,
+            //                             register.base,
+            //                             register.offset,
+            //                         );
+            //                     } else {
+            //                         let register = self.registers[get_register_index(
+            //                             instruction.r3.clone().expect("Need first source register"),
+            //                         )]
+            //                         .clone();
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             register.kind,
+            //                             register.base,
+            //                             register.offset,
+            //                         );
+            //                     }
+            //                 }
+            //                 Some(FlagValue::Abstract(a)) => {
+            //                     let opt1 = self.registers[get_register_index(
+            //                         instruction.r2.clone().expect("Need first source register"),
+            //                     )]
+            //                     .clone();
+
+            //                     let opt2 = self.registers[get_register_index(
+            //                         instruction.r3.clone().expect("Need second source register"),
+            //                     )]
+            //                     .clone();
+
+            //                     return Ok(ExecuteReturnType::Select(a.not(), instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //                 }
+            //                 None => {
+            //                     let opt1 = self.registers[get_register_index(
+            //                         instruction.r2.clone().expect("Need first source register"),
+            //                     )]
+            //                     .clone();
+
+            //                     let opt2 = self.registers[get_register_index(
+            //                         instruction.r3.clone().expect("Need second source register"),
+            //                     )]
+            //                     .clone();
+            //                     return Ok(ExecuteReturnType::Select(AbstractComparison::new("==", AbstractExpression::Abstract("c_flag".to_string()), AbstractExpression::Immediate(1)), instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //                 }
+            //             },
+            //             "eq" => {
+            //                 match self.zero.clone().expect("Need zero flag set") {
+            //                     FlagValue::Real(z) => {
+            //                         if z == true {
+            //                             let register = self.registers[get_register_index(
+            //                                 instruction.r2.clone().expect("Need first source register"),
+            //                             )]
+            //                             .clone();
+            //                             self.set_register(
+            //                                 instruction.r1.clone().expect("need dst register"),
+            //                                 register.kind,
+            //                                 register.base,
+            //                                 register.offset,
+            //                             );
+            //                         } else {
+            //                             let register = self.registers[get_register_index(
+            //                                 instruction.r3.clone().expect("Need first source register"),
+            //                             )]
+            //                             .clone();
+            //                             self.set_register(
+            //                                 instruction.r1.clone().expect("need dst register"),
+            //                                 register.kind,
+            //                                 register.base,
+            //                                 register.offset,
+            //                             );
+            //                         }
+            //                     }
+            //                     FlagValue::Abstract(z) => {
+            //                         let opt1 = self.registers[get_register_index(
+            //                             instruction.r2.clone().expect("Need first source register"),
+            //                         )]
+            //                         .clone();
+            //                         let opt2 = self.registers[get_register_index(
+            //                             instruction.r3.clone().expect("Need second source register"),
+            //                         )]
+            //                         .clone();
+            //                         return Ok(ExecuteReturnType::Select(z, instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //                     }
+            //                 };
+            //             },
+            //             _ => todo!("unsupported comparison type for csel {:?}", instruction.r4),
+            //         }
+            //     }
+            //     "csetm" => {
+            //         // match on condition based on flags
+            //         match instruction
+            //             .r2
+            //             .clone()
+            //             .expect("Need to provide a condition")
+            //             .as_str()
+            //         {
+            //             "eq" => match self.zero.clone().expect("Need zero flag set") {
+            //                 FlagValue::Real(b) => {
+            //                     if b == true {
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             RegisterKind::Immediate,
+            //                             None,
+            //                             1,
+            //                         );
+            //                     } else {
+            //                         self.set_register(
+            //                             instruction.r1.clone().expect("need dst register"),
+            //                             RegisterKind::Immediate,
+            //                             None,
+            //                             0,
+            //                         );
+            //                     }
+            //                 }
+            //                 FlagValue::Abstract(a) => {
+            //                     let opt1 = RegisterValue {
+            //                         kind: RegisterKind::Immediate,
+            //                         base: None,
+            //                         offset: 1,
+            //                     };
+            //                     let opt2= RegisterValue {
+            //                         kind: RegisterKind::Immediate,
+            //                         base: None,
+            //                         offset: 1,
+            //                     };
+
+            //                     return Ok(ExecuteReturnType::Select(a, instruction.r1.clone().expect("need dst register"), opt1, opt2));
+            //                 }
+            //             },
+            //             _ => todo!("unsupported comparison type {:?}", instruction.r2),
+            //         }
+            //     }
+            //     "cmp" => {
+            //         self.cmp(
+            //             instruction.r1.clone().expect("need register to compare"),
+            //             instruction.r2.clone().expect("need register to compare"),
+            //         );
+            //         // TODO: make branch more general
+            //         // https://developer.arm.com/documentation/dui0068/b/ARM-Instruction-Reference/Conditional-execution
+            //     }
+            //     "cmn" => {
+            //         self.cmn(
+            //             instruction.r1.clone().expect("need register to compare"),
+            //             instruction.r2.clone().expect("need register to compare"),
+            //         );
+            //     }
+            //     "b" => {
+            //         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 5")));
+            //     }
+            //     "bl" => {
+            //         let label = instruction
+            //             .r1
+            //             .clone()
+            //             .expect("need label to jump")
+            //             .to_string();
+            //         self.set_register("x30".to_string(), RegisterKind::Immediate, None, pc as i64);
+            //         return Ok(ExecuteReturnType::JumpLabel(label));
+            //     }
+            //     "b.ne" | "bne" => {
+            //         match &self.zero {
+            //             // if zero is set to false, then cmp -> not equal and we branch
+            //             Some(flag) => match flag {
+            //                 FlagValue::Real(b) => {
+            //                     if !b {
+            //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 7")));
+            //                     } else {
+            //                         return Ok(ExecuteReturnType::Next);
+            //                     }
+            //                 }
+            //                 FlagValue::Abstract(s) => {
+            //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone().not(), instruction.r1.clone().expect("need jump label 8")));
+            //                 }
+            //             },
+            //             None => return Err(
+            //                 "Flag cannot be branched on since it has not been set within the program yet"
+            //                     .to_string(),
+            //             ),
+            //         }
+            //     }
+            //     "b.eq" | "beq" => {
+            //         match &self.zero {
+            //             // if zero is set to false, then cmp -> not equal and we branch
+            //             Some(flag) => match flag {
+            //                 FlagValue::Real(b) => {
+            //                     if *b {
+            //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 9")));
+            //                     } else {
+            //                         return Ok(ExecuteReturnType::Next);
+            //                     }
+            //                 }
+            //                 FlagValue::Abstract(s) => {
+            //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), instruction.r1.clone().expect("need jump label 10")));
+            //                 }
+            //             },
+            //             None => return Err(
+            //                 "Flag cannot be branched on since it has not been set within the program yet"
+            //                     .to_string(),
+            //             ),
+            //         }
+            //     }
+            //     "bt" | "b.gt" => {
+            //         match (&self.zero, &self.neg, &self.overflow) {
+            //             (Some(zero), Some(neg), Some(ove)) => {
+            //                 match  (zero, neg, ove) {
+            //                 (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
+            //                    if !z && n == v {  // Z = 0 AND N = V
+            //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 11")))
+            //                    } else {
+            //                         return Ok(ExecuteReturnType::Next)
+            //                    }
+            //                 },
+            //                 (FlagValue::Abstract(z) , _, _ ) =>  {
+            //                     let expression = generate_comparison(">", *z.left.clone(), *z.right.clone());
+            //                     return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, instruction.r1.clone().expect("need jump label 12")));
+            //                 },
+            //                 (_,_,_) => todo!("match on undefined flags!")
+            //                 }
+            //             },
+            //             (_, _, _) => return Err(
+            //                 "Flag cannot be branched on since it has not been set within the program yet"
+            //                     .to_string(),
+            //             ),
+            //         }
+            //     }
+            //     "b.lt" => {
+            //         match (&self.zero, &self.neg, &self.overflow) {
+            //             (Some(zero), Some(neg), Some(ove)) => {
+            //                 match  (zero, neg, ove) {
+            //                 (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
+            //                    if !z && n != v {  // Z = 0 AND N = V
+            //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 11")))
+            //                    } else {
+            //                         return Ok(ExecuteReturnType::Next)
+            //                    }
+            //                 },
+            //                 (FlagValue::Abstract(z) , _, _ ) =>  {
+            //                     let expression = generate_comparison("<", *z.left.clone(), *z.right.clone());
+            //                     return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, instruction.r1.clone().expect("need jump label 12")));
+            //                 },
+            //                 (_,_,_) => todo!("match on undefined flags!")
+            //                 }
+            //             },
+            //             (_, _, _) => return Err(
+            //                 "Flag cannot be branched on since it has not been set within the program yet"
+            //                     .to_string(),
+            //             ),
+            //         }
+            //     }
+            //     "b.ls" | "b.le" => {
+            //         match (&self.zero, &self.carry) {
+            //             (Some(zero), Some(carry)) => {
+            //                 match  (zero, carry) {
+            //                 (FlagValue::Real(z), FlagValue::Real(c)) => {
+            //                    if !z && *c {
+            //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 13")));
+            //                    } else {
+            //                         return Ok(ExecuteReturnType::Next)
+            //                    }
+            //                 },
+            //                 (FlagValue::Abstract(z) , _ ) | (_, FlagValue::Abstract(z) ) =>  {
+            //                     let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
+            //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 14")));
+            //                 },
+            //                 }
+            //             },
+            //             (_, _) => return Err(
+            //                 "Flag cannot be branched on since it has not been set within the program yet"
+            //                     .to_string(),
+            //             ),
+            //         }
+            //     }
+            //     "b.cs" | "b.hs" | "bcs" => {
+            //         match&self.carry{
+            //             Some(carry) => {
+            //                 match  carry {
+            //                 FlagValue::Real(c) => {
+            //                    if *c {
+            //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 15")));
+            //                    } else {
+            //                         return Ok(ExecuteReturnType::Next)
+            //                    }
+            //                 },
+            //                 FlagValue::Abstract(c) =>  {
+            //                     let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
+            //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 16")));
+            //                 },
+            //                 }
+            //             },
+            //             None => return Err(
+            //                 "Flag cannot be branched on since it has not been set within the program yet"
+            //                     .to_string(),
+            //             ),
+            //         }
+            //     }
+            //     "b.cc" | "b.lo" | "blo" => {
+            //         match&self.carry{
+            //             Some(carry) => {
+            //                 match  carry {
+            //                 FlagValue::Real(c) => {
+            //                    if !*c {
+            //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 15")));
+            //                    } else {
+            //                         return Ok(ExecuteReturnType::Next)
+            //                    }
+            //                 },
+            //                 FlagValue::Abstract(c) =>  {
+            //                     let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
+            //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 16")));
+            //                 },
+            //                 }
+            //             },
+            //             None => return Err(
+            //                 "Flag cannot be branched on since it has not been set within the program yet"
+            //                     .to_string(),
+            //             ),
+            //         }
+            //     }
+            //     "ret" => {
+            //         if instruction.r1.is_none() {
+            //             let x30 = self.registers[30].clone();
+            //             if x30.kind == RegisterKind::RegisterBase {
+            //                 if let Some(AbstractExpression::Abstract(address)) = x30.base {
+            //                     if address == "return" && x30.offset == 0 {
+            //                         return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
+            //                     } else {
+            //                         return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
+            //                     }
+            //                 }
+            //                 return Ok(ExecuteReturnType::JumpAddress(x30.offset.try_into().expect("computer4")));
+            //             } else {
+            //                 return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
+            //             }
+            //         } else {
+            //             let _r1 = &self.registers[get_register_index(
+            //                 instruction
+            //                     .r1
+            //                     .clone()
+            //                     .expect("provide valid return register"),
+            //             )];
+            //         }
+            //     }
+            //     "ldr" => {
+            //         let reg1 = instruction.r1.clone().expect("computer5");
+            //         let reg2 = instruction.r2.clone().expect("computer6");
+
+            //         let reg2base = get_register_name_string(reg2.clone());
+            //         let mut base_add_reg =
+            //             self.registers[get_register_index(reg2base.clone())].clone();
+
+            //         // pre-index increment
+            //         if reg2.contains(",") {
+            //             if let Some((base, offset)) = reg2.split_once(",") {
+            //                 base_add_reg = self.operand(base.to_string());
+            //                 base_add_reg.offset = base_add_reg.offset + self.operand(offset.to_string()).offset;
+            //             } else {
+            //                 base_add_reg = self.operand(reg2.clone());
+            //             }
+
+            //             if reg2.contains("!") {
+            //                 let new_reg = base_add_reg.clone();
+            //                 self.set_register(
+            //                     reg2base.clone(),
+            //                     new_reg.kind,
+            //                     new_reg.base,
+            //                     new_reg.offset,
+            //                 );
+            //             }
+            //         }
+
+            //         let res = self.load(reg1, base_add_reg.clone());
+            //         match res {
+            //             Err(e) => return Err(e.to_string()),
+            //             _ => (),
+            //         }
+
+            //         // post-index
+            //         if instruction.r3.is_some() {
+            //             let new_imm = self.operand(instruction.r3.clone().expect("computer7"));
+            //             self.set_register(
+            //                 reg2base,
+            //                 base_add_reg.kind,
+            //                 base_add_reg.base,
+            //                 base_add_reg.offset + new_imm.offset,
+            //             );
+            //         }
+            //     }
+            //     "ldrb" => {
+            //         let reg1 = instruction.r1.clone().expect("computer5");
+            //         let reg2 = instruction.r2.clone().expect("computer6");
+
+            //         let reg2base = get_register_name_string(reg2.clone());
+            //         let mut base_add_reg =
+            //             self.registers[get_register_index(reg2base.clone())].clone();
+
+            //         // pre-index increment
+            //         if reg2.contains(",") {
+            //             if let Some((base, offset)) = reg2.split_once(",") {
+            //                 base_add_reg = self.operand(base.to_string());
+            //                 base_add_reg.offset = base_add_reg.offset + self.operand(offset.to_string()).offset;
+            //             } else {
+            //                 base_add_reg = self.operand(reg2.clone());
+            //             }
+
+            //             if reg2.contains("!") {
+            //                 let new_reg = base_add_reg.clone();
+            //                 self.set_register(
+            //                     reg2base.clone(),
+            //                     new_reg.kind,
+            //                     new_reg.base,
+            //                     new_reg.offset,
+            //                 );
+            //             }
+            //         }
+
+            //         let res = self.load(reg1, base_add_reg.clone());
+            //         match res {
+            //             Err(e) => return Err(e.to_string()),
+            //             _ => (),
+            //         }
+
+            //         // post-index
+            //         if instruction.r3.is_some() {
+            //             let new_imm = self.operand(instruction.r3.clone().expect("computer7"));
+            //             self.set_register(
+            //                 reg2base,
+            //                 base_add_reg.kind,
+            //                 base_add_reg.base,
+            //                 base_add_reg.offset + new_imm.offset,
+            //             );
+            //         }
+            //     }
+            //     "ldp" => {
+            //         let reg1 = instruction.r1.clone().expect("computer8");
+            //         let reg2 = instruction.r2.clone().expect("computer9");
+            //         let reg3 = instruction.r3.clone().expect("computer10");
+
+            //         let reg3base = get_register_name_string(reg3.clone());
+            //         let mut base_add_reg =
+            //             self.registers[get_register_index(reg3base.clone())].clone();
+
+            //         // pre-index increment
+            //         if reg3.contains(",") {
+            //             base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
+            //             // with writeback
+            //             if reg3.contains("!") {
+            //                 let new_reg = base_add_reg.clone();
+            //                 self.set_register(
+            //                     reg3base.clone(),
+            //                     new_reg.kind,
+            //                     new_reg.base,
+            //                     new_reg.offset,
+            //                 );
+            //             }
+            //         }
+
+            //         let res1 = self.load(reg1, base_add_reg.clone());
+
+            //         let mut next = base_add_reg.clone();
+            //         next.offset = next.offset + 8;
+            //         let res2 = self.load(reg2, next);
+
+            //         // post-index
+            //         if instruction.r4.is_some() {
+            //             let new_imm = self.operand(instruction.r4.clone().expect("computer11"));
+            //             self.set_register(
+            //                 reg3base,
+            //                 base_add_reg.kind,
+            //                 base_add_reg.base,
+            //                 base_add_reg.offset + new_imm.offset,
+            //             );
+            //         }
+
+            //         match res1 {
+            //             Err(e) => return Err(e.to_string()),
+            //             _ => (),
+            //         }
+            //         match res2 {
+            //             Err(e) => return Err(e.to_string()),
+            //             _ => (),
+            //         }
+            //     }
+            //     "str" | "strb" => { // TODO: split
+            //         let reg1 = instruction.r1.clone().expect("computer12");
+            //         let reg2 = instruction.r2.clone().expect("computer13");
+
+            //         let reg2base = get_register_name_string(reg2.clone());
+            //         let mut base_add_reg =
+            //             self.registers[get_register_index(reg2base.clone())].clone();
+
+            //         // pre-index increment
+            //         if reg2.contains(",") {
+            //             base_add_reg = self.operand(reg2.clone().trim_end_matches("!").to_string());
+            //             // with writeback
+            //             if reg2.contains("!") {
+            //                 let new_reg = base_add_reg.clone();
+            //                 self.set_register(
+            //                     reg2base.clone(),
+            //                     new_reg.kind,
+            //                     new_reg.base,
+            //                     new_reg.offset,
+            //                 );
+            //             }
+            //         }
+
+            //         let reg2base = get_register_name_string(reg2.clone());
+            //         let res = self.store(reg1, base_add_reg.clone());
+            //         match res {
+            //             Err(e) => return Err(e.to_string()),
+            //             _ => (),
+            //         }
+
+            //         // post-index
+            //         if instruction.r3.is_some() {
+            //             let new_imm = self.operand(instruction.r3.clone().expect("computer14"));
+            //             self.set_register(
+            //                 reg2base,
+            //                 base_add_reg.kind,
+            //                 base_add_reg.base,
+            //                 base_add_reg.offset + new_imm.offset,
+            //             );
+            //         }
+            //     }
+            //     "stp" => {
+            //         let reg1 = instruction.r1.clone().expect("computer15");
+            //         let reg2 = instruction.r2.clone().expect("computer16");
+            //         let reg3 = instruction.r3.clone().expect("computer17");
+
+            //         let reg3base = get_register_name_string(reg3.clone());
+            //         let mut base_add_reg =
+            //             self.registers[get_register_index(reg3base.clone())].clone();
+
+            //         // pre-index increment
+            //         if reg3.contains(",") {
+            //             base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
+            //             // with writeback
+            //             if reg3.contains("!") {
+            //                 let new_reg = base_add_reg.clone();
+            //                 self.set_register(
+            //                     reg3base.clone(),
+            //                     new_reg.kind,
+            //                     new_reg.base,
+            //                     new_reg.offset,
+            //                 );
+            //             }
+            //         }
+
+            //         let res = self.store(reg1, base_add_reg.clone());
+            //         match res {
+            //             Err(e) => return Err(e.to_string()),
+            //             _ => (),
+            //         }
+            //         let mut next = base_add_reg.clone();
+            //         next.offset = next.offset + 8;
+            //         let res = self.store(reg2, next);
+            //         match res {
+            //             Err(e) => return Err(e.to_string()),
+            //             _ => (),
+            //         }
+
+            //         // post-index
+            //         if instruction.r4.is_some() {
+            //             let new_imm = self.operand(instruction.r4.clone().expect("computer18"));
+            //             self.set_register(
+            //                 reg3base,
+            //                 base_add_reg.kind,
+            //                 base_add_reg.base,
+            //                 base_add_reg.offset + new_imm.offset,
+            //             );
+            //         }
+            //     }
+            //     "mov" | "movz" => {
+            //         let reg1 = instruction.r1.clone().expect("Need dst reg");
+            //         let reg2 = instruction.r2.clone().expect("Need src reg");
+
+            //         let src = self.operand(reg2);
+            //         self.set_register(reg1, src.kind, src.base, src.offset);
+            //     }
+            //     "movk" => {
+            //         let reg1 = instruction.r1.clone().expect("Need dst reg");
+            //         let reg2 = instruction.r2.clone().expect("Need src reg");
+
+            //         let src = self.operand(reg1.clone());
+            //         let mut offset = self.operand(reg2).offset;
+
+            //         if let Some(op) = instruction.r3.clone() {
+            //             match op.as_str() {
+            //                 "lsl" | "lsl#16" => offset = offset << 16,
+            //                 _ => todo!("implement more shifting strategies for movk: {:?}", op),
+            //             }
+            //         }
+            //         self.set_register(reg1, src.kind, src.base, src.offset + offset);
+            //     }
+            //     "rev" | "rev32" | "rbit" => { //TODO: reimpl rev32
+            //         let reg1 = instruction.r1.clone().expect("Need dst register");
+            //         let reg2 = instruction.r2.clone().expect("Need source register");
+
+            //         let mut src = self.operand(reg2);
+
+            //         if let Some(base) = src.base {
+            //             src.base =
+            //                 Some(generate_expression("rev", base, AbstractExpression::Empty));
+            //         }
+
+            //         src.offset = src.offset.swap_bytes();
+            //         self.set_register(reg1, src.kind, src.base, src.offset);
+            //     }
+            //     "clz" => {
+            //         // TODO: actually count
+            //         let reg1 = instruction.r1.clone().expect("Need dst register");
+            //         self.set_register(reg1, RegisterKind::Number, None, 0);
+            //     }
+            //     _ => {
+            //         log::warn!("Instruction not supported {:?}", instruction);
+            //         todo!("Instruction not implemented {:?}", instruction)
+            //     }
+            // }
+        } else {
+            //     // SIMD
+            //     if instruction.op.contains(".") {
+            //         if let Some((op, vec)) = instruction.op.split_once(".") {
+            //             match op {
+            //                 "rev64" => {
+            //                     let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                     let reg2 = instruction.r2.clone().expect("Need source register");
+
+            //                     let src =
+            //                         &self.simd_registers[get_register_index(reg2.clone())].clone();
+            //                     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+            //                     dest.kind = src.kind.clone();
+            //                     match vec {
+            //                         "8h" => {
+            //                             for i in 0..8 {
+            //                                 let (base, offset) = src.get_halfword(7 - i);
+            //                                 dest.set_halfword(i, base, offset);
+            //                             }
+            //                         }
+            //                         "16b" => {
+            //                             for i in 0..16 {
+            //                                 let (base, offset) = src.get_byte(15 - i);
+            //                                 dest.set_byte(i, base, offset);
+            //                             }
+            //                         }
+            //                         _ => todo!("rev64 support more vector modes"),
+            //                     }
+            //                 }
+            //                 "ld1" => {
+            //                     // TODO: fix parser to not consider { as register
+            //                     // using 2 and 4 because instruction gets parsed like this:
+            //                     // Instruction { op: "ld1.8h", r1: Some("{"), r2: Some("v0"), r3: Some("}"), r4: Some("[x1"), r5: None, r6: None }
+            //                     let reg2 = instruction.r2.clone().expect("Need dst register");
+            //                     let reg4 = instruction.r4.clone().expect("Need source register");
+
+            //                     let src = &self.registers[get_register_index(
+            //                         reg4.strip_prefix('[').unwrap_or(&reg4).to_string(),
+            //                     )]
+            //                     .clone();
+
+            //                     let res = self.load_vector(reg2, src.clone());
+            //                     match res {
+            //                         Err(e) => return Err(e.to_string()),
+            //                         _ => (),
+            //                     }
+            //                 }
+            //                 "st1" => {
+            //                     // TODO: fix parser because instruction gets parsed like this:
+            //                     // Instruction { op: "st1.d", r1: Some("{"), r2: Some("v0"), r3: Some("[1], [x0"), r4: Some("[1], [x0"), r5: Some("x4"), r6: None }
+            //                     let reg2 = instruction.r2.clone().expect("Need src register");
+            //                     let reg3 = instruction.r3.clone().expect("Need index and dest");
+
+            //                     let mut parts = reg3.split(",");
+            //                     let _index = parts
+            //                         .next()
+            //                         .expect("expecting index")
+            //                         .strip_prefix('[')
+            //                         .expect("something")
+            //                         .strip_suffix("]")
+            //                         .expect("something else")
+            //                         .parse::<i32>()
+            //                         .expect("expected int");
+
+            //                     let dest = get_register_name_string(
+            //                         parts
+            //                             .next()
+            //                             .expect("need another reg")
+            //                             .strip_prefix(" [")
+            //                             .expect("storage dest")
+            //                             .to_string(),
+            //                     );
+            //                     let address = self.registers[get_register_index(dest.clone())].clone();
+
+            //                     // TODO: use offset to grab only low/high parts of vector
+            //                     let res = self.store_vector(reg2, address.clone());
+            //                     match res {
+            //                         Err(e) => return Err(e.to_string()),
+            //                         _ => (),
+            //                     }
+
+            //                     if let Some(reg5) = instruction.r5.clone() {
+            //                         let offset = self.operand(reg5);
+
+            //                         self.set_register(
+            //                             dest,
+            //                             address.kind,
+            //                             address.base,
+            //                             address.offset + offset.offset,
+            //                         );
+            //                     }
+            //                 }
+            //                 "ld1r" => {
+            //                     let dst = instruction.r2.clone().expect("need dst ld1r") + vec;
+            //                     let src = instruction.r4.clone().expect("need src ld1r");
+
+            //                     let address = self.registers[get_register_index(src.clone())].clone();
+            //                     let _ = self.load(dst, address);
+
+            //                     //    match vec {
+            //                     //     "16b" => {
+            //                     //         for i in 0..15 {
+            //                     //             set_byte
+            //                     //         }
+            //                     // },
+
+            //                     // _ => todo!("support more ld1r types")
+            //                     //    }
+            //                 }
+            //                 "dup" | "neg" | "shl" => {
+            //                     println!("here");
+            //                 }
+            //                 _ => todo!("support simd operation with notation {:?}", instruction),
+            //             }
+            //         }
+            //     } else {
+            //         match instruction.op.as_str() {
+            //             "ld1" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need first source register");
+            //                 let reg2 = instruction
+            //                     .r2
+            //                     .clone()
+            //                     .expect("Need second source or dst register");
+            //                 // either two vector registers in r1 and r2, or four in r1-r4, followed by address and potentially followed by immediate increment value
+            //                 if let Some(reg5) = &instruction.r5 {
+            //                     let reg3 = instruction.r3.clone().expect("Need 3rd vector");
+            //                     let reg4 = instruction.r4.clone().expect("Need 4th vector");
+            //                     if reg4.contains("}") {
+            //                         let base_name = get_register_name_string(reg5.clone());
+            //                         let base_add_reg =
+            //                             self.registers[get_register_index(base_name.clone())].clone();
+
+            //                         match self.load_vector(reg1, base_add_reg.clone()) {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                         match self.load_vector(reg2, base_add_reg.clone()) {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                         match self.load_vector(reg3, base_add_reg.clone()) {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                         match self.load_vector(reg4, base_add_reg.clone()) {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+
+            //                         if let Some(reg6) = &instruction.r6 {
+            //                             let new_imm =
+            //                                 self.operand(get_register_name_string(reg6.clone()));
+            //                             let peeled_reg5 =
+            //                                 reg5.strip_prefix("[").unwrap_or(reg5).to_string();
+            //                             self.set_register(
+            //                                 peeled_reg5,
+            //                                 base_add_reg.kind,
+            //                                 base_add_reg.base,
+            //                                 base_add_reg.offset + new_imm.offset,
+            //                             );
+            //                         }
+            //                     } else {
+            //                         let imm = self.operand(reg3.to_string());
+            //                         let base_name = get_register_name_string(reg2.clone());
+            //                         let mut base_add_reg =
+            //                             self.registers[get_register_index(base_name.clone())].clone();
+
+            //                         base_add_reg.offset = base_add_reg.offset + imm.offset;
+            //                         let res = self.load_vector(reg1, base_add_reg.clone());
+            //                         match res {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                     }
+            //                 } else if let Some(reg3) = &instruction.r3 {
+            //                     if reg2.contains("}") {
+            //                         let base_name = get_register_name_string(reg3.clone());
+            //                         let base_add_reg =
+            //                             self.registers[get_register_index(base_name.clone())].clone();
+
+            //                         match self.load_vector(reg1, base_add_reg.clone()) {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                         match self.load_vector(reg2, base_add_reg.clone()) {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                         if let Some(reg4) = &instruction.r4 {
+            //                             let new_imm =
+            //                                 self.operand(get_register_name_string(reg4.clone()));
+            //                             let peeled_reg3 =
+            //                                 reg3.strip_prefix("[").unwrap_or(reg3).to_string();
+            //                             self.set_register(
+            //                                 peeled_reg3,
+            //                                 base_add_reg.kind,
+            //                                 base_add_reg.base,
+            //                                 base_add_reg.offset + new_imm.offset,
+            //                             );
+            //                         }
+            //                     } else if reg3.contains("#") {
+            //                         let base_name = get_register_name_string(reg2.clone());
+            //                         let base_add_reg =
+            //                             self.registers[get_register_index(base_name.clone())].clone();
+
+            //                         let res = self.load_vector(reg1, base_add_reg.clone());
+            //                         match res {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+
+            //                         //post index
+            //                         let imm = self.operand(reg3.to_string());
+            //                         self.set_register(
+            //                             base_name,
+            //                             base_add_reg.kind,
+            //                             base_add_reg.base,
+            //                             base_add_reg.offset + imm.offset,
+            //                         );
+            //                     } else {
+            //                         let imm = self.operand(reg3.to_string());
+            //                         let base_name = get_register_name_string(reg2.clone());
+            //                         let mut base_add_reg =
+            //                             self.registers[get_register_index(base_name.clone())].clone();
+
+            //                         base_add_reg.offset = base_add_reg.offset + imm.offset;
+            //                         let res = self.load_vector(reg1, base_add_reg.clone());
+            //                         match res {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                     }
+            //                 } else {
+            //                     let base_name = get_register_name_string(reg2.clone());
+            //                     let base_add_reg =
+            //                         self.registers[get_register_index(base_name.clone())].clone();
+            //                     let res = self.load_vector(reg1, base_add_reg.clone());
+            //                     match res {
+            //                         Err(e) => return Err(e.to_string()),
+            //                         _ => (),
+            //                     }
+            //                 }
+            //             }
+            //             "st1" => {
+            //                 let reg1 = instruction.r1.clone().expect("computer19");
+            //                 let reg2 = instruction.r2.clone().expect("computer20");
+            //                 if let Some(reg3) = instruction.r3.clone() {
+            //                     if reg3.contains("#") {
+            //                         let offset = self.operand(reg3).offset;
+            //                         let reg2base = get_register_name_string(reg2.clone());
+            //                         let mut base_add_reg =
+            //                             self.registers[get_register_index(reg2base.clone())].clone();
+            //                         base_add_reg.offset = base_add_reg.offset + offset;
+
+            //                         let res = self.store_vector(reg1, base_add_reg.clone());
+            //                         match res {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                     } else {
+            //                         let reg3base = get_register_name_string(reg3.clone());
+            //                         let base_add_reg =
+            //                             self.registers[get_register_index(reg3base.clone())].clone();
+
+            //                         let res = self.store_vector(reg1, base_add_reg.clone());
+            //                         match res {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                         let res = self.store_vector(reg2, base_add_reg.clone());
+            //                         match res {
+            //                             Err(e) => return Err(e.to_string()),
+            //                             _ => (),
+            //                         }
+            //                     }
+            //                 } else {
+            //                     let reg2base = get_register_name_string(reg2.clone());
+            //                     let base_add_reg =
+            //                         self.registers[get_register_index(reg2base.clone())].clone();
+
+            //                     let res = self.store_vector(reg1, base_add_reg.clone());
+            //                     match res {
+            //                         Err(e) => return Err(e.to_string()),
+            //                         _ => (),
+            //                     }
+            //                 }
+            //             }
+            //             "movi" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need first register name");
+            //                 let reg2 = instruction.r2.clone().expect("Need immediate");
+            //                 let imm = self.operand(reg2);
+            //                 self.set_register(reg1, RegisterKind::Immediate, None, imm.offset);
+            //             }
+            //             "mov" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst reg");
+            //                 let reg2 = instruction.r2.clone().expect("Need src reg");
+            //                 let src = self.operand(reg2);
+            //                 self.set_register(reg1, src.kind, src.base, src.offset);
+            //             }
+            //             "fmov" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst reg");
+            //                 let reg2 = instruction.r2.clone().expect("Need src reg");
+            //                 let src = self.operand(reg2);
+            //                 self.set_register(reg1, src.kind, src.base, src.offset);
+            //             }
+            //             "shl" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need source register");
+            //                 let reg3 = instruction.r3.clone().expect("Need immediate");
+            //                 let imm = self.operand(reg3);
+
+            //                 if let Some((_, arrange)) = reg1.split_once(".") {
+            //                     match arrange {
+            //                         "2d" => {
+            //                             for i in 0..2 {
+            //                                 let (bases, offsets) = self.simd_registers
+            //                                     [get_register_index(reg2.clone())]
+            //                                 .get_double(i);
+            //                                 let mut offset = u64::from_be_bytes(offsets);
+            //                                 (offset, _) = offset.overflowing_shl(
+            //                                     imm.offset.try_into().expect("computer21"),
+            //                                 );
+            //                                 // TODO: figure out best way to modify bases
+            //                                 let dest = &mut self.simd_registers
+            //                                     [get_register_index(reg1.clone())];
+            //                                 dest.set_double(i, bases, offset.to_be_bytes());
+            //                             }
+            //                         }
+            //                         _ => todo!("unsupported shl vector type"),
+            //                     }
+            //                 }
+            //             }
+            //             "ushr" | "sshr" => {
+            //                 // FIX figure out how to do sshr over byte strings
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need source register");
+            //                 let reg3 = instruction.r3.clone().expect("Need immediate");
+            //                 let imm = self.operand(reg3);
+
+            //                 if let Some((_, arrange)) = reg1.split_once(".") {
+            //                     match arrange {
+            //                         "2d" => {
+            //                             for i in 0..2 {
+            //                                 let (bases, offsets) = self.simd_registers
+            //                                     [get_register_index(reg2.clone())]
+            //                                 .get_double(i);
+            //                                 let mut offset = u64::from_be_bytes(offsets);
+            //                                 (offset, _) = offset.overflowing_shr(
+            //                                     imm.offset.try_into().expect("computer22"),
+            //                                 );
+            //                                 // TODO: figure out best way to modify bases
+            //                                 let dest = &mut self.simd_registers
+            //                                     [get_register_index(reg1.clone())];
+            //                                 dest.set_double(i, bases, offset.to_be_bytes());
+            //                             }
+            //                         }
+            //                         "4s" => {
+            //                             for i in 0..4 {
+            //                                 let (bases, offsets) = self.simd_registers
+            //                                     [get_register_index(reg2.clone())]
+            //                                 .get_word(i);
+            //                                 let mut offset = u32::from_be_bytes(offsets);
+            //                                 (offset, _) = offset.overflowing_shr(
+            //                                     imm.offset.try_into().expect("computer23"),
+            //                                 );
+            //                                 // TODO: figure out best way to modify bases
+            //                                 let dest = &mut self.simd_registers
+            //                                     [get_register_index(reg1.clone())];
+            //                                 dest.set_word(i, bases, offset.to_be_bytes());
+            //                             }
+            //                         }
+            //                         _ => todo!("unsupported ushr vector type"),
+            //                     }
+            //                 }
+            //             }
+            //             "ext" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need source register");
+            //                 let reg3 = instruction.r3.clone().expect("Need immediate");
+            //                 let reg4 = instruction.r4.clone().expect("Need immediate");
+            //                 let imm = self.operand(reg4);
+
+            //                 if let Some((_, arrange)) = reg1.split_once(".") {
+            //                     match arrange {
+            //                         "8b" => {
+            //                             let amt = imm.offset as usize;
+            //                             assert!(amt < 8);
+            //                             for i in 0..amt {
+            //                                 let (base, offset) = self.simd_registers
+            //                                     [get_register_index(reg2.clone())]
+            //                                 .get_byte(i);
+            //                                 let dest = &mut self.simd_registers
+            //                                     [get_register_index(reg1.clone())];
+            //                                 dest.set_byte(i, base.clone(), offset);
+            //                             }
+            //                             for i in amt..8 {
+            //                                 let (base, offset) = self.simd_registers
+            //                                     [get_register_index(reg3.clone())]
+            //                                 .get_byte(i);
+            //                                 let dest = &mut self.simd_registers
+            //                                     [get_register_index(reg1.clone())];
+            //                                 dest.set_byte(i, base.clone(), offset);
+            //                             }
+            //                         }
+            //                         "16b" => {
+            //                             let amt = imm.offset as usize;
+            //                             assert!(amt < 16);
+            //                             for i in 0..amt {
+            //                                 let (base, offset) = self.simd_registers
+            //                                     [get_register_index(reg2.clone())]
+            //                                 .get_byte(i);
+            //                                 let dest = &mut self.simd_registers
+            //                                     [get_register_index(reg1.clone())];
+            //                                 dest.set_byte(i, base.clone(), offset);
+            //                             }
+            //                             for i in amt..16 {
+            //                                 let (base, offset) = self.simd_registers
+            //                                     [get_register_index(reg3.clone())]
+            //                                 .get_byte(i);
+            //                                 let dest = &mut self.simd_registers
+            //                                     [get_register_index(reg1.clone())];
+            //                                 dest.set_byte(i, base.clone(), offset);
+            //                             }
+            //                         }
+            //                         _ => todo!("unsupported ext vector type"),
+            //                     }
+            //                 }
+            //             }
+            //             "dup" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let mut reg2 = instruction.r2.clone().expect("Need source register");
+            //                 if reg2.contains("[") {
+            //                     let left_brac = reg2.find("[").expect("need left bracket");
+            //                     let right_brac = reg2.find("]").expect("need right bracket");
+            //                     let index_string = reg2
+            //                         .get((left_brac + 1)..right_brac)
+            //                         .expect("need brackets");
+            //                     let index = index_string
+            //                         .parse::<usize>()
+            //                         .expect("index into vector must be an integer");
+
+            //                     reg2 = reg2.split_at(left_brac).0.to_string();
+            //                     if let Some((vector1, arrangement1)) = reg1.split_once(".") {
+            //                         if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+            //                             assert!(arrangement1.contains(arrangement2));
+            //                             let src = self.simd_registers
+            //                                 [get_register_index(vector2.to_string())]
+            //                             .clone();
+            //                             let dest = &mut self.simd_registers
+            //                                 [get_register_index(vector1.to_string())];
+
+            //                             match arrangement2 {
+            //                                 "b" => {
+            //                                     let elem = src.get_byte(index);
+            //                                     for i in 0..16 {
+            //                                         dest.set_byte(i, elem.0.clone(), elem.1);
+            //                                     }
+            //                                 }
+            //                                 "h" => {
+            //                                     let elem = src.get_halfword(index);
+            //                                     for i in 0..8 {
+            //                                         dest.set_halfword(i, elem.0.clone(), elem.1);
+            //                                     }
+            //                                 }
+            //                                 "s" => {
+            //                                     let elem = src.get_word(index);
+            //                                     for i in 0..4 {
+            //                                         dest.set_word(i, elem.0.clone(), elem.1);
+            //                                     }
+            //                                 }
+            //                                 "d" => {
+            //                                     let elem = src.get_double(index);
+            //                                     for i in 0..2 {
+            //                                         dest.set_double(i, elem.0.clone(), elem.1);
+            //                                     }
+            //                                 }
+            //                                 _ => log::error!(
+            //                                     "Not a valid vector arrangement {:?}",
+            //                                     arrangement1
+            //                                 ),
+            //                             }
+            //                         }
+            //                     };
+            //                 } else {
+            //                     if let Some((vector1, arrangement1)) = reg1.split_once(".") {
+            //                         let dest = &mut self.simd_registers
+            //                             [get_register_index(vector1.to_string())];
+            //                         let src = &mut self.registers[get_register_index(reg2)];
+
+            //                         dest.set_register(
+            //                             arrangement1.to_string(),
+            //                             src.kind.clone(),
+            //                             src.base.clone(),
+            //                             src.offset as u128,
+            //                         );
+            //                     };
+            //                 }
+            //             }
+            //             "and" => {
+            //                 self.vector_arithmetic(
+            //                     "&",
+            //                     &|x, y| x & y,
+            //                     &|x, y| x & y,
+            //                     &|x, y| x & y,
+            //                     &|x, y| x & y,
+            //                     instruction,
+            //                 );
+            //             }
+            //             "add" => {
+            //                 self.vector_arithmetic(
+            //                     "+",
+            //                     &|x, y| x + y,
+            //                     &|x, y| x + y,
+            //                     &|x, y| x + y,
+            //                     &|x, y| x + y,
+            //                     instruction,
+            //                 );
+            //             }
+            //             "orr" => {
+            //                 self.vector_arithmetic(
+            //                     "|",
+            //                     &|x, y| x | y,
+            //                     &|x, y| x | y,
+            //                     &|x, y| x | y,
+            //                     &|x, y| x | y,
+            //                     instruction,
+            //                 );
+            //             }
+            //             "eor" => {
+            //                 self.vector_arithmetic(
+            //                     "^",
+            //                     &|x, y| x ^ y,
+            //                     &|x, y| x ^ y,
+            //                     &|x, y| x ^ y,
+            //                     &|x, y| x ^ y,
+            //                     instruction,
+            //                 );
+            //             }
+            //             "mul" => {
+            //                 self.vector_arithmetic(
+            //                     "*",
+            //                     &|x, y| x * y,
+            //                     &|x, y| x * y,
+            //                     &|x, y| x * y,
+            //                     &|x, y| x * y,
+            //                     instruction,
+            //                 );
+            //             }
+            //             "sub" => {
+            //                 self.vector_arithmetic(
+            //                     "-",
+            //                     &|x, y| x - y,
+            //                     &|x, y| x - y,
+            //                     &|x, y| x - y,
+            //                     &|x, y| x - y,
+            //                     instruction,
+            //                 );
+            //             }
+            //             "rev64" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need source register");
+
+            //                 let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+            //                 let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+            //                 dest.kind = src.kind.clone();
+            //                 for i in 0..16 {
+            //                     let (base, offset) = src.get_byte(15 - i);
+            //                     dest.set_byte(i, base, offset);
+            //                 }
+            //             }
+            //             "rev32" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need source register");
+
+            //                 let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+            //                 let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+            //                 dest.kind = src.kind.clone();
+            //                 for i in 0..8 {
+            //                     let (base, offset) = src.get_byte(7 - i);
+            //                     dest.set_byte(i, base, offset);
+            //                 }
+
+            //                 for i in 8..16 {
+            //                     let (base, offset) = src.get_byte(15 - i);
+            //                     dest.set_byte(i, base, offset);
+            //                 }
+            //             }
+            //             "ins" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let mut reg2 = instruction.r2.clone().expect("Need source register");
+
+            //                 // vector, element
+            //                 if reg2.contains("v") {
+            //                     let left_brac = reg2.find("[").expect("need left bracket");
+            //                     let right_brac = reg2.find("]").expect("need right bracket");
+            //                     let index_string = reg2
+            //                         .get((left_brac + 1)..right_brac)
+            //                         .expect("need brackets");
+            //                     let index = index_string
+            //                         .parse::<usize>()
+            //                         .expect("index into vector must be an integer");
+
+            //                     reg2 = reg2.split_at(left_brac).0.to_string();
+            //                     if let Some((vector1, arrangement1)) = reg1.split_once(".") {
+            //                         if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+            //                             assert!(arrangement1.contains(arrangement2));
+            //                             let src = self.simd_registers
+            //                                 [get_register_index(vector2.to_string())]
+            //                             .clone();
+            //                             let dest = &mut self.simd_registers
+            //                                 [get_register_index(vector1.to_string())];
+
+            //                             match arrangement2 {
+            //                                 "b" => {
+            //                                     let (base, offset) = src.get_byte(index);
+            //                                     dest.set_byte(index, base, offset);
+            //                                 }
+            //                                 "h" => {
+            //                                     let (base, offset) = src.get_halfword(index);
+            //                                     dest.set_halfword(index, base, offset);
+            //                                 }
+            //                                 "s" => {
+            //                                     let (base, offset) = src.get_word(index);
+            //                                     dest.set_word(index, base, offset);
+            //                                 }
+            //                                 "d" => {
+            //                                     let (base, offset) = src.get_double(index);
+            //                                     dest.set_double(index, base, offset);
+            //                                 }
+            //                                 _ => log::error!(
+            //                                     "Not a valid vector arrangement {:?}",
+            //                                     arrangement1
+            //                                 ),
+            //                             }
+            //                         }
+            //                     }
+            //                 // vector, general
+            //                 } else {
+            //                     todo!("vector general ins unsupported");
+            //                 }
+            //             }
+            //             "pmull" | "pmull2" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need first source register");
+            //                 let reg3 = instruction.r3.clone().expect("Need second source register");
+
+            //                 if let Some((vector1, _)) = reg1.split_once(".") {
+            //                     if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+            //                         if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+            //                             assert_eq!(arrangement2, arrangement3);
+
+            //                             let src1 = self.simd_registers
+            //                                 [get_register_index(vector2.to_string())]
+            //                             .clone();
+            //                             let src2 = self.simd_registers
+            //                                 [get_register_index(vector3.to_string())]
+            //                             .clone();
+            //                             let dest = &mut self.simd_registers
+            //                                 [get_register_index(vector1.to_string())];
+
+            //                             match arrangement2 {
+            //                                 "8b" => {
+            //                                     for i in 0..8 {
+            //                                         let base = generate_expression_from_options(
+            //                                             "*",
+            //                                             src1.get_byte(i).0,
+            //                                             src2.get_byte(i).0,
+            //                                         );
+            //                                         let offset =
+            //                                             src1.get_byte(i).1 * src2.get_byte(i).1;
+
+            //                                         dest.set_byte(i, base, offset);
+            //                                     }
+            //                                 }
+            //                                 "4h" => {
+            //                                     for i in 0..8 {
+            //                                         let (bases1, offsets1) = self.simd_registers
+            //                                             [get_register_index(reg2.clone())]
+            //                                         .get_halfword(i);
+
+            //                                         let (bases2, offsets2) = self.simd_registers
+            //                                             [get_register_index(reg3.clone())]
+            //                                         .get_halfword(i);
+            //                                         let a = u16::from_be_bytes(offsets1);
+            //                                         let b = u16::from_be_bytes(offsets2);
+            //                                         let offset = a * b;
+
+            //                                         let mut new_bases = [BASE_INIT; 2];
+            //                                         for i in 0..2 {
+            //                                             new_bases[i] = generate_expression_from_options(
+            //                                                 "*",
+            //                                                 bases1[i].clone(),
+            //                                                 bases2[i].clone(),
+            //                                             );
+            //                                         }
+
+            //                                         let dest = &mut self.simd_registers
+            //                                             [get_register_index(reg1.clone())];
+            //                                         dest.set_halfword(
+            //                                             i,
+            //                                             new_bases,
+            //                                             offset.to_be_bytes(),
+            //                                         );
+            //                                     }
+            //                                 }
+            //                                 _ => todo!("pmull unsupported vector access"),
+            //                             }
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //             "zip1" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need first source register");
+            //                 let reg3 = instruction.r3.clone().expect("Need second source register");
+
+            //                 if let Some((vector1, _)) = reg1.split_once(".") {
+            //                     if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+            //                         if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+            //                             assert_eq!(arrangement2, arrangement3);
+
+            //                             let src1 = self.simd_registers
+            //                                 [get_register_index(vector2.to_string())]
+            //                             .clone();
+            //                             let src2 = self.simd_registers
+            //                                 [get_register_index(vector3.to_string())]
+            //                             .clone();
+            //                             let dest = &mut self.simd_registers
+            //                                 [get_register_index(vector1.to_string())];
+
+            //                             match arrangement2 {
+            //                                 "2d" => {
+            //                                     let elem = src1.get_double(0);
+            //                                     dest.set_double(0, elem.0, elem.1);
+
+            //                                     let elem = src2.get_double(0);
+            //                                     dest.set_double(1, elem.0, elem.1);
+            //                                 }
+            //                                 "16b" => {
+            //                                     for i in 0..16 {
+            //                                         if i % 2 == 0 {
+            //                                             let elem = src1.get_byte(0);
+            //                                             dest.set_byte(i, elem.0, elem.1);
+            //                                         } else {
+            //                                             let elem = src2.get_byte(0);
+            //                                             dest.set_byte(i, elem.0, elem.1);
+            //                                         }
+            //                                     }
+            //                                 }
+            //                                 _ => todo!("zip1 unsupported vector access"),
+            //                             }
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //             "zip2" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need first source register");
+            //                 let reg3 = instruction.r3.clone().expect("Need second source register");
+
+            //                 if let Some((vector1, _)) = reg1.split_once(".") {
+            //                     if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+            //                         if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+            //                             assert_eq!(arrangement2, arrangement3);
+
+            //                             let src1 = self.simd_registers
+            //                                 [get_register_index(vector2.to_string())]
+            //                             .clone();
+            //                             let src2 = self.simd_registers
+            //                                 [get_register_index(vector3.to_string())]
+            //                             .clone();
+            //                             let dest = &mut self.simd_registers
+            //                                 [get_register_index(vector1.to_string())];
+
+            //                             match arrangement2 {
+            //                                 "2d" => {
+            //                                     let elem = src1.get_double(1);
+            //                                     dest.set_double(0, elem.0, elem.1);
+
+            //                                     let elem = src2.get_double(1);
+            //                                     dest.set_double(1, elem.0, elem.1);
+            //                                 }
+            //                                 "16b" => {
+            //                                     //FIX
+            //                                     for i in 0..16 {
+            //                                         if i % 2 == 1 {
+            //                                             let elem = src1.get_byte(0);
+            //                                             dest.set_byte(i, elem.0, elem.1);
+            //                                         } else {
+            //                                             let elem = src2.get_byte(0);
+            //                                             dest.set_byte(i, elem.0, elem.1);
+            //                                         }
+            //                                     }
+            //                                 }
+            //                                 _ => todo!("zip2 unsupported vector access"),
+            //                             }
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //             "aese" | "aesmc" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need first source register");
+
+            //                 let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
+            //                 let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+
+            //                 match (src.kind.clone(), dest.kind.clone()) {
+            //                     (RegisterKind::Number, RegisterKind::Number) => {
+            //                         // don't need to do anything
+            //                         ()
+            //                     }
+            //                     _ => todo!(),
+            //                 }
+            //             }
+            //             "trn1" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need first source register");
+            //                 let reg3 = instruction.r3.clone().expect("Need second source register");
+
+            //                 if let Some((vector1, _)) = reg1.split_once(".") {
+            //                     if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+            //                         if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+            //                             assert_eq!(arrangement2, arrangement3);
+
+            //                             let src1 = self.simd_registers
+            //                                 [get_register_index(vector2.to_string())]
+            //                             .clone();
+            //                             let src2 = self.simd_registers
+            //                                 [get_register_index(vector3.to_string())]
+            //                             .clone();
+            //                             let dest = &mut self.simd_registers
+            //                                 [get_register_index(vector1.to_string())];
+
+            //                             match arrangement2 {
+            //                                 "2d" => {
+            //                                     let elem = src1.get_double(0);
+            //                                     dest.set_double(0, elem.0, elem.1);
+
+            //                                     let elem = src2.get_double(0);
+            //                                     dest.set_double(1, elem.0, elem.1);
+            //                                 }
+            //                                 _ => todo!("trn1 unsupported vector access"),
+            //                             }
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //             "trn2" => {
+            //                 let reg1 = instruction.r1.clone().expect("Need dst register");
+            //                 let reg2 = instruction.r2.clone().expect("Need first source register");
+            //                 let reg3 = instruction.r3.clone().expect("Need second source register");
+
+            //                 if let Some((vector1, _)) = reg1.split_once(".") {
+            //                     if let Some((vector2, arrangement2)) = reg2.split_once(".") {
+            //                         if let Some((vector3, arrangement3)) = reg3.split_once(".") {
+            //                             assert_eq!(arrangement2, arrangement3);
+
+            //                             let src1 = self.simd_registers
+            //                                 [get_register_index(vector2.to_string())]
+            //                             .clone();
+            //                             let src2 = self.simd_registers
+            //                                 [get_register_index(vector3.to_string())]
+            //                             .clone();
+            //                             let dest = &mut self.simd_registers
+            //                                 [get_register_index(vector1.to_string())];
+
+            //                             match arrangement2 {
+            //                                 "2d" => {
+            //                                     let elem = src1.get_double(1);
+            //                                     dest.set_double(0, elem.0, elem.1);
+
+            //                                     let elem = src2.get_double(1);
+            //                                     dest.set_double(1, elem.0, elem.1);
+            //                                 }
+            //                                 _ => todo!("trn2 unsupported vector access"),
+            //                             }
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //             "ld1r" => {
+            //                 let dst = instruction.r1.clone().expect("need dst ld1r");
+            //                 let src = instruction.r2.clone().expect("need src ld1r");
+
+            //                 let address = self.registers[get_register_index(src.clone())].clone();
+            //                 let _ = self.load(dst, address);
+            //             }
+            //             "bit" | "uaddl" | "uaddl2" | "sqrshrun" | "sqrshrun2" | "umull" | "umull2"
+            //             | "umlal" | "umlal2" | "rshrn" | "rshrn2" => {
+            //                 let dest = instruction.r1.clone().expect("need dest");
+            //                 let reg = &mut self.simd_registers[get_register_index(dest.to_string())];
+            //                 reg.set(
+            //                     "16b".to_string(),
+            //                     RegisterKind::Number,
+            //                     [BASE_INIT; 16],
+            //                     [0; 16],
+            //                 );
+            //             }
+            //             _ => {
+            //                 log::warn!("SIMD instruction not supported {:?}", instruction);
+            //                 todo!("unsupported vector operation {:?}", instruction);
+            //             }
+            //         }
+            //     }
         }
         Ok(ExecuteReturnType::Next)
     }
@@ -2406,26 +2412,33 @@ impl<'ctx> ARMCORTEXA<'_> {
         &mut self,
         op_string: &str,
         op: impl Fn(i64, i64) -> i64,
-        reg0: String,
-        reg1: String,
-        reg2: String,
-        reg3: Option<String>,
+        operands: Vec<Operand>,
     ) {
-        let r1 = self.operand(reg1.clone());
-        let mut r2 = self.operand(reg2.clone());
+        let mut reg_iter = operands.iter();
+        let r0 = &reg_iter.next().expect("Need destination register");
+        let reg0 = match r0 {
+            Operand::Register(r) => r,
+            _ => todo!("Unsupported destination operand type for arithmetic operation"),
+        };
+        let reg1 = &reg_iter.next().expect("Need first source register");
+        let reg2 = &reg_iter.next().expect("Need second source register");
 
-        if reg3.is_some() {
-            if let Some(expr) = reg3 {
-                if expr.starts_with('u') | expr.starts_with('s') {
-                    // TODO: zero extend?
-                } else {
-                    // FIX: account for possibility of space between # and number
-                    let parts = expr
-                        .split_once('#')
-                        .expect(&format!("computer24 {:?}", expr).to_string());
-                    r2 = shift_imm(parts.0.to_string(), r2.clone(), string_to_int(parts.1));
-                }
+        let (r1, mut r2) = match (reg1, reg2) {
+            (Operand::Register(r1), Operand::Register(r2)) => {
+                (self.get_register(&r1), self.get_register(&r2))
             }
+            (Operand::Register(r1), Operand::Immediate(r2)) => {
+                (self.get_register(&r1), RegisterValue::new_imm(*r2))
+            }
+            _ => todo!(
+                "Unsupported operand types for arithmetic operation {:?} {:?}",
+                reg1,
+                reg2
+            ),
+        };
+
+        if let Some(Operand::Bitwise(op, num)) = &reg_iter.next() {
+            r2 = shift_imm(op.to_string(), r2.clone(), *num);
         }
 
         if r1.kind == r2.kind {
@@ -2505,427 +2518,427 @@ impl<'ctx> ARMCORTEXA<'_> {
         }
     }
 
-    fn vector_arithmetic(
-        &mut self,
-        op_string: &str,
-        op_byte: impl Fn(u8, u8) -> u8,
-        op_half: impl Fn(u16, u16) -> u16,
-        op_word: impl Fn(u32, u32) -> u32,
-        op_double: impl Fn(u64, u64) -> u64,
-        instruction: &Instruction,
-    ) {
-        let reg1 = instruction.r1.clone().expect("Need dst register");
-        let reg2 = instruction.r2.clone().expect("Need source register");
-        let reg3 = instruction.r3.clone().expect("Need immediate");
+    // fn vector_arithmetic(
+    //     &mut self,
+    //     op_string: &str,
+    //     op_byte: impl Fn(u8, u8) -> u8,
+    //     op_half: impl Fn(u16, u16) -> u16,
+    //     op_word: impl Fn(u32, u32) -> u32,
+    //     op_double: impl Fn(u64, u64) -> u64,
+    //     instruction: &Instruction,
+    // ) {
+    //     let reg1 = instruction.r1.clone().expect("Need dst register");
+    //     let reg2 = instruction.r2.clone().expect("Need source register");
+    //     let reg3 = instruction.r3.clone().expect("Need immediate");
 
-        if let Some((_, arrange)) = reg1.split_once(".") {
-            match arrange {
-                "2d" => {
-                    for i in 0..2 {
-                        let (bases1, offsets1) =
-                            self.simd_registers[get_register_index(reg2.clone())].get_double(i);
+    //     if let Some((_, arrange)) = reg1.split_once(".") {
+    //         match arrange {
+    //             "2d" => {
+    //                 for i in 0..2 {
+    //                     let (bases1, offsets1) =
+    //                         self.simd_registers[get_register_index(reg2.clone())].get_double(i);
 
-                        let (bases2, offsets2) =
-                            self.simd_registers[get_register_index(reg3.clone())].get_double(i);
+    //                     let (bases2, offsets2) =
+    //                         self.simd_registers[get_register_index(reg3.clone())].get_double(i);
 
-                        let a = u64::from_be_bytes(offsets1);
-                        let b = u64::from_be_bytes(offsets2);
-                        let offset = op_double(a, b);
+    //                     let a = u64::from_be_bytes(offsets1);
+    //                     let b = u64::from_be_bytes(offsets2);
+    //                     let offset = op_double(a, b);
 
-                        let mut new_bases = [BASE_INIT; 8];
-                        for i in 0..8 {
-                            if bases1[i].is_some() && bases2[i].is_some() {
-                                new_bases[i] = generate_expression_from_options(
-                                    op_string,
-                                    bases1[i].clone(),
-                                    bases2[i].clone(),
-                                );
-                            }
-                        }
+    //                     let mut new_bases = [BASE_INIT; 8];
+    //                     for i in 0..8 {
+    //                         if bases1[i].is_some() && bases2[i].is_some() {
+    //                             new_bases[i] = generate_expression_from_options(
+    //                                 op_string,
+    //                                 bases1[i].clone(),
+    //                                 bases2[i].clone(),
+    //                             );
+    //                         }
+    //                     }
 
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-                        dest.set_double(i, new_bases, offset.to_be_bytes());
-                    }
-                }
-                "4s" => {
-                    for i in 0..4 {
-                        let (bases1, offsets1) =
-                            self.simd_registers[get_register_index(reg2.clone())].get_word(i);
+    //                     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+    //                     dest.set_double(i, new_bases, offset.to_be_bytes());
+    //                 }
+    //             }
+    //             "4s" => {
+    //                 for i in 0..4 {
+    //                     let (bases1, offsets1) =
+    //                         self.simd_registers[get_register_index(reg2.clone())].get_word(i);
 
-                        let (bases2, offsets2) =
-                            self.simd_registers[get_register_index(reg3.clone())].get_word(i);
-                        let a = u32::from_be_bytes(offsets1);
-                        let b = u32::from_be_bytes(offsets2);
-                        let offset = op_word(a, b);
+    //                     let (bases2, offsets2) =
+    //                         self.simd_registers[get_register_index(reg3.clone())].get_word(i);
+    //                     let a = u32::from_be_bytes(offsets1);
+    //                     let b = u32::from_be_bytes(offsets2);
+    //                     let offset = op_word(a, b);
 
-                        let mut new_bases = [BASE_INIT; 4];
-                        for i in 0..4 {
-                            new_bases[i] = generate_expression_from_options(
-                                op_string,
-                                bases1[i].clone(),
-                                bases2[i].clone(),
-                            );
-                        }
+    //                     let mut new_bases = [BASE_INIT; 4];
+    //                     for i in 0..4 {
+    //                         new_bases[i] = generate_expression_from_options(
+    //                             op_string,
+    //                             bases1[i].clone(),
+    //                             bases2[i].clone(),
+    //                         );
+    //                     }
 
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-                        dest.set_word(i, new_bases, offset.to_be_bytes());
-                    }
-                }
-                "4h" => {
-                    for i in 0..4 {
-                        let (bases1, offsets1) =
-                            self.simd_registers[get_register_index(reg2.clone())].get_halfword(i);
+    //                     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+    //                     dest.set_word(i, new_bases, offset.to_be_bytes());
+    //                 }
+    //             }
+    //             "4h" => {
+    //                 for i in 0..4 {
+    //                     let (bases1, offsets1) =
+    //                         self.simd_registers[get_register_index(reg2.clone())].get_halfword(i);
 
-                        let (bases2, offsets2) =
-                            self.simd_registers[get_register_index(reg3.clone())].get_halfword(i);
-                        let a = u16::from_be_bytes(offsets1);
-                        let b = u16::from_be_bytes(offsets2);
-                        let offset = op_half(a, b);
+    //                     let (bases2, offsets2) =
+    //                         self.simd_registers[get_register_index(reg3.clone())].get_halfword(i);
+    //                     let a = u16::from_be_bytes(offsets1);
+    //                     let b = u16::from_be_bytes(offsets2);
+    //                     let offset = op_half(a, b);
 
-                        let mut new_bases = [BASE_INIT; 2];
-                        for i in 0..4 {
-                            new_bases[i] = generate_expression_from_options(
-                                op_string,
-                                bases1[i].clone(),
-                                bases2[i].clone(),
-                            );
-                        }
+    //                     let mut new_bases = [BASE_INIT; 2];
+    //                     for i in 0..4 {
+    //                         new_bases[i] = generate_expression_from_options(
+    //                             op_string,
+    //                             bases1[i].clone(),
+    //                             bases2[i].clone(),
+    //                         );
+    //                     }
 
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-                        dest.set_halfword(i, new_bases, offset.to_be_bytes());
-                    }
-                }
-                "8h" => {
-                    for i in 0..8 {
-                        let (bases1, offsets1) =
-                            self.simd_registers[get_register_index(reg2.clone())].get_halfword(i);
+    //                     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+    //                     dest.set_halfword(i, new_bases, offset.to_be_bytes());
+    //                 }
+    //             }
+    //             "8h" => {
+    //                 for i in 0..8 {
+    //                     let (bases1, offsets1) =
+    //                         self.simd_registers[get_register_index(reg2.clone())].get_halfword(i);
 
-                        let (bases2, offsets2) =
-                            self.simd_registers[get_register_index(reg3.clone())].get_halfword(i);
-                        let a = u16::from_be_bytes(offsets1);
-                        let b = u16::from_be_bytes(offsets2);
-                        let offset = op_half(a, b);
+    //                     let (bases2, offsets2) =
+    //                         self.simd_registers[get_register_index(reg3.clone())].get_halfword(i);
+    //                     let a = u16::from_be_bytes(offsets1);
+    //                     let b = u16::from_be_bytes(offsets2);
+    //                     let offset = op_half(a, b);
 
-                        let mut new_bases = [BASE_INIT; 2];
-                        for i in 0..2 {
-                            new_bases[i] = generate_expression_from_options(
-                                op_string,
-                                bases1[i].clone(),
-                                bases2[i].clone(),
-                            );
-                        }
+    //                     let mut new_bases = [BASE_INIT; 2];
+    //                     for i in 0..2 {
+    //                         new_bases[i] = generate_expression_from_options(
+    //                             op_string,
+    //                             bases1[i].clone(),
+    //                             bases2[i].clone(),
+    //                         );
+    //                     }
 
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-                        dest.set_halfword(i, new_bases, offset.to_be_bytes());
-                    }
-                }
-                "8b" => {
-                    for i in 0..8 {
-                        let (bases1, a) =
-                            self.simd_registers[get_register_index(reg2.clone())].get_byte(i);
+    //                     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+    //                     dest.set_halfword(i, new_bases, offset.to_be_bytes());
+    //                 }
+    //             }
+    //             "8b" => {
+    //                 for i in 0..8 {
+    //                     let (bases1, a) =
+    //                         self.simd_registers[get_register_index(reg2.clone())].get_byte(i);
 
-                        let (bases2, b) =
-                            self.simd_registers[get_register_index(reg3.clone())].get_byte(i);
+    //                     let (bases2, b) =
+    //                         self.simd_registers[get_register_index(reg3.clone())].get_byte(i);
 
-                        let offset = op_byte(a, b);
+    //                     let offset = op_byte(a, b);
 
-                        let new_base = generate_expression_from_options(
-                            op_string,
-                            bases1.clone(),
-                            bases2.clone(),
-                        );
+    //                     let new_base = generate_expression_from_options(
+    //                         op_string,
+    //                         bases1.clone(),
+    //                         bases2.clone(),
+    //                     );
 
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-                        dest.set_byte(i, new_base, offset);
-                    }
-                }
-                "16b" => {
-                    for i in 0..16 {
-                        let (bases1, a) =
-                            self.simd_registers[get_register_index(reg2.clone())].get_byte(i);
+    //                     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+    //                     dest.set_byte(i, new_base, offset);
+    //                 }
+    //             }
+    //             "16b" => {
+    //                 for i in 0..16 {
+    //                     let (bases1, a) =
+    //                         self.simd_registers[get_register_index(reg2.clone())].get_byte(i);
 
-                        let (bases2, b) =
-                            self.simd_registers[get_register_index(reg3.clone())].get_byte(i);
+    //                     let (bases2, b) =
+    //                         self.simd_registers[get_register_index(reg3.clone())].get_byte(i);
 
-                        let offset = op_byte(a, b);
+    //                     let offset = op_byte(a, b);
 
-                        let new_base = generate_expression_from_options(
-                            op_string,
-                            bases1.clone(),
-                            bases2.clone(),
-                        );
+    //                     let new_base = generate_expression_from_options(
+    //                         op_string,
+    //                         bases1.clone(),
+    //                         bases2.clone(),
+    //                     );
 
-                        let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-                        dest.set_byte(i, new_base, offset);
-                    }
-                }
-                _ => todo!("unsupported vector arithmetic access"),
-            }
-        }
-    }
+    //                     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
+    //                     dest.set_byte(i, new_base, offset);
+    //                 }
+    //             }
+    //             _ => todo!("unsupported vector arithmetic access"),
+    //         }
+    //     }
+    // }
 
-    fn shift_reg(&mut self, reg1: String, reg2: String, reg3: String) {
-        let r2 = self.registers[get_register_index(reg2)].clone();
+    // fn shift_reg(&mut self, reg1: String, reg2: String, reg3: String) {
+    //     let r2 = self.registers[get_register_index(reg2)].clone();
 
-        let shift = self.operand(reg3).offset;
-        let new_offset = r2.offset >> (shift);
-        self.set_register(
-            reg1,
-            r2.clone().kind,
-            Some(generate_expression(
-                "ror",
-                r2.base.unwrap_or(AbstractExpression::Empty),
-                AbstractExpression::Immediate(new_offset),
-            )),
-            new_offset,
-        );
-    }
+    //     let shift = self.operand(reg3).offset;
+    //     let new_offset = r2.offset >> (shift);
+    //     self.set_register(
+    //         reg1,
+    //         r2.clone().kind,
+    //         Some(generate_expression(
+    //             "ror",
+    //             r2.base.unwrap_or(AbstractExpression::Empty),
+    //             AbstractExpression::Immediate(new_offset),
+    //         )),
+    //         new_offset,
+    //     );
+    // }
 
-    fn cmp(&mut self, reg1: String, reg2: String) {
-        let r1 = self.operand(reg1.clone()).clone();
-        let r2 = self.operand(reg2.clone()).clone();
+    // fn cmp(&mut self, reg1: String, reg2: String) {
+    //     let r1 = self.operand(reg1.clone()).clone();
+    //     let r2 = self.operand(reg2.clone()).clone();
 
-        if r1 == r2 {
-            self.neg = Some(FlagValue::Real(false));
-            self.zero = Some(FlagValue::Real(true));
-            self.carry = Some(FlagValue::Real(false));
-            self.overflow = Some(FlagValue::Real(false));
-            return;
-        }
+    //     if r1 == r2 {
+    //         self.neg = Some(FlagValue::Real(false));
+    //         self.zero = Some(FlagValue::Real(true));
+    //         self.carry = Some(FlagValue::Real(false));
+    //         self.overflow = Some(FlagValue::Real(false));
+    //         return;
+    //     }
 
-        if r1.kind == r2.kind {
-            match r1.kind {
-                RegisterKind::RegisterBase => {
-                    if r1.base.eq(&r2.base) {
-                        self.neg = if r1.offset < r2.offset {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.zero = if r1.offset == r2.offset {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        // signed vs signed distinction, maybe make offset generic to handle both?
-                        self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                    } else {
-                        let expression = AbstractExpression::Expression(
-                            "-".to_string(),
-                            Box::new(AbstractExpression::Register(Box::new(r1))),
-                            Box::new(AbstractExpression::Register(Box::new(r2))),
-                        );
-                        self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
-                            expression.clone(),
-                            AbstractExpression::Immediate(0),
-                        )));
-                        self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "==",
-                            expression.clone(),
-                            AbstractExpression::Immediate(0),
-                        )));
-                        // FIX carry + overflow
-                        self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
-                            expression.clone(),
-                            AbstractExpression::Immediate(std::i64::MIN),
-                        )));
-                        self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
-                            expression,
-                            AbstractExpression::Immediate(std::i64::MIN),
-                        )));
-                    }
-                }
-                RegisterKind::Number => {
-                    log::error!("Cannot compare these two registers")
-                }
-                RegisterKind::Immediate => {
-                    self.neg = if r1.offset < r2.offset {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    self.zero = if r1.offset == r2.offset {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    // signed vs signed distinction, maybe make offset generic to handle both?
-                    self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                }
-            }
-        } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
-            let expression = AbstractExpression::Expression(
-                "-".to_string(),
-                Box::new(AbstractExpression::Register(Box::new(r1))),
-                Box::new(AbstractExpression::Register(Box::new(r2))),
-            );
-            self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
-                expression.clone(),
-                AbstractExpression::Immediate(0),
-            )));
-            self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
-                "==",
-                expression.clone(),
-                AbstractExpression::Immediate(0),
-            )));
-            // FIX carry + overflow
-            self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
-                expression.clone(),
-                AbstractExpression::Immediate(std::i64::MIN),
-            )));
-            self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
-                expression,
-                AbstractExpression::Immediate(std::i64::MIN),
-            )));
-        }
-    }
+    //     if r1.kind == r2.kind {
+    //         match r1.kind {
+    //             RegisterKind::RegisterBase => {
+    //                 if r1.base.eq(&r2.base) {
+    //                     self.neg = if r1.offset < r2.offset {
+    //                         Some(FlagValue::Real(true))
+    //                     } else {
+    //                         Some(FlagValue::Real(false))
+    //                     };
+    //                     self.zero = if r1.offset == r2.offset {
+    //                         Some(FlagValue::Real(true))
+    //                     } else {
+    //                         Some(FlagValue::Real(false))
+    //                     };
+    //                     // signed vs signed distinction, maybe make offset generic to handle both?
+    //                     self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+    //                         Some(FlagValue::Real(true))
+    //                     } else {
+    //                         Some(FlagValue::Real(false))
+    //                     };
+    //                     self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+    //                         Some(FlagValue::Real(true))
+    //                     } else {
+    //                         Some(FlagValue::Real(false))
+    //                     };
+    //                 } else {
+    //                     let expression = AbstractExpression::Expression(
+    //                         "-".to_string(),
+    //                         Box::new(AbstractExpression::Register(Box::new(r1))),
+    //                         Box::new(AbstractExpression::Register(Box::new(r2))),
+    //                     );
+    //                     self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
+    //                         "<",
+    //                         expression.clone(),
+    //                         AbstractExpression::Immediate(0),
+    //                     )));
+    //                     self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
+    //                         "==",
+    //                         expression.clone(),
+    //                         AbstractExpression::Immediate(0),
+    //                     )));
+    //                     // FIX carry + overflow
+    //                     self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
+    //                         "<",
+    //                         expression.clone(),
+    //                         AbstractExpression::Immediate(std::i64::MIN),
+    //                     )));
+    //                     self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
+    //                         "<",
+    //                         expression,
+    //                         AbstractExpression::Immediate(std::i64::MIN),
+    //                     )));
+    //                 }
+    //             }
+    //             RegisterKind::Number => {
+    //                 log::error!("Cannot compare these two registers")
+    //             }
+    //             RegisterKind::Immediate => {
+    //                 self.neg = if r1.offset < r2.offset {
+    //                     Some(FlagValue::Real(true))
+    //                 } else {
+    //                     Some(FlagValue::Real(false))
+    //                 };
+    //                 self.zero = if r1.offset == r2.offset {
+    //                     Some(FlagValue::Real(true))
+    //                 } else {
+    //                     Some(FlagValue::Real(false))
+    //                 };
+    //                 // signed vs signed distinction, maybe make offset generic to handle both?
+    //                 self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+    //                     Some(FlagValue::Real(true))
+    //                 } else {
+    //                     Some(FlagValue::Real(false))
+    //                 };
+    //                 self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
+    //                     Some(FlagValue::Real(true))
+    //                 } else {
+    //                     Some(FlagValue::Real(false))
+    //                 };
+    //             }
+    //         }
+    //     } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
+    //         let expression = AbstractExpression::Expression(
+    //             "-".to_string(),
+    //             Box::new(AbstractExpression::Register(Box::new(r1))),
+    //             Box::new(AbstractExpression::Register(Box::new(r2))),
+    //         );
+    //         self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
+    //             "<",
+    //             expression.clone(),
+    //             AbstractExpression::Immediate(0),
+    //         )));
+    //         self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
+    //             "==",
+    //             expression.clone(),
+    //             AbstractExpression::Immediate(0),
+    //         )));
+    //         // FIX carry + overflow
+    //         self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
+    //             "<",
+    //             expression.clone(),
+    //             AbstractExpression::Immediate(std::i64::MIN),
+    //         )));
+    //         self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
+    //             "<",
+    //             expression,
+    //             AbstractExpression::Immediate(std::i64::MIN),
+    //         )));
+    //     }
+    // }
 
-    fn cmn(&mut self, reg1: String, reg2: String) {
-        let r1 = self.operand(reg1.clone()).clone();
-        let r2 = self.operand(reg2.clone()).clone();
+    // fn cmn(&mut self, reg1: String, reg2: String) {
+    //     let r1 = self.operand(reg1.clone()).clone();
+    //     let r2 = self.operand(reg2.clone()).clone();
 
-        if r1 == r2 {
-            self.neg = Some(FlagValue::Real(false));
-            self.zero = Some(FlagValue::Real(true));
-            self.carry = Some(FlagValue::Real(false));
-            self.overflow = Some(FlagValue::Real(false));
+    //     if r1 == r2 {
+    //         self.neg = Some(FlagValue::Real(false));
+    //         self.zero = Some(FlagValue::Real(true));
+    //         self.carry = Some(FlagValue::Real(false));
+    //         self.overflow = Some(FlagValue::Real(false));
 
-            return;
-        }
+    //         return;
+    //     }
 
-        if r1.kind == r2.kind {
-            match r1.kind {
-                RegisterKind::RegisterBase => {
-                    if r1.base.eq(&r2.base) {
-                        self.neg = if r1.offset + r2.offset < 0 {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.zero = if r1.offset + r2.offset == 0 {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.carry = if r2.offset + r1.offset > std::i64::MAX {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.overflow = if r2.offset + r1.offset > std::i64::MAX {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                    } else {
-                        let expression = AbstractExpression::Expression(
-                            "+".to_string(),
-                            Box::new(AbstractExpression::Register(Box::new(r1))),
-                            Box::new(AbstractExpression::Register(Box::new(r2))),
-                        );
-                        self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
-                            expression.clone(),
-                            AbstractExpression::Immediate(0),
-                        )));
-                        self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "==",
-                            expression.clone(),
-                            AbstractExpression::Immediate(0),
-                        )));
-                        // FIX carry + overflow
-                        self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                            ">",
-                            expression.clone(),
-                            AbstractExpression::Immediate(std::i64::MAX),
-                        )));
-                        self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                            ">",
-                            expression,
-                            AbstractExpression::Immediate(std::i64::MAX),
-                        )));
-                    }
-                }
-                RegisterKind::Number => {
-                    log::error!("Cannot compare these two registers")
-                }
-                RegisterKind::Immediate => {
-                    self.neg = if r1.offset + r2.offset < 0 {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    self.zero = if r1.offset + r2.offset == 0 {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    // signed vs signed distinction, maybe make offset generic to handle both?
-                    self.carry = if r2.offset + r1.offset > std::i64::MAX {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    self.overflow = if r2.offset + r1.offset > std::i64::MAX {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                }
-            }
-        } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
-            let expression = AbstractExpression::Expression(
-                "+".to_string(),
-                Box::new(AbstractExpression::Register(Box::new(r1))),
-                Box::new(AbstractExpression::Register(Box::new(r2))),
-            );
-            self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
-                expression.clone(),
-                AbstractExpression::Immediate(0),
-            )));
-            self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
-                "==",
-                expression.clone(),
-                AbstractExpression::Immediate(0),
-            )));
-            // FIX carry + overflow
-            self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                ">",
-                expression.clone(),
-                AbstractExpression::Immediate(std::i64::MAX),
-            )));
-            self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                ">",
-                expression,
-                AbstractExpression::Immediate(std::i64::MAX),
-            )));
-        }
-    }
+    //     if r1.kind == r2.kind {
+    //         match r1.kind {
+    //             RegisterKind::RegisterBase => {
+    //                 if r1.base.eq(&r2.base) {
+    //                     self.neg = if r1.offset + r2.offset < 0 {
+    //                         Some(FlagValue::Real(true))
+    //                     } else {
+    //                         Some(FlagValue::Real(false))
+    //                     };
+    //                     self.zero = if r1.offset + r2.offset == 0 {
+    //                         Some(FlagValue::Real(true))
+    //                     } else {
+    //                         Some(FlagValue::Real(false))
+    //                     };
+    //                     self.carry = if r2.offset + r1.offset > std::i64::MAX {
+    //                         Some(FlagValue::Real(true))
+    //                     } else {
+    //                         Some(FlagValue::Real(false))
+    //                     };
+    //                     self.overflow = if r2.offset + r1.offset > std::i64::MAX {
+    //                         Some(FlagValue::Real(true))
+    //                     } else {
+    //                         Some(FlagValue::Real(false))
+    //                     };
+    //                 } else {
+    //                     let expression = AbstractExpression::Expression(
+    //                         "+".to_string(),
+    //                         Box::new(AbstractExpression::Register(Box::new(r1))),
+    //                         Box::new(AbstractExpression::Register(Box::new(r2))),
+    //                     );
+    //                     self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
+    //                         "<",
+    //                         expression.clone(),
+    //                         AbstractExpression::Immediate(0),
+    //                     )));
+    //                     self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
+    //                         "==",
+    //                         expression.clone(),
+    //                         AbstractExpression::Immediate(0),
+    //                     )));
+    //                     // FIX carry + overflow
+    //                     self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
+    //                         ">",
+    //                         expression.clone(),
+    //                         AbstractExpression::Immediate(std::i64::MAX),
+    //                     )));
+    //                     self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
+    //                         ">",
+    //                         expression,
+    //                         AbstractExpression::Immediate(std::i64::MAX),
+    //                     )));
+    //                 }
+    //             }
+    //             RegisterKind::Number => {
+    //                 log::error!("Cannot compare these two registers")
+    //             }
+    //             RegisterKind::Immediate => {
+    //                 self.neg = if r1.offset + r2.offset < 0 {
+    //                     Some(FlagValue::Real(true))
+    //                 } else {
+    //                     Some(FlagValue::Real(false))
+    //                 };
+    //                 self.zero = if r1.offset + r2.offset == 0 {
+    //                     Some(FlagValue::Real(true))
+    //                 } else {
+    //                     Some(FlagValue::Real(false))
+    //                 };
+    //                 // signed vs signed distinction, maybe make offset generic to handle both?
+    //                 self.carry = if r2.offset + r1.offset > std::i64::MAX {
+    //                     Some(FlagValue::Real(true))
+    //                 } else {
+    //                     Some(FlagValue::Real(false))
+    //                 };
+    //                 self.overflow = if r2.offset + r1.offset > std::i64::MAX {
+    //                     Some(FlagValue::Real(true))
+    //                 } else {
+    //                     Some(FlagValue::Real(false))
+    //                 };
+    //             }
+    //         }
+    //     } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
+    //         let expression = AbstractExpression::Expression(
+    //             "+".to_string(),
+    //             Box::new(AbstractExpression::Register(Box::new(r1))),
+    //             Box::new(AbstractExpression::Register(Box::new(r2))),
+    //         );
+    //         self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
+    //             "<",
+    //             expression.clone(),
+    //             AbstractExpression::Immediate(0),
+    //         )));
+    //         self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
+    //             "==",
+    //             expression.clone(),
+    //             AbstractExpression::Immediate(0),
+    //         )));
+    //         // FIX carry + overflow
+    //         self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
+    //             ">",
+    //             expression.clone(),
+    //             AbstractExpression::Immediate(std::i64::MAX),
+    //         )));
+    //         self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
+    //             ">",
+    //             expression,
+    //             AbstractExpression::Immediate(std::i64::MAX),
+    //         )));
+    //     }
+    // }
 
     /*
      * t: register name to load into
@@ -2947,7 +2960,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     .expect(format!("Need memory region to load from {:?}", region_name).as_str());
                 match region.get(offset) {
                     Some(v) => {
-                        self.set_register(t, v.kind.clone(), v.base.clone(), v.offset);
+                        self.set_register(&t, v.kind.clone(), v.base.clone(), v.offset);
                         self.rw_queue.push(MemoryAccess {
                             kind: RegionType::READ,
                             base: base.clone(),
@@ -2977,7 +2990,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     base: address.base.expect("Need base").to_string(),
                     offset: address.offset,
                 });
-                self.set_register(t, RegisterKind::Number, None, 0);
+                self.set_register(&t, RegisterKind::Number, None, 0);
                 Ok(())
             }
         } else {
@@ -3001,7 +3014,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     .expect(format!("Need memory region to load from {:?}", region_name).as_str());
                 match region.get(offset) {
                     Some(v) => {
-                        self.set_register(t, v.kind.clone(), v.base, v.offset);
+                        self.set_register(&t, v.kind.clone(), v.base, v.offset);
                         self.rw_queue.push(MemoryAccess {
                             kind: RegionType::READ,
                             base: base.clone(),
@@ -3031,7 +3044,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     base: address.base.expect("Need base").to_string(),
                     offset: address.offset,
                 });
-                self.set_register(t, RegisterKind::Number, None, 0);
+                self.set_register(&t, RegisterKind::Number, None, 0);
                 Ok(())
             }
         } else {
@@ -3056,7 +3069,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let region = self.memory.get_mut(&region).expect("No region");
-                let register = &self.registers[get_register_index(register)];
+                let register = &self.registers[get_register_index(&register)];
                 region.insert(offset.clone(), register.clone());
 
                 log::info!(
@@ -3104,7 +3117,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let region = self.memory.get_mut(&region).expect("No region");
-                let register = &self.registers[get_register_index(register)];
+                let register = &self.registers[get_register_index(&register)];
                 region.insert(offset.clone(), register.clone());
 
                 log::info!(
@@ -3286,5 +3299,133 @@ impl<'ctx> ARMCORTEXA<'_> {
             )
             .as_str(),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // TODO: figure out how to refactor computer setup code w/lifetimes
+
+    #[test]
+    fn test_arithmetic_add_imm_registers() {
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut computer = ARMCORTEXA::new(&ctx);
+
+        computer.set_register("x1", RegisterKind::Immediate, None, 2);
+        computer.set_register("x2", RegisterKind::Immediate, None, 3);
+        let _ = computer.execute(0, &Instruction::new("add x0, x1, x2".to_string()));
+        let result = computer.get_register("x0").offset;
+        assert_eq!(result, 5);
+    }
+
+    #[test]
+    fn test_arithmetic_add_abstract_and_imm() {
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut computer = ARMCORTEXA::new(&ctx);
+
+        computer.set_register(
+            "x1",
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract("hello,".to_string())),
+            0,
+        );
+        computer.set_register("x2", RegisterKind::Immediate, None, 5);
+        let _ = computer.execute(0, &Instruction::new("add x0, x1, x2".to_string()));
+        let result = computer.get_register("x0");
+        assert_eq!(
+            result,
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(AbstractExpression::Abstract("hello,".to_string())),
+                offset: 5,
+            }
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_add_abstract_registers() {
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut computer = ARMCORTEXA::new(&ctx);
+
+        computer.set_register(
+            "x1",
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract("hello,".to_string())),
+            0,
+        );
+        computer.set_register(
+            "x2",
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract("world!".to_string())),
+            0,
+        );
+        let _ = computer.execute(0, &Instruction::new("add x0, x1, x2".to_string()));
+        let result = computer.get_register("x0");
+        assert_eq!(
+            result,
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(generate_expression(
+                    "+",
+                    AbstractExpression::Abstract("hello,".to_string()),
+                    AbstractExpression::Abstract("world!".to_string())
+                )),
+                offset: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_add_with_shift() {
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut computer = ARMCORTEXA::new(&ctx);
+
+        computer.set_register(
+            "x1",
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract("hello,".to_string())),
+            0,
+        );
+        computer.set_register("x2", RegisterKind::Immediate, None, 3);
+        let _ = computer.execute(0, &Instruction::new("add x0, x1, x2, lsl#2".to_string()));
+        let result = computer.get_register("x0");
+        assert_eq!(
+            result,
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(AbstractExpression::Abstract("hello,".to_string())),
+                offset: 12,
+            }
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_add_abstract_and_imm_instruction() {
+        let cfg = Config::new();
+        let ctx = Context::new(&cfg);
+        let mut computer = ARMCORTEXA::new(&ctx);
+
+        computer.set_register(
+            "x1",
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract("hello,".to_string())),
+            0,
+        );
+        let _ = computer.execute(0, &Instruction::new("add x0, x1, #7".to_string()));
+        let result = computer.get_register("x0");
+        assert_eq!(
+            result,
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(AbstractExpression::Abstract("hello,".to_string())),
+                offset: 7,
+            }
+        );
     }
 }

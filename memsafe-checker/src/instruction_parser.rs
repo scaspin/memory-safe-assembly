@@ -1,17 +1,17 @@
-use std::str::FromStr;
+#[derive(Debug, Clone, PartialEq)]
+pub struct Instruction {
+    pub ty: InstructionType,
+    pub opcode: String,
+    pub operands: Vec<Operand>,
+}
 
-// #[derive(Debug, Clone, PartialEq)]
-// enum InstructionType {
-//     Arithmetic,
-//     MultiArithmetic, //SIMD or FP Note: may need a type that contains lane config for instructions like ushll.8h
-//     Logical,        // Move, shift, anything with one input register
-//     Memory,
-//     MultiMemory,
-//     Comparison,
-//     Jump,
-//     Shift,
-//     Other,
-// }
+fn is_register(n: String) -> bool {
+    n.starts_with("x")
+        || n.starts_with("z")
+        || n.starts_with("w")
+        || n.starts_with("fp")
+        || n.starts_with("sp")
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Arrangement {
@@ -59,20 +59,6 @@ pub enum Operand {
     Label(String),
     Address(String, i64), // for relative addresses, i.e. LK256@PAGEOFF
     Other,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct NewInstruction {
-    opcode: String,
-    operands: Vec<Operand>,
-}
-
-fn is_register(n: String) -> bool {
-    n.starts_with("x")
-        || n.starts_with("z")
-        || n.starts_with("w")
-        || n.starts_with("fp")
-        || n.starts_with("sp")
 }
 
 fn operand_from_string(a: String) -> Operand {
@@ -190,7 +176,56 @@ fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
     return result;
 }
 
-impl NewInstruction {
+#[derive(Debug, Clone, PartialEq)]
+pub enum InstructionType {
+    Arithmetic,
+    SIMDArithmetic,
+    Memory,
+    SIMDManagement, // loading and storing vectors
+    Label,
+    Other, // catchall for now, add other subtypes like jumps, comparisons, etc... if necessary
+}
+
+fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType {
+    if operands.is_empty() {
+        if opcode.ends_with(':') {
+            return InstructionType::Label;
+        }
+        return InstructionType::Other;
+    // considered SIMDManagement when there is a vector access or when a vector is loaded/stored from a regular register
+    } else if operands
+        .iter()
+        .any(|op| matches!(op, Operand::VectorAccess(..)))
+        || ((operands.iter().any(|op| matches!(op, Operand::Vector(..)))
+            || operands
+                .iter()
+                .any(|op| matches!(op, Operand::VectorRegister(..))))
+            && (operands
+                .iter()
+                .any(|op| matches!(op, Operand::Register(..)))
+                || operands.iter().any(|op| matches!(op, Operand::Memory(..)))))
+    {
+        return InstructionType::SIMDManagement;
+    } else if operands.iter().any(|op| matches!(op, Operand::Memory(..))) {
+        return InstructionType::Memory;
+    } else if operands.len() > 2
+        && operands.iter().all(|op| {
+            matches!(op, Operand::Register(_))
+                || matches!(op, Operand::Immediate(_))
+                || matches!(op, Operand::Bitwise(..))
+        })
+    {
+        return InstructionType::Arithmetic;
+    } else if operands
+        .iter()
+        .any(|op| matches!(op, Operand::Vector(..)) || matches!(op, Operand::VectorRegister(..)))
+    {
+        return InstructionType::SIMDArithmetic;
+    }
+    return InstructionType::Other;
+}
+
+impl Instruction {
     pub fn new(input: String) -> Self {
         let mut parts = input
             .split(|c| c == '\t' || c == ',' || c == ' ' || c == '{' || c == '}')
@@ -201,14 +236,22 @@ impl NewInstruction {
             .next()
             .expect("Require opcode for instruction")
             .to_string();
+
         let combine_brackets =
             combine_addressing_modes_operands(parts.into_iter().map(|s| s.to_string()).collect());
-        let operands = combine_brackets
+
+        let operands: Vec<Operand> = combine_brackets
             .into_iter()
             .map(|s| operand_from_string(s.to_string()))
             .collect();
 
-        NewInstruction { opcode, operands }
+        let ty = match_instruction_type(&opcode, &operands);
+
+        Instruction {
+            ty,
+            opcode,
+            operands,
+        }
     }
 
     pub fn is_simd(&self) -> bool {
@@ -219,6 +262,10 @@ impl NewInstruction {
             _ => false,
         })
     }
+
+    pub fn is_label(&self) -> bool {
+        self.ty == InstructionType::Label
+    }
 }
 
 #[cfg(test)]
@@ -227,7 +274,8 @@ mod tests {
 
     #[test]
     fn test_parse_add_register() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Arithmetic,
             opcode: String::from("add"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
@@ -237,38 +285,21 @@ mod tests {
         };
 
         // test multiple variations of spacing around commas
-        assert_eq!(NewInstruction::new("add x0,x0,x1".to_string()), good_result,);
+        assert_eq!(Instruction::new("add x0,x0,x1".to_string()), good_result,);
         assert_eq!(
-            NewInstruction::new("add x0 , x0 , x1".to_string()),
+            Instruction::new("add x0 , x0 , x1".to_string()),
             good_result,
         );
         assert_eq!(
-            NewInstruction::new(" add x0 , x0 , x1".to_string()),
+            Instruction::new(" add x0 , x0 , x1".to_string()),
             good_result,
-        );
-    }
-
-    #[test]
-    fn test_parse_add_shifted_register() {
-        let good_result = NewInstruction {
-            opcode: String::from("add"),
-            operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x1")),
-                Operand::Bitwise(String::from("lsl"), 2),
-            ]),
-        };
-
-        assert_eq!(
-            NewInstruction::new("add x0,x0,x1,lsl#2".to_string()),
-            good_result
         );
     }
 
     #[test]
     fn test_parse_add_immediate() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Arithmetic,
             opcode: String::from("add"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
@@ -277,12 +308,13 @@ mod tests {
             ]),
         };
 
-        assert_eq!(NewInstruction::new("add x0,x0,#4".to_string()), good_result);
+        assert_eq!(Instruction::new("add x0,x0,#4".to_string()), good_result);
     }
 
     #[test]
     fn test_parse_add_shifted_immediate() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Arithmetic,
             opcode: String::from("add"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
@@ -293,14 +325,34 @@ mod tests {
         };
 
         assert_eq!(
-            NewInstruction::new("add x0,x0,#2,lsl#12".to_string()),
+            Instruction::new("add x0,x0,#2,lsl#12".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_add_shifted_immediate_with_space() {
+        let good_result = Instruction {
+            ty: InstructionType::Arithmetic,
+            opcode: String::from("add"),
+            operands: Vec::from([
+                Operand::Register(String::from("x0")),
+                Operand::Register(String::from("x0")),
+                Operand::Register(String::from("x1")),
+                Operand::Bitwise(String::from("lsl"), 12),
+            ]),
+        };
+
+        assert_eq!(
+            Instruction::new("add x0,x0,x1,lsl #12".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_add_address() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
             opcode: String::from("add"),
             operands: Vec::from([
                 Operand::Register(String::from("x30")),
@@ -309,26 +361,28 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("add	x30,x30,LK256@PAGEOFF".to_string()),
+            Instruction::new("add	x30,x30,LK256@PAGEOFF".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_str() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Memory,
             opcode: String::from("str"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
                 Operand::Memory(String::from("x29"), None, None, None),
             ]),
         };
-        assert_eq!(NewInstruction::new("str x0,[x29]".to_string()), good_result);
+        assert_eq!(Instruction::new("str x0,[x29]".to_string()), good_result);
     }
 
     #[test]
     fn test_parse_str_immediate() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Memory,
             opcode: String::from("str"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
@@ -336,14 +390,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("str x0,[x29,#112]".to_string()),
+            Instruction::new("str x0,[x29,#112]".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_stp_register_address() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
                 Operand::Register(String::from("x20")),
@@ -352,14 +407,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("stp x20,x21,[x0]".to_string()),
+            Instruction::new("stp x20,x21,[x0]".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_stp_signed_offset() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
                 Operand::Register(String::from("x22")),
@@ -368,14 +424,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("stp x22,x23,[x0,#8]".to_string()),
+            Instruction::new("stp x22,x23,[x0,#8]".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_stp_signed_offset_arithmetic() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
                 Operand::Register(String::from("x22")),
@@ -384,14 +441,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("stp x22,x23,[x0,#2*4]".to_string()),
+            Instruction::new("stp x22,x23,[x0,#2*4]".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_stp_post_index() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
                 Operand::Register(String::from("x22")),
@@ -400,14 +458,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("stp x22,x23,[x0],#8".to_string()),
+            Instruction::new("stp x22,x23,[x0],#8".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_stp_post_index_arithmetic() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
                 Operand::Register(String::from("x22")),
@@ -416,15 +475,16 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("stp x22,x23,[x0],#2*4".to_string()),
+            Instruction::new("stp x22,x23,[x0],#2*4".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_stp_pre_index() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
             opcode: String::from("stp"),
+            ty: InstructionType::Memory,
             operands: Vec::from([
                 Operand::Register(String::from("x29")),
                 Operand::Register(String::from("x30")),
@@ -432,7 +492,7 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("stp x29,x30,[x0,#-128]!".to_string()),
+            Instruction::new("stp x29,x30,[x0,#-128]!".to_string()),
             good_result
         );
     }
@@ -441,28 +501,31 @@ mod tests {
 
     #[test]
     fn test_parse_cmp_register_immediate() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
             opcode: String::from("cmp"),
             operands: Vec::from([Operand::Register(String::from("x0")), Operand::Immediate(2)]),
         };
-        assert_eq!(NewInstruction::new("cmp x0,#2".to_string()), good_result);
+        assert_eq!(Instruction::new("cmp x0,#2".to_string()), good_result);
     }
 
     #[test]
     fn test_parse_cmp_register() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
             opcode: String::from("cmp"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
                 Operand::Register(String::from("x1")),
             ]),
         };
-        assert_eq!(NewInstruction::new("cmp x0,x1".to_string()), good_result);
+        assert_eq!(Instruction::new("cmp x0,x1".to_string()), good_result);
     }
 
     #[test]
     fn test_parse_cmp_shifted_register() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Arithmetic,
             opcode: String::from("cmp"),
             operands: Vec::from([
                 Operand::Register(String::from("x0")),
@@ -470,15 +533,13 @@ mod tests {
                 Operand::Bitwise(String::from("lsr"), 2),
             ]),
         };
-        assert_eq!(
-            NewInstruction::new("cmp x0,x1,lsr#2".to_string()),
-            good_result
-        );
+        assert_eq!(Instruction::new("cmp x0,x1,lsr#2".to_string()), good_result);
     }
 
     #[test]
     fn test_parse_adrp() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
             opcode: String::from("adrp"),
             operands: Vec::from([
                 Operand::Register(String::from("x30")),
@@ -486,32 +547,35 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("adrp x30,LK256@PAGE".to_string()),
+            Instruction::new("adrp x30,LK256@PAGE".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_b_condition_bne() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
             opcode: String::from("b.ne"),
             operands: Vec::from([Operand::Label(String::from("Loop"))]),
         };
-        assert_eq!(NewInstruction::new("b.ne Loop".to_string()), good_result);
+        assert_eq!(Instruction::new("b.ne Loop".to_string()), good_result);
     }
 
     #[test]
     fn test_parse_b() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
             opcode: String::from("b"),
             operands: Vec::from([Operand::Label(String::from("Loop"))]),
         };
-        assert_eq!(NewInstruction::new("b Loop".to_string()), good_result);
+        assert_eq!(Instruction::new("b Loop".to_string()), good_result);
     }
 
     #[test]
     fn test_parse_cbnz() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
             opcode: String::from("cbnz"),
             operands: Vec::from([
                 Operand::Register(String::from("w19")),
@@ -519,23 +583,25 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("cbnz w19,Loop_16_xx".to_string()),
+            Instruction::new("cbnz w19,Loop_16_xx".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_ret() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
             opcode: String::from("ret"),
             operands: Vec::new(),
         };
-        assert_eq!(NewInstruction::new("ret".to_string()), good_result);
+        assert_eq!(Instruction::new("ret".to_string()), good_result);
     }
 
     #[test]
     fn test_parse_simd_ld1() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
             opcode: String::from("ld1"),
             operands: Vec::from([
                 Operand::Vector(String::from("v0"), Arrangement::B16),
@@ -543,14 +609,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("ld1 { v0.16b }, [x16]".to_string()),
+            Instruction::new("ld1 { v0.16b }, [x16]".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_simd_st1() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
             opcode: String::from("st1"),
             operands: Vec::from([
                 Operand::Vector(String::from("v5"), Arrangement::H8),
@@ -558,14 +625,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("st1 { v5.8h }, [x0]".to_string()),
+            Instruction::new("st1 { v5.8h }, [x0]".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_simd_movi() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDArithmetic,
             opcode: String::from("movi"),
             operands: Vec::from([
                 Operand::Vector(String::from("v19"), Arrangement::B16),
@@ -573,14 +641,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("movi v19.16b, #0xe1".to_string()),
+            Instruction::new("movi v19.16b, #0xe1".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_simd_aese() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDArithmetic,
             opcode: String::from("aese"),
             operands: Vec::from([
                 Operand::Vector(String::from("v0"), Arrangement::B16),
@@ -588,14 +657,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("aese v0.16b, v18.16b".to_string()),
+            Instruction::new("aese v0.16b, v18.16b".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_simd_fmov() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
             opcode: String::from("fmov"),
             operands: Vec::from([
                 Operand::VectorAccess(String::from("v1"), Arrangement::D, 1),
@@ -603,14 +673,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("fmov v1.d[1], x9".to_string()),
+            Instruction::new("fmov v1.d[1], x9".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_parse_simd_ext() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDArithmetic,
             opcode: String::from("ext"),
             operands: Vec::from([
                 Operand::Vector(String::from("v14"), Arrangement::B16),
@@ -620,14 +691,15 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("ext v14.16b, v14.16b, v14.16b, #8".to_string()),
+            Instruction::new("ext v14.16b, v14.16b, v14.16b, #8".to_string()),
             good_result
         );
     }
 
     #[test]
     fn test_simd_arithmetic() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDArithmetic,
             opcode: String::from("eor"),
             operands: Vec::from([
                 Operand::Vector(String::from("v1"), Arrangement::B16),
@@ -636,7 +708,7 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("eor v1.16b, v1.16b, v31.16b".to_string()),
+            Instruction::new("eor v1.16b, v1.16b, v31.16b".to_string()),
             good_result
         );
     }
@@ -644,7 +716,8 @@ mod tests {
     // this is what the SIMD used in rav1d looks like, may change with different decompilation pipeline
     #[test]
     fn test_parse_simd_st1_8h() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
             opcode: String::from("st1.8h"),
             operands: Vec::from([
                 Operand::VectorRegister(String::from("v30")),
@@ -653,13 +726,14 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("st1.8h { v30, v31 }, [x0], #32".to_string()),
+            Instruction::new("st1.8h { v30, v31 }, [x0], #32".to_string()),
             good_result
         );
     }
     #[test]
     fn test_parse_simd_ushll() {
-        let good_result = NewInstruction {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDArithmetic,
             opcode: String::from("ushll.8h"),
             operands: Vec::from([
                 Operand::VectorRegister(String::from("v2")),
@@ -668,196 +742,204 @@ mod tests {
             ]),
         };
         assert_eq!(
-            NewInstruction::new("ushll.8h v2, v2, #0".to_string()),
+            Instruction::new("ushll.8h v2, v2, #0".to_string()),
             good_result
         );
     }
-}
 
-// TODO: rewrite instruction structure (from here down)
-// to make decision branches in execute simpler
-#[derive(Debug, Clone)]
-pub struct Instruction {
-    pub op: String,
-    pub r1: Option<String>,
-    pub r2: Option<String>,
-    pub r3: Option<String>,
-    pub r4: Option<String>,
-    pub r5: Option<String>,
-    pub r6: Option<String>,
-}
-
-impl Instruction {
-    pub fn new(text: String) -> Instruction {
-        Instruction {
-            op: text,
-            r1: None,
-            r2: None,
-            r3: None,
-            r4: None,
-            r5: None,
-            r6: None,
-        }
-    }
-
-    pub fn is_simd(&self) -> bool {
-        if self.op.starts_with("b.") {
-            return false;
-        }
-        if let Some(i) = &self.r1 {
-            if i.contains("_") {
-                return false;
-            } else if (i.contains("v") && !i.contains("<"))
-                && (self.op.contains(".") || i.contains("."))
-            {
-                return true;
-            }
-        }
-        if let Some(i) = &self.r2 {
-            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
-                return true;
-            }
-        }
-        if let Some(i) = &self.r3 {
-            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
-                return true;
-            }
-        }
-        if let Some(i) = &self.r4 {
-            if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
-                return true;
-            }
-        }
-        false
-    }
-}
-#[derive(Debug, Clone)]
-pub struct ParseInstructionError;
-
-impl FromStr for Instruction {
-    type Err = ParseInstructionError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        //find if there's anything in brackets to allow fun addressing modes
-        let mut brac: String = Default::default();
-        if s.contains("[") {
-            let left = s.find('[');
-            let right = s.rfind(']');
-            let exclamation = s.rfind('!');
-            if left.is_some() && right.is_some() {
-                brac = s[left.expect("common1")..right.expect("common2")].to_string();
-            }
-            if exclamation.is_some() {
-                brac = brac + "!";
-            }
-        }
-
-        let parsed_v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
-
-        let mut v: Vec<&str> = vec![];
-        for e in parsed_v {
-            if e != "" {
-                v.push(e);
-            }
-        }
-
-        let v0 = v[0].to_string();
-        let v1: Option<String>;
-        let v2: Option<String>;
-        let v3: Option<String>;
-        let v4: Option<String>;
-        let v5: Option<String>;
-        let v6: Option<String>;
-
-        if v.len() > 1 {
-            let val1 = v[1].to_string();
-            if val1.contains("[") && !val1.contains("v") {
-                // TODO: clean up parsing so we don't have to do it like this
-                v1 = Some(brac.clone());
-            } else if val1.contains("]") && !val1.contains("v") {
-                v1 = None;
-            } else {
-                v1 = Some(val1);
-            }
-        } else {
-            v1 = None;
-        }
-        if v.len() > 2 {
-            let val2 = v[2].to_string();
-            if val2.contains("[") && !val2.contains("v") {
-                v2 = Some(brac.clone());
-            } else if val2.contains("]") && !val2.contains("v") {
-                v2 = None;
-            } else {
-                v2 = Some(val2);
-            }
-        } else {
-            v2 = None;
-        }
-        if v.len() > 3 && !v[3].is_empty() {
-            let val3 = v[3].to_string();
-            if val3.contains("[") {
-                v3 = Some(brac.clone());
-            } else if val3.contains("]") {
-                v3 = None;
-            } else {
-                v3 = Some(val3);
-            }
-        } else {
-            v3 = None;
-        }
-        if v.len() > 4 && !v[4].is_empty() {
-            let val4 = v[4].to_string();
-            if val4.contains("[") {
-                v4 = Some(brac.clone());
-            } else if val4.contains("]") {
-                v4 = None;
-            } else {
-                v4 = Some(val4);
-            }
-        } else {
-            v4 = None;
-        }
-
-        if v.len() > 5 && !v[5].is_empty() {
-            let val5 = v[5].to_string();
-            if val5.contains("[") {
-                v5 = Some(brac.clone());
-            } else if val5.contains("]") {
-                v5 = None;
-            } else {
-                v5 = Some(val5);
-            }
-        } else {
-            v5 = None;
-        }
-
-        if v.len() > 6 && !v[6].is_empty() {
-            let val6 = v[6].to_string();
-            if val6.contains("[") {
-                v6 = Some(brac);
-            } else if val6.contains("]") {
-                v6 = None;
-            } else {
-                v6 = Some(val6);
-            }
-        } else {
-            v6 = None;
-        }
-
-        Ok(Instruction {
-            op: v0,
-            r1: v1,
-            r2: v2,
-            r3: v3,
-            r4: v4,
-            r5: v5,
-            r6: v6,
-        })
+    #[test]
+    fn test_parse_label() {
+        let good_result = Instruction {
+            ty: InstructionType::Label,
+            opcode: String::from("Loop:"),
+            operands: Vec::new(),
+        };
+        assert_eq!(Instruction::new("Loop:".to_string()), good_result);
     }
 }
 
-// FIX: try to retire this function since errors are sometimes confusing
+// #[derive(Debug, Clone)]
+// pub struct Instruction {
+//     pub op: String,
+//     pub r1: Option<String>,
+//     pub r2: Option<String>,
+//     pub r3: Option<String>,
+//     pub r4: Option<String>,
+//     pub r5: Option<String>,
+//     pub r6: Option<String>,
+// }
+
+// impl Instruction {
+//     pub fn new(text: String) -> Instruction {
+//         Instruction {
+//             op: text,
+//             r1: None,
+//             r2: None,
+//             r3: None,
+//             r4: None,
+//             r5: None,
+//             r6: None,
+//         }
+//     }
+
+//     pub fn is_simd(&self) -> bool {
+//         if self.op.starts_with("b.") {
+//             return false;
+//         }
+//         if let Some(i) = &self.r1 {
+//             if i.contains("_") {
+//                 return false;
+//             } else if (i.contains("v") && !i.contains("<"))
+//                 && (self.op.contains(".") || i.contains("."))
+//             {
+//                 return true;
+//             }
+//         }
+//         if let Some(i) = &self.r2 {
+//             if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
+//                 return true;
+//             }
+//         }
+//         if let Some(i) = &self.r3 {
+//             if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
+//                 return true;
+//             }
+//         }
+//         if let Some(i) = &self.r4 {
+//             if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
+//                 return true;
+//             }
+//         }
+//         false
+//     }
+// }
+// #[derive(Debug, Clone)]
+// pub struct ParseInstructionError;
+
+// impl FromStr for Instruction {
+//     type Err = ParseInstructionError;
+
+//     fn from_str(s: &str) -> Result<Self, Self::Err> {
+//         //find if there's anything in brackets to allow fun addressing modes
+//         let mut brac: String = Default::default();
+//         if s.contains("[") {
+//             let left = s.find('[');
+//             let right = s.rfind(']');
+//             let exclamation = s.rfind('!');
+//             if left.is_some() && right.is_some() {
+//                 brac = s[left.expect("common1")..right.expect("common2")].to_string();
+//             }
+//             if exclamation.is_some() {
+//                 brac = brac + "!";
+//             }
+//         }
+
+//         let parsed_v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
+
+//         let mut v: Vec<&str> = vec![];
+//         for e in parsed_v {
+//             if e != "" {
+//                 v.push(e);
+//             }
+//         }
+
+//         let v0 = v[0].to_string();
+//         let v1: Option<String>;
+//         let v2: Option<String>;
+//         let v3: Option<String>;
+//         let v4: Option<String>;
+//         let v5: Option<String>;
+//         let v6: Option<String>;
+
+//         if v.len() > 1 {
+//             let val1 = v[1].to_string();
+//             if val1.contains("[") && !val1.contains("v") {
+//                 // TODO: clean up parsing so we don't have to do it like this
+//                 v1 = Some(brac.clone());
+//             } else if val1.contains("]") && !val1.contains("v") {
+//                 v1 = None;
+//             } else {
+//                 v1 = Some(val1);
+//             }
+//         } else {
+//             v1 = None;
+//         }
+//         if v.len() > 2 {
+//             let val2 = v[2].to_string();
+//             if val2.contains("[") && !val2.contains("v") {
+//                 v2 = Some(brac.clone());
+//             } else if val2.contains("]") && !val2.contains("v") {
+//                 v2 = None;
+//             } else {
+//                 v2 = Some(val2);
+//             }
+//         } else {
+//             v2 = None;
+//         }
+//         if v.len() > 3 && !v[3].is_empty() {
+//             let val3 = v[3].to_string();
+//             if val3.contains("[") {
+//                 v3 = Some(brac.clone());
+//             } else if val3.contains("]") {
+//                 v3 = None;
+//             } else {
+//                 v3 = Some(val3);
+//             }
+//         } else {
+//             v3 = None;
+//         }
+//         if v.len() > 4 && !v[4].is_empty() {
+//             let val4 = v[4].to_string();
+//             if val4.contains("[") {
+//                 v4 = Some(brac.clone());
+//             } else if val4.contains("]") {
+//                 v4 = None;
+//             } else {
+//                 v4 = Some(val4);
+//             }
+//         } else {
+//             v4 = None;
+//         }
+
+//         if v.len() > 5 && !v[5].is_empty() {
+//             let val5 = v[5].to_string();
+//             if val5.contains("[") {
+//                 v5 = Some(brac.clone());
+//             } else if val5.contains("]") {
+//                 v5 = None;
+//             } else {
+//                 v5 = Some(val5);
+//             }
+//         } else {
+//             v5 = None;
+//         }
+
+//         if v.len() > 6 && !v[6].is_empty() {
+//             let val6 = v[6].to_string();
+//             if val6.contains("[") {
+//                 v6 = Some(brac);
+//             } else if val6.contains("]") {
+//                 v6 = None;
+//             } else {
+//                 v6 = Some(val6);
+//             }
+//         } else {
+//             v6 = None;
+//         }
+
+//         Ok(Instruction {
+//             op: v0,
+//             r1: v1,
+//             r2: v2,
+//             r3: v3,
+//             r4: v4,
+//             r5: v5,
+//             r6: v6,
+//         })
+//     }
+// }
+
+// // FIX: try to retire this function since errors are sometimes confusing
 pub fn string_to_int(s: &str) -> i64 {
     let mut value = 1;
     let v = s

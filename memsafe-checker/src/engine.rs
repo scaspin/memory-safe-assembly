@@ -59,6 +59,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
         // first pass, move text into array
         for line in lines {
+            // trim trailing comments and whitespace
             let trimmed = line.trim();
             let nocomment = trimmed.split_once("//");
             let text: String;
@@ -85,31 +86,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
                 }
 
-                // code.push(text.clone());
-
-                if text.ends_with(":") && !text.contains(".") {
-                    let mut label = text.strip_suffix(":").expect("engine1");
-                    label = label.strip_prefix("_").unwrap_or(label);
-                    labels.push((label.to_string(), line_number));
-                    defs.push(text.to_string());
-                    // if text == start {
-                    //     pc = line_number;
-                    // }
-                    code.push(Instruction::new(text))
-                } else {
-                    let parsed = text.parse::<Instruction>();
-                    match parsed {
-                        Ok(i) => code.push(i),
-                        Err(_) => todo!(),
-                    }
-                }
+                code.push(Instruction::new(text));
 
                 line_number = line_number + 1;
-
-                //if text.contains(':') || text.contains("_") || text.contains("@") {
-                // handle these later
-                //    continue;
-                //}
             }
         }
 
@@ -268,7 +247,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             let mut instruction = self.program.code[pc].clone();
 
             // skip instruction if it is a label
-            if instruction.op.contains(":") {
+            if instruction.is_label() {
                 pc = pc + 1;
                 instruction = self.program.code[pc].clone();
             }
@@ -573,7 +552,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         (SatResult::Sat, SatResult::Unsat) => {
                             self.add_constraint(condition.clone(), true);
                             self.computer.set_register(
-                                register.clone(),
+                                &register,
                                 option1.kind,
                                 option1.base,
                                 option1.offset,
@@ -583,7 +562,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         (SatResult::Unsat, SatResult::Sat) => {
                             self.add_constraint(condition.clone(), false);
                             self.computer.set_register(
-                                register.clone(),
+                                &register,
                                 option2.kind,
                                 option2.base,
                                 option2.offset,
@@ -595,7 +574,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                             self.add_constraint(condition.clone(), true);
                             self.computer.set_register(
-                                register.clone(),
+                                &register,
                                 option1.kind,
                                 option1.base,
                                 option1.offset,
@@ -604,7 +583,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                             clone.add_constraint(condition, false);
                             self.computer.set_register(
-                                register,
+                                &register,
                                 option2.kind,
                                 option2.base,
                                 option2.offset,
