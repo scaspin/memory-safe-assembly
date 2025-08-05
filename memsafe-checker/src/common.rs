@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::fmt;
 use z3::*;
 
+use crate::instruction_parser;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RegisterKind {
     RegisterBase, // abstract name / asbtract expression + immediate offset
@@ -740,5 +742,10 @@ pub enum ExecuteReturnType {
     JumpAddress(u128),
     ConditionalJumpLabel(AbstractComparison, String),
     ConditionalJumpAddress(AbstractComparison, u128),
-    Select(AbstractComparison, String, RegisterValue, RegisterValue),
+    Select(
+        AbstractComparison,
+        instruction_parser::Operand,
+        RegisterValue,
+        RegisterValue,
+    ),
 }

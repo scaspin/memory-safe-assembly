@@ -5,14 +5,6 @@ pub struct Instruction {
     pub operands: Vec<Operand>,
 }
 
-fn is_register(n: String) -> bool {
-    n.starts_with("x")
-        || n.starts_with("z")
-        || n.starts_with("w")
-        || n.starts_with("fp")
-        || n.starts_with("sp")
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Arrangement {
     B8,
@@ -26,6 +18,17 @@ pub enum Arrangement {
     S,
     H,
     B,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RePrefix {
+    X,
+    W,
+    V,
+    Fp,
+    Sp,
+    Ra,
+    Ze,
 }
 
 impl Arrangement {
@@ -47,23 +50,57 @@ impl Arrangement {
     }
 }
 
+// BIG TODO: get rid of all the strings!
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operand {
-    Register(String),
+    Register(RePrefix, usize),
     Immediate(i64),
-    Memory(String, Option<i64>, Option<String>, Option<bool>), // like [x0, #16] // bool to represent pre/post index 0 = false, 1 = true
-    Bitwise(String, i64),                                      // like lsl#2
-    VectorRegister(String),
-    Vector(String, Arrangement),
-    VectorAccess(String, Arrangement, i64), // like v1.d[1] or v2.b[3]
+    Memory(RePrefix, usize, Option<i64>, Option<String>, Option<bool>), // like [x0, #16] // bool to represent pre/post index 0 = false, 1 = true
+    Bitwise(String, i64), // like lsl#2, TODO: make enum for shift types
+    // the "string" param is probably always going to be "v"
+    VectorRegister(RePrefix, usize),
+    Vector(RePrefix, usize, Arrangement),
+    VectorAccess(RePrefix, usize, Arrangement, i64), // like v1.d[1] or v2.b[3]
     Label(String),
     Address(String, i64), // for relative addresses, i.e. LK256@PAGEOFF
     Other,
 }
+pub fn register_to_tuple(r: &Operand) -> (RePrefix, usize) {
+    match r.clone() {
+        Operand::Register(prefix, index) => (prefix, index),
+        Operand::VectorRegister(prefix, index) => (prefix, index),
+        Operand::Memory(prefix, index, _, _, _) => (prefix, index),
+        _ => panic!("Expected a register or vector register operand"),
+    }
+}
 
-fn operand_from_string(a: String) -> Operand {
-    if is_register(a.clone()) {
-        return Operand::Register(a);
+pub fn operand_from_string(a: String) -> Operand {
+    if a.starts_with("x")
+        || a.starts_with("z")
+        || a.starts_with("w")
+        || a.starts_with("fp")
+        || a.starts_with("sp")
+    {
+        match a.as_str() {
+            "sp" => return Operand::Register(RePrefix::Sp, 0),
+            "fp" => return Operand::Register(RePrefix::Fp, 0),
+            "ra" => return Operand::Register(RePrefix::Ra, 0),
+            "ze" => return Operand::Register(RePrefix::Ze, 0),
+            _ => {
+                let parts = a.split_at(1);
+                let prefix = parts.0;
+                if let Ok(num) = parts.1.parse::<usize>() {
+                    return Operand::Register(
+                        match prefix {
+                            "x" => RePrefix::X,
+                            "w" => RePrefix::W,
+                            _ => panic!("Unknown register prefix: {}", prefix),
+                        },
+                        num,
+                    );
+                }
+            }
+        }
     }
 
     // is number
@@ -119,13 +156,29 @@ fn operand_from_string(a: String) -> Operand {
                 );
                 let index = string_to_int(parts.next().expect("index required"));
                 // TODO: maybe runtime check index is valid for arrangement?
-                return Operand::VectorAccess(base.to_string(), a, index);
+
+                let parts = base.split_at(1);
+                let i = parts
+                    .1
+                    .parse::<usize>()
+                    .expect("vector number must be a number");
+                return Operand::VectorAccess(RePrefix::V, i, a, index);
             } else {
                 let a = Arrangement::from_string(arrangement);
-                return Operand::Vector(base.to_string(), a);
+                let parts = base.split_at(1);
+                let i = parts
+                    .1
+                    .parse::<usize>()
+                    .expect("vector number must be a number");
+                return Operand::Vector(RePrefix::V, i, a);
             }
         }
-        return Operand::VectorRegister(a);
+        let parts = a.split_at(1);
+        let i = parts
+            .1
+            .parse::<usize>()
+            .expect("vector number must be a number");
+        return Operand::VectorRegister(RePrefix::V, i);
     }
 
     if a.contains("[") || a.contains("]") {
@@ -149,8 +202,18 @@ fn operand_from_string(a: String) -> Operand {
             indexing = Some(false);
         }
 
+        let parts = base.split_at(1);
+        let prefix = match parts.0 {
+            "x" => RePrefix::X,
+            "w" => RePrefix::W,
+            e => panic!("Unknown register prefix: {}", e),
+        };
+        let num = parts
+            .1
+            .parse::<usize>()
+            .expect(&format!("register name must include a number {:?}", parts));
         // TODO: include shift
-        return Operand::Memory(base, offset, None, indexing);
+        return Operand::Memory(prefix, num, offset, None, indexing);
     }
 
     if !a.is_empty() {
@@ -179,8 +242,9 @@ fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum InstructionType {
     Arithmetic,
-    SIMDArithmetic,
     Memory,
+    ControlFlow,
+    SIMDArithmetic,
     SIMDManagement, // loading and storing vectors
     Label,
     Other, // catchall for now, add other subtypes like jumps, comparisons, etc... if necessary
@@ -210,7 +274,7 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
         return InstructionType::Memory;
     } else if operands.len() > 2
         && operands.iter().all(|op| {
-            matches!(op, Operand::Register(_))
+            matches!(op, Operand::Register(..))
                 || matches!(op, Operand::Immediate(_))
                 || matches!(op, Operand::Bitwise(..))
         })
@@ -221,6 +285,8 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
         .any(|op| matches!(op, Operand::Vector(..)) || matches!(op, Operand::VectorRegister(..)))
     {
         return InstructionType::SIMDArithmetic;
+    } else if opcode.contains("b") || opcode.contains("j") {
+        return InstructionType::ControlFlow;
     }
     return InstructionType::Other;
 }
@@ -256,9 +322,9 @@ impl Instruction {
 
     pub fn is_simd(&self) -> bool {
         self.operands.iter().any(|op| match op {
-            Operand::VectorRegister(_) => true,
-            Operand::Vector(_, _) => true,
-            Operand::VectorAccess(_, _, _) => true,
+            Operand::VectorRegister(..) => true,
+            Operand::Vector(..) => true,
+            Operand::VectorAccess(..) => true,
             _ => false,
         })
     }
@@ -278,9 +344,9 @@ mod tests {
             ty: InstructionType::Arithmetic,
             opcode: String::from("add"),
             operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x1")),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Register(RePrefix::X, 1),
             ]),
         };
 
@@ -302,8 +368,8 @@ mod tests {
             ty: InstructionType::Arithmetic,
             opcode: String::from("add"),
             operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x0")),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Register(RePrefix::X, 0),
                 Operand::Immediate(4),
             ]),
         };
@@ -317,8 +383,8 @@ mod tests {
             ty: InstructionType::Arithmetic,
             opcode: String::from("add"),
             operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x0")),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Register(RePrefix::X, 0),
                 Operand::Immediate(2),
                 Operand::Bitwise(String::from("lsl"), 12),
             ]),
@@ -336,9 +402,9 @@ mod tests {
             ty: InstructionType::Arithmetic,
             opcode: String::from("add"),
             operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x1")),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Register(RePrefix::X, 1),
                 Operand::Bitwise(String::from("lsl"), 12),
             ]),
         };
@@ -355,8 +421,8 @@ mod tests {
             ty: InstructionType::Other,
             opcode: String::from("add"),
             operands: Vec::from([
-                Operand::Register(String::from("x30")),
-                Operand::Register(String::from("x30")),
+                Operand::Register(RePrefix::X, 30),
+                Operand::Register(RePrefix::X, 30),
                 Operand::Address(String::from("LK256@PAGEOFF"), 0),
             ]),
         };
@@ -372,8 +438,8 @@ mod tests {
             ty: InstructionType::Memory,
             opcode: String::from("str"),
             operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Memory(String::from("x29"), None, None, None),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Memory(RePrefix::X, 29, None, None, None),
             ]),
         };
         assert_eq!(Instruction::new("str x0,[x29]".to_string()), good_result);
@@ -385,8 +451,8 @@ mod tests {
             ty: InstructionType::Memory,
             opcode: String::from("str"),
             operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Memory(String::from("x29"), Some(112), None, None),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Memory(RePrefix::X, 29, Some(112), None, None),
             ]),
         };
         assert_eq!(
@@ -401,9 +467,9 @@ mod tests {
             ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
-                Operand::Register(String::from("x20")),
-                Operand::Register(String::from("x21")),
-                Operand::Memory(String::from("x0"), None, None, None),
+                Operand::Register(RePrefix::X, 20),
+                Operand::Register(RePrefix::X, 21),
+                Operand::Memory(RePrefix::X, 0, None, None, None),
             ]),
         };
         assert_eq!(
@@ -418,9 +484,9 @@ mod tests {
             ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
-                Operand::Register(String::from("x22")),
-                Operand::Register(String::from("x23")),
-                Operand::Memory(String::from("x0"), Some(8), None, None),
+                Operand::Register(RePrefix::X, 22),
+                Operand::Register(RePrefix::X, 23),
+                Operand::Memory(RePrefix::X, 0, Some(8), None, None),
             ]),
         };
         assert_eq!(
@@ -435,9 +501,9 @@ mod tests {
             ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
-                Operand::Register(String::from("x22")),
-                Operand::Register(String::from("x23")),
-                Operand::Memory(String::from("x0"), Some(8), None, None),
+                Operand::Register(RePrefix::X, 22),
+                Operand::Register(RePrefix::X, 23),
+                Operand::Memory(RePrefix::X, 0, Some(8), None, None),
             ]),
         };
         assert_eq!(
@@ -452,9 +518,9 @@ mod tests {
             ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
-                Operand::Register(String::from("x22")),
-                Operand::Register(String::from("x23")),
-                Operand::Memory(String::from("x0"), Some(8), None, Some(true)),
+                Operand::Register(RePrefix::X, 22),
+                Operand::Register(RePrefix::X, 23),
+                Operand::Memory(RePrefix::X, 0, Some(8), None, Some(true)),
             ]),
         };
         assert_eq!(
@@ -469,9 +535,9 @@ mod tests {
             ty: InstructionType::Memory,
             opcode: String::from("stp"),
             operands: Vec::from([
-                Operand::Register(String::from("x22")),
-                Operand::Register(String::from("x23")),
-                Operand::Memory(String::from("x0"), Some(8), None, Some(true)),
+                Operand::Register(RePrefix::X, 22),
+                Operand::Register(RePrefix::X, 23),
+                Operand::Memory(RePrefix::X, 0, Some(8), None, Some(true)),
             ]),
         };
         assert_eq!(
@@ -486,9 +552,9 @@ mod tests {
             opcode: String::from("stp"),
             ty: InstructionType::Memory,
             operands: Vec::from([
-                Operand::Register(String::from("x29")),
-                Operand::Register(String::from("x30")),
-                Operand::Memory(String::from("x0"), Some(-128), None, Some(false)),
+                Operand::Register(RePrefix::X, 29),
+                Operand::Register(RePrefix::X, 30),
+                Operand::Memory(RePrefix::X, 0, Some(-128), None, Some(false)),
             ]),
         };
         assert_eq!(
@@ -504,7 +570,7 @@ mod tests {
         let good_result = Instruction {
             ty: InstructionType::Other,
             opcode: String::from("cmp"),
-            operands: Vec::from([Operand::Register(String::from("x0")), Operand::Immediate(2)]),
+            operands: Vec::from([Operand::Register(RePrefix::X, 0), Operand::Immediate(2)]),
         };
         assert_eq!(Instruction::new("cmp x0,#2".to_string()), good_result);
     }
@@ -515,8 +581,8 @@ mod tests {
             ty: InstructionType::Other,
             opcode: String::from("cmp"),
             operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x1")),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Register(RePrefix::X, 1),
             ]),
         };
         assert_eq!(Instruction::new("cmp x0,x1".to_string()), good_result);
@@ -528,8 +594,8 @@ mod tests {
             ty: InstructionType::Arithmetic,
             opcode: String::from("cmp"),
             operands: Vec::from([
-                Operand::Register(String::from("x0")),
-                Operand::Register(String::from("x1")),
+                Operand::Register(RePrefix::X, 0),
+                Operand::Register(RePrefix::X, 1),
                 Operand::Bitwise(String::from("lsr"), 2),
             ]),
         };
@@ -542,7 +608,7 @@ mod tests {
             ty: InstructionType::Other,
             opcode: String::from("adrp"),
             operands: Vec::from([
-                Operand::Register(String::from("x30")),
+                Operand::Register(RePrefix::X, 30),
                 Operand::Address(String::from("LK256@PAGE"), 0),
             ]),
         };
@@ -555,7 +621,7 @@ mod tests {
     #[test]
     fn test_parse_b_condition_bne() {
         let good_result = Instruction {
-            ty: InstructionType::Other,
+            ty: InstructionType::ControlFlow,
             opcode: String::from("b.ne"),
             operands: Vec::from([Operand::Label(String::from("Loop"))]),
         };
@@ -565,7 +631,7 @@ mod tests {
     #[test]
     fn test_parse_b() {
         let good_result = Instruction {
-            ty: InstructionType::Other,
+            ty: InstructionType::ControlFlow,
             opcode: String::from("b"),
             operands: Vec::from([Operand::Label(String::from("Loop"))]),
         };
@@ -575,10 +641,10 @@ mod tests {
     #[test]
     fn test_parse_cbnz() {
         let good_result = Instruction {
-            ty: InstructionType::Other,
+            ty: InstructionType::ControlFlow,
             opcode: String::from("cbnz"),
             operands: Vec::from([
-                Operand::Register(String::from("w19")),
+                Operand::Register(RePrefix::W, 19),
                 Operand::Label(String::from("Loop_16_xx")),
             ]),
         };
@@ -604,8 +670,8 @@ mod tests {
             ty: InstructionType::SIMDManagement,
             opcode: String::from("ld1"),
             operands: Vec::from([
-                Operand::Vector(String::from("v0"), Arrangement::B16),
-                Operand::Memory(String::from("x16"), None, None, None),
+                Operand::Vector(RePrefix::V, 0, Arrangement::B16),
+                Operand::Memory(RePrefix::X, 16, None, None, None),
             ]),
         };
         assert_eq!(
@@ -620,8 +686,8 @@ mod tests {
             ty: InstructionType::SIMDManagement,
             opcode: String::from("st1"),
             operands: Vec::from([
-                Operand::Vector(String::from("v5"), Arrangement::H8),
-                Operand::Memory(String::from("x0"), None, None, None),
+                Operand::Vector(RePrefix::V, 5, Arrangement::H8),
+                Operand::Memory(RePrefix::X, 0, None, None, None),
             ]),
         };
         assert_eq!(
@@ -636,7 +702,7 @@ mod tests {
             ty: InstructionType::SIMDArithmetic,
             opcode: String::from("movi"),
             operands: Vec::from([
-                Operand::Vector(String::from("v19"), Arrangement::B16),
+                Operand::Vector(RePrefix::V, 19, Arrangement::B16),
                 Operand::Immediate(0xe1),
             ]),
         };
@@ -652,8 +718,8 @@ mod tests {
             ty: InstructionType::SIMDArithmetic,
             opcode: String::from("aese"),
             operands: Vec::from([
-                Operand::Vector(String::from("v0"), Arrangement::B16),
-                Operand::Vector(String::from("v18"), Arrangement::B16),
+                Operand::Vector(RePrefix::V, 0, Arrangement::B16),
+                Operand::Vector(RePrefix::V, 18, Arrangement::B16),
             ]),
         };
         assert_eq!(
@@ -668,8 +734,8 @@ mod tests {
             ty: InstructionType::SIMDManagement,
             opcode: String::from("fmov"),
             operands: Vec::from([
-                Operand::VectorAccess(String::from("v1"), Arrangement::D, 1),
-                Operand::Register(String::from("x9")),
+                Operand::VectorAccess(RePrefix::V, 1, Arrangement::D, 1),
+                Operand::Register(RePrefix::X, 9),
             ]),
         };
         assert_eq!(
@@ -684,9 +750,9 @@ mod tests {
             ty: InstructionType::SIMDArithmetic,
             opcode: String::from("ext"),
             operands: Vec::from([
-                Operand::Vector(String::from("v14"), Arrangement::B16),
-                Operand::Vector(String::from("v14"), Arrangement::B16),
-                Operand::Vector(String::from("v14"), Arrangement::B16),
+                Operand::Vector(RePrefix::V, 14, Arrangement::B16),
+                Operand::Vector(RePrefix::V, 14, Arrangement::B16),
+                Operand::Vector(RePrefix::V, 14, Arrangement::B16),
                 Operand::Immediate(8),
             ]),
         };
@@ -697,14 +763,14 @@ mod tests {
     }
 
     #[test]
-    fn test_simd_arithmetic() {
+    fn test_parse_simd_arithmetic() {
         let good_result = Instruction {
             ty: InstructionType::SIMDArithmetic,
             opcode: String::from("eor"),
             operands: Vec::from([
-                Operand::Vector(String::from("v1"), Arrangement::B16),
-                Operand::Vector(String::from("v1"), Arrangement::B16),
-                Operand::Vector(String::from("v31"), Arrangement::B16),
+                Operand::Vector(RePrefix::V, 1, Arrangement::B16),
+                Operand::Vector(RePrefix::V, 1, Arrangement::B16),
+                Operand::Vector(RePrefix::V, 31, Arrangement::B16),
             ]),
         };
         assert_eq!(
@@ -720,9 +786,9 @@ mod tests {
             ty: InstructionType::SIMDManagement,
             opcode: String::from("st1.8h"),
             operands: Vec::from([
-                Operand::VectorRegister(String::from("v30")),
-                Operand::VectorRegister(String::from("v31")),
-                Operand::Memory(String::from("x0"), Some(32), None, Some(true)),
+                Operand::VectorRegister(RePrefix::V, 30),
+                Operand::VectorRegister(RePrefix::V, 31),
+                Operand::Memory(RePrefix::X, 0, Some(32), None, Some(true)),
             ]),
         };
         assert_eq!(
@@ -736,8 +802,8 @@ mod tests {
             ty: InstructionType::SIMDArithmetic,
             opcode: String::from("ushll.8h"),
             operands: Vec::from([
-                Operand::VectorRegister(String::from("v2")),
-                Operand::VectorRegister(String::from("v2")),
+                Operand::VectorRegister(RePrefix::V, 2),
+                Operand::VectorRegister(RePrefix::V, 2),
                 Operand::Immediate(0),
             ]),
         };
@@ -756,188 +822,19 @@ mod tests {
         };
         assert_eq!(Instruction::new("Loop:".to_string()), good_result);
     }
+
+    #[test]
+    #[should_panic(expected = "not yet implemented")] // TODO
+    fn test_parse_bad_register_name_prefix() {
+        todo!();
+    }
+
+    #[test]
+    #[should_panic(expected = "not yet implemented")] // TODO
+    fn test_parse_bad_register_name_index() {
+        todo!();
+    }
 }
-
-// #[derive(Debug, Clone)]
-// pub struct Instruction {
-//     pub op: String,
-//     pub r1: Option<String>,
-//     pub r2: Option<String>,
-//     pub r3: Option<String>,
-//     pub r4: Option<String>,
-//     pub r5: Option<String>,
-//     pub r6: Option<String>,
-// }
-
-// impl Instruction {
-//     pub fn new(text: String) -> Instruction {
-//         Instruction {
-//             op: text,
-//             r1: None,
-//             r2: None,
-//             r3: None,
-//             r4: None,
-//             r5: None,
-//             r6: None,
-//         }
-//     }
-
-//     pub fn is_simd(&self) -> bool {
-//         if self.op.starts_with("b.") {
-//             return false;
-//         }
-//         if let Some(i) = &self.r1 {
-//             if i.contains("_") {
-//                 return false;
-//             } else if (i.contains("v") && !i.contains("<"))
-//                 && (self.op.contains(".") || i.contains("."))
-//             {
-//                 return true;
-//             }
-//         }
-//         if let Some(i) = &self.r2 {
-//             if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
-//                 return true;
-//             }
-//         }
-//         if let Some(i) = &self.r3 {
-//             if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
-//                 return true;
-//             }
-//         }
-//         if let Some(i) = &self.r4 {
-//             if (i.contains("v") && !i.contains("<")) && (self.op.contains(".") || i.contains(".")) {
-//                 return true;
-//             }
-//         }
-//         false
-//     }
-// }
-// #[derive(Debug, Clone)]
-// pub struct ParseInstructionError;
-
-// impl FromStr for Instruction {
-//     type Err = ParseInstructionError;
-
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         //find if there's anything in brackets to allow fun addressing modes
-//         let mut brac: String = Default::default();
-//         if s.contains("[") {
-//             let left = s.find('[');
-//             let right = s.rfind(']');
-//             let exclamation = s.rfind('!');
-//             if left.is_some() && right.is_some() {
-//                 brac = s[left.expect("common1")..right.expect("common2")].to_string();
-//             }
-//             if exclamation.is_some() {
-//                 brac = brac + "!";
-//             }
-//         }
-
-//         let parsed_v: Vec<&str> = s.split(|c| c == '\t' || c == ',' || c == ' ').collect();
-
-//         let mut v: Vec<&str> = vec![];
-//         for e in parsed_v {
-//             if e != "" {
-//                 v.push(e);
-//             }
-//         }
-
-//         let v0 = v[0].to_string();
-//         let v1: Option<String>;
-//         let v2: Option<String>;
-//         let v3: Option<String>;
-//         let v4: Option<String>;
-//         let v5: Option<String>;
-//         let v6: Option<String>;
-
-//         if v.len() > 1 {
-//             let val1 = v[1].to_string();
-//             if val1.contains("[") && !val1.contains("v") {
-//                 // TODO: clean up parsing so we don't have to do it like this
-//                 v1 = Some(brac.clone());
-//             } else if val1.contains("]") && !val1.contains("v") {
-//                 v1 = None;
-//             } else {
-//                 v1 = Some(val1);
-//             }
-//         } else {
-//             v1 = None;
-//         }
-//         if v.len() > 2 {
-//             let val2 = v[2].to_string();
-//             if val2.contains("[") && !val2.contains("v") {
-//                 v2 = Some(brac.clone());
-//             } else if val2.contains("]") && !val2.contains("v") {
-//                 v2 = None;
-//             } else {
-//                 v2 = Some(val2);
-//             }
-//         } else {
-//             v2 = None;
-//         }
-//         if v.len() > 3 && !v[3].is_empty() {
-//             let val3 = v[3].to_string();
-//             if val3.contains("[") {
-//                 v3 = Some(brac.clone());
-//             } else if val3.contains("]") {
-//                 v3 = None;
-//             } else {
-//                 v3 = Some(val3);
-//             }
-//         } else {
-//             v3 = None;
-//         }
-//         if v.len() > 4 && !v[4].is_empty() {
-//             let val4 = v[4].to_string();
-//             if val4.contains("[") {
-//                 v4 = Some(brac.clone());
-//             } else if val4.contains("]") {
-//                 v4 = None;
-//             } else {
-//                 v4 = Some(val4);
-//             }
-//         } else {
-//             v4 = None;
-//         }
-
-//         if v.len() > 5 && !v[5].is_empty() {
-//             let val5 = v[5].to_string();
-//             if val5.contains("[") {
-//                 v5 = Some(brac.clone());
-//             } else if val5.contains("]") {
-//                 v5 = None;
-//             } else {
-//                 v5 = Some(val5);
-//             }
-//         } else {
-//             v5 = None;
-//         }
-
-//         if v.len() > 6 && !v[6].is_empty() {
-//             let val6 = v[6].to_string();
-//             if val6.contains("[") {
-//                 v6 = Some(brac);
-//             } else if val6.contains("]") {
-//                 v6 = None;
-//             } else {
-//                 v6 = Some(val6);
-//             }
-//         } else {
-//             v6 = None;
-//         }
-
-//         Ok(Instruction {
-//             op: v0,
-//             r1: v1,
-//             r2: v2,
-//             r3: v3,
-//             r4: v4,
-//             r5: v5,
-//             r6: v6,
-//         })
-//     }
-// }
 
 // // FIX: try to retire this function since errors are sometimes confusing
 pub fn string_to_int(s: &str) -> i64 {
