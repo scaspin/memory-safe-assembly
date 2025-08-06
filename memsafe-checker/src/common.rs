@@ -608,56 +608,6 @@ pub fn get_register_name_string(r: String) -> String {
     return r;
 }
 
-pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {
-    match op.as_str() {
-        "lsl" => {
-            let new_offset = register.offset << shift;
-            RegisterValue {
-                kind: register.kind,
-                base: Some(generate_expression(
-                    &op,
-                    register.base.unwrap_or(AbstractExpression::Empty),
-                    AbstractExpression::Immediate(shift),
-                )),
-                offset: new_offset,
-            }
-        }
-        "lsr" => {
-            let new_offset = register.offset << shift;
-            RegisterValue {
-                kind: register.kind,
-                base: Some(generate_expression(
-                    &op,
-                    register.base.unwrap_or(AbstractExpression::Empty),
-                    AbstractExpression::Immediate(shift),
-                )),
-                offset: new_offset,
-            }
-        }
-        "ror" => {
-            let new_offset = register.offset >> shift;
-            RegisterValue {
-                kind: register.kind,
-                base: Some(generate_expression(
-                    &op,
-                    register.base.unwrap_or(AbstractExpression::Empty),
-                    AbstractExpression::Immediate(shift),
-                )),
-                offset: new_offset,
-            }
-        }
-        "" => {
-            let new_offset = register.offset + shift;
-            RegisterValue {
-                kind: register.kind,
-                base: register.base,
-                offset: new_offset,
-            }
-        }
-        _ => todo!("{}", op),
-    }
-}
-
 pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> Option<ast::Int> {
     match expression.clone() {
         AbstractExpression::Immediate(num) => {

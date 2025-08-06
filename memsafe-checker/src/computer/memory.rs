@@ -5,7 +5,7 @@ impl<'ctx> ARMCORTEXA<'_> {
      * t: register name to load into
      * address: register with address as value
      */
-    fn load(&mut self, t: Operand, address: RegisterValue) -> Result<(), MemorySafetyError> {
+    pub fn load(&mut self, t: Operand, address: RegisterValue) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
             address.base.clone().expect("Need a name for region"),
             address.offset,
@@ -117,7 +117,7 @@ impl<'ctx> ARMCORTEXA<'_> {
      * t: register to be stored
      * address: where to store it
      */
-    fn store(
+    pub fn store(
         &mut self,
         register: Operand,
         address: RegisterValue,

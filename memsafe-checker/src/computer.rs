@@ -294,6 +294,11 @@ impl<'ctx> ARMCORTEXA<'_> {
         self.memory.insert(name, new_region);
     }
 
+    fn label_to_memory_index(&self, label: String) -> (String, i64) {
+        todo!("implement label to memory index func");
+        return ("memory".to_string(), 0);
+    }
+
     pub fn check_stack_pointer_restored(&self) {
         let s = &self.registers[31];
         match &s.base {
@@ -375,7 +380,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 "tst" => {
                     todo!();
                 }
-                "ror" => {
+                "ror" | "lsl" | "lsr" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let reg0 = reg_iter.next().expect("Need destination register");
@@ -384,218 +389,452 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     self.shift_reg(reg0, reg1, reg2);
                 }
+                "ands" => {
+                    self.cmp(&instruction.operands[0], &instruction.operands[1]);
+                    self.arithmetic("&", &|x, y| x & y, instruction.operands.clone());
+                }
+                "adc" => {
+                    match &self.carry {
+                        Some(FlagValue::Real(b)) => {
+                            if *b == true {
+                                self.arithmetic(
+                                    "+",
+                                    &|x, y| x + y + 1,
+                                    instruction.operands.clone(),
+                                );
+                            } else {
+                                self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
+                            }
+                        }
+                        _ => todo!(),
+                        // Some(FlagValue::Abstract(c)) => {
+                        //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
+                        //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
 
-                // TODO: this is a really bad way to do this, get expressions from include/arm_arch.h
-                //"ands"
-                //     "lsr" | "lsl" => {
-                //         let r2 = self.registers
-                //             [get_register_index(instruction.r2.clone().expect("Need register"))]
-                //         .clone();
-                //         let shift = self
-                //             .operand(instruction.r3.clone().expect("Need shift amt"))
-                //             .offset;
-                //         let new_offset = r2.offset >> shift;
-                //         if new_offset == 0 {
-                //             self.set_register(
-                //                 instruction.r1.clone().expect("Need destination register"),
-                //                 r2.clone().kind,
-                //                 None,
-                //                 new_offset,
-                //             );
-                //         } else {
-                //             self.set_register(
-                //                 instruction.r1.clone().expect("Need destination register"),
-                //                 r2.clone().kind,
-                //                 Some(generate_expression(
-                //                     "lsr",
-                //                     r2.base.unwrap_or(AbstractExpression::Empty),
-                //                     AbstractExpression::Immediate(new_offset),
-                //                 )),
-                //                 new_offset,
-                //             );
-                //         }
-                //     }
+                        //     return Ok(ExecuteReturnType::Select(c.clone(), reg0.clone(), opt0, opt1));
+                        // }
+                        // None => {
+                        //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
+                        //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
 
-                //     "adcs" | "adc" => {
-                //         match self.carry.clone() {
-                //         Some(FlagValue::Real(b)) => {
-                //             if b == true {
-                //                 self.arithmetic(
-                //                     "+",
-                //                     &|x, y| x + y,
-                //                     instruction.r1.clone().expect("Need dst register"),
-                //                     instruction.r2.clone().expect("Need one operand"),
-                //                     instruction.r2.clone().expect("Need one operand"),
-                //                     Some("#1".to_string()),
-                //                 );
-                //             } else {
-                //                 self.arithmetic(
-                //                     "+",
-                //                     &|x, y| x + y,
-                //                     instruction.r1.clone().expect("Need dst register"),
-                //                     instruction.r2.clone().expect("Need one operand"),
-                //                     instruction.r2.clone().expect("Need one operand"),
-                //                     Some("#0".to_string()),
-                //                 );
-                //             }
-                //         }
-                //         Some(FlagValue::Abstract(c)) => {
-                //             let opt1 = self.registers[get_register_index(
-                //                 instruction.r2.clone().expect("Need first source register"),
-                //             )]
-                //             .clone();
+                        //     return Ok(ExecuteReturnType::Select(
+                        //         AbstractComparison::new(
+                        //             "==",
+                        //             AbstractExpression::Abstract("carry".to_string()),
+                        //             AbstractExpression::Immediate(1),
+                        //         ),
+                        //         reg0.clone(),
+                        //         opt0,
+                        //         opt1,
+                        //     ));
+                        // }
+                    }
+                }
+                "adcs" => {
+                    let mut reg_iter = instruction.operands.iter().clone();
+                    let _ = reg_iter.next().expect("Need destination register");
+                    let reg1 = reg_iter.next().expect("Need first choice register");
+                    let reg2 = reg_iter.next().expect("Need second choice source register");
 
-                //             let mut opt2 = self.registers[get_register_index(
-                //                 instruction.r3.clone().expect("Need second source register"),
-                //             )]
-                //             .clone();
-                //             opt2.offset = opt2.offset + 1;
+                    match &self.carry {
+                        Some(FlagValue::Real(b)) => {
+                            if *b == true {
+                                self.arithmetic(
+                                    "+",
+                                    &|x, y| x + y + 1,
+                                    instruction.operands.clone(),
+                                );
+                                self.cmn(reg1, reg2);
+                            } else {
+                                self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
+                                self.cmn(reg1, reg2);
+                            }
+                        }
+                        _ => todo!(),
+                    }
+                }
+                "sbc" => match &self.carry {
+                    Some(FlagValue::Real(b)) => {
+                        if *b == true {
+                            self.arithmetic("-", &|x, y| x - y, instruction.operands.clone());
+                        } else {
+                            self.arithmetic("+", &|x, y| x - y - 1, instruction.operands.clone());
+                        }
+                    }
+                    _ => todo!(),
+                },
+                "sbcs" => {
+                    let mut reg_iter = instruction.operands.iter().clone();
+                    let _ = reg_iter.next().expect("Need destination register");
+                    let reg1 = reg_iter.next().expect("Need first choice register");
+                    let reg2 = reg_iter.next().expect("Need second choice source register");
 
-                //             return Ok(ExecuteReturnType::Select(c,
-                //              instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //         }
-                //         None => {
-                //             let opt1 = self.registers[get_register_index(
-                //                 instruction.r2.clone().expect("Need first source register"),
-                //             )]
-                //             .clone();
+                    match &self.carry {
+                        Some(FlagValue::Real(b)) => {
+                            if *b == true {
+                                self.arithmetic("-", &|x, y| x - y, instruction.operands.clone());
+                                self.cmp(reg1, reg2);
+                            } else {
+                                self.arithmetic(
+                                    "-",
+                                    &|x, y| x - y - 1,
+                                    instruction.operands.clone(),
+                                );
+                                self.cmp(reg1, reg2);
+                            }
+                        }
+                        _ => todo!(),
+                    }
+                }
+                "clz" => {
+                    let mut reg_iter = instruction.operands.iter().clone();
+                    let reg0 = reg_iter.next().expect("Need register output for clz");
+                    let reg1 = reg_iter.next().expect("Need register output for clz");
 
-                //             let mut opt2 = self.registers[get_register_index(
-                //                 instruction.r3.clone().expect("Need second source register"),
-                //             )]
-                //             .clone();
-                //             opt2.offset = opt2.offset + 1;
+                    let r1 = self.get_register(reg1);
+                    match r1.kind {
+                        RegisterKind::Immediate => {
+                            self.set_register(
+                                reg0,
+                                RegisterKind::Number,
+                                None,
+                                r1.offset.leading_zeros() as i64,
+                            );
+                        }
+                        _ => {
+                            self.set_register(reg0, RegisterKind::Number, None, 0);
+                        }
+                    }
+                }
+                "mov" | "movz" | "movk" => {
+                    let mut reg_iter = instruction.operands.iter().clone();
+                    let reg0 = reg_iter.next().expect("Need register output for mov");
+                    let reg1 = reg_iter.next().expect("Need register output for mov");
 
-                //             return Ok(ExecuteReturnType::Select(AbstractComparison::new(
-                //                 "==",
-                //                 AbstractExpression::Abstract("carry".to_string()),
-                //                 AbstractExpression::Immediate(1)),
-                //              instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //         }
-                //         }
-                //         //update flags
-                //         self.cmn(instruction.r1.clone().expect("need register to compare"),instruction.r2.clone().expect("need register to compare"), );
-                //     },
-                //     "sbcs" | "sbc" => match self.carry.clone() { // FIX: split
-                //         Some(FlagValue::Real(b)) => {
-                //             if b == true {
-                //                 self.arithmetic(
-                //                     "-",
-                //                     &|x, y| x - y,
-                //                     instruction.r1.clone().expect("Need dst register"),
-                //                     instruction.r2.clone().expect("Need one operand"),
-                //                     instruction.r2.clone().expect("Need one operand"),
-                //                     Some("#1".to_string()),
-                //                 );
-                //             } else {
-                //                 self.arithmetic(
-                //                     "-",
-                //                     &|x, y| x - y,
-                //                     instruction.r1.clone().expect("Need dst register"),
-                //                     instruction.r2.clone().expect("Need one operand"),
-                //                     instruction.r2.clone().expect("Need one operand"),
-                //                     Some("#0".to_string()),
-                //                 );
-                //             }
-                //         }
-                //         Some(FlagValue::Abstract(a)) => {
-                //             let opt1 = self.registers[get_register_index(
-                //                 instruction.r2.clone().expect("Need first source register"),
-                //             )]
-                //             .clone();
+                    let mut r1 = self.get_register(reg1);
 
-                //             let mut opt2 = self.registers[get_register_index(
-                //                 instruction.r3.clone().expect("Need second source register"),
-                //             )]
-                //             .clone();
-                //             opt2.offset = opt2.offset + 1;
+                    if let Some(a) = reg_iter.next() {
+                        match a {
+                            Operand::Bitwise(op, shift) => {
+                                r1 = instruction_aux::shift_imm(op.to_string(), r1, *shift);
+                            }
+                            _ => todo!("not sure what else can show up here"),
+                        }
+                    }
 
-                //             return Ok(ExecuteReturnType::Select(a,
-                //              instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //         }
-                //         None => {
-                //             let opt1 = self.registers[get_register_index(
-                //                 instruction.r2.clone().expect("Need first source register"),
-                //             )]
-                //             .clone();
+                    self.set_register(reg0, r1.kind, r1.base, r1.offset);
+                }
+                "rev" | "rev32" | "rbit" => {
+                    let mut reg_iter = instruction.operands.iter().clone();
+                    let reg0 = reg_iter.next().expect("Need register output for rev");
+                    let reg1 = reg_iter.next().expect("Need register output for rev");
 
-                //             let mut opt2 = self.registers[get_register_index(
-                //                 instruction.r3.clone().expect("Need second source register"),
-                //             )]
-                //             .clone();
-                //             opt2.offset = opt2.offset -1 ;
+                    let mut r1 = self.get_register(reg1);
 
-                //             return Ok(ExecuteReturnType::Select(AbstractComparison::new(
-                //                 "==",
-                //                 AbstractExpression::Abstract("carry".to_string()),
-                //                 AbstractExpression::Immediate(1)),
-                //                 instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //         }
-                //     },
-                //     "adrp"=> {
-                //         let address = self.operand(instruction.r2.clone().expect("Need address label"));
-                //         self.set_register(
-                //             instruction.r1.clone().expect("need dst register"),
-                //             RegisterKind::RegisterBase,
-                //             address.base,
-                //             address.offset,
-                //         );
-                //     }
-                //     "adr" => {
-                //         let address = self.operand(instruction.r2.clone().expect("Need address label"));
-                //         self.set_register(
-                //             instruction.r1.clone().expect("need dst register"),
-                //             RegisterKind::RegisterBase,
-                //             address.base,
-                //             address.offset,
-                //         );
-                //     }
-                //     "cbnz" => {
-                //         let register = self.registers
-                //             [get_register_index(instruction.r1.clone().expect("Need one register"))]
-                //         .clone();
-                //         if (register.base.is_none()
-                //             || register.base.clone().expect("computer2") == AbstractExpression::Empty)
-                //             && register.offset == 0
-                //         {
-                //             return Ok(ExecuteReturnType::Next);
-                //         } else if register.kind == RegisterKind::RegisterBase {
-                //             return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                //                 AbstractComparison::new(
-                //                     "!=",
-                //                     AbstractExpression::Immediate(0),
-                //                     AbstractExpression::Register(Box::new(register)),
-                //                 ),
-                //                 instruction.r2.clone().expect("need jump label 1 "),
-                //             ));
-                //         } else {
-                //             return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 2")));
-                //         }
-                //     }
-                //     // Compare and Branch on Zero compares the value in a register with zero, and conditionally branches to a label at a PC-relative offset if the comparison is equal. It provides a hint that this is not a subroutine call or return. This instruction does not affect condition flags.
-                //     "cbz" => {
-                //         let register = self.registers
-                //             [get_register_index(instruction.r1.clone().expect("Need one register"))]
-                //         .clone();
+                    if let Some(base) = r1.base {
+                        r1.base = Some(generate_expression("rev", base, AbstractExpression::Empty));
+                    }
 
-                //         if (register.base.is_none()
-                //             || register.base.clone().expect("computer3") == AbstractExpression::Empty)
-                //             && register.offset == 0
-                //         {
-                //             return Ok(ExecuteReturnType::JumpLabel(instruction.r2.clone().expect("need jump label 3")));
-                //         } else if register.kind == RegisterKind::RegisterBase {
-                //             return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                //                 AbstractComparison::new(
-                //                     "==",
-                //                     AbstractExpression::Immediate(0),
-                //                     AbstractExpression::Register(Box::new(register)),
-                //                 ),
-                //                 instruction.r2.clone().expect("need jump label 4"),
-                //             ));
-                //         } else {
-                //             return Ok(ExecuteReturnType::Next);
-                //         }
-                //     }
+                    r1.offset = r1.offset.swap_bytes();
+                    self.set_register(reg0, r1.kind, r1.base, r1.offset);
+                }
+                _ => todo!("Unsupported arithmetic instruction: {:?}", instruction),
+            },
+            InstructionType::ControlFlow => match instruction.opcode.as_str() {
+                "adr" => {
+                    if let Operand::Label(label) = &instruction.operands[1] {
+                        let (region, index) = self.label_to_memory_index(label.clone());
+                        self.set_register(
+                            &instruction.operands[0],
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(region)),
+                            index,
+                        );
+                    } else {
+                        panic!("adr not invoked correctly with register and label")
+                    }
+                }
+                "adrp" => {
+                    // Form PC-relative address to 4KB page adds an immediate value that is shifted left by 12 bits, to the PC value to form a PC-relative address, with the bottom 12 bits masked out, and writes the result to the destination register.
+                    // TODO: handle case for sha256 where we need @OFF page address
+                    if let Operand::Label(label) = &instruction.operands[1] {
+                        let (region, index) = self.label_to_memory_index(label.clone());
+                        self.set_register(
+                            &instruction.operands[0],
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(region)),
+                            index << 12,
+                        );
+                    } else {
+                        panic!("adr not invoked correctly with register and label")
+                    }
+                }
+                "cbz" => {
+                    // Compare and Branch on Zero compares the value in a register with zero, and conditionally branches to a label at a PC-relative offset if the comparison is equal. It provides a hint that this is not a subroutine call or return. This instruction does not affect condition flags.
+                    let register = self.get_register(&instruction.operands[0]);
+                    if let Operand::Label(label) = &instruction.operands[1] {
+                        if (register.base.is_none()
+                            || register.base == Some(AbstractExpression::Empty))
+                            && register.offset == 0
+                        {
+                            return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
+                        } else if register.kind == RegisterKind::RegisterBase {
+                            return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                AbstractComparison::new(
+                                    "==",
+                                    AbstractExpression::Immediate(0),
+                                    AbstractExpression::Register(Box::new(register)),
+                                ),
+                                label.to_string(),
+                            ));
+                        } else {
+                            return Ok(ExecuteReturnType::Next);
+                        }
+                    } else {
+                        panic!("cbz not invoked correctly with register and label");
+                    }
+                }
+                "cbnz" => {
+                    let register = self.get_register(&instruction.operands[0]);
+                    if let Operand::Label(label) = &instruction.operands[1] {
+                        if (register.base.is_none()
+                            || register.base == Some(AbstractExpression::Empty))
+                            && register.offset == 0
+                        {
+                            return Ok(ExecuteReturnType::Next);
+                        } else if register.kind == RegisterKind::RegisterBase {
+                            return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                AbstractComparison::new(
+                                    "!=",
+                                    AbstractExpression::Immediate(0),
+                                    AbstractExpression::Register(Box::new(register)),
+                                ),
+                                label.to_string(),
+                            ));
+                        } else {
+                            return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
+                        }
+                    } else {
+                        panic!("cbnz not invoked correctly with register and label");
+                    }
+                }
+                "b" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
+                    } else {
+                        panic!("b not invoked correctly");
+                    }
+                }
+                "bl" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        self.set_register(
+                            &Operand::Register(RePrefix::X, 30),
+                            RegisterKind::Immediate,
+                            None,
+                            pc as i64,
+                        );
+                        return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
+                    } else {
+                        panic!("b not invoked correctly");
+                    }
+                }
+                "b.ne" | "bne" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        match &self.zero {
+                            // if zero is set to false, then cmp -> not equal and we branch
+                            Some(flag) => match flag {
+                                FlagValue::Real(b) => {
+                                    if !b {
+                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                                    } else {
+                                        return Ok(ExecuteReturnType::Next);
+                                    }
+                                }
+                                FlagValue::Abstract(s) => {
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone().not(), label.clone()));
+                                }
+                            },
+                            None => return Err(
+                                "Flag cannot be branched on since it has not been set within the program yet"
+                                    .to_string(),
+                            ),
+                        }
+                    }
+                    panic!("bne not invoked correctly with label");
+                }
+                "b.eq" | "beq" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        match &self.zero {
+                            // if zero is set to false, then cmp -> not equal and we branch
+                            Some(flag) => match flag {
+                                FlagValue::Real(b) => {
+                                    if *b {
+                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                                    } else {
+                                        return Ok(ExecuteReturnType::Next);
+                                    }
+                                }
+                                FlagValue::Abstract(s) => {
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), label.clone()));
+                                }
+                            },
+                            None => return Err(
+                                "Flag cannot be branched on since it has not been set within the program yet"
+                                    .to_string(),
+                            ),
+                        }
+                    }
+                    panic!("beq not invoked correctly with label");
+                }
+                "bgt" | "bt" | "b.gt" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        match (&self.zero, &self.neg, &self.overflow) {
+                            (Some(zero), Some(neg), Some(ove)) => {
+                                match  (zero, neg, ove) {
+                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
+                                   if !z && n == v {  // Z = 0 AND N = V
+                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()))
+                                   } else {
+                                        return Ok(ExecuteReturnType::Next)
+                                   }
+                                },
+                                (FlagValue::Abstract(z) , _, _ ) =>  {
+                                    let expression = generate_comparison(">", *z.left.clone(), *z.right.clone());
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
+                                },
+                                (_,_,_) => todo!("match on undefined flags!")
+                                }
+                            },
+                            (_, _, _) => return Err(
+                                "Flag cannot be branched on since it has not been set within the program yet"
+                                    .to_string(),
+                            ),
+                        }
+                    }
+                    panic!("b.gt not invoked correctly with label");
+                }
+                "b.lt" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        match (&self.zero, &self.neg, &self.overflow) {
+                            (Some(zero), Some(neg), Some(ove)) => {
+                                match  (zero, neg, ove) {
+                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
+                                   if !z && n != v {  // Z = 0 AND N = V
+                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()))
+                                   } else {
+                                        return Ok(ExecuteReturnType::Next)
+                                   }
+                                },
+                                (FlagValue::Abstract(z) , _, _ ) =>  {
+                                    let expression = generate_comparison("<", *z.left.clone(), *z.right.clone());
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, label.clone()));
+                                },
+                                (_,_,_) => todo!("match on undefined flags!")
+                                }
+                            },
+                            (_, _, _) => return Err(
+                                "Flag cannot be branched on since it has not been set within the program yet"
+                                    .to_string(),
+                            ),
+                        }
+                    }
+                }
+                "b.ls" | "b.le" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        match (&self.zero, &self.carry) {
+                        (Some(zero), Some(carry)) => {
+                            match  (zero, carry) {
+                            (FlagValue::Real(z), FlagValue::Real(c)) => {
+                               if !z && *c {
+                                    return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                               } else {
+                                    return Ok(ExecuteReturnType::Next)
+                               }
+                            },
+                            (FlagValue::Abstract(z) , _ ) | (_, FlagValue::Abstract(z) ) =>  {
+                                let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
+                            },
+                            }
+                        },
+                        (_, _) => return Err(
+                            "Flag cannot be branched on since it has not been set within the program yet"
+                                .to_string(),
+                        ),
+                    }
+                    }
+                    panic!("b.ls not invoked correctly with label");
+                }
+                "b.cs" | "b.hs" | "bcs" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        match&self.carry{
+                            Some(carry) => {
+                                match  carry {
+                                FlagValue::Real(c) => {
+                                   if *c {
+                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                                   } else {
+                                        return Ok(ExecuteReturnType::Next)
+                                   }
+                                },
+                                FlagValue::Abstract(c) =>  {
+                                    let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
+                                },
+                                }
+                            },
+                            None => return Err(
+                                "Flag cannot be branched on since it has not been set within the program yet"
+                                    .to_string(),
+                            ),
+                        }
+                    }
+                    panic!("b.cs not invoked correctly");
+                }
+                "b.cc" | "b.lo" | "blo" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        match&self.carry{
+                            Some(carry) => {
+                                match  carry {
+                                FlagValue::Real(c) => {
+                                   if !*c {
+                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                                   } else {
+                                        return Ok(ExecuteReturnType::Next)
+                                   }
+                                },
+                                FlagValue::Abstract(c) =>  {
+                                    let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
+                                },
+                                }
+                            },
+                            None => return Err(
+                                "Flag cannot be branched on since it has not been set within the program yet"
+                                    .to_string(),
+                            ),
+                        }
+                    }
+                    panic!("b.cc/lo/blo not invoked correctly");
+                }
+                "ret" => {
+                    let x30 = self.get_register(&Operand::Register(RePrefix::X, 30));
+                    if x30.kind == RegisterKind::RegisterBase {
+                        if let Some(AbstractExpression::Abstract(address)) = x30.base {
+                            if address == "return" && x30.offset == 0 {
+                                return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
+                            } else {
+                                return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
+                            }
+                        }
+                        return Ok(ExecuteReturnType::JumpAddress(
+                            x30.offset.try_into().expect("computer4"),
+                        ));
+                    } else {
+                        panic!("return register not set before calling ret")
+                    }
+                }
+                _ => todo!(),
                 //     "cset" => {
                 //         // match on condition based on flags
                 //         match instruction
@@ -840,477 +1079,207 @@ impl<'ctx> ARMCORTEXA<'_> {
                 //             _ => todo!("unsupported comparison type {:?}", instruction.r2),
                 //         }
                 //     }
-                //     "b" => {
-                //         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 5")));
-                //     }
-                //     "bl" => {
-                //         let label = instruction
-                //             .r1
-                //             .clone()
-                //             .expect("need label to jump")
-                //             .to_string();
-                //         self.set_register("x30".to_string(), RegisterKind::Immediate, None, pc as i64);
-                //         return Ok(ExecuteReturnType::JumpLabel(label));
-                //     }
-                //     "b.ne" | "bne" => {
-                //         match &self.zero {
-                //             // if zero is set to false, then cmp -> not equal and we branch
-                //             Some(flag) => match flag {
-                //                 FlagValue::Real(b) => {
-                //                     if !b {
-                //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 7")));
-                //                     } else {
-                //                         return Ok(ExecuteReturnType::Next);
-                //                     }
-                //                 }
-                //                 FlagValue::Abstract(s) => {
-                //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone().not(), instruction.r1.clone().expect("need jump label 8")));
-                //                 }
-                //             },
-                //             None => return Err(
-                //                 "Flag cannot be branched on since it has not been set within the program yet"
-                //                     .to_string(),
-                //             ),
-                //         }
-                //     }
-                //     "b.eq" | "beq" => {
-                //         match &self.zero {
-                //             // if zero is set to false, then cmp -> not equal and we branch
-                //             Some(flag) => match flag {
-                //                 FlagValue::Real(b) => {
-                //                     if *b {
-                //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 9")));
-                //                     } else {
-                //                         return Ok(ExecuteReturnType::Next);
-                //                     }
-                //                 }
-                //                 FlagValue::Abstract(s) => {
-                //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), instruction.r1.clone().expect("need jump label 10")));
-                //                 }
-                //             },
-                //             None => return Err(
-                //                 "Flag cannot be branched on since it has not been set within the program yet"
-                //                     .to_string(),
-                //             ),
-                //         }
-                //     }
-                //     "bt" | "b.gt" => {
-                //         match (&self.zero, &self.neg, &self.overflow) {
-                //             (Some(zero), Some(neg), Some(ove)) => {
-                //                 match  (zero, neg, ove) {
-                //                 (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
-                //                    if !z && n == v {  // Z = 0 AND N = V
-                //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 11")))
-                //                    } else {
-                //                         return Ok(ExecuteReturnType::Next)
-                //                    }
-                //                 },
-                //                 (FlagValue::Abstract(z) , _, _ ) =>  {
-                //                     let expression = generate_comparison(">", *z.left.clone(), *z.right.clone());
-                //                     return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, instruction.r1.clone().expect("need jump label 12")));
-                //                 },
-                //                 (_,_,_) => todo!("match on undefined flags!")
-                //                 }
-                //             },
-                //             (_, _, _) => return Err(
-                //                 "Flag cannot be branched on since it has not been set within the program yet"
-                //                     .to_string(),
-                //             ),
-                //         }
-                //     }
-                //     "b.lt" => {
-                //         match (&self.zero, &self.neg, &self.overflow) {
-                //             (Some(zero), Some(neg), Some(ove)) => {
-                //                 match  (zero, neg, ove) {
-                //                 (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
-                //                    if !z && n != v {  // Z = 0 AND N = V
-                //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 11")))
-                //                    } else {
-                //                         return Ok(ExecuteReturnType::Next)
-                //                    }
-                //                 },
-                //                 (FlagValue::Abstract(z) , _, _ ) =>  {
-                //                     let expression = generate_comparison("<", *z.left.clone(), *z.right.clone());
-                //                     return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, instruction.r1.clone().expect("need jump label 12")));
-                //                 },
-                //                 (_,_,_) => todo!("match on undefined flags!")
-                //                 }
-                //             },
-                //             (_, _, _) => return Err(
-                //                 "Flag cannot be branched on since it has not been set within the program yet"
-                //                     .to_string(),
-                //             ),
-                //         }
-                //     }
-                //     "b.ls" | "b.le" => {
-                //         match (&self.zero, &self.carry) {
-                //             (Some(zero), Some(carry)) => {
-                //                 match  (zero, carry) {
-                //                 (FlagValue::Real(z), FlagValue::Real(c)) => {
-                //                    if !z && *c {
-                //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 13")));
-                //                    } else {
-                //                         return Ok(ExecuteReturnType::Next)
-                //                    }
-                //                 },
-                //                 (FlagValue::Abstract(z) , _ ) | (_, FlagValue::Abstract(z) ) =>  {
-                //                     let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
-                //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 14")));
-                //                 },
-                //                 }
-                //             },
-                //             (_, _) => return Err(
-                //                 "Flag cannot be branched on since it has not been set within the program yet"
-                //                     .to_string(),
-                //             ),
-                //         }
-                //     }
-                //     "b.cs" | "b.hs" | "bcs" => {
-                //         match&self.carry{
-                //             Some(carry) => {
-                //                 match  carry {
-                //                 FlagValue::Real(c) => {
-                //                    if *c {
-                //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 15")));
-                //                    } else {
-                //                         return Ok(ExecuteReturnType::Next)
-                //                    }
-                //                 },
-                //                 FlagValue::Abstract(c) =>  {
-                //                     let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
-                //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 16")));
-                //                 },
-                //                 }
-                //             },
-                //             None => return Err(
-                //                 "Flag cannot be branched on since it has not been set within the program yet"
-                //                     .to_string(),
-                //             ),
-                //         }
-                //     }
-                //     "b.cc" | "b.lo" | "blo" => {
-                //         match&self.carry{
-                //             Some(carry) => {
-                //                 match  carry {
-                //                 FlagValue::Real(c) => {
-                //                    if !*c {
-                //                         return Ok(ExecuteReturnType::JumpLabel(instruction.r1.clone().expect("need jump label 15")));
-                //                    } else {
-                //                         return Ok(ExecuteReturnType::Next)
-                //                    }
-                //                 },
-                //                 FlagValue::Abstract(c) =>  {
-                //                     let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
-                //                     return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, instruction.r1.clone().expect("need jump label 16")));
-                //                 },
-                //                 }
-                //             },
-                //             None => return Err(
-                //                 "Flag cannot be branched on since it has not been set within the program yet"
-                //                     .to_string(),
-                //             ),
-                //         }
-                //     }
-                //     "ret" => {
-                //         if instruction.r1.is_none() {
-                //             let x30 = self.registers[30].clone();
-                //             if x30.kind == RegisterKind::RegisterBase {
-                //                 if let Some(AbstractExpression::Abstract(address)) = x30.base {
-                //                     if address == "return" && x30.offset == 0 {
-                //                         return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                //                     } else {
-                //                         return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
-                //                     }
-                //                 }
-                //                 return Ok(ExecuteReturnType::JumpAddress(x30.offset.try_into().expect("computer4")));
-                //             } else {
-                //                 return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                //             }
-                //         } else {
-                //             let _r1 = &self.registers[get_register_index(
-                //                 instruction
-                //                     .r1
-                //                     .clone()
-                //                     .expect("provide valid return register"),
-                //             )];
-                //         }
-                //     }
-                //     "ldr" => {
-                //         let reg1 = instruction.r1.clone().expect("computer5");
-                //         let reg2 = instruction.r2.clone().expect("computer6");
-
-                //         let reg2base = get_register_name_string(reg2.clone());
-                //         let mut base_add_reg =
-                //             self.registers[get_register_index(reg2base.clone())].clone();
-
-                //         // pre-index increment
-                //         if reg2.contains(",") {
-                //             if let Some((base, offset)) = reg2.split_once(",") {
-                //                 base_add_reg = self.operand(base.to_string());
-                //                 base_add_reg.offset = base_add_reg.offset + self.operand(offset.to_string()).offset;
-                //             } else {
-                //                 base_add_reg = self.operand(reg2.clone());
-                //             }
-
-                //             if reg2.contains("!") {
-                //                 let new_reg = base_add_reg.clone();
-                //                 self.set_register(
-                //                     reg2base.clone(),
-                //                     new_reg.kind,
-                //                     new_reg.base,
-                //                     new_reg.offset,
-                //                 );
-                //             }
-                //         }
-
-                //         let res = self.load(reg1, base_add_reg.clone());
-                //         match res {
-                //             Err(e) => return Err(e.to_string()),
-                //             _ => (),
-                //         }
-
-                //         // post-index
-                //         if instruction.r3.is_some() {
-                //             let new_imm = self.operand(instruction.r3.clone().expect("computer7"));
-                //             self.set_register(
-                //                 reg2base,
-                //                 base_add_reg.kind,
-                //                 base_add_reg.base,
-                //                 base_add_reg.offset + new_imm.offset,
-                //             );
-                //         }
-                //     }
-                //     "ldrb" => {
-                //         let reg1 = instruction.r1.clone().expect("computer5");
-                //         let reg2 = instruction.r2.clone().expect("computer6");
-
-                //         let reg2base = get_register_name_string(reg2.clone());
-                //         let mut base_add_reg =
-                //             self.registers[get_register_index(reg2base.clone())].clone();
-
-                //         // pre-index increment
-                //         if reg2.contains(",") {
-                //             if let Some((base, offset)) = reg2.split_once(",") {
-                //                 base_add_reg = self.operand(base.to_string());
-                //                 base_add_reg.offset = base_add_reg.offset + self.operand(offset.to_string()).offset;
-                //             } else {
-                //                 base_add_reg = self.operand(reg2.clone());
-                //             }
-
-                //             if reg2.contains("!") {
-                //                 let new_reg = base_add_reg.clone();
-                //                 self.set_register(
-                //                     reg2base.clone(),
-                //                     new_reg.kind,
-                //                     new_reg.base,
-                //                     new_reg.offset,
-                //                 );
-                //             }
-                //         }
-
-                //         let res = self.load(reg1, base_add_reg.clone());
-                //         match res {
-                //             Err(e) => return Err(e.to_string()),
-                //             _ => (),
-                //         }
-
-                //         // post-index
-                //         if instruction.r3.is_some() {
-                //             let new_imm = self.operand(instruction.r3.clone().expect("computer7"));
-                //             self.set_register(
-                //                 reg2base,
-                //                 base_add_reg.kind,
-                //                 base_add_reg.base,
-                //                 base_add_reg.offset + new_imm.offset,
-                //             );
-                //         }
-                //     }
-                //     "ldp" => {
-                //         let reg1 = instruction.r1.clone().expect("computer8");
-                //         let reg2 = instruction.r2.clone().expect("computer9");
-                //         let reg3 = instruction.r3.clone().expect("computer10");
-
-                //         let reg3base = get_register_name_string(reg3.clone());
-                //         let mut base_add_reg =
-                //             self.registers[get_register_index(reg3base.clone())].clone();
-
-                //         // pre-index increment
-                //         if reg3.contains(",") {
-                //             base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
-                //             // with writeback
-                //             if reg3.contains("!") {
-                //                 let new_reg = base_add_reg.clone();
-                //                 self.set_register(
-                //                     reg3base.clone(),
-                //                     new_reg.kind,
-                //                     new_reg.base,
-                //                     new_reg.offset,
-                //                 );
-                //             }
-                //         }
-
-                //         let res1 = self.load(reg1, base_add_reg.clone());
-
-                //         let mut next = base_add_reg.clone();
-                //         next.offset = next.offset + 8;
-                //         let res2 = self.load(reg2, next);
-
-                //         // post-index
-                //         if instruction.r4.is_some() {
-                //             let new_imm = self.operand(instruction.r4.clone().expect("computer11"));
-                //             self.set_register(
-                //                 reg3base,
-                //                 base_add_reg.kind,
-                //                 base_add_reg.base,
-                //                 base_add_reg.offset + new_imm.offset,
-                //             );
-                //         }
-
-                //         match res1 {
-                //             Err(e) => return Err(e.to_string()),
-                //             _ => (),
-                //         }
-                //         match res2 {
-                //             Err(e) => return Err(e.to_string()),
-                //             _ => (),
-                //         }
-                //     }
-                //     "str" | "strb" => { // TODO: split
-                //         let reg1 = instruction.r1.clone().expect("computer12");
-                //         let reg2 = instruction.r2.clone().expect("computer13");
-
-                //         let reg2base = get_register_name_string(reg2.clone());
-                //         let mut base_add_reg =
-                //             self.registers[get_register_index(reg2base.clone())].clone();
-
-                //         // pre-index increment
-                //         if reg2.contains(",") {
-                //             base_add_reg = self.operand(reg2.clone().trim_end_matches("!").to_string());
-                //             // with writeback
-                //             if reg2.contains("!") {
-                //                 let new_reg = base_add_reg.clone();
-                //                 self.set_register(
-                //                     reg2base.clone(),
-                //                     new_reg.kind,
-                //                     new_reg.base,
-                //                     new_reg.offset,
-                //                 );
-                //             }
-                //         }
-
-                //         let reg2base = get_register_name_string(reg2.clone());
-                //         let res = self.store(reg1, base_add_reg.clone());
-                //         match res {
-                //             Err(e) => return Err(e.to_string()),
-                //             _ => (),
-                //         }
-
-                //         // post-index
-                //         if instruction.r3.is_some() {
-                //             let new_imm = self.operand(instruction.r3.clone().expect("computer14"));
-                //             self.set_register(
-                //                 reg2base,
-                //                 base_add_reg.kind,
-                //                 base_add_reg.base,
-                //                 base_add_reg.offset + new_imm.offset,
-                //             );
-                //         }
-                //     }
-                //     "stp" => {
-                //         let reg1 = instruction.r1.clone().expect("computer15");
-                //         let reg2 = instruction.r2.clone().expect("computer16");
-                //         let reg3 = instruction.r3.clone().expect("computer17");
-
-                //         let reg3base = get_register_name_string(reg3.clone());
-                //         let mut base_add_reg =
-                //             self.registers[get_register_index(reg3base.clone())].clone();
-
-                //         // pre-index increment
-                //         if reg3.contains(",") {
-                //             base_add_reg = self.operand(reg3.clone().trim_end_matches("!").to_string());
-                //             // with writeback
-                //             if reg3.contains("!") {
-                //                 let new_reg = base_add_reg.clone();
-                //                 self.set_register(
-                //                     reg3base.clone(),
-                //                     new_reg.kind,
-                //                     new_reg.base,
-                //                     new_reg.offset,
-                //                 );
-                //             }
-                //         }
-
-                //         let res = self.store(reg1, base_add_reg.clone());
-                //         match res {
-                //             Err(e) => return Err(e.to_string()),
-                //             _ => (),
-                //         }
-                //         let mut next = base_add_reg.clone();
-                //         next.offset = next.offset + 8;
-                //         let res = self.store(reg2, next);
-                //         match res {
-                //             Err(e) => return Err(e.to_string()),
-                //             _ => (),
-                //         }
-
-                //         // post-index
-                //         if instruction.r4.is_some() {
-                //             let new_imm = self.operand(instruction.r4.clone().expect("computer18"));
-                //             self.set_register(
-                //                 reg3base,
-                //                 base_add_reg.kind,
-                //                 base_add_reg.base,
-                //                 base_add_reg.offset + new_imm.offset,
-                //             );
-                //         }
-                //     }
-                //     "mov" | "movz" => {
-                //         let reg1 = instruction.r1.clone().expect("Need dst reg");
-                //         let reg2 = instruction.r2.clone().expect("Need src reg");
-
-                //         let src = self.operand(reg2);
-                //         self.set_register(reg1, src.kind, src.base, src.offset);
-                //     }
-                //     "movk" => {
-                //         let reg1 = instruction.r1.clone().expect("Need dst reg");
-                //         let reg2 = instruction.r2.clone().expect("Need src reg");
-
-                //         let src = self.operand(reg1.clone());
-                //         let mut offset = self.operand(reg2).offset;
-
-                //         if let Some(op) = instruction.r3.clone() {
-                //             match op.as_str() {
-                //                 "lsl" | "lsl#16" => offset = offset << 16,
-                //                 _ => todo!("implement more shifting strategies for movk: {:?}", op),
-                //             }
-                //         }
-                //         self.set_register(reg1, src.kind, src.base, src.offset + offset);
-                //     }
-                //     "rev" | "rev32" | "rbit" => { //TODO: reimpl rev32
-                //         let reg1 = instruction.r1.clone().expect("Need dst register");
-                //         let reg2 = instruction.r2.clone().expect("Need source register");
-
-                //         let mut src = self.operand(reg2);
-
-                //         if let Some(base) = src.base {
-                //             src.base =
-                //                 Some(generate_expression("rev", base, AbstractExpression::Empty));
-                //         }
-
-                //         src.offset = src.offset.swap_bytes();
-                //         self.set_register(reg1, src.kind, src.base, src.offset);
-                //     }
-                //     "clz" => {
-                //         // TODO: actually count
-                //         let reg1 = instruction.r1.clone().expect("Need dst register");
-                //         self.set_register(reg1, RegisterKind::Number, None, 0);
-                //     }
-                _ => todo!(),
             },
             InstructionType::Memory => match instruction.opcode.as_str() {
-                _ => todo!(),
-            },
-            InstructionType::ControlFlow => match instruction.opcode.as_str() {
+                "ldr" | "ldrb" => {
+                    // TODO: split, have to rewrite load or do post-processing after load to extract meaningful byte
+                    let mut reg_iter = instruction.operands.iter();
+
+                    let dst = reg_iter.next().expect("ldr dst");
+                    let src_addr = reg_iter.next().expect("ldr src");
+
+                    match src_addr {
+                        Operand::Memory(w, reg_num, offset, _, mode) => {
+                            let mut address = self
+                                .get_register(&Operand::Register(w.clone(), *reg_num))
+                                .clone();
+                            address.offset = address.offset + offset.unwrap_or(0);
+
+                            let res = self.load(dst.clone(), address.clone());
+                            match res {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+
+                            match mode {
+                                // pre
+                                Some(false) => {
+                                    self.set_register(
+                                        src_addr,
+                                        address.kind,
+                                        address.base,
+                                        address.offset - offset.unwrap_or(0),
+                                    );
+                                }
+                                // post
+                                Some(true) => {
+                                    self.set_register(
+                                        src_addr,
+                                        address.kind,
+                                        address.base,
+                                        address.offset,
+                                    );
+                                }
+                                None => {}
+                            }
+                        }
+                        _ => {
+                            panic!("ldr not with correct syntax for memory operand");
+                        }
+                    }
+                }
+                "ldp" => {
+                    let mut reg_iter = instruction.operands.iter();
+
+                    let dst1 = reg_iter.next().expect("ldr dst");
+                    let dst2 = reg_iter.next().expect("ldr src");
+                    let src_addr = reg_iter.next().expect("ldr src");
+
+                    match src_addr {
+                        Operand::Memory(w, reg_num, offset, _, mode) => {
+                            let mut address = self
+                                .get_register(&Operand::Register(w.clone(), *reg_num))
+                                .clone();
+                            address.offset = address.offset + offset.unwrap_or(0);
+
+                            let res1 = self.load(dst1.clone(), address.clone());
+                            address.offset += 8;
+                            let res2 = self.load(dst2.clone(), address.clone());
+                            match res1 {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                            match res2 {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+
+                            match mode {
+                                // pre
+                                Some(false) => {
+                                    self.set_register(
+                                        src_addr,
+                                        address.kind,
+                                        address.base,
+                                        address.offset - offset.unwrap_or(0) - 8,
+                                    );
+                                }
+                                // post
+                                Some(true) => {
+                                    self.set_register(
+                                        src_addr,
+                                        address.kind,
+                                        address.base,
+                                        address.offset,
+                                    );
+                                }
+                                None => {}
+                            }
+                        }
+                        _ => {
+                            panic!("ldr not with correct syntax for memory operand");
+                        }
+                    }
+                }
+                "str" | "strb" => {
+                    let mut reg_iter = instruction.operands.iter();
+
+                    let dst = reg_iter.next().expect("ldr dst");
+                    let src_addr = reg_iter.next().expect("ldr src");
+
+                    match src_addr {
+                        Operand::Memory(w, reg_num, offset, _, mode) => {
+                            let mut address = self
+                                .get_register(&Operand::Register(w.clone(), *reg_num))
+                                .clone();
+                            address.offset = address.offset + offset.unwrap_or(0);
+
+                            let res = self.store(dst.clone(), address.clone());
+                            match res {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+
+                            match mode {
+                                // pre
+                                Some(false) => {
+                                    self.set_register(
+                                        src_addr,
+                                        address.kind,
+                                        address.base,
+                                        address.offset - offset.unwrap_or(0),
+                                    );
+                                }
+                                // post
+                                Some(true) => {
+                                    self.set_register(
+                                        src_addr,
+                                        address.kind,
+                                        address.base,
+                                        address.offset,
+                                    );
+                                }
+                                None => {}
+                            }
+                        }
+                        _ => {
+                            panic!("ldr not with correct syntax for memory operand");
+                        }
+                    }
+                }
+                "stp" => {
+                    let mut reg_iter = instruction.operands.iter();
+
+                    let dst1 = reg_iter.next().expect("ldr dst");
+                    let dst2 = reg_iter.next().expect("ldr src");
+                    let src_addr = reg_iter.next().expect("ldr src");
+
+                    match src_addr {
+                        Operand::Memory(w, reg_num, offset, _, mode) => {
+                            let mut address = self
+                                .get_register(&Operand::Register(w.clone(), *reg_num))
+                                .clone();
+                            address.offset = address.offset + offset.unwrap_or(0);
+
+                            let res1 = self.store(dst1.clone(), address.clone());
+                            address.offset += 8;
+                            let res2 = self.store(dst2.clone(), address.clone());
+                            match res1 {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+                            match res2 {
+                                Err(e) => return Err(e.to_string()),
+                                _ => (),
+                            }
+
+                            match mode {
+                                // pre
+                                Some(false) => {
+                                    self.set_register(
+                                        src_addr,
+                                        address.kind,
+                                        address.base,
+                                        address.offset - offset.unwrap_or(0) - 8,
+                                    );
+                                }
+                                // post
+                                Some(true) => {
+                                    self.set_register(
+                                        src_addr,
+                                        address.kind,
+                                        address.base,
+                                        address.offset,
+                                    );
+                                }
+                                None => {}
+                            }
+                        }
+                        _ => {
+                            panic!("ldr not with correct syntax for memory operand");
+                        }
+                    }
+                }
                 _ => todo!(),
             },
             InstructionType::SIMDArithmetic => {

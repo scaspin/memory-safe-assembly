@@ -55,7 +55,7 @@ impl Arrangement {
 pub enum Operand {
     Register(RePrefix, usize),
     Immediate(i64),
-    Memory(RePrefix, usize, Option<i64>, Option<String>, Option<bool>), // like [x0, #16] // bool to represent pre/post index 0 = false, 1 = true
+    Memory(RePrefix, usize, Option<i64>, Option<String>, Option<bool>), // like [x0, #16] // bool to represent pre/post index false = pre, true = post
     Bitwise(String, i64), // like lsl#2, TODO: make enum for shift types
     // the "string" param is probably always going to be "v"
     VectorRegister(RePrefix, usize),
@@ -285,7 +285,11 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
         .any(|op| matches!(op, Operand::Vector(..)) || matches!(op, Operand::VectorRegister(..)))
     {
         return InstructionType::SIMDArithmetic;
-    } else if opcode.contains("b") || opcode.contains("j") {
+    } else if opcode.starts_with("b")
+        || opcode.starts_with("j")
+        || opcode.contains("adr")
+        || opcode == "ret"
+    {
         return InstructionType::ControlFlow;
     }
     return InstructionType::Other;
@@ -821,6 +825,19 @@ mod tests {
             operands: Vec::new(),
         };
         assert_eq!(Instruction::new("Loop:".to_string()), good_result);
+    }
+
+    #[test]
+    fn test_parse_cset_with_condition() {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
+            opcode: String::from("cset"),
+            operands: Vec::from([
+                Operand::Register(RePrefix::W, 0),
+                Operand::Label("eq".to_string()), // TODO: make this condition code enum
+            ]),
+        };
+        assert_eq!(Instruction::new("cset w0, eq".to_string()), good_result);
     }
 
     #[test]
