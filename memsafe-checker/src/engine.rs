@@ -43,7 +43,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
     pub fn new(lines: Vec<String>, context: &'ctx Context) -> ExecutionEngine<'ctx> {
         // let _ = env_logger::try_init();
         // log::info!("--------");
-        // log::info!("NEW EXEC");
+        // log::info!("NEW EXECUTION ENGINE");
         // log::info!("-------");
 
         // represent code this way, highly unoptimized
@@ -86,6 +86,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
                 }
 
+                let i = Instruction::new(text.clone());
+                if i.ty == InstructionType::Label {
+                    labels.push((i.opcode, line_number));
+                }
                 code.push(Instruction::new(text));
 
                 line_number = line_number + 1;
@@ -210,6 +214,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
         }
     }
 
+    pub fn get_register_output(&self, register: usize) -> RegisterValue {
+        return self.computer.registers[register].clone();
+    }
+
     pub fn dont_fail_fast(&mut self) {
         self.fail_fast = false;
     }
@@ -220,7 +228,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let pc;
-        match self.get_linenumber_of_label(start) {
+        match self.get_linenumber_of_label(start.trim_matches(|c| c == '_' || c == ':').to_string())
+        {
             Some(n) => pc = n,
             None => {
                 return Err(Error::new(
@@ -967,5 +976,73 @@ impl<'ctx> ExecutionEngine<'ctx> {
             }
             return None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_label_parsing_simple() {
+        let mut asm = Vec::new();
+        asm.push("start:".to_string());
+        asm.push("add x0, x1, x2".to_string());
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let engine = ExecutionEngine::new(asm, &ctx);
+
+        let labels: Vec<(String, usize)> = engine.program.labels;
+        assert_eq!(labels.len(), 1);
+        assert_eq!(labels[0], ("start".to_string(), 0));
+    }
+
+    #[test]
+    fn test_label_parsing_multi() {
+        let mut asm = Vec::new();
+        asm.push("start:".to_string());
+        asm.push("add x0, x1, x2".to_string());
+        asm.push("add x0, x1, x2".to_string());
+        asm.push("add x0, x1, x2".to_string());
+        asm.push("end:".to_string());
+        asm.push("ret".to_string());
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let engine = ExecutionEngine::new(asm, &ctx);
+
+        let labels: Vec<(String, usize)> = engine.program.labels;
+        assert_eq!(labels.len(), 2);
+        assert_eq!(labels[0], ("start".to_string(), 0));
+        assert_eq!(labels[1], ("end".to_string(), 4));
+    }
+
+    #[test]
+    fn test_running_small_program_no_mem_access() {
+        let mut asm = Vec::new();
+        asm.push("start:".to_string());
+        asm.push("add x0, x1, x2".to_string());
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let mut engine = ExecutionEngine::new(asm, &ctx);
+
+        let res = engine.start("start".to_string());
+        assert_eq!(
+            engine.computer.registers[0],
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(generate_expression(
+                    "+",
+                    AbstractExpression::Abstract("x1".to_string()),
+                    AbstractExpression::Abstract("x2".to_string())
+                )),
+                offset: 0,
+            }
+        )
     }
 }

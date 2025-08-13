@@ -13,7 +13,6 @@ impl<'ctx> ARMCORTEXA<'_> {
         let reg1 = reg_iter.next().expect("Need first source register");
         let reg2 = reg_iter.next().expect("Need second source register");
 
-        let r0 = self.get_register(reg0);
         let r1 = self.get_register(reg1);
         let mut r2 = self.get_register(reg2);
 

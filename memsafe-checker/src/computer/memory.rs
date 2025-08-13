@@ -235,6 +235,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         let mut symbolic_base = false;
         let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => {
+                println!("memory : {:?}", self.memory);
                 if let Some(region) = self.memory.get(&regbase.clone()) {
                     (
                         region,
@@ -252,7 +253,6 @@ impl<'ctx> ARMCORTEXA<'_> {
                             ast::Int::new_const(self.context, regbase),
                         )
                     } else {
-                        println!("region: {:?}", base_expr);
                         todo!("memory regions in access check");
                     }
                 }

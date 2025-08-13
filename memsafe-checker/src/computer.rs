@@ -238,7 +238,14 @@ impl<'ctx> ARMCORTEXA<'_> {
     pub fn get_register(&mut self, reg: &Operand) -> RegisterValue {
         return match reg {
             // TODO: reimplement accessing half a register using w
-            Operand::Register(_, index) => self.registers[*index].clone(),
+            Operand::Register(prefix, index) => match prefix {
+                RePrefix::Fp => self.registers[29].clone(),
+                RePrefix::Ra => self.registers[30].clone(),
+                RePrefix::Sp => self.registers[31].clone(),
+                RePrefix::Ze => self.registers[32].clone(),
+                RePrefix::X | RePrefix::W => self.registers[*index].clone(),
+                _ => todo!("invalid register prefix in get register"),
+            },
             Operand::Immediate(value) => RegisterValue::new_imm(*value),
             Operand::VectorRegister(_, index) => self.simd_registers[*index].get_as_register(),
             _ => panic!("Not a valid register operand for operation"),
@@ -295,7 +302,6 @@ impl<'ctx> ARMCORTEXA<'_> {
     }
 
     fn label_to_memory_index(&self, label: String) -> (String, i64) {
-        todo!("implement label to memory index func");
         return ("memory".to_string(), 0);
     }
 
@@ -338,12 +344,6 @@ impl<'ctx> ARMCORTEXA<'_> {
     ) -> Result<ExecuteReturnType, String> {
         match instruction.ty {
             InstructionType::Arithmetic => match instruction.opcode.as_str() {
-                "cmp" => {
-                    self.cmp(&instruction.operands[0], &instruction.operands[1]);
-                }
-                "cmn" => {
-                    self.cmn(&instruction.operands[0], &instruction.operands[1]);
-                }
                 "add" => {
                     self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
                 }
@@ -817,268 +817,185 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                     panic!("b.cc/lo/blo not invoked correctly");
                 }
-                "ret" => {
-                    let x30 = self.get_register(&Operand::Register(RePrefix::X, 30));
-                    if x30.kind == RegisterKind::RegisterBase {
-                        if let Some(AbstractExpression::Abstract(address)) = x30.base {
-                            if address == "return" && x30.offset == 0 {
-                                return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                            } else {
-                                return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
+                "cset" => {
+                    // match on condition based on flags
+                    let mut reg_iter = instruction.operands.iter();
+
+                    let register = register_to_tuple(reg_iter.next().expect("cset register"));
+                    let Operand::Label(cond) = reg_iter.next().expect("cset condition code") else {
+                        panic!("not a valid condition code")
+                    };
+
+                    match cond.as_str() {
+                        "cs" => match self.carry.clone().expect("Need carry flag set cset cs") {
+                            FlagValue::Real(b) => {
+                                if b == true {
+                                    self.set_register_from_tuple(
+                                        register,
+                                        RegisterKind::Immediate,
+                                        None,
+                                        1,
+                                    );
+                                } else {
+                                    self.set_register_from_tuple(
+                                        register,
+                                        RegisterKind::Immediate,
+                                        None,
+                                        0,
+                                    );
+                                }
+                            }
+                            FlagValue::Abstract(_) => {
+                                log::error!("Can't support this yet :)");
+                                todo!("Abstract Flag Expression3");
+                            }
+                        },
+                        "cc" | "lo" => {
+                            match self.carry.clone().expect("Need carry flag set cset cc") {
+                                FlagValue::Real(b) => {
+                                    if b == false {
+                                        self.set_register_from_tuple(
+                                            register,
+                                            RegisterKind::Immediate,
+                                            None,
+                                            1,
+                                        );
+                                    } else {
+                                        self.set_register_from_tuple(
+                                            register,
+                                            RegisterKind::Immediate,
+                                            None,
+                                            0,
+                                        );
+                                    }
+                                }
+                                FlagValue::Abstract(_) => {
+                                    log::error!("Can't support this yet :)");
+                                    todo!("Abstract Flag Expression3");
+                                }
                             }
                         }
-                        return Ok(ExecuteReturnType::JumpAddress(
-                            x30.offset.try_into().expect("computer4"),
-                        ));
-                    } else {
-                        panic!("return register not set before calling ret")
+                        a => todo!("unimplemented condition code for set {}", a),
                     }
                 }
-                _ => todo!(),
-                //     "cset" => {
-                //         // match on condition based on flags
-                //         match instruction
-                //             .r2
-                //             .clone()
-                //             .expect("Need to provide a condition")
-                //             .as_str()
-                //         {
-                //             "cs" => match self.carry.clone().expect("Need carry flag set cset cs") {
-                //                 FlagValue::Real(b) => {
-                //                     if b == true {
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             RegisterKind::Immediate,
-                //                             None,
-                //                             1,
-                //                         );
-                //                     } else {
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             RegisterKind::Immediate,
-                //                             None,
-                //                             0,
-                //                         );
-                //                     }
-                //                 }
-                //                 FlagValue::Abstract(_) => {
-                //                     log::error!("Can't support this yet :)");
-                //                     todo!("Abstract Flag Expression3");
-                //                 }
-                //             },
-                //             "cc" | "lo" => match self.carry.clone().expect("Need carry flag set cset cc") {
-                //                 FlagValue::Real(b) => {
-                //                     if b == false {
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             RegisterKind::Immediate,
-                //                             None,
-                //                             0,
-                //                         );
-                //                     } else {
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             RegisterKind::Immediate,
-                //                             None,
-                //                             1,
-                //                         );
-                //                     }
-                //                 }
-                //                 FlagValue::Abstract(_) => {
-                //                     log::error!("Can't support this yet :)");
-                //                     todo!("Abstract flag expressions 4");
-                //                 }
-                //             },
-                //             _ => todo!("unsupported comparison type {:?}", instruction.r2),
-                //         }
-                //     }
-                //     "csel" => {
-                //         // match on condition based on flags
-                //         match instruction
-                //             .r4
-                //             .clone()
-                //             .expect("Need to provide a condition")
-                //             .as_str()
-                //         {
-                //             "cc" | "lo" => match self.carry.clone().expect("Need carry flag set csel cc") {
-                //                 FlagValue::Real(b) => {
-                //                     if b == true {
-                //                         let register = self.registers[get_register_index(
-                //                             instruction.r2.clone().expect("Need first source register"),
-                //                         )]
-                //                         .clone();
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             register.kind,
-                //                             register.base,
-                //                             register.offset,
-                //                         );
-                //                     } else {
-                //                         let register = self.registers[get_register_index(
-                //                             instruction.r3.clone().expect("Need first source register"),
-                //                         )]
-                //                         .clone();
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             register.kind,
-                //                             register.base,
-                //                             register.offset,
-                //                         );
-                //                     }
-                //                 }
-                //                 FlagValue::Abstract(a) => {
-                //                     let opt1 = self.registers[get_register_index(
-                //                         instruction.r2.clone().expect("Need first source register"),
-                //                     )]
-                //                     .clone();
+                "csel" => {
+                    // match on condition based on flags
+                    let mut reg_iter = instruction.operands.iter();
 
-                //                     let opt2 = self.registers[get_register_index(
-                //                         instruction.r3.clone().expect("Need second source register"),
-                //                     )]
-                //                     .clone();
+                    let dest = reg_iter.next().expect("cset register");
+                    let opt1 = self.get_register(reg_iter.next().expect("csel register"));
+                    let opt2 = self.get_register(reg_iter.next().expect("csel register"));
+                    let Operand::Label(cond) = reg_iter.next().expect("csel condition code") else {
+                        panic!("not a valid condition code")
+                    };
 
-                //                     return Ok(ExecuteReturnType::Select(a, instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //                 }
-                //             },
-                //             "cs" => match self.carry.clone() {
-                //                 Some(FlagValue::Real(b)) => {
-                //                     if b == false {
-                //                         let register = self.registers[get_register_index(
-                //                             instruction.r2.clone().expect("Need first source register"),
-                //                         )]
-                //                         .clone();
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             register.kind,
-                //                             register.base,
-                //                             register.offset,
-                //                         );
-                //                     } else {
-                //                         let register = self.registers[get_register_index(
-                //                             instruction.r3.clone().expect("Need first source register"),
-                //                         )]
-                //                         .clone();
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             register.kind,
-                //                             register.base,
-                //                             register.offset,
-                //                         );
-                //                     }
-                //                 }
-                //                 Some(FlagValue::Abstract(a)) => {
-                //                     let opt1 = self.registers[get_register_index(
-                //                         instruction.r2.clone().expect("Need first source register"),
-                //                     )]
-                //                     .clone();
+                    match cond.as_str() {
+                        "cc" | "lo" => {
+                            match self.carry.clone().expect("Need carry flag set csel cc") {
+                                FlagValue::Real(b) => {
+                                    if b == true {
+                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                                    } else {
+                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                                    }
+                                }
+                                FlagValue::Abstract(a) => {
+                                    return Ok(ExecuteReturnType::Select(
+                                        a,
+                                        dest.clone(),
+                                        opt1,
+                                        opt2,
+                                    ));
+                                }
+                            }
+                        }
+                        "cs" => match self.carry.clone() {
+                            Some(FlagValue::Real(b)) => {
+                                if b == false {
+                                    self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                                } else {
+                                    self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                                }
+                            }
+                            Some(FlagValue::Abstract(a)) => {
+                                return Ok(ExecuteReturnType::Select(
+                                    a.not(),
+                                    dest.clone(),
+                                    opt1,
+                                    opt2,
+                                ));
+                            }
+                            None => {
+                                return Ok(ExecuteReturnType::Select(
+                                    AbstractComparison::new(
+                                        "==",
+                                        AbstractExpression::Abstract("c_flag".to_string()),
+                                        AbstractExpression::Immediate(1),
+                                    ),
+                                    dest.clone(),
+                                    opt1,
+                                    opt2,
+                                ));
+                            }
+                        },
+                        "eq" => {
+                            match self.zero.clone().expect("Need zero flag set") {
+                                FlagValue::Real(z) => {
+                                    if z == true {
+                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                                    } else {
+                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                                    }
+                                }
+                                FlagValue::Abstract(z) => {
+                                    return Ok(ExecuteReturnType::Select(
+                                        z,
+                                        dest.clone(),
+                                        opt1,
+                                        opt2,
+                                    ));
+                                }
+                            };
+                        }
+                        a => todo!("csel with condition code not yet implemented {}", a),
+                    }
+                }
+                "csetm" => {
+                    let mut reg_iter = instruction.operands.iter();
 
-                //                     let opt2 = self.registers[get_register_index(
-                //                         instruction.r3.clone().expect("Need second source register"),
-                //                     )]
-                //                     .clone();
+                    let dest = reg_iter.next().expect("cset register");
+                    let Operand::Label(cond) = reg_iter.next().expect("cset condition code") else {
+                        panic!("not a valid condition code")
+                    };
 
-                //                     return Ok(ExecuteReturnType::Select(a.not(), instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //                 }
-                //                 None => {
-                //                     let opt1 = self.registers[get_register_index(
-                //                         instruction.r2.clone().expect("Need first source register"),
-                //                     )]
-                //                     .clone();
+                    match cond.as_str() {
+                        "eq" => match self.zero.clone().expect("Need zero flag set") {
+                            FlagValue::Real(b) => {
+                                if b == true {
+                                    self.set_register(&dest, RegisterKind::Immediate, None, 1);
+                                } else {
+                                    self.set_register(&dest, RegisterKind::Immediate, None, 0);
+                                }
+                            }
+                            FlagValue::Abstract(a) => {
+                                let opt1 = RegisterValue {
+                                    kind: RegisterKind::Immediate,
+                                    base: None,
+                                    offset: 1,
+                                };
+                                let opt2 = RegisterValue {
+                                    kind: RegisterKind::Immediate,
+                                    base: None,
+                                    offset: 1,
+                                };
 
-                //                     let opt2 = self.registers[get_register_index(
-                //                         instruction.r3.clone().expect("Need second source register"),
-                //                     )]
-                //                     .clone();
-                //                     return Ok(ExecuteReturnType::Select(AbstractComparison::new("==", AbstractExpression::Abstract("c_flag".to_string()), AbstractExpression::Immediate(1)), instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //                 }
-                //             },
-                //             "eq" => {
-                //                 match self.zero.clone().expect("Need zero flag set") {
-                //                     FlagValue::Real(z) => {
-                //                         if z == true {
-                //                             let register = self.registers[get_register_index(
-                //                                 instruction.r2.clone().expect("Need first source register"),
-                //                             )]
-                //                             .clone();
-                //                             self.set_register(
-                //                                 instruction.r1.clone().expect("need dst register"),
-                //                                 register.kind,
-                //                                 register.base,
-                //                                 register.offset,
-                //                             );
-                //                         } else {
-                //                             let register = self.registers[get_register_index(
-                //                                 instruction.r3.clone().expect("Need first source register"),
-                //                             )]
-                //                             .clone();
-                //                             self.set_register(
-                //                                 instruction.r1.clone().expect("need dst register"),
-                //                                 register.kind,
-                //                                 register.base,
-                //                                 register.offset,
-                //                             );
-                //                         }
-                //                     }
-                //                     FlagValue::Abstract(z) => {
-                //                         let opt1 = self.registers[get_register_index(
-                //                             instruction.r2.clone().expect("Need first source register"),
-                //                         )]
-                //                         .clone();
-                //                         let opt2 = self.registers[get_register_index(
-                //                             instruction.r3.clone().expect("Need second source register"),
-                //                         )]
-                //                         .clone();
-                //                         return Ok(ExecuteReturnType::Select(z, instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //                     }
-                //                 };
-                //             },
-                //             _ => todo!("unsupported comparison type for csel {:?}", instruction.r4),
-                //         }
-                //     }
-                //     "csetm" => {
-                //         // match on condition based on flags
-                //         match instruction
-                //             .r2
-                //             .clone()
-                //             .expect("Need to provide a condition")
-                //             .as_str()
-                //         {
-                //             "eq" => match self.zero.clone().expect("Need zero flag set") {
-                //                 FlagValue::Real(b) => {
-                //                     if b == true {
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             RegisterKind::Immediate,
-                //                             None,
-                //                             1,
-                //                         );
-                //                     } else {
-                //                         self.set_register(
-                //                             instruction.r1.clone().expect("need dst register"),
-                //                             RegisterKind::Immediate,
-                //                             None,
-                //                             0,
-                //                         );
-                //                     }
-                //                 }
-                //                 FlagValue::Abstract(a) => {
-                //                     let opt1 = RegisterValue {
-                //                         kind: RegisterKind::Immediate,
-                //                         base: None,
-                //                         offset: 1,
-                //                     };
-                //                     let opt2= RegisterValue {
-                //                         kind: RegisterKind::Immediate,
-                //                         base: None,
-                //                         offset: 1,
-                //                     };
-
-                //                     return Ok(ExecuteReturnType::Select(a, instruction.r1.clone().expect("need dst register"), opt1, opt2));
-                //                 }
-                //             },
-                //             _ => todo!("unsupported comparison type {:?}", instruction.r2),
-                //         }
-                //     }
+                                return Ok(ExecuteReturnType::Select(a, dest.clone(), opt1, opt2));
+                            }
+                        },
+                        _ => todo!("unsupported condition code for csetm {:?}", cond),
+                    }
+                }
+                a => todo!("arithmetic instruction not yet implemented {:?}", a),
             },
             InstructionType::Memory => match instruction.opcode.as_str() {
                 "ldr" | "ldrb" => {
@@ -1283,11 +1200,37 @@ impl<'ctx> ARMCORTEXA<'_> {
                 _ => todo!(),
             },
             InstructionType::SIMDArithmetic => {
-                todo!();
+                todo!("simd arithmetic");
             }
             InstructionType::SIMDManagement => {
-                todo!();
+                todo!("simd register movement");
             }
+            InstructionType::Other => match instruction.opcode.as_str() {
+                "cmp" => {
+                    self.cmp(&instruction.operands[0], &instruction.operands[1]);
+                }
+                "cmn" => {
+                    self.cmn(&instruction.operands[0], &instruction.operands[1]);
+                }
+                "ret" => {
+                    let x30 = self.get_register(&Operand::Register(RePrefix::X, 30));
+                    if x30.kind == RegisterKind::RegisterBase {
+                        if let Some(AbstractExpression::Abstract(address)) = x30.base {
+                            if address == "return" && x30.offset == 0 {
+                                return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
+                            } else {
+                                return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
+                            }
+                        }
+                        return Ok(ExecuteReturnType::JumpAddress(
+                            x30.offset.try_into().expect("computer4"),
+                        ));
+                    } else {
+                        panic!("return register not set before calling ret")
+                    }
+                }
+                a => todo!("other instruction not implemented yet {:?}", a),
+            },
             _ => panic!(),
         }
 
