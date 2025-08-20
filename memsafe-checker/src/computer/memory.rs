@@ -59,7 +59,11 @@ impl<'ctx> ARMCORTEXA<'_> {
         }
     }
 
-    fn load_vector(&mut self, t: Operand, address: RegisterValue) -> Result<(), MemorySafetyError> {
+    pub fn load_vector(
+        &mut self,
+        t: Operand,
+        address: RegisterValue,
+    ) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
             address.base.clone().expect("Need a name for region"),
             address.offset,
@@ -165,7 +169,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         }
     }
 
-    fn store_vector(
+    pub fn store_vector(
         &mut self,
         register: Operand,
         address: RegisterValue,

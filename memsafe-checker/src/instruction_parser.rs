@@ -714,6 +714,42 @@ mod tests {
             good_result
         );
     }
+    #[test]
+    fn test_parse_simd_ld1_multiple_dst() {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
+            opcode: String::from("ld1"),
+            operands: Vec::from([
+                Operand::Vector(RePrefix::V, 24, Arrangement::D2),
+                Operand::Vector(RePrefix::V, 25, Arrangement::D2),
+                Operand::Vector(RePrefix::V, 26, Arrangement::D2),
+                Operand::Vector(RePrefix::V, 27, Arrangement::D2),
+                Operand::Memory(RePrefix::X, 10, None, None, None),
+            ]),
+        };
+        assert_eq!(
+            Instruction::new("ld1 {v24.2d,v25.2d,v26.2d,v27.2d}, [x10]".to_string()),
+            good_result
+        );
+    }
+    #[test]
+    fn test_parse_simd_ld1_multiple_dst_with_offset() {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
+            opcode: String::from("ld1"),
+            operands: Vec::from([
+                Operand::Vector(RePrefix::V, 20, Arrangement::D2),
+                Operand::Vector(RePrefix::V, 21, Arrangement::D2),
+                Operand::Vector(RePrefix::V, 22, Arrangement::D2),
+                Operand::Vector(RePrefix::V, 23, Arrangement::D2),
+                Operand::Memory(RePrefix::X, 10, Some(64), None, Some(true)),
+            ]),
+        };
+        assert_eq!(
+            Instruction::new("ld1	{v20.2d,v21.2d,v22.2d,v23.2d}, [x10],#64".to_string()),
+            good_result
+        );
+    }
 
     #[test]
     fn test_parse_simd_st1() {

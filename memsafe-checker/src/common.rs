@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use z3::*;
 
-use crate::instruction_parser;
+use crate::instruction_parser::{self, Arrangement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RegisterKind {
@@ -157,42 +157,55 @@ impl SimdRegister {
         }
     }
 
-    pub fn set(
+    pub fn set_from_register(
         &mut self,
-        _arrangement: String,
-        kind: RegisterKind,
-        base: [Option<AbstractExpression>; 16],
-        offset: [u8; 16],
-    ) {
-        self.kind = kind;
-        self.base = base;
-        self.offset = offset;
-    }
-
-    pub fn set_register(
-        &mut self,
-        arrangement: String,
+        arrangement: Arrangement,
         kind: RegisterKind,
         base: Option<AbstractExpression>,
         offset: u128,
     ) {
         self.kind = kind;
-        if let Some(b) = base {
-            for i in 0..15 {
-                self.base[i] = Some(AbstractExpression::Expression(
-                    "&".to_string(),
-                    Box::new(AbstractExpression::Abstract(format!(
-                        "{}{}",
-                        arrangement, i
-                    ))),
-                    Box::new(b.clone()),
-                ));
+        match arrangement {
+            Arrangement::B16 => {
+                if let Some(b) = base {
+                    for i in 0..15 {
+                        self.base[i] = Some(AbstractExpression::Expression(
+                            "&".to_string(),
+                            Box::new(AbstractExpression::Abstract(format!(
+                                "{:?}{}",
+                                arrangement, i
+                            ))),
+                            Box::new(b.clone()),
+                        ));
+                    }
+                } else {
+                    self.base = [BASE_INIT; 16];
+                }
+                self.offset = [(offset as u8).try_into().expect("conversion to u8 failed"); 16];
             }
-        } else {
-            self.base = [BASE_INIT; 16];
+            Arrangement::H8 => {
+                let offset = offset as u16;
+                let new_bases = [BASE_INIT; 2];
+                for i in 0..8 {
+                    self.set_halfword(i, new_bases.clone(), offset.to_be_bytes());
+                }
+            }
+            Arrangement::S4 => {
+                let offset = offset as u32;
+                let new_bases = [BASE_INIT; 4];
+                for i in 0..4 {
+                    self.set_word(i, new_bases.clone(), offset.to_be_bytes());
+                }
+            }
+            Arrangement::D2 => {
+                let offset = offset as u64;
+                let new_bases = [BASE_INIT; 8];
+                for i in 0..2 {
+                    self.set_double(i, new_bases.clone(), offset.to_be_bytes());
+                }
+            }
+            a => todo!("support setting from register across {:?} channels", a),
         }
-
-        self.offset = offset.to_be_bytes();
     }
 
     pub fn get_as_register(&self) -> RegisterValue {
