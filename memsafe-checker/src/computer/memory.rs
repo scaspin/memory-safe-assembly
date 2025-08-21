@@ -239,7 +239,6 @@ impl<'ctx> ARMCORTEXA<'_> {
         let mut symbolic_base = false;
         let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => {
-                println!("memory : {:?}", self.memory);
                 if let Some(region) = self.memory.get(&regbase.clone()) {
                     (
                         region,

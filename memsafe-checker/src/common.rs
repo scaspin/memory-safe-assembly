@@ -166,7 +166,8 @@ impl SimdRegister {
     ) {
         self.kind = kind;
         match arrangement {
-            Arrangement::B16 => {
+            Arrangement::B16 | Arrangement::B8 => {
+                // FIX
                 if let Some(b) = base {
                     for i in 0..15 {
                         self.base[i] = Some(AbstractExpression::Expression(
@@ -203,6 +204,18 @@ impl SimdRegister {
                 for i in 0..2 {
                     self.set_double(i, new_bases.clone(), offset.to_be_bytes());
                 }
+            }
+            Arrangement::S => {
+                let offset = offset as u32;
+                let new_bases = [BASE_INIT; 4];
+                // FIX to take in index
+                self.set_word(0, new_bases.clone(), offset.to_be_bytes());
+            }
+            Arrangement::D => {
+                let offset = offset as u64;
+                let new_bases = [BASE_INIT; 8];
+                // FIX to take in index
+                self.set_double(0, new_bases.clone(), offset.to_be_bytes());
             }
             a => todo!("support setting from register across {:?} channels", a),
         }
@@ -621,7 +634,10 @@ pub fn get_register_name_string(r: String) -> String {
     return r;
 }
 
-pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> Option<ast::Int> {
+pub fn expression_to_ast(
+    context: &Context,
+    expression: AbstractExpression,
+) -> Option<ast::Int<'_>> {
     match expression.clone() {
         AbstractExpression::Immediate(num) => {
             return Some(ast::Int::from_i64(context, num));
@@ -666,7 +682,10 @@ pub fn expression_to_ast(context: &Context, expression: AbstractExpression) -> O
     }
 }
 
-pub fn comparison_to_ast(context: &Context, expression: AbstractComparison) -> Option<ast::Bool> {
+pub fn comparison_to_ast(
+    context: &Context,
+    expression: AbstractComparison,
+) -> Option<ast::Bool<'_>> {
     let left = expression_to_ast(context, *expression.left).expect("common10");
     let right = expression_to_ast(context, *expression.right).expect("common11");
     match expression.op.as_str() {

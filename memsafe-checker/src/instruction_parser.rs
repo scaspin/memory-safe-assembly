@@ -41,7 +41,7 @@ impl Arrangement {
             "2s" => Arrangement::S2,
             "4s" => Arrangement::S4,
             "2d" => Arrangement::D2,
-            "d" => Arrangement::D,
+            "d" | "1d" => Arrangement::D,
             "s" => Arrangement::S,
             "h" => Arrangement::H,
             "b" => Arrangement::B,
@@ -55,7 +55,13 @@ impl Arrangement {
 pub enum Operand {
     Register(RePrefix, usize),
     Immediate(i64),
-    Memory(RePrefix, usize, Option<i64>, Option<String>, Option<bool>), // like [x0, #16] // bool to represent pre/post index false = pre, true = post
+    Memory(
+        RePrefix,
+        usize,
+        Option<i64>,
+        Option<Box<Operand>>,
+        Option<bool>,
+    ), // like [x0, #16] // bool to represent pre/post index false = pre, true = post
     Bitwise(String, i64), // like lsl#2, TODO: make enum for shift types
     // the "string" param is probably always going to be "v"
     VectorRegister(RePrefix, usize),
@@ -148,7 +154,7 @@ pub fn operand_from_string(a: String) -> Operand {
         }
     }
 
-    if a.contains("v") {
+    if a.starts_with("v") {
         if a.contains(".") {
             let mut parts = a.split('.').into_iter();
             let base = parts
@@ -169,7 +175,7 @@ pub fn operand_from_string(a: String) -> Operand {
                 let i = parts
                     .1
                     .parse::<usize>()
-                    .expect("vector number must be a number");
+                    .expect("vector access number must be a number");
                 return Operand::VectorAccess(RePrefix::V, i, a, index);
             } else {
                 let a = Arrangement::from_string(arrangement);
@@ -182,17 +188,44 @@ pub fn operand_from_string(a: String) -> Operand {
             }
         }
         let parts = a.split_at(1);
-        let i = parts
-            .1
-            .parse::<usize>()
-            .expect("vector number must be a number");
-        return Operand::VectorRegister(RePrefix::V, i);
+        if let Ok(value) = parts.1.parse::<usize>() {
+            return Operand::VectorRegister(RePrefix::V, value);
+        } else {
+            ();
+        }
+    }
+
+    // equivalent to vector registers
+    if a.starts_with("D")
+        || a.starts_with("S")
+        || a.starts_with("H")
+        || a.starts_with("B")
+        || a.starts_with("d")
+        || a.starts_with("s")
+        || a.starts_with("h")
+        || a.starts_with("b")
+    {
+        let parts = a.split_at(1);
+        let arr: Arrangement = match parts.0 {
+            "B" | "b" => Arrangement::B16,
+            "S" | "s" => Arrangement::S4,
+            "D" | "d" => Arrangement::D2,
+            "H" | "h" => Arrangement::H8,
+            a => panic!("invalid arrangement {}", a),
+        };
+
+        if let Ok(value) = parts.1.parse::<usize>() {
+            return Operand::Vector(RePrefix::V, value, arr);
+        } else {
+            ();
+        }
     }
 
     if a.contains("[") || a.contains("]") {
         let mut parts = a.split(',').peekable();
         let mut base: String = String::new();
         let mut offset: Option<i64> = None;
+        let mut register_offset: Option<Box<Operand>> = None;
         let mut indexing: Option<bool> = None;
 
         if let Some(b) = parts.next() {
@@ -203,7 +236,11 @@ pub fn operand_from_string(a: String) -> Operand {
         }
 
         if let Some(o) = parts.next() {
-            offset = Some(string_to_int(o.trim_matches(&['[', ']', ',', '#', '!'])));
+            if o.starts_with("x") || o.starts_with("w") {
+                register_offset = Some(Box::new(operand_from_string(o.to_string())));
+            } else {
+                offset = Some(string_to_int(o.trim_matches(&['[', ']', ',', '#', '!'])));
+            }
         }
 
         if a.contains("!") {
@@ -234,7 +271,7 @@ pub fn operand_from_string(a: String) -> Operand {
         };
 
         // TODO: include shift
-        return Operand::Memory(prefix, num, offset, None, indexing);
+        return Operand::Memory(prefix, num, offset, register_offset, indexing);
     }
 
     if !a.is_empty() {
@@ -297,6 +334,8 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
         return InstructionType::SIMDManagement;
     } else if operands.iter().any(|op| matches!(op, Operand::Memory(..))) {
         return InstructionType::Memory;
+    } else if operands.iter().any(|op| matches!(op, Operand::Address(..))) {
+        return InstructionType::ControlFlow;
     } else if operands.len() > 2
         && operands.iter().all(|op| {
             matches!(op, Operand::Register(..))
@@ -324,8 +363,9 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
 
 impl Instruction {
     pub fn new(input: String) -> Self {
-        let mut parts = input
-            .split(|c| c == '\t' || c == ',' || c == ' ' || c == '{' || c == '}')
+        let delete_curly_brackets = input.replace("{", " ").replace("}", "");
+        let mut parts = delete_curly_brackets
+            .split(|c| c == '\t' || c == ',' || c == ' ')
             .collect::<Vec<&str>>()
             .into_iter()
             .filter(|x| !x.is_empty());
@@ -431,6 +471,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_parse_rev_single_src() {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
+            opcode: String::from("rev"),
+            operands: Vec::from([
+                Operand::Register(RePrefix::W, 3),
+                Operand::Register(RePrefix::W, 3),
+            ]),
+        };
+
+        assert_eq!(Instruction::new("rev w3,w3".to_string()), good_result);
+    }
+
     // #[test]
     // fn test_parse_add_shifted_immediate_with_space() {
     //     let good_result = Instruction {
@@ -453,7 +507,7 @@ mod tests {
     #[test]
     fn test_parse_add_address() {
         let good_result = Instruction {
-            ty: InstructionType::Other,
+            ty: InstructionType::ControlFlow,
             opcode: String::from("add"),
             operands: Vec::from([
                 Operand::Register(RePrefix::X, 30),
@@ -654,6 +708,22 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_adrp_from_sha256() {
+        let good_result = Instruction {
+            ty: InstructionType::ControlFlow,
+            opcode: String::from("adrp"),
+            operands: Vec::from([
+                Operand::Register(RePrefix::X, 9),
+                Operand::Address(String::from("_BORINGSSL_function_hit@PAGEE"), 0),
+            ]),
+        };
+        assert_eq!(
+            Instruction::new("adrp	x9,_BORINGSSL_function_hit@PAGEE".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
     fn test_parse_b_condition_bne() {
         let good_result = Instruction {
             ty: InstructionType::ControlFlow,
@@ -763,6 +833,43 @@ mod tests {
         };
         assert_eq!(
             Instruction::new("st1 { v5.8h }, [x0]".to_string()),
+            good_result
+        );
+    }
+    #[test]
+    fn test_parse_simd_st1_register_offset() {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
+            opcode: String::from("st1"),
+            operands: Vec::from([
+                Operand::Vector(RePrefix::V, 0, Arrangement::S4),
+                Operand::Memory(
+                    RePrefix::X,
+                    0,
+                    None,
+                    Some(Box::new(Operand::Register(RePrefix::X, 4))),
+                    Some(true),
+                ),
+            ]),
+        };
+        assert_eq!(
+            Instruction::new("st1{v0.4s},[x0],x4".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_simd_st1_indexed() {
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
+            opcode: String::from("st1"),
+            operands: Vec::from([
+                Operand::VectorAccess(RePrefix::V, 1, Arrangement::S, 0),
+                Operand::Memory(RePrefix::X, 0, None, None, None),
+            ]),
+        };
+        assert_eq!(
+            Instruction::new("st1	{v1.s}[0],[x0]".to_string()),
             good_result
         );
     }
@@ -947,18 +1054,6 @@ mod tests {
             good_result
         );
     }
-
-    #[test]
-    #[should_panic(expected = "not yet implemented")] // TODO
-    fn test_parse_bad_register_name_prefix() {
-        todo!();
-    }
-
-    #[test]
-    #[should_panic(expected = "not yet implemented")] // TODO
-    fn test_parse_bad_register_name_index() {
-        todo!();
-    }
 }
 
 // // FIX: try to retire this function since errors are sometimes confusing
@@ -981,13 +1076,17 @@ pub fn string_to_int(s: &str) -> i64 {
             let m = string_to_int(part);
             value = value + m;
         }
-    } else if v.contains("x") {
+    } else if v.contains("0x") {
         // FIX: store as two if i128 is needed
         value = i128::from_str_radix(v.strip_prefix("0x").expect("common4"), 16).expect("common5")
             as i64;
     } else {
         let clean = &v.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "");
-        value = clean.parse::<i64>().expect("common6");
+        if clean == "~1<<6" {
+            value = -65
+        } else {
+            value = clean.parse::<i64>().expect(&format!("common6 {:?}", clean));
+        }
     }
 
     return value;

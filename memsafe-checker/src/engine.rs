@@ -70,7 +70,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
             if text.is_empty() {
                 continue;
-            } else if text.starts_with("# ") {
+            } else if text.starts_with("#") {
                 continue;
             } else if text.starts_with('.') {
                 defs.push(text);
@@ -1031,7 +1031,7 @@ mod tests {
         let ctx = Context::new(&cfg);
         let mut engine = ExecutionEngine::new(asm, &ctx);
 
-        let res = engine.start("start".to_string());
+        let _ = engine.start("start".to_string());
         assert_eq!(
             engine.computer.registers[0],
             RegisterValue {

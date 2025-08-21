@@ -235,7 +235,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                     offset as u128,
                 );
             }
-            _ => todo!("not a valid register type for set register"),
+            // FIX
+            Operand::VectorAccess(_, num, arr, _) => {
+                self.simd_registers[*num].set_from_register(
+                    arr.clone(),
+                    kind,
+                    base,
+                    offset as u128,
+                );
+            }
+            a => todo!("not a valid register type for set register {:?}", a),
         }
     }
 
@@ -271,7 +280,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             Operand::VectorAccess(_, index, _, _) => {
                 self.simd_registers[*index].clone().get_as_register()
             }
-            _ => panic!("Not a valid register operand for operation"),
+            a => panic!("Not a valid register operand for operation {:?}", a),
         };
     }
 
@@ -279,6 +288,10 @@ impl<'ctx> ARMCORTEXA<'_> {
         match reg {
             Operand::VectorRegister(_, index) => self.simd_registers[*index].clone(),
             Operand::Vector(_, index, _) => self.simd_registers[*index].clone(),
+            Operand::VectorAccess(_, index, _, _) => {
+                // FIX
+                return self.simd_registers[*index].clone();
+            }
             _ => panic!("cannot get register {:?} as a simd register", reg),
         }
     }
