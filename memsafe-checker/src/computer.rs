@@ -280,7 +280,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             Operand::VectorAccess(_, index, _, _) => {
                 self.simd_registers[*index].clone().get_as_register()
             }
-            a => panic!("Not a valid register operand for operation {:?}", a),
+            a => panic!("Not a valid register operand for get operation {:?}", a),
         };
     }
 

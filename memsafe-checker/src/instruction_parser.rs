@@ -154,6 +154,10 @@ pub fn operand_from_string(a: String) -> Operand {
         }
     }
 
+    if a == "uxtw" || a == "uxtb" || a == "uxth" {
+        return Operand::Bitwise(a, 0);
+    }
+
     if a.starts_with("v") {
         if a.contains(".") {
             let mut parts = a.split('.').into_iter();
@@ -186,12 +190,25 @@ pub fn operand_from_string(a: String) -> Operand {
                     .expect("vector number must be a number");
                 return Operand::Vector(RePrefix::V, i, a);
             }
+        } else if a.contains("[") && a.contains("]") {
+            let mut parts = a.split('[').into_iter();
+            let base = parts
+                .next()
+                .expect("require base register for simd register");
+            let index = string_to_int(parts.next().expect("index required").trim_matches(']'));
+
+            let parts = base.split_at(1);
+            let i = parts
+                .1
+                .parse::<usize>()
+                .expect("vector access number must be a number");
+            return Operand::VectorAccess(RePrefix::V, i, Arrangement::S, index);
         }
         let parts = a.split_at(1);
         if let Ok(value) = parts.1.parse::<usize>() {
             return Operand::VectorRegister(RePrefix::V, value);
         } else {
-            ();
+            ()
         }
     }
 
@@ -285,16 +302,25 @@ pub fn operand_from_string(a: String) -> Operand {
 fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
     let mut result = Vec::new();
 
-    for i in 0..parts.len() {
-        if parts[i].starts_with('[') {
+    // start at 1 to ignore cases like fmov example
+    let mut last_instance = parts.len() + 1;
+    for i in 1..parts.len() {
+        if parts[i].contains("[") {
+            last_instance = i;
+        }
+    }
+
+    for j in 0..parts.len() {
+        if j == last_instance {
             // ignores SIMD/SVE indexing like v1.d[1]
-            let rest = parts[i..].join(",");
+            let rest = parts[j..].join(",");
             result.push(rest);
             break;
         } else {
-            result.push(parts[i].clone());
+            result.push(parts[j].clone());
         }
     }
+
     return result;
 }
 
@@ -363,7 +389,12 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
 
 impl Instruction {
     pub fn new(input: String) -> Self {
-        let delete_curly_brackets = input.replace("{", " ").replace("}", "");
+        let delete_curly_brackets = input
+            .replace(" }", "")
+            .replace("} ", "")
+            .replace("{", " ")
+            .replace("\t", " ")
+            .replace("}", "");
         let mut parts = delete_curly_brackets
             .split(|c| c == '\t' || c == ',' || c == ' ')
             .collect::<Vec<&str>>()
@@ -1054,6 +1085,29 @@ mod tests {
             good_result
         );
     }
+
+    #[test]
+    fn test_parse_rav1d_notation_st1d() {
+        //st1.d	{ v0 }[1], [x0], x4
+        let good_result = Instruction {
+            ty: InstructionType::SIMDManagement,
+            opcode: String::from("st1.d"),
+            operands: Vec::from([
+                Operand::VectorAccess(RePrefix::V, 0, Arrangement::S, 1),
+                Operand::Memory(
+                    RePrefix::X,
+                    0,
+                    None,
+                    Some(Box::new(Operand::Register(RePrefix::X, 4))),
+                    Some(true),
+                ),
+            ]),
+        };
+        assert_eq!(
+            Instruction::new("st1.d	{ v0 }[1], [x0], x4".to_string()),
+            good_result
+        );
+    }
 }
 
 // // FIX: try to retire this function since errors are sometimes confusing
@@ -1076,16 +1130,31 @@ pub fn string_to_int(s: &str) -> i64 {
             let m = string_to_int(part);
             value = value + m;
         }
-    } else if v.contains("0x") {
+    } else if v.starts_with("0x") {
         // FIX: store as two if i128 is needed
-        value = i128::from_str_radix(v.strip_prefix("0x").expect("common4"), 16).expect("common5")
-            as i64;
+        value = i128::from_str_radix(
+            v.strip_prefix("0x").expect("radix parse strip 0x failed"),
+            16,
+        )
+        .expect("radix parse failed") as i64;
+    } else if v.starts_with("-0x") {
+        // FIX: store as two if i128 is needed
+        value = -i128::from_str_radix(
+            v.strip_prefix("-0x").expect("radix parse strip -0x failed"),
+            16,
+        )
+        .expect("radix parse negative failed") as i64;
     } else {
-        let clean = &v.replace(&['(', ')', ',', '\"', '.', ';', ':', '\'', '#'][..], "");
+        let clean = &v.replace(
+            &['(', ')', ',', '\"', '.', ';', ':', '\'', '#', '[', ']'][..],
+            "",
+        );
         if clean == "~1<<6" {
             value = -65
         } else {
-            value = clean.parse::<i64>().expect(&format!("common6 {:?}", clean));
+            value = clean
+                .parse::<i64>()
+                .expect(&format!("integer parsing failed {:?}", clean));
         }
     }
 

@@ -410,6 +410,14 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
                 offset: new_offset,
             }
         }
+        "uxtw" => {
+            // TODO
+            RegisterValue {
+                kind: register.kind,
+                base: register.base,
+                offset: register.offset,
+            }
+        }
         _ => todo!("{}", op),
     }
 }

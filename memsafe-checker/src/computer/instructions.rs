@@ -181,6 +181,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Some(AbstractExpression::Abstract(region)),
                             index,
                         );
+                    } else if let Operand::Label(label) = &instruction.operands[1] {
+                        let (region, index) = self.label_to_memory_index(label.clone());
+                        self.set_register(
+                            &instruction.operands[0],
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(region)),
+                            index,
+                        );
                     } else {
                         panic!("adr not invoked correctly with register and label")
                     }
@@ -627,11 +635,20 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 // BIG TODO: reimplement these
-                "movk" | "tst" => {
+                "tst" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
                     self.set_register(dst, RegisterKind::Number, None, 0);
+                }
+                "mov" | "movz" | "movk" => {
+                    let mut reg_iter = instruction.operands.iter().clone();
+                    let reg0 = reg_iter.next().expect("Need register output for mov");
+                    let reg1 = reg_iter.next().expect("Need register output for mov");
+
+                    let r1 = self.get_register(reg1);
+
+                    self.set_register(reg0, r1.kind, r1.base, r1.offset);
                 }
                 _ => todo!(
                     "control flow instruction not yet implemented {:?}",
@@ -841,7 +858,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 _ => todo!("memory instruction not supported yet {:?}", instruction),
             },
             InstructionType::SIMDArithmetic => match instruction.opcode.as_str() {
-                "rev64" => {
+                "rev64" | "rev64.16b" | "rev64.8h" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dest_op = reg_iter.next().expect("rev64 dst");
@@ -865,11 +882,22 @@ impl<'ctx> ARMCORTEXA<'_> {
                             _ => todo!("rev64 support more arrangement modes"),
                         },
                         Operand::VectorRegister(_, _) => {
-                            // Rav1d syntax
-                            dest.kind = src.kind.clone();
-                            for i in 0..16 {
-                                let (base, offset) = src.get_byte(15 - i);
-                                dest.set_byte(i, base, offset);
+                            let arr = instruction.opcode.split(".").collect::<Vec<&str>>()[1];
+                            match arr {
+                                "16b" => {
+                                    dest.kind = src.kind.clone();
+                                    for i in 0..16 {
+                                        let (base, offset) = src.get_byte(15 - i);
+                                        dest.set_byte(i, base, offset);
+                                    }
+                                }
+                                "8h" => {
+                                    for i in 0..8 {
+                                        let (base, offset) = src.get_halfword(7 - i);
+                                        dest.set_halfword(i, base, offset);
+                                    }
+                                }
+                                _ => todo!("support arr in rav1d for rev64"),
                             }
                         }
                         a => todo!("unsupported operand in simd rev64 {:?}", a),
@@ -984,15 +1012,18 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
-                    let addr = self.get_register(reg_iter.next().expect("need src register ld1r"));
+                    if let Some(Operand::Memory(prefix, num, _, _, _)) = reg_iter.next() {
+                        let a = self.get_register(&Operand::Register(prefix.clone(), *num));
 
-                    match self.load_vector(dst.clone(), addr) {
-                        Err(e) => return Err(e.to_string()),
-                        _ => (),
+                        match self.load_vector(dst.clone(), a) {
+                            Err(e) => return Err(e.to_string()),
+                            _ => (),
+                        }
                     }
                     // let new_value = self.get_register(dst);
                 }
-                "ld1" => {
+                // FIX: extract arrangement from opcode
+                "ld1" | "ld1.16b" | "ld1.8h" => {
                     // multiple versions:
                     // ld1	{v24.2d,v25.2d,v26.2d,v27.2d}, [x10]
                     // ld1 {v0.16b}, [x2], #16
@@ -1001,6 +1032,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     for o in instruction.operands.iter() {
                         match o {
                             Operand::Vector(..) => destinations.push(o),
+                            Operand::VectorRegister(..) => addr = Some(o),
                             Operand::Memory(..) => addr = Some(o),
                             _ => panic!("not a valid operand for instruction ld1"),
                         }
@@ -1029,7 +1061,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         panic!("ld1 does not include address {:?}", instruction)
                     };
                 }
-                "st1" => {
+                "st1" | "st1.d" => {
                     // multiple versions:
                     // st1  {v30.8h, v31.8h}, [x0], #32
                     // st1	{v3.4s},[x2],#16
@@ -1038,8 +1070,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                     for o in instruction.operands.iter() {
                         match o {
                             Operand::Vector(..) => sources.push(o),
+                            Operand::VectorAccess(..) => addr = Some(o),
                             Operand::Memory(..) => addr = Some(o),
-                            _ => panic!("not a valid operand for instruction ld1"),
+                            _ => panic!("not a valid operand for instruction st1"),
                         }
                     }
 
