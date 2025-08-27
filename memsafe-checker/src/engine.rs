@@ -5,6 +5,7 @@ use z3::*;
 
 use crate::common::*;
 use crate::computer::*;
+use crate::instruction_parser::*;
 
 #[derive(Clone)]
 struct Program {
@@ -42,7 +43,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
     pub fn new(lines: Vec<String>, context: &'ctx Context) -> ExecutionEngine<'ctx> {
         // let _ = env_logger::try_init();
         // log::info!("--------");
-        // log::info!("NEW EXEC");
+        // log::info!("NEW EXECUTION ENGINE");
         // log::info!("-------");
 
         // represent code this way, highly unoptimized
@@ -58,6 +59,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
         // first pass, move text into array
         for line in lines {
+            // trim trailing comments and whitespace
             let trimmed = line.trim();
             let nocomment = trimmed.split_once("//");
             let text: String;
@@ -68,7 +70,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
             if text.is_empty() {
                 continue;
-            } else if text.starts_with("# ") {
+            } else if text.starts_with("#") {
                 continue;
             } else if text.starts_with('.') {
                 defs.push(text);
@@ -84,31 +86,13 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
                 }
 
-                // code.push(text.clone());
-
-                if text.ends_with(":") && !text.contains(".") {
-                    let mut label = text.strip_suffix(":").expect("engine1");
-                    label = label.strip_prefix("_").unwrap_or(label);
-                    labels.push((label.to_string(), line_number));
-                    defs.push(text.to_string());
-                    // if text == start {
-                    //     pc = line_number;
-                    // }
-                    code.push(Instruction::new(text))
-                } else {
-                    let parsed = text.parse::<Instruction>();
-                    match parsed {
-                        Ok(i) => code.push(i),
-                        Err(_) => todo!(),
-                    }
+                let i = Instruction::new(text.clone());
+                if i.ty == InstructionType::Label {
+                    labels.push((i.opcode, line_number));
                 }
+                code.push(Instruction::new(text));
 
                 line_number = line_number + 1;
-
-                //if text.contains(':') || text.contains("_") || text.contains("@") {
-                // handle these later
-                //    continue;
-                //}
             }
         }
 
@@ -230,6 +214,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
         }
     }
 
+    pub fn get_register_output(&self, register: usize) -> RegisterValue {
+        return self.computer.registers[register].clone();
+    }
+
     pub fn dont_fail_fast(&mut self) {
         self.fail_fast = false;
     }
@@ -240,7 +228,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
         let pc;
-        match self.get_linenumber_of_label(start) {
+        match self.get_linenumber_of_label(start.trim_matches(|c| c == '_' || c == ':').to_string())
+        {
             Some(n) => pc = n,
             None => {
                 return Err(Error::new(
@@ -267,7 +256,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             let mut instruction = self.program.code[pc].clone();
 
             // skip instruction if it is a label
-            if instruction.op.contains(":") {
+            if instruction.is_label() {
                 pc = pc + 1;
                 instruction = self.program.code[pc].clone();
             }
@@ -572,7 +561,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         (SatResult::Sat, SatResult::Unsat) => {
                             self.add_constraint(condition.clone(), true);
                             self.computer.set_register(
-                                register.clone(),
+                                &register,
                                 option1.kind,
                                 option1.base,
                                 option1.offset,
@@ -582,7 +571,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         (SatResult::Unsat, SatResult::Sat) => {
                             self.add_constraint(condition.clone(), false);
                             self.computer.set_register(
-                                register.clone(),
+                                &register,
                                 option2.kind,
                                 option2.base,
                                 option2.offset,
@@ -594,7 +583,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                             self.add_constraint(condition.clone(), true);
                             self.computer.set_register(
-                                register.clone(),
+                                &register,
                                 option1.kind,
                                 option1.base,
                                 option1.offset,
@@ -603,7 +592,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
                             clone.add_constraint(condition, false);
                             self.computer.set_register(
-                                register,
+                                &register,
                                 option2.kind,
                                 option2.base,
                                 option2.offset,
@@ -987,5 +976,73 @@ impl<'ctx> ExecutionEngine<'ctx> {
             }
             return None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_label_parsing_simple() {
+        let mut asm = Vec::new();
+        asm.push("start:".to_string());
+        asm.push("add x0, x1, x2".to_string());
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let engine = ExecutionEngine::new(asm, &ctx);
+
+        let labels: Vec<(String, usize)> = engine.program.labels;
+        assert_eq!(labels.len(), 1);
+        assert_eq!(labels[0], ("start".to_string(), 0));
+    }
+
+    #[test]
+    fn test_label_parsing_multi() {
+        let mut asm = Vec::new();
+        asm.push("start:".to_string());
+        asm.push("add x0, x1, x2".to_string());
+        asm.push("add x0, x1, x2".to_string());
+        asm.push("add x0, x1, x2".to_string());
+        asm.push("end:".to_string());
+        asm.push("ret".to_string());
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let engine = ExecutionEngine::new(asm, &ctx);
+
+        let labels: Vec<(String, usize)> = engine.program.labels;
+        assert_eq!(labels.len(), 2);
+        assert_eq!(labels[0], ("start".to_string(), 0));
+        assert_eq!(labels[1], ("end".to_string(), 4));
+    }
+
+    #[test]
+    fn test_running_small_program_no_mem_access() {
+        let mut asm = Vec::new();
+        asm.push("start:".to_string());
+        asm.push("add x0, x1, x2".to_string());
+
+        let mut cfg = Config::new();
+        cfg.set_proof_generation(true);
+        let ctx = Context::new(&cfg);
+        let mut engine = ExecutionEngine::new(asm, &ctx);
+
+        let _ = engine.start("start".to_string());
+        assert_eq!(
+            engine.computer.registers[0],
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(generate_expression(
+                    "+",
+                    AbstractExpression::Abstract("x1".to_string()),
+                    AbstractExpression::Abstract("x2".to_string())
+                )),
+                offset: 0,
+            }
+        )
     }
 }

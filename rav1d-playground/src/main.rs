@@ -200,7 +200,7 @@ mod tests {
     #[allow(unreachable_code)]
     #[test]
     fn test_reverse_asm_impls() {
-        todo!();
+        todo!("figure out linking issues with rav1d");
         // TODO: figure out why this fails, what the actual length computation is
 
         let pixel_src: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
