@@ -3,7 +3,7 @@
 This crate exposes the ```#[check_mem_safe()]``` macro that attaches to Rust function declarations and transforms them to "safe" extern calls to assembly.
 Example uses of the macro can be found in the crypto- and rav1d- playgrounds.
 
-When run in ```--release``` mode, the macro will throw a compile error when the analysis cannot conclude the linked assembly is safe.
+Must be run in ```--release``` mode so that the macro will throw a compile error when the analysis cannot conclude the linked assembly is safe.
 This can happen if parameters are not passed in correctly, not all preconditions are defined, the assembly includes unsupported behavior such as system calls, or the assembly has critical memory safety bugs.
 
 
