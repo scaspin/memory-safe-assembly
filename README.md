@@ -1,29 +1,12 @@
 # Memory Safe Assembly
 
-Bottom-up memory-safety for assembly language using symbolic execution
--  ```memsafe-checker``` mem safety checker using symbolic execution (bums) written in Rust
--  ```bums-macros``` macro wrappers to bums crate
--  ```playground``` how to use the macros exposed by ```bums-macros```
+Bottom-up memory-safety checks for assembly using symbolic execution
+
+Repository structure:
+-  ```memsafe-checker``` directory is the ```bums``` crate for the symbolic execution engine
+-  ```bums-macros``` directory contains the **check_mem_safe** macro that derives safety constraints from function calls and invokes the symbolic execution
+-  ```crypto-playground``` shows examples of how to use the macros exposed by ```bums-macros``` to check cryptography from [aws-lc-rs](https://github.com/aws/aws-lc-rs)
+-  ```rav1d-playground``` shows examples of how to use the macros exposed by ```bums-macros``` to check video decoding code from [rav1d](https://github.com/memorysafety/rav1d)
 -  ```asm-files``` assembly files for cryptographic algorithms collected from various crypto libraries
+-  ```scrape-asm``` contains code for searching for assembly in top crates from crates.io
 
-### Framework Goals
-- [x] Quick
-- [x] Static
-- [x] Derive semantics with little programmer help
-- [x] Responsive, i.e. indicating line numbers for "bad" behavior so code can be rewritten
-- [ ] Derive assembly semantics directly from specification
-
-### What does it mean for assembly to be memory-safe?
-
-No definition for memory safety for handwritten assembly code. Would like integration into programs written in
-higher-level memory-safe languages without compromising program memory safety.
-In particular, want to target cryptographic algorithms that mostly contain arithmetic or perhaps need constant time as a security property.
-Simpler memory models allow some simplifying assumptions since we don't need to support a wide range of behaviors.
-
-- Isolation
-    - Reads from inputs, writes to output buffers
-    - Reads/writes from the stack
-    - Reads from program memory
-    - Cannot pointer chase (use a read value as an address for a subsequent read/write)
-- No dependencies on input parameters
-    - No branching or looping on explicit input values (for example, can't do if first byte is X do this, if second byte is Y do this, etc...)
