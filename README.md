@@ -14,7 +14,7 @@ BUMS achieves quick verification times by discarding information about program s
 
 Repository structure:
 -  [memsafe-checker](memsafe-checker) is the ```bums``` symbex engine
--  [bums-macros](bums-macros) exposes the macro
+-  [bums-macro](bums-macro) exposes the macro
 -  [crypto-playground](crypto-playground) has macro examples on cryptography from [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 -  [rav1d-playground](rav1d-playground) has macro examples on video decoding code from [rav1d](https://github.com/memorysafety/rav1d)
 -  [asm-files](asm-files) assembly files for cryptographic algorithms collected from various crypto libraries
