@@ -1,35 +1,41 @@
-Verifying multiple examples can be run using tests:
+## Symbolic Execution of Assembly for Checking Memory Safety
 
-```cargo test```
+Multiple test examples of how to use this library without a wrapping macro can be found in [tests](tests/examples.rs).
 
-and with logging at:
+Note: the computer model is a wip and cannot currently handle the entire Aarch64 ISA.
 
-```RUST_LOG=info cargo test -- --nocapture```
+#### Usage 
+1. Configure and initialize a Z3 context:
+    ```rust
+    use bums;
+    use z3::*;
 
-An assembly file is checked by instantiating a symbolic execution engine from library [engine](src/engine.rs), then adding the appropriate memory regions if needed, and then starting execution by providing the label of the function.
+   let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    ```
+2. Initialize an engine with a program (as Vec<String>) and the context:
+```rust
+    let start_label = "test".to_string();
+    program.push(start_label);
+    program.push("add x0,x0,#1".to_string());
+    program.push("ret".to_string());
+   
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+```
 
-Example cases are shown in [tests](tests/cli.rs) and the original assembly files are [provided](tests/asm-examples) for the following:
-* sha256 arm v8 from boringssl
+3. Initialize any known machine state, such as register values or memory
+```rust
+    engine.add_immediate(String::from("x0"), 1);
+    engine.add_region(RegionType::READ, "Input".to_string(), 64);
+```
 
-## Notes on Z3 checks ##
+4. Run symbolic execution and handle the result
+```rust
+    let res = engine.start(start_label);
+```
 
-When a memory region is added, it has start and end which are values (real or abstract).
-Two constraints are generated and added to solver, along with instantiating the abstracts appropriately. There are at least two abstract: the region "base", i.e the initial address given to the program, and the "pointer", which is the address the program would use to index into this array.
-
-1. base >= 0
-2. start >= 0
-3. end >= 0
-4. pointer >= base + start 
-5. pointer =< base + end 
-
-( where start and end CAN be abstract values. End is not the size of the region since it considers alignment and is the last "safe" address for this region. Alignment is added based on computer defs to calculate the end such that the end is inclusive. )
-These constraints essentially say the pointer can only take specific values based on the region.
-
-When a memory access to this region is performed, we need to check three properties:
-1. pointer = base + index is satisfiable (i.e. this memory access is within the region). This quickly checks the basic case where a memory access is performed in an unreachable are, for example with index = 4 while end = 2.
-
-The next two properties are important when "index" may be undefined. We need to ensure not only that index is possible within the region, but also that there is NO WAY that any possible value of index is outside the memory safe region. A memory access is allowed IFF:
-
-2. index < start is unsatisfiable (we have sufficient constraints to know that "index" is never less than start)
-3. index > end is unsatisfiable (we have sufficient constraints to know that "index" is never greater than index)
-
+#### Contents
+- [engine](src/engine.rs) handles symbolic execution, including running instructions, control flow, and loop acceleration
+- [computer](src/computer.rs) is a model of an Arm Cortex-A computer which transforms and returns values with an ```execute``` function
+- [memory safety checks](src/computer/memory.rs) are handled within the computer logic on loads and stores
+- [parser](src/instruction_parser.rs) parses unstructured string inputs into an instruction type

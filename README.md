@@ -1,29 +1,22 @@
 # Memory Safe Assembly
 
-Bottom-up memory-safety for assembly language using symbolic execution
--  ```memsafe-checker``` mem safety checker using symbolic execution (bums) written in Rust
--  ```bums-macros``` macro wrappers to bums crate
--  ```playground``` how to use the macros exposed by ```bums-macros```
--  ```asm-files``` assembly files for cryptographic algorithms collected from various crypto libraries
+Bottom-up memory-safety (_BUMS_) checks memory safety for assembly linked into Rust using symbolic execution. This repo includes a symbolic execution engine, a procedural macro for easy use of the analysis framework, and some example use cases.
+The symbex engine accepts assembly code and memory regions as inputs, and checks whether the assembly operates within the allowable memory regions for all possible executions. 
+The macro attaches to function declarations in Rust and derives memory regions and thus memory safety conditions automatically.
+The BUMS macro allows developers to specify preconditions on the input passed to the assembly, which may be required for verification to succeed. These preconditions are checked at runtime every time the function is invoked.
 
-### Framework Goals
-- [x] Quick
-- [x] Static
-- [x] Derive semantics with little programmer help
-- [x] Responsive, i.e. indicating line numbers for "bad" behavior so code can be rewritten
-- [ ] Derive assembly semantics directly from specification
 
-### What does it mean for assembly to be memory-safe?
+Currently, the memory safety analysis performed by _BUMS_ is sound but not complete. 
+BUMS can verify isolated programs, i.e, programs that do not allocate or free memory (operating only within memory explicitly passed through input parameters).
+BUMS supports resolving constant-step loops over potentially unbounded input buffers by generating inductive proofs of safety.
+BUMS specifically targets cryptographic code, which is written for constant-time and includes little to no branching on input, thus simplifying symbolic execution.
+BUMS achieves quick verification times by discarding information about program state that could not lead to safe memory accesses, such as the result of a computation over two unspecified input values.
 
-No definition for memory safety for handwritten assembly code. Would like integration into programs written in
-higher-level memory-safe languages without compromising program memory safety.
-In particular, want to target cryptographic algorithms that mostly contain arithmetic or perhaps need constant time as a security property.
-Simpler memory models allow some simplifying assumptions since we don't need to support a wide range of behaviors.
+Repository structure:
+-  [memsafe-checker](memsafe-checker) is the ```bums``` symbex engine
+-  [bums_macros](bums_macros) exposes the macro
+-  [crypto-playground](crypto-playground) has macro examples on cryptography from [aws-lc-rs](https://github.com/aws/aws-lc-rs)
+-  [rav1d-playground](rav1d-playground) has macro examples on video decoding code from [rav1d](https://github.com/memorysafety/rav1d)
+-  [asm-files](asm-files) assembly files for cryptographic algorithms collected from various crypto libraries
+-  [scrape-asm](scrape-asm) contains code for searching for assembly in top crates from crates.io
 
-- Isolation
-    - Reads from inputs, writes to output buffers
-    - Reads/writes from the stack
-    - Reads from program memory
-    - Cannot pointer chase (use a read value as an address for a subsequent read/write)
-- No dependencies on input parameters
-    - No branching or looping on explicit input values (for example, can't do if first byte is X do this, if second byte is Y do this, etc...)
