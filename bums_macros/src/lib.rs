@@ -13,6 +13,8 @@ use syn::*;
 use z3::{Config, Context};
 
 use bums::common::*;
+mod disassembler;
+use disassembler::*;
 
 #[derive(Debug)]
 struct CallColon {
@@ -245,6 +247,10 @@ fn tuple_to_struct(name: String, tuple: TypeTuple) -> ItemStruct {
     let struct_name = syn::Ident::new(&(name + "_struct"), span);
     parse_quote! { #[repr(C)] struct #struct_name { #fields }}
 }
+
+// fn find_binary_with_function(function_name: String) -> (Vec<String, Vec<String>>) {
+//     let project_root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+// }
 
 // ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
