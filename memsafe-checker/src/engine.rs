@@ -218,6 +218,15 @@ impl<'ctx> ExecutionEngine<'ctx> {
         return self.computer.registers[register].clone();
     }
 
+    pub fn load_memory_from_vec(&mut self, region: String, data: Vec<u64>) {
+        let mut address = 0;
+        for d in data {
+            self.computer
+                .add_memory_value(region.clone(), address, d.try_into().unwrap());
+            address = address + 8;
+        }
+    }
+
     pub fn dont_fail_fast(&mut self) {
         self.fail_fast = false;
     }
@@ -241,6 +250,17 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
         // run is recursive
         let res = self.run(pc);
+        match res {
+            Ok(_) => (),
+            Err(err) => return Err(Error::new(ErrorKind::Other, err)),
+        }
+
+        Ok(())
+    }
+
+    pub fn start_at(&mut self, start: usize) -> std::io::Result<()> {
+        // run is recursive
+        let res = self.run(start);
         match res {
             Ok(_) => (),
             Err(err) => return Err(Error::new(ErrorKind::Other, err)),
