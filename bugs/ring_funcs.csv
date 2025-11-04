@@ -1,0 +1,33 @@
+filename,line_number,declaration,reason,call_count,bindgen,public,highlight
+ring/src/prefixed.rs,34,"extern ""C"" { $( prefixed_item! { link_name $name { $( #[$meta] )* $vis fn $name ( $( $arg_pat : $arg_ty ),* ) $( -> $ret_ty )?; } } )+",extern,0,False,False,False
+ring/src/prefixed.rs,54,"extern ""C"" { prefixed_item! { link_name $name { $( #[$meta] )* $vis static $name: $typ; } }",extern,0,False,False,False
+ring/src/prefixed.rs,71,"extern ""C"" { prefixed_item! { link_name $name { $( #[$meta] )* $vis static mut $name: $typ; } }",extern,0,False,False,False
+ring/src/prefixed.rs,95,"$vis:vis unsafe extern ""C""",extern,0,False,False,False
+ring/src/prefixed.rs,103,"$vis unsafe extern ""C"" fn $name ( $( $arg_pat : $arg_ty ),* ) $body",extern,0,False,False,False
+ring/src/arithmetic/ffi.rs,76,"f: unsafe extern ""C"" fn(",extern,0,False,False,False
+ring/src/arithmetic/limbs/fallback/mont.rs,74,"unsafe extern ""C"" fn bn_mul_mont_fallback_impl(",extern,2,False,False,False
+ring/src/arithmetic/limbs/fallback/mont.rs,57,"unsafe extern ""C"" fn bn_mul_mont_fallback(",extern,1,False,False,False
+ring/src/arithmetic/limbs/fallback/mont.rs,103,"// unwind as an `extern ""C""` function.",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,81,"elem_mul_mont: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, b: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,291,"point_mul_impl: unsafe extern ""C"" fn(",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,297,"point_add_jacobian_impl: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, b: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,375,"scalar_mul_mont: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, b: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,714,"elem_sub: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, b: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,766,"elem_div_by_2: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,814,"elem_neg: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,926,"sqr_rep: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, rep: LeakyWord),",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,1024,"point_add_affine: unsafe extern ""C"" fn(",extern,0,False,False,False
+ring/src/ec/suite_b/ops.rs,1081,"point_double: unsafe extern ""C"" fn(",extern,0,False,False,False
+ring/src/ec/suite_b/ops/elem.rs,108,"f: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, b: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops/elem.rs,121,"f: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, b: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops/elem.rs,133,"f: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, b: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops/elem.rs,144,"f: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops/elem.rs,155,"f: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops/elem.rs,165,"f: unsafe extern ""C"" fn(r: *mut Limb, a: *const Limb, b: *const Limb),",extern,0,False,False,False
+ring/src/ec/suite_b/ops/p384.rs,286,"unsafe extern ""C"" fn p384_elem_sqr_mont(",extern,1,False,False,False
+ring/src/digest/sha2/ffi.rs,54,"f: unsafe extern ""C"" fn(",extern,0,False,False,False
+ring/src/cpu/aarch64/fuchsia.rs,23,"extern ""C"" { fn zx_system_get_features(kind: u32, features: *mut u32) -> zx_status_t;",extern,2,False,False,False
+ring/src/aead/chacha/ffi.rs,56,"f: unsafe extern ""C"" fn(*mut u8, *const u8, crate::c::size_t, &[u32; 8], &Counter),",extern,0,False,False,False
+ring/src/aead/aes/ffi.rs,113,"f: unsafe extern ""C"" fn(*const u8, KeyBitLength, *mut AES_KEY) -> c_int,",extern,0,False,False,False
+ring/src/aead/aes/ffi.rs,201,"f: unsafe extern ""C"" fn(",extern,0,False,False,False
+ring/src/aead/aes/ffi.rs,246,"f: unsafe extern ""C"" fn(",extern,0,False,False,False
