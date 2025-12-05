@@ -937,6 +937,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_error]
 pub fn check_mem_safe_from_build(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vars = parse_macro_input!(item as CallColon);
+
     let mut attributes = parse_macro_input!(attr as AttributeListNoFileName);
     let fn_name = &vars.item_fn.ident;
     let output = &vars.item_fn.output;
@@ -1344,7 +1345,8 @@ pub fn check_mem_safe_from_build(attr: TokenStream, item: TokenStream) -> TokenS
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(parsed_program.program, &ctx);
+    let mut engine =
+        bums::engine::ExecutionEngine::new_from_disassembler(parsed_program.program, &ctx);
     engine.add_region(
         RegionType::RW,
         "memory".to_string(),

@@ -44,9 +44,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                 "ror" | "lsl" | "lsr" => {
                     let mut reg_iter = instruction.operands.iter();
 
-                    let reg0 = reg_iter.next().expect("Need destination register");
-                    let reg1 = reg_iter.next().expect("Need first source register");
-                    let reg2 = reg_iter.next().expect("Need second source register");
+                    let reg0 = reg_iter.next().expect("Need destination register ror");
+                    let reg1 = reg_iter.next().expect("Need first source register ror");
+                    let reg2 = reg_iter.next().expect("Need second source register ror");
 
                     self.shift_reg(reg0, reg1, reg2);
                 }
@@ -67,28 +67,30 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
                             }
                         }
-                        _ => todo!("adcs carry is not real not supported yet"),
-                        // Some(FlagValue::Abstract(c)) => {
-                        //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
-                        //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
+                        _ => {
+                            // FIX
+                            self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
+                        } // Some(FlagValue::Abstract(c)) => {
+                          //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
+                          //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
 
-                        //     return Ok(ExecuteReturnType::Select(c.clone(), reg0.clone(), opt0, opt1));
-                        // }
-                        // None => {
-                        //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
-                        //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
+                          //     return Ok(ExecuteReturnType::Select(c.clone(), reg0.clone(), opt0, opt1));
+                          // }
+                          // None => {
+                          //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
+                          //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
 
-                        //     return Ok(ExecuteReturnType::Select(
-                        //         AbstractComparison::new(
-                        //             "==",
-                        //             AbstractExpression::Abstract("carry".to_string()),
-                        //             AbstractExpression::Immediate(1),
-                        //         ),
-                        //         reg0.clone(),
-                        //         opt0,
-                        //         opt1,
-                        //     ));
-                        // }
+                          //     return Ok(ExecuteReturnType::Select(
+                          //         AbstractComparison::new(
+                          //             "==",
+                          //             AbstractExpression::Abstract("carry".to_string()),
+                          //             AbstractExpression::Immediate(1),
+                          //         ),
+                          //         reg0.clone(),
+                          //         opt0,
+                          //         opt1,
+                          //     ));
+                          // }
                     }
                 }
                 "adcs" => {
@@ -111,10 +113,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 self.cmn(reg1, reg2);
                             }
                         }
-                        _ => todo!("adcs carry not real 2"),
+                        Some(FlagValue::Abstract(_)) | None => {
+                            // FIX
+                            self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
+                            self.cmn(reg1, reg2);
+                        }
                     }
                 }
-                "sbc" => match &self.carry {
+                "sbc" | "ngc" => match &self.carry {
                     Some(FlagValue::Real(b)) => {
                         if *b == true {
                             self.arithmetic("-", &|x, y| x - y, instruction.operands.clone());
@@ -530,7 +536,10 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     match cond.as_str() {
                         "cc" | "lo" => {
-                            match self.carry.clone().expect("Need carry flag set csel cc") {
+                            match self.carry.clone().expect(&format!(
+                                "Need carry flag set csel cc/lo at pc {:?} instruction {:?}",
+                                pc, instruction
+                            )) {
                                 FlagValue::Real(b) => {
                                     if b == true {
                                         self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
@@ -1231,6 +1240,19 @@ impl<'ctx> ARMCORTEXA<'_> {
                     r1.offset = r1.offset.swap_bytes();
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);
                 }
+                "sbc" | "ngc" => match &self.carry {
+                    Some(FlagValue::Real(b)) => {
+                        let mut operands = instruction.operands.clone();
+                        if *b == true {
+                            operands.push(Operand::Immediate(1));
+                            self.arithmetic("-", &|x, y| x - y, operands);
+                        } else {
+                            operands.push(Operand::Immediate(0));
+                            self.arithmetic("+", &|x, y| x - y - 1, operands);
+                        }
+                    }
+                    _ => todo!("sbc todo"),
+                },
                 _ => todo!("other instruction not implemented yet {:?}", instruction),
             },
             _ => panic!(),

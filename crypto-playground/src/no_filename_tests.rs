@@ -1,26 +1,29 @@
 use bums_macros;
 
 #[bums_macros::check_mem_safe_from_build(output.as_mut_ptr(), a.as_ptr(), b.as_ptr())]
-fn ecp_nistz256_sub(output: &mut [u64; 4], a: &[u64; 4], b: &[u64; 4]) -> bool;
+fn aws_lc_0_14_1_ecp_nistz256_sub(output: &mut [u64; 4], a: &[u64; 4], b: &[u64; 4]) -> bool;
+
+// #[bums_macros::check_mem_safe("p256-armv8-asm.S",res.as_mut_ptr(), a.as_ptr())]
+// fn ecp_nistz256_point_double(res: &mut [u64; 4], a: &[u64; 4]);
 
 mod tests {
     use super::*;
 
     #[test]
     fn test_ecp_nistz256_sub_macro() {
-        let mut output = [0u64;4];
+        let mut output = [0u64; 4];
         let a = [1u64, 2, 3, 4];
         let b = [4u64, 3, 2, 1];
-        let res = ecp_nistz256_sub(&mut output, &a, &b);
-        
+        let res = aws_lc_0_14_1_ecp_nistz256_sub(&mut output, &a, &b);
+
         assert_eq!(res, true);
-        assert!(output != [0;4]);
+        assert!(output != [0; 4]);
     }
 
     // #[test]
     // fn test_sha512_block_data_order_macro() {
     //     let mut context = [0u32; 16];
-    //     let input = vec![0u8; 256]; 
+    //     let input = vec![0u8; 256];
     //     sha512_block_data_order(&mut context, &input);
 
     //     assert_eq!(context.len(), 16);
@@ -79,9 +82,6 @@ mod tests {
 // TODO: need zero flag set
 // #[bums_macros::check_mem_safe("p256-armv8-asm.S",res.as_mut_ptr(), a.as_ptr())]
 // fn ecp_nistz256_neg(res: &mut [u64; 4], a: &[u64; 4]);
-
-#[bums_macros::check_mem_safe("p256-armv8-asm.S",res.as_mut_ptr(), a.as_ptr())]
-fn ecp_nistz256_point_double(res: &mut [u64; 4], a: &[u64; 4]);
 
 // TODO: implement "ne"
 // #[bums_macros::check_mem_safe("p256-armv8-asm.S", res.as_mut_ptr(), a.as_ptr(), b.as_ptr())]

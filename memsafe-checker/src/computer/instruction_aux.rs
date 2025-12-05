@@ -9,9 +9,15 @@ impl<'ctx> ARMCORTEXA<'_> {
     ) {
         let mut reg_iter = operands.iter();
 
-        let reg0 = reg_iter.next().expect("Need destination register");
-        let reg1 = reg_iter.next().expect("Need first source register");
-        let reg2 = reg_iter.next().expect("Need second source register");
+        let reg0 = reg_iter
+            .next()
+            .expect("Need destination register arithmetic");
+        let reg1 = reg_iter
+            .next()
+            .expect("Need first source register arithmetic");
+        let reg2 = reg_iter
+            .next()
+            .expect("Need second source register arithmetic");
 
         let r1 = self.get_register(reg1);
         let mut r2 = self.get_register(reg2);

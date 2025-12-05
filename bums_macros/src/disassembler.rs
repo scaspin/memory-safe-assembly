@@ -1,7 +1,6 @@
 use capstone::{arch::arm64::ArchMode, arch::BuildsCapstone, Capstone};
 use goblin::mach::Mach;
 use goblin::*;
-use log::info;
 use rustc_demangle::demangle;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,7 +9,7 @@ use std::path::{Path, PathBuf};
 pub struct ParsedFunction {
     pub _name: String,
     pub program: Vec<String>,
-    pub data: Vec<u64>,
+    pub data: Vec<i64>,
     pub start_line: usize,
 }
 
@@ -23,8 +22,6 @@ pub fn find_and_disassemble_aarch64_function(
     let target_path = Path::new(&target_dir);
 
     let (binary_path, line) = find_binary_with_function(target_path, function_name)?;
-
-    info!("Found binary: {}", binary_path.display());
 
     let instructions = disassemble_file_aarch64(&binary_path)?;
     let (filedata, _const_addr) = reconstruct_file_data(&binary_path)?;
@@ -59,17 +56,30 @@ fn function_in_binary(entry: walkdir::DirEntry, function_name: &str) -> (bool, u
     let path = entry.path();
 
     let file_data = std::fs::read(path).expect("Could not read file.");
+
     let bytes = file_data.as_slice();
-    if let Ok(s) = Object::parse(&bytes) {
-        match s {
+    if let Ok(parsed) = Object::parse(&bytes) {
+        match parsed {
             Object::Mach(mach) => match mach {
                 Mach::Binary(macho) => {
                     for s in macho.symbols() {
                         if let Ok((name, nlist)) = s {
-                            let demangled = demangle(name).to_string();
-                            if demangled.contains(function_name) || name.contains(function_name) {
-                                info!("Found symbol: {} in {:?}", demangled, path);
-                                return (true, nlist.n_strx);
+                            let mut demangled = demangle(name).to_string();
+                            demangled = demangled
+                                .strip_prefix("_")
+                                .unwrap_or(&demangled)
+                                .to_string();
+
+                            if demangled.contains(function_name) {
+                                if function_name.contains(&demangled) {
+                                    // let ctx = Context::from_object(&parsed)?;
+                                    // if let Ok(Some(location)) = ctx.find_location( nlist.n_value) {
+                                    //     println!("file: {:?}, line: {:?}", location.file, location.line);
+                                    // }
+                                    // let line = find_symbol_line(path, nlist.n_value);
+                                    let line = nlist.n_value as usize;
+                                    return (true, line + 8);
+                                }
                             }
                         }
                     }
@@ -133,7 +143,7 @@ fn disassemble_file_aarch64<P: AsRef<Path>>(
 // take a filepath and return the instructions in the const section
 fn reconstruct_file_data<P: AsRef<Path>>(
     binary_path: P,
-) -> Result<(Vec<u64>, u64), Box<dyn std::error::Error>> {
+) -> Result<(Vec<i64>, u64), Box<dyn std::error::Error>> {
     use object::{Object, ObjectSection};
 
     let binary_data = fs::read(binary_path).expect("Failed to read file");
@@ -150,7 +160,7 @@ fn reconstruct_file_data<P: AsRef<Path>>(
                     .map(|chunk| {
                         let mut buffer = [0u8; 8];
                         buffer[..chunk.len()].copy_from_slice(chunk);
-                        u64::from_le_bytes(buffer)
+                        i64::from_le_bytes(buffer)
                     })
                     .collect(),
                 addr,
