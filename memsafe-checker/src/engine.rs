@@ -41,11 +41,6 @@ pub struct ExecutionEngine<'ctx> {
 
 impl<'ctx> ExecutionEngine<'ctx> {
     pub fn new(lines: Vec<String>, context: &'ctx Context) -> ExecutionEngine<'ctx> {
-        // let _ = env_logger::try_init();
-        // log::info!("--------");
-        // log::info!("NEW EXECUTION ENGINE");
-        // log::info!("-------");
-
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
         let mut code: Vec<Instruction> = Vec::new();
@@ -160,6 +155,46 @@ impl<'ctx> ExecutionEngine<'ctx> {
             fail_fast: true,
         };
     }
+    pub fn new_from_disassembler(
+        lines: Vec<String>,
+        context: &'ctx Context,
+    ) -> ExecutionEngine<'ctx> {
+        // represent code this way, highly unoptimized
+        let mut code: Vec<Instruction> = Vec::new();
+        let mut labels: Vec<(String, usize)> = Vec::new();
+
+        // grab lines into array
+        let mut line_number = 0;
+
+        // first pass, move text into array
+        for line in lines {
+            let mut text = line.clone();
+
+            //remove address
+            if let Some(colon_index) = line.find(':') {
+                text = text[(colon_index + 1)..].trim().to_string();
+            }
+
+            let i = Instruction::new(text.clone());
+            if i.ty == InstructionType::Label {
+                labels.push((i.opcode, line_number));
+            }
+            code.push(Instruction::new(text));
+
+            line_number = line_number + 1;
+        }
+
+        let computer = ARMCORTEXA::new(context);
+
+        return ExecutionEngine {
+            program: Program { code, labels },
+            computer,
+            jump_history: Vec::new(),
+            in_loop: false,
+            // abstracts: HashMap::new(),
+            fail_fast: true,
+        };
+    }
 
     pub fn add_region(&mut self, ty: RegionType, base: String, length: AbstractExpression) {
         let zero = ast::Int::from_i64(self.computer.context, 0);
@@ -218,6 +253,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
         return self.computer.registers[register].clone();
     }
 
+    pub fn load_memory_from_vec(&mut self, region: String, data: Vec<i64>) {
+        let mut address = 0;
+        for d in data {
+            self.computer.add_memory_value(region.clone(), address, d);
+            address = address + 8;
+        }
+    }
+
     pub fn dont_fail_fast(&mut self) {
         self.fail_fast = false;
     }
@@ -227,6 +270,11 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
+        let _ = env_logger::try_init();
+        log::info!("--------");
+        log::info!("NEW EXECUTION STARTING AT LABEL: {:?}", start);
+        log::info!("-------");
+
         let pc;
         match self.get_linenumber_of_label(start.trim_matches(|c| c == '_' || c == ':').to_string())
         {
@@ -241,6 +289,22 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
         // run is recursive
         let res = self.run(pc);
+        match res {
+            Ok(_) => (),
+            Err(err) => return Err(Error::new(ErrorKind::Other, err)),
+        }
+
+        Ok(())
+    }
+
+    pub fn start_at(&mut self, start: usize) -> std::io::Result<()> {
+        // run is recursive
+        let _ = env_logger::try_init();
+        log::info!("--------");
+        log::info!("NEW EXECUTION STARTING AT LINE: {}", start);
+        log::info!("-------");
+
+        let res = self.run(start);
         match res {
             Ok(_) => (),
             Err(err) => return Err(Error::new(ErrorKind::Other, err)),
@@ -264,7 +328,6 @@ impl<'ctx> ExecutionEngine<'ctx> {
             log::info!("{:?}: {:?}", pc, instruction);
 
             let execute_result = self.computer.execute(pc, &instruction);
-
             match execute_result {
                 Ok(res) => match res {
                     ExecuteReturnType::Next => {
@@ -273,14 +336,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         continue;
                     }
                     ExecuteReturnType::JumpLabel(label) => {
-                        log::info!("jumping to: {}", pc);
                         if &label == "return" {
+                            log::info!("returning");
                             break;
                         }
                         let newline = self.get_linenumber_of_label(label.clone());
                         match newline {
                             Some(n) => {
-                                log::info!("jumping to: {}", n);
+                                log::info!("jumping to: {} {}", n, label);
                                 pc = n;
                             }
                             None => {

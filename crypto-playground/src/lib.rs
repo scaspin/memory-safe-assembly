@@ -5,6 +5,7 @@ pub mod ghash;
 pub mod md5;
 pub mod sha1;
 pub mod sha256;
+pub mod no_filename_tests;
 mod utils;
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]

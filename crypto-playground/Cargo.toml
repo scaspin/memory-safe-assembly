@@ -3,6 +3,9 @@ name = "crypto-playground"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+debug = true
+
 [dependencies]
 bums_macros = { path = "../bums_macros" }
 byteorder = "*"
