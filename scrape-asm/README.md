@@ -5,7 +5,7 @@ Pulls pages of the top crates from crates.io, downloads each crate's source code
 The results are saved in ```data/```.
 
 ### Usage:
-```python3 tool.py \<pages\> -d```
+```python3 rust_asm_search.py \<pages\> -d```
 
 where -d or --delete deletes crates after downloading/analyzing them to minimize memory usage
 
