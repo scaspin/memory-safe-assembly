@@ -46,30 +46,117 @@
 | 31 | filmgrain.s/filmgrain16.s | fguv_loop_sx1_neon | y | y | n | N/A | ? |
 | 32 | filmgrain16.s | get_grain_4_neon | n | n | n | N/A | ? |
 | 33 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
-| 34 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
-| 35 | loopfilter.S/loopfilter16.S | <mark>11/12</mark> | ? | ? | ? | ? | ? |
-| 36 | looprestoration.S/looprestoration16.S | <mark>11</mark> | ? | ? | ? | ? | ? |
-| 37 | looprestoration_common.S | sgr_box3_vert_neon | n | y | n | N/A | Calls "clz", input value bitdepth_max, for calculations |
-| 38 | looprestoration_common.S | sgr_box5_vert_neon | n | y | n | N/A | Calls "clz", input value bitdepth_max, for calculations |
-| 39 | looprestoration_tmpl.S | sgr_finish_filter1_2rows_\bpc\()bpc_neon | n | y | n | N/A | ? |
-| 40 | looprestoration_tmpl.S | sgr_finish_weighted1_\bpc\()bpc_neon | n | y | n | N/A | ? |
-| 41 | looprestoration_tmpl.S | sgr_finish_filter2_2rows_\bpc\()bpc_neon | n | y | n | N/A | ? |
-| 42 | looprestoration_tmpl.S | sgr_finish_weighted2_\bpc\()bpc_neon | n | y | n | N/A | ? |
-| 43 | looprestoration_tmpl.S | sgr_weighted2_\bpc\()bpc_neon | n | y | n | N/A | ? |
-| 44 | mc.S/mc16.S | 17 | ? | ? | ? | ? | ? |
-| 45 | mc16_sve.S | \op\()_8tap_\type\()_16bpc_\isa | n | ? | ? | ? | Calls \op\()_8tap_\isa |
-| 46 | mc16_sve.S | \type\()_8tap_\isa | n | ? | y | 6, \type\()_8tap_h_\isa\()_tbl | ? |
-| 47 | mc16_sve.S | prep_sve | n | ? | y, prep_tbl | 6 | ? |
-| 48 | mc_dotprod.S | \op\()_8tap_\type\()_8bpc_\isa | n | y | y | 6 | Calls \type\()_8tap_\isa, 9 versions, 6 options in page table (need to get disassembled version on different hardware) |
-| 49 | mc_dotprod.S |\type\()_8tap_\isa | n | y | y | 6 | ? |
-| 50 | msac.S | msac_decode_symbol_adapt4_neon | n | y (nested in L(refill)) | n | N/A | ? |
-| 51 | msac.S | msac_decode_symbol_adapt8_neon | n | y | y, above | ? | Calls into "msac_decode_symbol_adapt4_neon"|
-| 52 | msac.S | msac_decode_symbol_adapt16_neon | n | y | y, above | ? | ? |
-| 53 | msac.S | msac_decode_hi_tok_neon | n | n (but interesting jump behavior) | n | N/A | ? |
-| 54 | msac.S | msac_decode_bool_equi_neon | n | n | n | N/A | Jump to L(refill) |
-| 55 | msac.S | msac_decode_bool_neon | n | n | n | N/A | Jump to L(refill) |
-| 56 | msac.S | msac_decode_bool_adapt_neon | n | n | n | N/A | Jump to L(refill) |
-| 57 | refmvs.S | splat_mv_neon | n | y | y | 6, jumptable splat_tbl (.word 320b - splat_tbl ... .word 10b - splat_tbl) endjumptable| ? |
-| 58 | refmvs.S | save_tmvs_neon | n | y | y | 44, jumptable save_tmvs_tbl | ? |
-| 59 | refmvs.S | load_tmvs_neon | n | y? | n | N/A | xloop and yloop, many jumps, maybe good example |
-| 60 | util.S | NONE | ? | ? | ? | ? | ? |
+| 34 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 35 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 36 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 37 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 38 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 39 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 40 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 41 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 42 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 43 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 44 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 45 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 46 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 47 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 48 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 49 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 50 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 51 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 52 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 53 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 54 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 55 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 56 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 57 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 58 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 59 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 60 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 61 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 62 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 63 | ipred.S/ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 64 | ipred16.s | <mark>33/34</mark> | ? | ? | ? | ? | ? |
+| 65 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 66 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 67 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 68 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 69 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 70 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 71 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 72 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 73 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 74 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 75 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 76 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 77 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 78 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 79 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 80 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 81 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 82 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 83 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 84 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 85 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 86 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 87 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 88 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 89 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 90 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 91 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 92 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 93 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 94 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 95 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 96 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 97 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 98 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 99 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 100 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 101 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 102 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 103 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 104 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 105 | itx.S/itx16.S | <mark>68/58</mark> | ? | ? | ? | ? | ? |
+| 106 | loopfilter.S/loopfilter16.S | <mark>11/12</mark> | ? | ? | ? | ? | ? |
+| 107 | looprestoration.S/looprestoration16.S | <mark>11</mark> | ? | ? | ? | ? | ? |
+| 108 | looprestoration_common.S | sgr_box3_vert_neon | n | y | n | N/A | Calls "clz", input value bitdepth_max, for calculations |
+| 109 | looprestoration_common.S | sgr_box5_vert_neon | n | y | n | N/A | Calls "clz", input value bitdepth_max, for calculations |
+| 110 | looprestoration_tmpl.S | sgr_finish_filter1_2rows_\bpc\()bpc_neon | n | y | n | N/A | ? |
+| 111 | looprestoration_tmpl.S | sgr_finish_weighted1_\bpc\()bpc_neon | n | y | n | N/A | ? |
+| 112 | looprestoration_tmpl.S | sgr_finish_filter2_2rows_\bpc\()bpc_neon | n | y | n | N/A | ? |
+| 113 | looprestoration_tmpl.S | sgr_finish_weighted2_\bpc\()bpc_neon | n | y | n | N/A | ? |
+| 114 | looprestoration_tmpl.S | sgr_weighted2_\bpc\()bpc_neon | n | y | n | N/A | ? |
+| 115 | mc.S/mc16.S | \type\()_8bpc_neon | y | y | y | 8, in \type\()_tbl | Uses "\type" instruction, three types: w_avg, and mask |
+| 116 | mc.S/mc16.S | w_mask_\type\()_8bpc_neon | y | 2, non-nested | y | 6, w_mask_\type\()_tbl | type=420,422,444 options |
+| 117 | mc.S/mc16.S | blend_8bpc_neon | y | y, 3 non-nested | y | 4, blend_tbl | ? |
+| 118 | mc.S/mc16.S | blend_h_8bpc_neon | y | y, 4 non-nested (for jumptable) and 1 nested (for 321/32 option) | y | 7, blend_h_tbl | ? |
+| 119 | mc.S/mc16.S | blend_v_8bpc_neon | y | y | y | 5 , blend_v_tbl | ? |
+| 120 | mc.S/mc16.S | put_neon/put_16bpc_neon | y | y | y | 7 ,  put_tbl | From comments: This has got the same signature as the put_8tap functions, and assumes that x8 is set to (clz(w)-24). |
+| 121 | mc.S/mc16.S | prep_neon/prep_16bpc_neon | y | y | y | 6, prep_tbl | From comments: assumes that x8 is set to (clz(w)-24), and x7 to w*2 |
+| 122 | mc.S/mc16.S | \op\()_8tap_\type\()_8bpc_neon | y | ? | ? | ? | A function of macros |
+| 123 | mc.S/mc16.S | \type\()_\taps\()_neon | y | y | \type\()_\taps\()_h_tbl | Not just a jumptable, find b based on name | So many macros, expands fine in diassembled |
+| 124 | mc.S/mc16.S | L(\type\()_\taps\()_v) | y | ? | y | 7,  \type\()_\taps\()_h_tbl | ? |
+| 125 | mc.S/mc16.S | L(\type\()_\taps\()_hv) | y | ? | y | 7, \type\()_\taps\()_hv_tbl | ? |
+| 126 | mc.S/mc16.S | \type\()_bilin_8bpc_neon | y | ? | y | 7, \type\()_bilin_h_tbl | ? |
+| 127 | mc.S/mc16.S | L(\type\()_bilin_v) | y | ? | y | 7, \type\()_bilin_v_tbl | ? |
+| 128 | mc.S/mc16.S | L(\type\()_bilin_hv) | y | ? | y | 7, \type\()_bilin_hv_tbl| ? |
+| 129 | mc.S/mc16.S | warp_filter_horz_neon | y | n | n | N/A | ? |
+| 130 | mc.S/mc16.S | warp_affine_8x8\t\()_8bpc_neon | y |  y | n | N/A | ? |
+| 131 | mc.S/mc16.S | emu_edge_8bpc_neon | y | y | n | N/A | (lots of small loops and interesting branching) |
+| 132 | mc16_sve.S | \op\()_8tap_\type\()_16bpc_\isa | n | ? | ? | ? | Calls \op\()_8tap_\isa |
+| 133 | mc16_sve.S | \type\()_8tap_\isa | n | ? | y | 6, \type\()_8tap_h_\isa\()_tbl | ? |
+| 134 | mc16_sve.S | prep_sve | n | ? | y, prep_tbl | 6 | ? |
+| 135 | mc_dotprod.S | \op\()_8tap_\type\()_8bpc_\isa | n | y | y | 6 | Calls \type\()_8tap_\isa, 9 versions, 6 options in page table (need to get disassembled version on different hardware) |
+| 136 | mc_dotprod.S |\type\()_8tap_\isa | n | y | y | 6 | ? |
+| 137 | msac.S | msac_decode_symbol_adapt4_neon | n | y (nested in L(refill)) | y | N/A | ? |
+| 138 | msac.S | msac_decode_symbol_adapt8_neon | n | y | y, above | ? | Calls into "msac_decode_symbol_adapt4_neon"|
+| 139 | msac.S | msac_decode_symbol_adapt16_neon | n | y | y, above | ? | ? |
+| 140 | msac.S | msac_decode_hi_tok_neon | n | n (but interesting jump behavior) | n | N/A | ? |
+| 141 | msac.S | msac_decode_bool_equi_neon | n | n | n | N/A | Jump to L(refill) |
+| 142 | msac.S | msac_decode_bool_neon | n | n | n | N/A | Jump to L(refill) |
+| 143 | msac.S | msac_decode_bool_adapt_neon | n | n | n | N/A | Jump to L(refill) |
+| 144 | refmvs.S | splat_mv_neon | n | y | y | 6, jumptable splat_tbl (.word 320b - splat_tbl ... .word 10b - splat_tbl) endjumptable| ? |
+| 145 | refmvs.S | save_tmvs_neon | n | y | y | 44, jumptable save_tmvs_tbl | ? |
+| 146 | refmvs.S | load_tmvs_neon | n | y? | n | N/A | xloop and yloop, many jumps, maybe good example |
+| 147 | util.S | NONE | ? | ? | ? | ? | ? |
