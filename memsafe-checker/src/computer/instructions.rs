@@ -1,4 +1,5 @@
 use crate::computer::*;
+use log::info;
 
 impl<'ctx> ARMCORTEXA<'_> {
     pub fn execute(
@@ -204,8 +205,15 @@ impl<'ctx> ARMCORTEXA<'_> {
                             Some(AbstractExpression::Abstract(region)),
                             index << 12,
                         );
+                    } else if let Operand::Label(label) = &instruction.operands[1] {
+                        self.set_register(
+                            &instruction.operands[0],
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(label.clone())),
+                            0,
+                        );
                     } else {
-                        panic!("adrp not invoked correctly with register and label")
+                        panic!("adrp not invoked correctly with register and label {:?}", instruction);
                     }
                 }
                 "cbz" => {
@@ -596,6 +604,40 @@ impl<'ctx> ARMCORTEXA<'_> {
                                 }
                             };
                         }
+                        "gt" => match self.zero.clone() {
+                            Some(FlagValue::Real(b)) => {
+                                if b == false {
+                                    self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                                } else {
+                                    if self.neg.clone() == self.overflow.clone(){
+                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                                    } else {
+                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                                    } 
+                                }
+                            }
+                            Some(FlagValue::Abstract(a)) => {
+                                return Ok(ExecuteReturnType::Select(
+                                    //FIX, does it matter?
+                                    a,
+                                    dest.clone(),
+                                    opt1,
+                                    opt2,
+                                ));
+                            }
+                            None => {
+                                return Ok(ExecuteReturnType::Select(
+                                    AbstractComparison::new(
+                                        ">",
+                                        AbstractExpression::Abstract("z".to_string()),
+                                        AbstractExpression::Immediate(0),
+                                    ),
+                                    dest.clone(),
+                                    opt1,
+                                    opt2,
+                                ));
+                            }
+                        },
                         a => todo!("csel with condition code not yet implemented {}", a),
                     }
                 }
@@ -656,7 +698,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 ),
             },
             InstructionType::Memory => match instruction.opcode.as_str() {
-                "ldr" | "ldrb" => {
+                "ldr" | "ldrb"  => {
                     // TODO: split, have to rewrite load or do post-processing after load to extract meaningful byte
                     let mut reg_iter = instruction.operands.iter();
 
@@ -997,13 +1039,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                 "aese" | "aesmc" | "movi" | "ext" | "ushr" | "dup" | "sshr" | "pmull"
                 | "pmull2" | "zip1" | "zip2" | "trn1" | "trn2" | "bit" | "uaddl" | "uaddl2"
                 | "sqrshrun" | "sqrshrun2" | "umull" | "umull2" | "umlal" | "umlal2" | "rshrn"
-                | "rshrn2" => {
+                | "rshrn2" | _ => {
+                    info!("simd arithmetic instruction not supported yet {:?}",instruction.clone());
+
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
                     self.set_register(dst, RegisterKind::Number, None, 0);
                 }
-                a => todo!("simd arithmetic instruction not supported yet {:?}", a),
             },
             InstructionType::SIMDManagement => match instruction.opcode.as_str() {
                 "ld1r" => {
@@ -1165,13 +1208,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 // BIG TODO: reimplement these
-                "movi" | "mov" | "fmov" | "aese" | "dup" | "ins" => {
+                "movi" | "mov" | "fmov" | "aese" | "dup" | "ins" | _ => {
+                    info!("simd instruction {} not supported yet", instruction.opcode);
+
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
                     self.set_register(dst, RegisterKind::Number, None, 0);
                 }
-                a => todo!("simd instruction {} not supported yet", a),
             },
             InstructionType::Other => match instruction.opcode.as_str() {
                 "cmp" => {
@@ -1230,6 +1274,25 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     r1.offset = r1.offset.swap_bytes();
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);
+                }
+                "clz" => {
+                    let mut reg_iter = instruction.operands.iter().clone();
+                    let reg0 = reg_iter.next().expect("Need register output for clz");
+                    let reg1 = reg_iter.next().expect("Need register input for clz");
+
+                    let r1 = self.get_register(reg1);
+
+                    match r1.kind {
+                        RegisterKind::Immediate => {
+                            let count = r1.offset.leading_zeros();
+                            self.set_register(reg0, RegisterKind::Immediate, None, count as i64);
+                        }
+                        _ => {
+                            // for non-immediate values, we can't determine the count
+                            // can make this more precise later if needed
+                            self.set_register(reg0, RegisterKind::Number, None, 0);
+                        }
+                    }
                 }
                 _ => todo!("other instruction not implemented yet {:?}", instruction),
             },

@@ -256,7 +256,11 @@ impl<'ctx> ARMCORTEXA<'_> {
                             ast::Int::new_const(self.context, regbase),
                         )
                     } else {
-                        todo!("memory regions in access check");
+                        todo!(
+                            "memory region not found in access check {:?} {:?}",
+                            regbase,
+                            self.memory_labels
+                        );
                     }
                 }
             }
