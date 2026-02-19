@@ -4,6 +4,6 @@ members = [
   "memsafe-checker",
   "crypto-playground",
   "rav1d-playground"
-]
+, "bignum-playground"]
 exclude = ["scrape-asm"]
 resolver = "2"

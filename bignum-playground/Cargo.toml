@@ -1,0 +1,12 @@
+[package]
+name = "bignum-playground"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bums_macros = { path = "../bums_macros" }
+cc = "1.1.16"
+
+[build-dependencies]
+bums_macros = { path = "../bums_macros" }
+cc = "1.1.16"
