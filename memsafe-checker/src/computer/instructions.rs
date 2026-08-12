@@ -266,15 +266,17 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "bl" => {
                     if let Operand::Label(label) = &instruction.operands[0] {
+                        // Return to the instruction after this call, not the call site itself
+                        // (otherwise `ret` would jump back here and re-execute the call forever).
                         self.set_register(
                             &Operand::Register(RePrefix::X, 30),
                             RegisterKind::Immediate,
                             None,
-                            pc as i64,
+                            (pc + 1) as i64,
                         );
                         return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
                     } else {
-                        panic!("b not invoked correctly");
+                        panic!("bl not invoked correctly");
                     }
                 }
                 "b.ne" | "bne" => {
@@ -1182,21 +1184,32 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
                 "ret" => {
                     let x30 = self.get_register(&Operand::Register(RePrefix::X, 30));
-                    if x30.kind == RegisterKind::RegisterBase {
-                        if let Some(AbstractExpression::Abstract(address)) = x30.base {
-                            if address == "return" && x30.offset == 0 {
-                                return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                            } else {
-                                return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
+                    match x30.kind {
+                        RegisterKind::RegisterBase => {
+                            if let Some(AbstractExpression::Abstract(address)) = x30.base {
+                                if address == "return" && x30.offset == 0 {
+                                    return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
+                                } else {
+                                    return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
+                                }
                             }
+                            return Ok(ExecuteReturnType::JumpAddress(
+                                x30.offset.try_into().expect("computer4"),
+                            ));
                         }
-                        return Ok(ExecuteReturnType::JumpAddress(
-                            x30.offset.try_into().expect("computer4"),
-                        ));
-                    } else {
-                        // FIX: why would this happen?
-                        return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                        // panic!("return register not set before calling ret {:?}", x30)
+                        RegisterKind::Immediate => {
+                            // x30 holds a concrete return pc pushed by a `bl`; resume there.
+                            return Ok(ExecuteReturnType::JumpAddress(
+                                x30.offset
+                                    .try_into()
+                                    .expect("ret: return address must be non-negative"),
+                            ));
+                        }
+                        RegisterKind::Number => {
+                            // x30 was never set (or was clobbered by unrelated arithmetic):
+                            // treat this as the outermost return.
+                            return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
+                        }
                     }
                 }
                 "mov" | "movz" | "movk" => {

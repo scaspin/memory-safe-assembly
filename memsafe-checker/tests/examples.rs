@@ -442,6 +442,42 @@ fn example_z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
     Ok(())
 }
 
+// Regression test for a bug where `bl` stored the call-site pc (instead of
+// pc+1) as an Immediate on x30, while `ret` only ever recognized a
+// RegisterBase x30 — so `ret` always fell back to treating every return as
+// the outermost return, and code after a `bl` was never executed. This
+// mirrors the AAPCS64 convention of saving/restoring x30 around a nested
+// call, and checks that both the callee's effect (+10) and the code after
+// the call (+1) actually ran.
+#[test]
+fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("test:".to_string());
+    program.push("str x30,[sp,#0]".to_string());
+    program.push("bl sub".to_string());
+    program.push("ldr x30,[sp,#0]".to_string());
+    program.push("add x0,x0,#1".to_string());
+    program.push("ret".to_string());
+    program.push("sub:".to_string());
+    program.push("add x0,x0,#10".to_string());
+    program.push("ret".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_immediate(String::from("x0"), 0);
+
+    let res = engine.start("test".to_string());
+
+    assert!(res.is_ok());
+    assert_eq!(engine.get_register_output(0).base, None);
+    assert_eq!(engine.get_register_output(0).offset, 11);
+    Ok(())
+}
+
 #[test]
 fn example_z3_example_branch() -> std::io::Result<()> {
     //env_logger::init();;
