@@ -256,6 +256,66 @@ fn example_z3_real_bound_safe() -> std::io::Result<()> {
     Ok(())
 }
 
+// Regression test for a bug in `mem_safe_access`'s upper-bound check: accesses
+// through a *symbolic* base expression (x0 here becomes `base + 8`, a compound
+// AbstractExpression, rather than the bare abstract "base") used a looser
+// `>` comparison instead of `>=`, so an access landing exactly on
+// `base+length` (one byte past the end of the region) was incorrectly
+// accepted as safe. The region here is 8 bytes (Immediate(1) -> length 8),
+// so base+8 is exactly one past the end.
+#[test]
+fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("add x0,x0,#8".to_string());
+    program.push("ldr x1,[x0,#0]".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(1),
+    );
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_err());
+    Ok(())
+}
+
+// Same symbolic-base path as above, but landing safely inside the region
+// (base+4 of an 8-byte region), to confirm the tightened boundary check
+// didn't start rejecting legitimately in-bounds symbolic accesses.
+#[test]
+fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("add x0,x0,#4".to_string());
+    program.push("ldr x1,[x0,#0]".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(1),
+    );
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_ok());
+    Ok(())
+}
+
 #[test]
 fn example_z3_real_bound_unsafe() -> std::io::Result<()> {
     init();

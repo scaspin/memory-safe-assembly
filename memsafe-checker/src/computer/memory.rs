@@ -236,7 +236,6 @@ impl<'ctx> ARMCORTEXA<'_> {
         mut offset: i64,
         ty: RegionType,
     ) -> Result<(), MemorySafetyError> {
-        let mut symbolic_base = false;
         let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => {
                 if let Some(region) = self.memory.get(&regbase.clone()) {
@@ -261,7 +260,6 @@ impl<'ctx> ARMCORTEXA<'_> {
                 }
             }
             _ => {
-                symbolic_base = true;
                 let abstracts = base_expr.get_abstracts();
                 let mut result: Option<(&MemorySafeRegion, z3::ast::Int<'_>, z3::ast::Int<'_>)> =
                     None;
@@ -332,13 +330,9 @@ impl<'ctx> ARMCORTEXA<'_> {
             expression_to_ast(self.context, region.get_length()).expect("computer26");
         let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
         let l = access.lt(&low_access);
-        let u = {
-            if offset == 0 && !symbolic_base {
-                access.ge(&up_access)
-            } else {
-                access.gt(&up_access)
-            }
-        };
+        // Valid accesses lie in [base, base+length): an access landing exactly
+        // on base+length is one byte past the end of the region and unsafe.
+        let u = access.ge(&up_access);
 
         match (
             self.solver.check_assumptions(&[l.clone()]),
