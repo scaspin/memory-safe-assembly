@@ -260,6 +260,37 @@ fn example_unrelated_unknowns_not_treated_as_equal() -> std::io::Result<()> {
     Ok(())
 }
 
+// `cmn` carries its own copy of the `r1 == r2` shortcut.
+#[test]
+fn example_unrelated_unknowns_not_treated_as_equal_cmn() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("ldr x1,[x0,#0]".to_string());
+    program.push("ldr x2,[x0,#4]".to_string());
+    program.push("cmn x1,x2".to_string());
+    program.push("b.eq bad".to_string());
+    program.push("ret".to_string());
+    program.push("bad:".to_string());
+    program.push("ret".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(8),
+    );
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_err());
+    Ok(())
+}
+
 #[test]
 fn example_z3_real_bound_safe() -> std::io::Result<()> {
     init();
@@ -286,13 +317,7 @@ fn example_z3_real_bound_safe() -> std::io::Result<()> {
     Ok(())
 }
 
-// Regression test for a bug in `mem_safe_access`'s upper-bound check: accesses
-// through a *symbolic* base expression (x0 here becomes `base + 8`, a compound
-// AbstractExpression, rather than the bare abstract "base") used a looser
-// `>` comparison instead of `>=`, so an access landing exactly on
-// `base+length` (one byte past the end of the region) was incorrectly
-// accepted as safe. The region here is 8 bytes (Immediate(1) -> length 8),
-// so base+8 is exactly one past the end.
+// Symbolic base landing exactly one past the end of an 8-byte region.
 #[test]
 fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
     init();
@@ -318,9 +343,7 @@ fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
     Ok(())
 }
 
-// Same symbolic-base path as above, but landing safely inside the region
-// (base+4 of an 8-byte region), to confirm the tightened boundary check
-// didn't start rejecting legitimately in-bounds symbolic accesses.
+// Same path, landing inside the region.
 #[test]
 fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
     init();
@@ -339,6 +362,108 @@ fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
         RegionType::READ,
         "base".to_string(),
         AbstractExpression::Immediate(1),
+    );
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_ok());
+    Ok(())
+}
+
+// Last byte of an 8-byte region; pins the boundary from the safe side.
+#[test]
+fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("add x0,x0,#7".to_string());
+    program.push("ldr x1,[x0,#0]".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(1),
+    );
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_ok());
+    Ok(())
+}
+
+// Lower bound: backing the pointer below its region.
+#[test]
+fn example_z3_symbolic_base_below_region_unsafe() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("sub x0,x0,#8".to_string());
+    program.push("ldr x1,[x0,#0]".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(1),
+    );
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_err());
+    Ok(())
+}
+
+// In-bounds store into a READ-only region.
+#[test]
+fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("str x1,[x0,#0]".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(8),
+    );
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_err());
+    Ok(())
+}
+
+// Kind check is one-directional: only WRITE-to-READ is rejected.
+#[test]
+fn example_z3_read_from_write_region_safe() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("ldr x1,[x0,#0]".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::WRITE,
+        "base".to_string(),
+        AbstractExpression::Immediate(8),
     );
 
     let res = engine.start("start".to_string());
@@ -532,13 +657,7 @@ fn example_z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
     Ok(())
 }
 
-// Regression test for a bug where `bl` stored the call-site pc (instead of
-// pc+1) as an Immediate on x30, while `ret` only ever recognized a
-// RegisterBase x30 — so `ret` always fell back to treating every return as
-// the outermost return, and code after a `bl` was never executed. This
-// mirrors the AAPCS64 convention of saving/restoring x30 around a nested
-// call, and checks that both the callee's effect (+10) and the code after
-// the call (+1) actually ran.
+// Code after a `bl` must run: callee adds 10, call site adds 1.
 #[test]
 fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
     init();
@@ -565,6 +684,42 @@ fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
     assert!(res.is_ok());
     assert_eq!(engine.get_register_output(0).base, None);
     assert_eq!(engine.get_register_output(0).offset, 11);
+    Ok(())
+}
+
+// Two frames deep: the inner call clobbers x30, so the outer return needs the spill.
+#[test]
+fn example_nested_call_two_levels_returns_to_call_sites() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("test:".to_string());
+    program.push("str x30,[sp,#0]".to_string());
+    program.push("bl outer".to_string());
+    program.push("ldr x30,[sp,#0]".to_string());
+    program.push("add x0,x0,#1".to_string());
+    program.push("ret".to_string());
+    program.push("outer:".to_string());
+    program.push("str x30,[sp,#8]".to_string());
+    program.push("bl inner".to_string());
+    program.push("ldr x30,[sp,#8]".to_string());
+    program.push("add x0,x0,#10".to_string());
+    program.push("ret".to_string());
+    program.push("inner:".to_string());
+    program.push("add x0,x0,#100".to_string());
+    program.push("ret".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_immediate(String::from("x0"), 0);
+
+    let res = engine.start("test".to_string());
+
+    assert!(res.is_ok());
+    assert_eq!(engine.get_register_output(0).base, None);
+    assert_eq!(engine.get_register_output(0).offset, 111);
     Ok(())
 }
 
