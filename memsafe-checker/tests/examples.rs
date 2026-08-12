@@ -231,6 +231,36 @@ fn example_z3_abstract_bound_unsafe_zero() -> std::io::Result<()> {
 }
 
 #[test]
+fn example_unrelated_unknowns_not_treated_as_equal() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("ldr x1,[x0,#0]".to_string());
+    program.push("ldr x2,[x0,#4]".to_string());
+    program.push("cmp x1,x2".to_string());
+    program.push("b.eq bad".to_string());
+    program.push("ret".to_string());
+    program.push("bad:".to_string());
+    program.push("ret".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(8),
+    );
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_err());
+    Ok(())
+}
+
+#[test]
 fn example_z3_real_bound_safe() -> std::io::Result<()> {
     init();
 

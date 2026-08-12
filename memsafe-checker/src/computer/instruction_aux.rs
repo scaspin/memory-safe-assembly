@@ -121,7 +121,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         let r1 = self.get_register(reg1);
         let r2 = self.get_register(reg2);
 
-        if r1 == r2 {
+        if r1 == r2 && r1.kind != RegisterKind::Number {
             self.neg = Some(FlagValue::Real(false));
             self.zero = Some(FlagValue::Real(true));
             self.carry = Some(FlagValue::Real(false));
@@ -184,7 +184,11 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 RegisterKind::Number => {
-                    log::error!("Cannot compare these two registers")
+                    log::error!("Cannot compare these two registers");
+                    self.neg = None;
+                    self.zero = None;
+                    self.carry = None;
+                    self.overflow = None;
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
@@ -244,7 +248,7 @@ impl<'ctx> ARMCORTEXA<'_> {
         let r1 = self.get_register(reg1);
         let r2 = self.get_register(reg2);
 
-        if r1 == r2 {
+        if r1 == r2 && r1.kind != RegisterKind::Number {
             self.neg = Some(FlagValue::Real(false));
             self.zero = Some(FlagValue::Real(true));
             self.carry = Some(FlagValue::Real(false));
@@ -307,7 +311,11 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                 }
                 RegisterKind::Number => {
-                    log::error!("Cannot compare these two registers")
+                    log::error!("Cannot compare these two registers");
+                    self.neg = None;
+                    self.zero = None;
+                    self.carry = None;
+                    self.overflow = None;
                 }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset + r2.offset < 0 {
