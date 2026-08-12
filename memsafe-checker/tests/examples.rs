@@ -687,6 +687,74 @@ fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
     Ok(())
 }
 
+// `b` to its own label cycles with no condition to resolve; must be bounded, not hang.
+#[test]
+fn example_unconditional_self_loop_bounded() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("spin:".to_string());
+    program.push("add x0,x0,#1".to_string());
+    program.push("b spin".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_immediate(String::from("x0"), 0);
+
+    let res = engine.start("spin".to_string());
+    assert!(res.is_err());
+    Ok(())
+}
+
+// Same cycle through the JumpAddress path: `ret` to a concrete address that leads back to it.
+#[test]
+fn example_ret_to_self_bounded() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("test:".to_string());
+    program.push("mov x30,#0".to_string());
+    program.push("ret".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    let res = engine.start("test".to_string());
+    assert!(res.is_err());
+    Ok(())
+}
+
+// The bound must not reject unconditional jumps that terminate.
+#[test]
+fn example_unconditional_forward_jump_terminates() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("test:".to_string());
+    program.push("add x0,x0,#1".to_string());
+    program.push("b second".to_string());
+    program.push("add x0,x0,#100".to_string());
+    program.push("second:".to_string());
+    program.push("add x0,x0,#10".to_string());
+    program.push("ret".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_immediate(String::from("x0"), 0);
+
+    let res = engine.start("test".to_string());
+
+    assert!(res.is_ok());
+    assert_eq!(engine.get_register_output(0).base, None);
+    assert_eq!(engine.get_register_output(0).offset, 11);
+    Ok(())
+}
+
 // Two frames deep: the inner call clobbers x30, so the outer return needs the spill.
 #[test]
 fn example_nested_call_two_levels_returns_to_call_sites() -> std::io::Result<()> {

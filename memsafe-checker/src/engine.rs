@@ -1,5 +1,8 @@
-// use std::collections::HashMap;
+use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
+
+// Unconditional jumps have no condition to resolve, so a cycle among them never reaches looping_too_deep.
+const MAX_UNCONDITIONAL_REVISITS: usize = 1000;
 use z3::ast::Ast;
 use z3::*;
 
@@ -256,6 +259,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
     fn run(&mut self, start_pc: usize) -> std::io::Result<()> {
         let mut pc = start_pc;
+        let mut unconditional_visits: HashMap<usize, usize> = HashMap::new();
         let length = self.program.code.len();
         while pc < length {
             let mut instruction = self.program.code[pc].clone();
@@ -286,6 +290,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         match newline {
                             Some(n) => {
                                 log::info!("jumping to: {}", n);
+                                Self::note_unconditional_jump(&mut unconditional_visits, n)?;
                                 pc = n;
                             }
                             None => {
@@ -295,7 +300,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
                     ExecuteReturnType::JumpAddress(address) => {
-                        pc = address as usize;
+                        let dest = address as usize;
+                        Self::note_unconditional_jump(&mut unconditional_visits, dest)?;
+                        pc = dest;
                     }
                     ExecuteReturnType::ConditionalJumpLabel(condition, label) => {
                         if self.looping_too_deep() {
@@ -413,6 +420,25 @@ impl<'ctx> ExecutionEngine<'ctx> {
             }
         }
         None
+    }
+
+    fn note_unconditional_jump(
+        visits: &mut HashMap<usize, usize>,
+        dest: usize,
+    ) -> std::io::Result<()> {
+        let count = visits.entry(dest).or_insert(0);
+        *count += 1;
+        if *count > MAX_UNCONDITIONAL_REVISITS {
+            log::error!("unconditional jump cycle at line {}", dest);
+            return Err(Error::new(
+                ErrorKind::Other,
+                format!(
+                    "could not resolve loop: unconditional jump to line {} repeated {} times",
+                    dest, count
+                ),
+            ));
+        }
+        Ok(())
     }
 
     fn resolve_jump_target(&self, label: &str) -> std::io::Result<usize> {
