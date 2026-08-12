@@ -217,7 +217,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 RePrefix::Ra => self.registers[30].set(kind, base, offset),
                 RePrefix::Sp => self.registers[31].set(kind, base, offset),
                 RePrefix::Ze => self.registers[32].set(kind, base, offset),
-                _ => todo!("set register for other prefix"),
+                RePrefix::V => unreachable!(),
             },
             Operand::VectorRegister(_, num) => {
                 self.simd_registers[*num].set_from_register(
@@ -272,7 +272,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 RePrefix::Sp => self.registers[31].clone(),
                 RePrefix::Ze => self.registers[32].clone(),
                 RePrefix::X | RePrefix::W => self.registers[*index].clone(),
-                _ => todo!("invalid register prefix in get register"),
+                RePrefix::V => unreachable!(),
             },
             Operand::Immediate(value) => RegisterValue::new_imm(*value),
             Operand::VectorRegister(_, index) => self.simd_registers[*index].get_as_register(),
