@@ -613,10 +613,6 @@ impl MemorySafetyError {
             details: msg.to_string(),
         }
     }
-
-    pub fn to_string(&self) -> String {
-        format!("{}", &self.details)
-    }
 }
 impl fmt::Display for MemorySafetyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -625,13 +621,11 @@ impl fmt::Display for MemorySafetyError {
 }
 
 pub fn get_register_name_string(r: String) -> String {
-    let a: Vec<&str> = r.split(",").collect();
-    for i in a {
-        let name = i.trim_matches('[').to_string();
-        return name;
-    }
-
-    return r;
+    r.split(",")
+        .next()
+        .unwrap_or(&r)
+        .trim_matches('[')
+        .to_string()
 }
 
 pub fn expression_to_ast(
