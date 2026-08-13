@@ -10,7 +10,6 @@ use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader};
 use syn::*;
-use z3::{Config, Context};
 
 use bums::common::*;
 
@@ -649,9 +648,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         program.push(line.unwrap_or(String::from("")));
     }
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     // add memory safe regions
     for (i, a) in arguments_to_memory_safe_regions.iter().enumerate() {

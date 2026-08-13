@@ -1,6 +1,6 @@
 use crate::computer::*;
 
-impl ARMCORTEXA<'_> {
+impl ARMCORTEXA {
     /*
      * t: register name to load into
      * address: register with address as value
@@ -239,15 +239,15 @@ impl ARMCORTEXA<'_> {
                 if let Some(region) = self.memory.get(&regbase.clone()) {
                     (
                         region,
-                        ast::Int::new_const(self.context, regbase.clone()),
-                        ast::Int::new_const(self.context, regbase),
+                        ast::Int::new_const(regbase.clone()),
+                        ast::Int::new_const(regbase),
                     )
                 } else if let Some(address) = self.memory_labels.get(&regbase.clone()) {
                     offset += address;
                     (
                         self.memory.get("memory").expect("memory should exist"),
-                        ast::Int::new_const(self.context, regbase.clone()),
-                        ast::Int::new_const(self.context, regbase),
+                        ast::Int::new_const(regbase.clone()),
+                        ast::Int::new_const(regbase),
                     )
                 } else {
                     todo!("memory regions in access check");
@@ -255,19 +255,14 @@ impl ARMCORTEXA<'_> {
             }
             _ => {
                 let abstracts = base_expr.get_abstracts();
-                let mut result: Option<(&MemorySafeRegion, z3::ast::Int<'_>, z3::ast::Int<'_>)> =
-                    None;
+                let mut result: Option<(&MemorySafeRegion, z3::ast::Int, z3::ast::Int)> = None;
                 for r in self.memory.keys() {
                     if abstracts.contains(r) {
                         result = Some((
                             self.memory.get(r).expect("Region not in memory 2"),
-                            expression_to_ast(
-                                self.context,
-                                AbstractExpression::Abstract(r.to_string()),
-                            )
-                            .expect("computer25"),
-                            expression_to_ast(self.context, base_expr.clone())
-                                .expect("computer251"),
+                            expression_to_ast(AbstractExpression::Abstract(r.to_string()))
+                                .expect("computer25"),
+                            expression_to_ast(base_expr.clone()).expect("computer251"),
                         ));
                         break;
                     }
@@ -278,13 +273,9 @@ impl ARMCORTEXA<'_> {
                             offset = *address;
                             result = Some((
                                 self.memory.get("memory").expect("Region not in memory 2"),
-                                expression_to_ast(
-                                    self.context,
-                                    AbstractExpression::Abstract(r.0.to_string()),
-                                )
-                                .expect("computer25"),
-                                expression_to_ast(self.context, base_expr.clone())
-                                    .expect("computer251"),
+                                expression_to_ast(AbstractExpression::Abstract(r.0.to_string()))
+                                    .expect("computer25"),
+                                expression_to_ast(base_expr.clone()).expect("computer251"),
                             ));
                             break;
                         }
@@ -311,18 +302,17 @@ impl ARMCORTEXA<'_> {
             )));
         }
 
-        let mut abs_offset = ast::Int::from_i64(self.context, offset);
+        let mut abs_offset = ast::Int::from_i64(offset);
         if base_expr.contains("sp") {
-            abs_offset = ast::Int::from_i64(self.context, offset.abs());
+            abs_offset = ast::Int::from_i64(offset.abs());
         }
-        let access = ast::Int::add(self.context, &[&base_access, &abs_offset]);
+        let access = ast::Int::add(&[&base_access, &abs_offset]);
 
-        // let width = ast::Int::from_i64(self.context, 2);    // how wide is memory access, two bytes
-        let lowerbound_value = ast::Int::from_i64(self.context, 0);
-        let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
-        let upperbound_value =
-            expression_to_ast(self.context, region.get_length()).expect("computer26");
-        let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
+        // let width = ast::Int::from_i64(2);    // how wide is memory access, two bytes
+        let lowerbound_value = ast::Int::from_i64(0);
+        let low_access = ast::Int::add(&[&base, &lowerbound_value]);
+        let upperbound_value = expression_to_ast(region.get_length()).expect("computer26");
+        let up_access = ast::Int::add(&[&base, &upperbound_value]);
         let l = access.lt(&low_access);
         // Valid accesses lie in [base, base+length): an access landing exactly
         // on base+length is one byte past the end of the region and unsafe.

@@ -1,6 +1,6 @@
 use crate::computer::*;
 
-impl ARMCORTEXA<'_> {
+impl ARMCORTEXA {
     //TODO: generics instead
     pub fn vector_arithmetic(
         &mut self,

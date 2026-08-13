@@ -1,5 +1,4 @@
 use bums::common::*;
-use z3::*;
 
 fn init() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -17,9 +16,7 @@ fn example_stack_push_pop() {
     program.push("ldr x0,[sp,#4]".to_string());
     program.push("ret".to_string());
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_immediate(String::from("x3"), 1);
 
@@ -49,9 +46,7 @@ fn example_basic_abstract_loop() -> std::io::Result<()> {
     program.push("add x4,x4,#4".to_string());
     program.push("ret".to_string());
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     let length = AbstractExpression::Abstract("Length".to_string());
     let base = AbstractExpression::Abstract("Base".to_string());
@@ -82,9 +77,7 @@ fn example_bad_increment_abstract_loop() -> std::io::Result<()> {
     program.push("b.ne loop".to_string());
     program.push("add x4,x4,#4".to_string());
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     let length = AbstractExpression::Abstract("Length".to_string());
     let base = AbstractExpression::Abstract("Base".to_string());
@@ -120,9 +113,7 @@ fn example_loop_on_input_abstract_loop() -> std::io::Result<()> {
     program.push("add x4,x4,#4".to_string());
     program.push("ret".to_string());
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     let length1 = AbstractExpression::Abstract("Length1".to_string());
     let length2 = AbstractExpression::Abstract("Length2".to_string());
@@ -161,7 +152,7 @@ fn example_loop_on_input_abstract_loop() -> std::io::Result<()> {
 
 //     let cfg = Config::new();
 //     let ctx = Context::new(&cfg);
-//     let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+//     let mut engine = bums::engine::ExecutionEngine::new(program);
 
 //     let length = AbstractExpression::Abstract("Length".to_string());
 //     let base = AbstractExpression::Abstract("Base".to_string());
@@ -188,9 +179,7 @@ fn example_z3_abstract_bound_unsafe() -> std::io::Result<()> {
         program.push("ldr x1,[x0,#4]".to_string());
     }
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -210,9 +199,7 @@ fn example_z3_abstract_bound_unsafe_zero() -> std::io::Result<()> {
 
     let program = vec!["start:".to_string(), "ldr x1,[x0,#0]".to_string()];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -241,9 +228,7 @@ fn example_unrelated_unknowns_not_treated_as_equal() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -273,9 +258,7 @@ fn example_unrelated_unknowns_not_treated_as_equal_cmn() -> std::io::Result<()> 
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -299,9 +282,7 @@ fn example_z3_real_bound_safe() -> std::io::Result<()> {
         "ldr x1,[x0,#4]".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -326,9 +307,7 @@ fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
         "ldr x1,[x0,#0]".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -353,9 +332,7 @@ fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
         "ldr x1,[x0,#0]".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -380,9 +357,7 @@ fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
         "ldr x1,[x0,#0]".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -407,9 +382,7 @@ fn example_z3_symbolic_base_below_region_unsafe() -> std::io::Result<()> {
         "ldr x1,[x0,#0]".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -430,9 +403,7 @@ fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
 
     let program = vec!["start:".to_string(), "str x1,[x0,#0]".to_string()];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -453,9 +424,7 @@ fn example_z3_read_from_write_region_safe() -> std::io::Result<()> {
 
     let program = vec!["start:".to_string(), "ldr x1,[x0,#0]".to_string()];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -479,9 +448,7 @@ fn example_z3_real_bound_unsafe() -> std::io::Result<()> {
         "ldr x1,[x0,#16]".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -515,9 +482,7 @@ fn example_z3_simple_loop_with_no_mem_access() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     let res = engine.start("start".to_string());
     assert!(res.is_ok());
@@ -541,9 +506,7 @@ fn example_z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -576,7 +539,7 @@ fn example_z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
 //     let mut cfg = Config::new();
 //     cfg.set_proof_generation(true);
 //     let ctx = Context::new(&cfg);
-//     let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+//     let mut engine = bums::engine::ExecutionEngine::new(program);
 
 //     engine.add_abstract_from(0, "base".to_string());
 //     engine.add_abstract_from(1, "blocks".to_string());
@@ -610,9 +573,7 @@ fn example_z3_complex_loop_with_mem_access_unsafe() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -643,9 +604,7 @@ fn example_z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -677,9 +636,7 @@ fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_immediate(String::from("x0"), 0);
 
@@ -702,9 +659,7 @@ fn example_unconditional_self_loop_bounded() -> std::io::Result<()> {
         "b spin".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_immediate(String::from("x0"), 0);
 
@@ -724,9 +679,7 @@ fn example_ret_to_self_bounded() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     let res = engine.start("test".to_string());
     assert!(res.is_err());
@@ -748,9 +701,7 @@ fn example_unconditional_forward_jump_terminates() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_immediate(String::from("x0"), 0);
 
@@ -785,9 +736,7 @@ fn example_nested_call_two_levels_returns_to_call_sites() -> std::io::Result<()>
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_immediate(String::from("x0"), 0);
 
@@ -815,9 +764,7 @@ fn example_z3_example_branch() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "left".to_string());
     engine.add_abstract_from(1, "right".to_string());
@@ -844,9 +791,7 @@ fn carry_branch_program(compare: &str, branch: &str) -> Vec<String> {
 fn run_carry_branch(program: Vec<String>, x1: usize, x2: usize) -> i64 {
     init();
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_immediate(String::from("x0"), 0);
     engine.add_immediate(String::from("x1"), x1);
@@ -950,9 +895,7 @@ fn example_b_ls_and_b_le_agree_on_equality() -> std::io::Result<()> {
 fn symbolic_carry_guard(program: Vec<String>) -> std::io::Result<()> {
     init();
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(
@@ -1015,9 +958,7 @@ fn example_cmn_same_register_not_assumed_equal() -> std::io::Result<()> {
         "ret".to_string(),
     ];
 
-    let cfg = Config::new();
-    let ctx = Context::new(&cfg);
-    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base".to_string());
     engine.add_region(

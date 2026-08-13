@@ -33,17 +33,17 @@ type JumpRecord = (
 );
 
 #[derive(Clone)]
-pub struct ExecutionEngine<'ctx> {
+pub struct ExecutionEngine {
     program: Program,
-    computer: ARMCORTEXA<'ctx>,
+    computer: ARMCORTEXA,
     // abstracts: HashMap<String, String>,
     in_loop: bool,
     jump_history: Vec<JumpRecord>,
     fail_fast: bool,
 }
 
-impl<'ctx> ExecutionEngine<'ctx> {
-    pub fn new(lines: Vec<String>, context: &'ctx Context) -> ExecutionEngine<'ctx> {
+impl ExecutionEngine {
+    pub fn new(lines: Vec<String>) -> ExecutionEngine {
         // let _ = env_logger::try_init();
         // log::info!("--------");
         // log::info!("NEW EXECUTION ENGINE");
@@ -95,7 +95,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             }
         }
 
-        let mut computer = ARMCORTEXA::new(context);
+        let mut computer = ARMCORTEXA::new();
 
         // load computer static memory
         let mut address = 4;
@@ -159,10 +159,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn add_region(&mut self, ty: RegionType, base: String, length: AbstractExpression) {
-        let zero = ast::Int::from_i64(self.computer.context, 0);
+        let zero = ast::Int::from_i64(0);
         for a in length.get_abstracts() {
-            let temp = ast::Int::new_const(self.computer.context, a);
-            self.computer.solver.assert(&temp.ge(&zero));
+            let temp = ast::Int::new_const(a);
+            self.computer.solver.assert(temp.ge(&zero));
         }
 
         self.computer.add_memory_region(base.clone(), ty, length);
@@ -307,16 +307,12 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
                     ExecuteReturnType::Select(condition, register, option1, option2) => {
                         match (
-                        self.computer.solver.check_assumptions(&[comparison_to_ast(
-                            self.computer.context,
-                            condition.clone(),
+                        self.computer.solver.check_assumptions(&[comparison_to_ast(condition.clone(),
                         )
                         .expect(
                             "need result of conversion of comparison to ast for evaluation at jump 0",
                         )]),
-                        self.computer.solver.check_assumptions(&[comparison_to_ast(
-                            self.computer.context,
-                            condition.clone().not(),
+                        self.computer.solver.check_assumptions(&[comparison_to_ast(condition.clone().not(),
                         )
                         .expect(
                             "need result of conversion of comparison to ast for evaluation at jump 0",
@@ -504,20 +500,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     fn add_constraint(&self, constraint: AbstractComparison, decision: bool) {
-        let c = comparison_to_ast(self.computer.context, constraint)
-            .expect("engine6")
-            .simplify();
+        let c = comparison_to_ast(constraint).expect("engine6").simplify();
         if decision {
             self.computer.solver.assert(&c);
         } else {
-            self.computer.solver.assert(&c.not());
+            self.computer.solver.assert(c.not());
         }
     }
 
     pub fn add_invariant(&self, constraint: AbstractComparison) {
-        let c = comparison_to_ast(self.computer.context, constraint)
-            .expect("engine6.5")
-            .simplify();
+        let c = comparison_to_ast(constraint).expect("engine6.5").simplify();
         self.computer.solver.assert(&c);
     }
 
@@ -564,21 +556,23 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
         // check whether both branches are valid, only take valid branch
         match (
-            self.computer.solver.check_assumptions(&[comparison_to_ast(
-                self.computer.context,
-                expression.clone(),
-            )
-            .expect("need result of conversion of comparison to ast for evaluation at jump 0")]),
-            self.computer.solver.check_assumptions(&[comparison_to_ast(
-                self.computer.context,
-                expression.clone().not(),
-            )
-            .expect("need result of conversion of comparison to ast for evaluation at jump 1")]),
+            self.computer
+                .solver
+                .check_assumptions(&[comparison_to_ast(expression.clone()).expect(
+                    "need result of conversion of comparison to ast for evaluation at jump 0",
+                )]),
+            self.computer
+                .solver
+                .check_assumptions(&[comparison_to_ast(expression.clone().not()).expect(
+                    "need result of conversion of comparison to ast for evaluation at jump 1",
+                )]),
         ) {
             (SatResult::Sat, SatResult::Unsat) => return Some(true),
             (SatResult::Sat, SatResult::Sat) => (), // normal! explore both!
             (SatResult::Unsat, _) => return Some(false),
-            (_, _) => todo!(), // not sure how this would happen!
+            (SatResult::Unknown, SatResult::Unsat) => return Some(true),
+            // Z3 gave up, so explore both branches rather than trust an undecided answer.
+            (_, _) => (),
         }
 
         //check if loop can be resolved without loop protocol
@@ -599,39 +593,31 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 let (last_jump_label, branch_decision, _, last_rw_list, last_state) = j;
                 if last_jump_label == pc && last_rw_list.len() == rw_list.len() {
                     // JUMP TO Kth ITERATION
-                    let one = ast::Int::from_i64(self.computer.context, 1);
-                    let two = ast::Int::from_i64(self.computer.context, 2);
+                    let one = ast::Int::from_i64(1);
+                    let two = ast::Int::from_i64(2);
 
                     self.computer.solver.push();
                     let loop_var_name = (pc.to_string()) + "_loop_?";
-                    let q = ast::Int::new_const(self.computer.context, loop_var_name.clone());
-                    self.computer.solver.assert(&q.gt(&two));
+                    let q = ast::Int::new_const(loop_var_name.clone());
+                    self.computer.solver.assert(q.gt(&two));
 
                     // find the variable that the loop estimates
-                    let simplified = comparison_to_ast(self.computer.context, expression.clone())
+                    let simplified = comparison_to_ast(expression.clone())
                         .expect("engine8")
                         .simplify();
 
-                    let some_multiple = ast::Int::new_const(
-                        self.computer.context,
-                        ("multiple_".to_owned() + &pc.to_string()).to_string(),
-                    );
-                    self.computer.solver.assert(&some_multiple.gt(&one));
+                    let some_multiple =
+                        ast::Int::new_const(("multiple_".to_owned() + &pc.to_string()).to_string());
+                    self.computer.solver.assert(some_multiple.gt(&one));
 
                     for a in expression.get_abstracts() {
                         if simplified.to_string().contains(&a) {
-                            let original_abstract =
-                                ast::Int::new_const(self.computer.context, a.to_string());
+                            let original_abstract = ast::Int::new_const(a.to_string());
 
-                            let kplus = ast::Int::add(self.computer.context, &[&q, &one]);
-                            let relation =
-                                ast::Int::mul(self.computer.context, &[&kplus, &some_multiple]);
-                            self.computer
-                                .solver
-                                .assert(&original_abstract.ge(&relation));
-                            self.computer
-                                .solver
-                                .assert(&original_abstract.le(&relation));
+                            let kplus = ast::Int::add(&[&q, &one]);
+                            let relation = ast::Int::mul(&[&kplus, &some_multiple]);
+                            self.computer.solver.assert(original_abstract.ge(&relation));
+                            self.computer.solver.assert(original_abstract.le(&relation));
                         }
                     }
 
@@ -676,9 +662,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         }
                     }
 
-                    let diff = ast::Int::from_i64(self.computer.context, max_diff);
-                    self.computer.solver.assert(&some_multiple.ge(&diff));
-                    self.computer.solver.assert(&some_multiple.le(&diff));
+                    let diff = ast::Int::from_i64(max_diff);
+                    self.computer.solver.assert(some_multiple.ge(&diff));
+                    self.computer.solver.assert(some_multiple.le(&diff));
 
                     // for i in 0..(last_state.1.len()) {
                     //     let last = &last_state.1[i];
@@ -744,9 +730,8 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 // && last_state == &self.computer.get_state()
                 {
                     self.computer.solver.pop(1);
-                    let condition = comparison_to_ast(self.computer.context, expression.clone())
-                        .expect("engineb");
-                    self.computer.solver.assert(&condition.simplify());
+                    let condition = comparison_to_ast(expression.clone()).expect("engineb");
+                    self.computer.solver.assert(condition.simplify());
                     self.in_loop = false;
                     return Some(!branch_decision);
                 } else if last_jump_label == pc {
@@ -848,10 +833,7 @@ mod tests {
     fn test_label_parsing_simple() {
         let asm = vec!["start:".to_string(), "add x0, x1, x2".to_string()];
 
-        let mut cfg = Config::new();
-        cfg.set_proof_generation(true);
-        let ctx = Context::new(&cfg);
-        let engine = ExecutionEngine::new(asm, &ctx);
+        let engine = ExecutionEngine::new(asm);
 
         let labels: Vec<(String, usize)> = engine.program.labels;
         assert_eq!(labels.len(), 1);
@@ -869,10 +851,7 @@ mod tests {
             "ret".to_string(),
         ];
 
-        let mut cfg = Config::new();
-        cfg.set_proof_generation(true);
-        let ctx = Context::new(&cfg);
-        let engine = ExecutionEngine::new(asm, &ctx);
+        let engine = ExecutionEngine::new(asm);
 
         let labels: Vec<(String, usize)> = engine.program.labels;
         assert_eq!(labels.len(), 2);
@@ -884,10 +863,7 @@ mod tests {
     fn test_running_small_program_no_mem_access() {
         let asm = vec!["start:".to_string(), "add x0, x1, x2".to_string()];
 
-        let mut cfg = Config::new();
-        cfg.set_proof_generation(true);
-        let ctx = Context::new(&cfg);
-        let mut engine = ExecutionEngine::new(asm, &ctx);
+        let mut engine = ExecutionEngine::new(asm);
 
         let _ = engine.start("start".to_string());
         assert_eq!(

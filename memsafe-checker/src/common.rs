@@ -601,37 +601,34 @@ pub fn get_register_name_string(r: String) -> String {
         .to_string()
 }
 
-pub fn expression_to_ast(
-    context: &Context,
-    expression: AbstractExpression,
-) -> Option<ast::Int<'_>> {
+pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
     match expression.clone() {
-        AbstractExpression::Immediate(num) => Some(ast::Int::from_i64(context, num)),
-        AbstractExpression::Abstract(a) => Some(ast::Int::new_const(context, a)),
+        AbstractExpression::Immediate(num) => Some(ast::Int::from_i64(num)),
+        AbstractExpression::Abstract(a) => Some(ast::Int::new_const(a)),
         AbstractExpression::Register(reg) => {
             if let Some(base) = reg.base.clone() {
-                let base = expression_to_ast(context, base).expect("common7");
-                let offset = ast::Int::from_i64(context, reg.offset);
-                Some(ast::Int::add(context, &[&base, &offset]))
+                let base = expression_to_ast(base).expect("common7");
+                let offset = ast::Int::from_i64(reg.offset);
+                Some(ast::Int::add(&[&base, &offset]))
             } else {
-                Some(ast::Int::from_i64(context, reg.offset))
+                Some(ast::Int::from_i64(reg.offset))
             }
         }
         AbstractExpression::Expression(op, old1, old2) => {
-            let new1 = expression_to_ast(context, *old1).expect("common8");
-            let new2 = expression_to_ast(context, *old2).expect("common8");
+            let new1 = expression_to_ast(*old1).expect("common8");
+            let new2 = expression_to_ast(*old2).expect("common8");
             match op.as_str() {
-                "+" => Some(ast::Int::add(context, &[&new1, &new2])),
-                "-" => Some(ast::Int::sub(context, &[&new1, &new2])),
-                "*" => Some(ast::Int::mul(context, &[&new1, &new2])),
+                "+" => Some(ast::Int::add(&[&new1, &new2])),
+                "-" => Some(ast::Int::sub(&[&new1, &new2])),
+                "*" => Some(ast::Int::mul(&[&new1, &new2])),
                 "/" => Some(new1.div(&new2)),
                 "lsl" => {
-                    let two = ast::Int::from_i64(context, 2);
+                    let two = ast::Int::from_i64(2);
                     let multiplier = two.power(&new2).to_int();
-                    Some(ast::Int::mul(context, &[&new1, &multiplier]))
+                    Some(ast::Int::mul(&[&new1, &multiplier]))
                 }
                 ">>" | "lsr" => {
-                    let two = ast::Int::from_i64(context, 2);
+                    let two = ast::Int::from_i64(2);
                     let divisor = new2.div(&two);
                     Some(new1.div(&divisor))
                 }
@@ -641,33 +638,20 @@ pub fn expression_to_ast(
                 }
             }
         }
-        _ => Some(ast::Int::from_i64(context, 0)),
+        _ => Some(ast::Int::from_i64(0)),
     }
 }
 
-pub fn comparison_to_ast(
-    context: &Context,
-    expression: AbstractComparison,
-) -> Option<ast::Bool<'_>> {
-    let left = expression_to_ast(context, *expression.left).expect("common10");
-    let right = expression_to_ast(context, *expression.right).expect("common11");
+pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
+    let left = expression_to_ast(*expression.left).expect("common10");
+    let right = expression_to_ast(*expression.right).expect("common11");
     match expression.op.as_str() {
         "<" => Some(left.lt(&right)),
         ">" => Some(left.gt(&right)),
         ">=" => Some(left.ge(&right)),
         "<=" => Some(left.le(&right)),
-        "==" => {
-            return Some(ast::Bool::and(
-                context,
-                &[&left.le(&right), &left.ge(&right)],
-            ));
-        }
-        "!=" => {
-            return Some(ast::Bool::or(
-                context,
-                &[&left.lt(&right), &left.gt(&right)],
-            ));
-        }
+        "==" => Some(ast::Bool::and(&[&left.le(&right), &left.ge(&right)])),
+        "!=" => Some(ast::Bool::or(&[&left.lt(&right), &left.gt(&right)])),
         _ => todo!("unsupported op {:?}", expression.op),
     }
 }

@@ -1,6 +1,6 @@
 use crate::computer::*;
 
-impl ARMCORTEXA<'_> {
+impl ARMCORTEXA {
     pub fn execute(
         &mut self,
         pc: usize,

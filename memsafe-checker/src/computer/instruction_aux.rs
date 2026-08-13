@@ -1,6 +1,6 @@
 use crate::computer::*;
 
-impl ARMCORTEXA<'_> {
+impl ARMCORTEXA {
     pub fn arithmetic(
         &mut self,
         op_string: &str,

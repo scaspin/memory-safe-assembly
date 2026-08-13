@@ -19,7 +19,7 @@ pub type ComputerState = (
 );
 
 #[derive(Clone)]
-pub struct ARMCORTEXA<'ctx> {
+pub struct ARMCORTEXA {
     pub registers: [RegisterValue; 33],
     pub simd_registers: [SimdRegister; 32],
     zero: Option<FlagValue>,
@@ -30,19 +30,24 @@ pub struct ARMCORTEXA<'ctx> {
     pub memory_labels: HashMap<String, i64>,
     rw_queue: Vec<MemoryAccess>,
     alignment: i64,
-    pub context: &'ctx Context,
-    pub solver: Solver<'ctx>,
+    pub solver: Solver,
 }
 
-impl fmt::Debug for ARMCORTEXA<'_> {
+impl fmt::Debug for ARMCORTEXA {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "registers {:#?}", &self.registers)?;
         write!(f, "simd registers {:?}", &self.simd_registers)
     }
 }
 
-impl<'ctx> ARMCORTEXA<'_> {
-    pub fn new(context: &'ctx Context) -> ARMCORTEXA<'ctx> {
+impl Default for ARMCORTEXA {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ARMCORTEXA {
+    pub fn new() -> ARMCORTEXA {
         let registers = [
             RegisterValue::new_empty("x0"),
             RegisterValue::new_empty("x1"),
@@ -118,12 +123,12 @@ impl<'ctx> ARMCORTEXA<'_> {
             SimdRegister::new("v31"),
         ];
 
-        let solver = Solver::new(context);
+        let solver = Solver::new();
         let mut memory = HashMap::new();
 
-        let max = ast::Int::from_i64(context, i64::MAX);
-        let stack_max = ast::Int::new_const(context, "MAX");
-        solver.assert(&stack_max.ge(&max));
+        let max = ast::Int::from_i64(i64::MAX);
+        let stack_max = ast::Int::new_const("MAX");
+        solver.assert(stack_max.ge(&max));
 
         memory.insert(
             "sp".to_string(),
@@ -144,7 +149,6 @@ impl<'ctx> ARMCORTEXA<'_> {
             memory_labels: HashMap::new(),
             rw_queue: Vec::new(),
             alignment: 4,
-            context,
             solver,
         }
     }
@@ -388,9 +392,7 @@ mod tests {
 
     #[test]
     fn test_arithmetic_add_imm_registers() {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let mut computer = ARMCORTEXA::new(&ctx);
+        let mut computer = ARMCORTEXA::new();
 
         computer.set_register(
             &Operand::Register(RePrefix::X, 1),
@@ -413,9 +415,7 @@ mod tests {
 
     #[test]
     fn test_arithmetic_add_abstract_and_imm() {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let mut computer = ARMCORTEXA::new(&ctx);
+        let mut computer = ARMCORTEXA::new();
 
         computer.set_register(
             &Operand::Register(RePrefix::X, 1),
@@ -443,9 +443,7 @@ mod tests {
 
     #[test]
     fn test_arithmetic_add_abstract_registers() {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let mut computer = ARMCORTEXA::new(&ctx);
+        let mut computer = ARMCORTEXA::new();
 
         computer.set_register(
             &Operand::Register(RePrefix::X, 1),
@@ -477,9 +475,7 @@ mod tests {
 
     #[test]
     fn test_arithmetic_add_with_shift() {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let mut computer = ARMCORTEXA::new(&ctx);
+        let mut computer = ARMCORTEXA::new();
 
         computer.set_register(
             &Operand::Register(RePrefix::X, 1),
@@ -507,9 +503,7 @@ mod tests {
 
     #[test]
     fn test_arithmetic_add_abstract_and_imm_instruction() {
-        let cfg = Config::new();
-        let ctx = Context::new(&cfg);
-        let mut computer = ARMCORTEXA::new(&ctx);
+        let mut computer = ARMCORTEXA::new();
 
         computer.set_register(
             &Operand::Register(RePrefix::X, 1),
