@@ -1076,15 +1076,15 @@ impl ARMCORTEXA<'_> {
                             }
                         }
 
-                        if *index == Some(true) {
-                            if let Some(off) = offset {
-                                self.set_register(
-                                    &Operand::Register(prefix.clone(), *num),
-                                    a.kind,
-                                    a.base,
-                                    a.offset + off,
-                                );
-                            }
+                        if *index == Some(true)
+                            && let Some(off) = offset
+                        {
+                            self.set_register(
+                                &Operand::Register(prefix.clone(), *num),
+                                a.kind,
+                                a.base,
+                                a.offset + off,
+                            );
                         }
                     } else {
                         panic!("ld1 does not include address {:?}", instruction)
@@ -1115,15 +1115,15 @@ impl ARMCORTEXA<'_> {
                             }
                         }
 
-                        if *indexing == Some(true) {
-                            if let Some(i) = num_offset {
-                                self.set_register(
-                                    &Operand::Register(prefix.clone(), *num),
-                                    a.kind.clone(),
-                                    a.base.clone(),
-                                    a.offset + i,
-                                );
-                            }
+                        if *indexing == Some(true)
+                            && let Some(i) = num_offset
+                        {
+                            self.set_register(
+                                &Operand::Register(prefix.clone(), *num),
+                                a.kind.clone(),
+                                a.base.clone(),
+                                a.offset + i,
+                            );
                         };
 
                         if let Some(reg) = reg_offset {

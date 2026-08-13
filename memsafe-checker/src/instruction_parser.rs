@@ -118,12 +118,11 @@ pub fn operand_from_string(a: String) -> Operand {
         }
     }
 
-    if a.starts_with("0x") {
-        if let Ok(n) =
+    if a.starts_with("0x")
+        && let Ok(n) =
             i64::from_str_radix(a.strip_prefix("0x").expect("error converting from hex"), 16)
-        {
-            return Operand::Immediate(n);
-        }
+    {
+        return Operand::Immediate(n);
     }
 
     if a.contains('@') {

@@ -272,21 +272,21 @@ impl ARMCORTEXA<'_> {
                         break;
                     }
                     for r in self.memory_labels.clone() {
-                        if abstracts.contains(&r.0) {
-                            if let Some(address) = self.memory_labels.get(&r.0.clone()) {
-                                offset = *address;
-                                result = Some((
-                                    self.memory.get("memory").expect("Region not in memory 2"),
-                                    expression_to_ast(
-                                        self.context,
-                                        AbstractExpression::Abstract(r.0.to_string()),
-                                    )
-                                    .expect("computer25"),
-                                    expression_to_ast(self.context, base_expr.clone())
-                                        .expect("computer251"),
-                                ));
-                                break;
-                            }
+                        if abstracts.contains(&r.0)
+                            && let Some(address) = self.memory_labels.get(&r.0.clone())
+                        {
+                            offset = *address;
+                            result = Some((
+                                self.memory.get("memory").expect("Region not in memory 2"),
+                                expression_to_ast(
+                                    self.context,
+                                    AbstractExpression::Abstract(r.0.to_string()),
+                                )
+                                .expect("computer25"),
+                                expression_to_ast(self.context, base_expr.clone())
+                                    .expect("computer251"),
+                            ));
+                            break;
                         }
                     }
                 }

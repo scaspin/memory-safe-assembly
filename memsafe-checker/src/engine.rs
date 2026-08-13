@@ -765,16 +765,16 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             Box::new(AbstractExpression::Abstract(loop_var_name.clone())),
                             Box::new(AbstractExpression::Immediate(diff)),
                         );
-                        if let Some(base) = &cur.base {
-                            if base.contains(&loop_var_name) && base.contains_expression(&base_step)
-                            {
-                                let new_reg = RegisterValue {
-                                    kind: cur.kind.clone(),
-                                    base: cur.base.clone(),
-                                    offset: 0,
-                                };
-                                self.computer.registers[i] = new_reg;
-                            }
+                        if let Some(base) = &cur.base
+                            && base.contains(&loop_var_name)
+                            && base.contains_expression(&base_step)
+                        {
+                            let new_reg = RegisterValue {
+                                kind: cur.kind.clone(),
+                                base: cur.base.clone(),
+                                offset: 0,
+                            };
+                            self.computer.registers[i] = new_reg;
                         }
                     }
 
