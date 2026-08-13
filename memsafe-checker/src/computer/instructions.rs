@@ -332,8 +332,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                         match (&self.zero, &self.neg, &self.overflow) {
                             (Some(zero), Some(neg), Some(ove)) => {
                                 match  (zero, neg, ove) {
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
-                                   if !z && n == v {  // Z = 0 AND N = V
+                                // neg holds the signed comparison, not the raw N bit, so V stays out.
+                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(_)) => {
+                                   if !z && !n {
                                         return Ok(ExecuteReturnType::JumpLabel(label.clone()))
                                    } else {
                                         return Ok(ExecuteReturnType::Next)
@@ -359,8 +360,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                         match (&self.zero, &self.neg, &self.overflow) {
                             (Some(zero), Some(neg), Some(ove)) => {
                                 match  (zero, neg, ove) {
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
-                                   if !z && n != v {  // Z = 0 AND N = V
+                                // neg holds the signed comparison, not the raw N bit, so V stays out.
+                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(_)) => {
+                                   if !z && *n {
                                         return Ok(ExecuteReturnType::JumpLabel(label.clone()))
                                    } else {
                                         return Ok(ExecuteReturnType::Next)
@@ -385,8 +387,9 @@ impl<'ctx> ARMCORTEXA<'_> {
                         match (&self.zero, &self.carry) {
                         (Some(zero), Some(carry)) => {
                             match  (zero, carry) {
+                            // b.ls is unsigned: Z == 1 or C == 0. b.le shares the arm and is signed.
                             (FlagValue::Real(z), FlagValue::Real(c)) => {
-                               if !z && *c {
+                               if *z || !c {
                                     return Ok(ExecuteReturnType::JumpLabel(label.clone()));
                                } else {
                                     return Ok(ExecuteReturnType::Next)
@@ -419,7 +422,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                    }
                                 },
                                 FlagValue::Abstract(c) =>  {
-                                    let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
+                                    let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
                                     return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
                                 },
                                 }
@@ -445,7 +448,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                                    }
                                 },
                                 FlagValue::Abstract(c) =>  {
-                                    let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
+                                    let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
                                     return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
                                 },
                                 }
@@ -1252,4 +1255,3 @@ impl<'ctx> ARMCORTEXA<'_> {
         Ok(ExecuteReturnType::Next)
     }
 }
-

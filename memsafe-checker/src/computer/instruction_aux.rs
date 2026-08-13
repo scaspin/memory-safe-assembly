@@ -124,7 +124,8 @@ impl<'ctx> ARMCORTEXA<'_> {
         if r1 == r2 && r1.kind != RegisterKind::Number {
             self.neg = Some(FlagValue::Real(false));
             self.zero = Some(FlagValue::Real(true));
-            self.carry = Some(FlagValue::Real(false));
+            // x - x borrows nothing, so carry is set.
+            self.carry = Some(FlagValue::Real(true));
             self.overflow = Some(FlagValue::Real(false));
             return;
         }
@@ -143,22 +144,17 @@ impl<'ctx> ARMCORTEXA<'_> {
                         } else {
                             Some(FlagValue::Real(false))
                         };
-                        // signed vs signed distinction, maybe make offset generic to handle both?
-                        self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
+                        // The shared base cancels, so the offsets decide borrow and overflow.
+                        self.carry = Some(FlagValue::Real(r1.offset >= r2.offset));
+                        self.overflow =
+                            Some(FlagValue::Real(r1.offset.overflowing_sub(r2.offset).1));
                     } else {
+                        let left = AbstractExpression::Register(Box::new(r1));
+                        let right = AbstractExpression::Register(Box::new(r2));
                         let expression = AbstractExpression::Expression(
                             "-".to_string(),
-                            Box::new(AbstractExpression::Register(Box::new(r1))),
-                            Box::new(AbstractExpression::Register(Box::new(r2))),
+                            Box::new(left.clone()),
+                            Box::new(right.clone()),
                         );
                         self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
@@ -170,16 +166,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
-                        // FIX carry + overflow
+                        // Carry is the unsigned no-borrow condition, so compare the operands.
                         self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
-                            expression.clone(),
-                            AbstractExpression::Immediate(std::i64::MIN),
+                            ">=", left, right,
                         )));
                         self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
                             expression,
-                            AbstractExpression::Immediate(std::i64::MIN),
+                            AbstractExpression::Immediate(i64::MIN),
                         )));
                     }
                 }
@@ -201,24 +195,18 @@ impl<'ctx> ARMCORTEXA<'_> {
                     } else {
                         Some(FlagValue::Real(false))
                     };
-                    // signed vs signed distinction, maybe make offset generic to handle both?
-                    self.carry = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    self.overflow = if r2.offset > r1.offset && r1.offset - r2.offset > 0 {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
+                    // Carry is unsigned no-borrow; overflow is signed subtraction overflow.
+                    self.carry = Some(FlagValue::Real((r1.offset as u64) >= (r2.offset as u64)));
+                    self.overflow = Some(FlagValue::Real(r1.offset.overflowing_sub(r2.offset).1));
                 }
             }
         } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
+            let left = AbstractExpression::Register(Box::new(r1));
+            let right = AbstractExpression::Register(Box::new(r2));
             let expression = AbstractExpression::Expression(
                 "-".to_string(),
-                Box::new(AbstractExpression::Register(Box::new(r1))),
-                Box::new(AbstractExpression::Register(Box::new(r2))),
+                Box::new(left.clone()),
+                Box::new(right.clone()),
             );
             self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
@@ -230,16 +218,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            // FIX carry + overflow
+            // Carry is the unsigned no-borrow condition, so compare the operands.
             self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
-                expression.clone(),
-                AbstractExpression::Immediate(std::i64::MIN),
+                ">=", left, right,
             )));
             self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
                 expression,
-                AbstractExpression::Immediate(std::i64::MIN),
+                AbstractExpression::Immediate(i64::MIN),
             )));
         }
     }
@@ -248,67 +234,36 @@ impl<'ctx> ARMCORTEXA<'_> {
         let r1 = self.get_register(reg1);
         let r2 = self.get_register(reg2);
 
-        if r1 == r2 && r1.kind != RegisterKind::Number {
-            self.neg = Some(FlagValue::Real(false));
-            self.zero = Some(FlagValue::Real(true));
-            self.carry = Some(FlagValue::Real(false));
-            self.overflow = Some(FlagValue::Real(false));
-
-            return;
-        }
-
         if r1.kind == r2.kind {
             match r1.kind {
+                // Addition does not cancel a shared base, so no flag follows from the offsets.
                 RegisterKind::RegisterBase => {
-                    if r1.base.eq(&r2.base) {
-                        self.neg = if r1.offset + r2.offset < 0 {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.zero = if r1.offset + r2.offset == 0 {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.carry = if r2.offset + r1.offset > std::i64::MAX {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                        self.overflow = if r2.offset + r1.offset > std::i64::MAX {
-                            Some(FlagValue::Real(true))
-                        } else {
-                            Some(FlagValue::Real(false))
-                        };
-                    } else {
-                        let expression = AbstractExpression::Expression(
-                            "+".to_string(),
-                            Box::new(AbstractExpression::Register(Box::new(r1))),
-                            Box::new(AbstractExpression::Register(Box::new(r2))),
-                        );
-                        self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
-                            expression.clone(),
-                            AbstractExpression::Immediate(0),
-                        )));
-                        self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "==",
-                            expression.clone(),
-                            AbstractExpression::Immediate(0),
-                        )));
-                        // FIX carry + overflow
-                        self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                            ">",
-                            expression.clone(),
-                            AbstractExpression::Immediate(std::i64::MAX),
-                        )));
-                        self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                            ">",
-                            expression,
-                            AbstractExpression::Immediate(std::i64::MAX),
-                        )));
-                    }
+                    let expression = AbstractExpression::Expression(
+                        "+".to_string(),
+                        Box::new(AbstractExpression::Register(Box::new(r1))),
+                        Box::new(AbstractExpression::Register(Box::new(r2))),
+                    );
+                    self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
+                        "<",
+                        expression.clone(),
+                        AbstractExpression::Immediate(0),
+                    )));
+                    self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
+                        "==",
+                        expression.clone(),
+                        AbstractExpression::Immediate(0),
+                    )));
+                    // i64 is the widest immediate available, so carry-out is approximated by it.
+                    self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
+                        ">",
+                        expression.clone(),
+                        AbstractExpression::Immediate(i64::MAX),
+                    )));
+                    self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
+                        ">",
+                        expression,
+                        AbstractExpression::Immediate(i64::MAX),
+                    )));
                 }
                 RegisterKind::Number => {
                     log::error!("Cannot compare these two registers");
@@ -318,27 +273,14 @@ impl<'ctx> ARMCORTEXA<'_> {
                     self.overflow = None;
                 }
                 RegisterKind::Immediate => {
-                    self.neg = if r1.offset + r2.offset < 0 {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    self.zero = if r1.offset + r2.offset == 0 {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    // signed vs signed distinction, maybe make offset generic to handle both?
-                    self.carry = if r2.offset + r1.offset > std::i64::MAX {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
-                    self.overflow = if r2.offset + r1.offset > std::i64::MAX {
-                        Some(FlagValue::Real(true))
-                    } else {
-                        Some(FlagValue::Real(false))
-                    };
+                    let (sum, signed_overflow) = r1.offset.overflowing_add(r2.offset);
+                    self.neg = Some(FlagValue::Real(sum < 0));
+                    self.zero = Some(FlagValue::Real(sum == 0));
+                    // Carry is the unsigned carry-out; overflow is signed addition overflow.
+                    self.carry = Some(FlagValue::Real(
+                        (r1.offset as u64).overflowing_add(r2.offset as u64).1,
+                    ));
+                    self.overflow = Some(FlagValue::Real(signed_overflow));
                 }
             }
         } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
@@ -357,16 +299,16 @@ impl<'ctx> ARMCORTEXA<'_> {
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            // FIX carry + overflow
+            // i64 is the widest immediate available, so carry-out is approximated by it.
             self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                 ">",
                 expression.clone(),
-                AbstractExpression::Immediate(std::i64::MAX),
+                AbstractExpression::Immediate(i64::MAX),
             )));
             self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
                 ">",
                 expression,
-                AbstractExpression::Immediate(std::i64::MAX),
+                AbstractExpression::Immediate(i64::MAX),
             )));
         }
     }

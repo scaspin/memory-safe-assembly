@@ -817,3 +817,177 @@ fn example_z3_example_branch() -> std::io::Result<()> {
     assert!(res.is_ok());
     Ok(())
 }
+
+// Records which side of a carry-driven branch ran: 2 for taken, 1 for fallthrough.
+fn carry_branch_program(compare: &str, branch: &str) -> Vec<String> {
+    vec![
+        "start:".to_string(),
+        compare.to_string(),
+        branch.to_string(),
+        "add x0,x0,#1".to_string(),
+        "ret".to_string(),
+        "taken:".to_string(),
+        "add x0,x0,#2".to_string(),
+        "ret".to_string(),
+    ]
+}
+
+fn run_carry_branch(program: Vec<String>, x1: usize, x2: usize) -> i64 {
+    init();
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_immediate(String::from("x0"), 0);
+    engine.add_immediate(String::from("x1"), x1);
+    engine.add_immediate(String::from("x2"), x2);
+
+    engine.start("start".to_string()).expect("program runs");
+    engine.get_register_output(0).offset
+}
+
+#[test]
+fn example_cmp_carry_set_when_unsigned_greater_or_equal() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.cs taken");
+    assert_eq!(run_carry_branch(program, 8, 4), 2);
+    Ok(())
+}
+
+#[test]
+fn example_cmp_carry_clear_when_unsigned_less() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.cs taken");
+    assert_eq!(run_carry_branch(program, 4, 8), 1);
+    Ok(())
+}
+
+// -1 is below 1 signed but above it unsigned, so carry must read the operands as u64.
+#[test]
+fn example_cmp_carry_uses_unsigned_comparison() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.cs taken");
+    assert_eq!(run_carry_branch(program, usize::MAX, 1), 2);
+    Ok(())
+}
+
+// b.ls is taken on Z set or carry clear.
+#[test]
+fn example_cmp_carry_clear_takes_b_ls() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.ls taken");
+    assert_eq!(run_carry_branch(program, 4, 8), 2);
+    Ok(())
+}
+
+#[test]
+fn example_cmp_equal_operands_set_carry() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.cs taken");
+    assert_eq!(run_carry_branch(program, 6, 6), 2);
+    Ok(())
+}
+
+// Signed overflow must not flip b.gt, since neg already holds the signed comparison.
+#[test]
+fn example_cmp_signed_overflow_does_not_flip_b_gt() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.gt taken");
+    assert_eq!(run_carry_branch(program, i64::MIN as usize, 1), 1);
+    Ok(())
+}
+
+// -1 + 1 wraps past u64::MAX, so carry is set even though the signed sum is zero.
+#[test]
+fn example_cmn_carry_set_on_unsigned_carry_out() -> std::io::Result<()> {
+    let program = carry_branch_program("cmn x1,x2", "b.cs taken");
+    assert_eq!(run_carry_branch(program, usize::MAX, 1), 2);
+    Ok(())
+}
+
+#[test]
+fn example_cmn_no_carry_out_without_wrap() -> std::io::Result<()> {
+    let program = carry_branch_program("cmn x1,x2", "b.cs taken");
+    assert_eq!(run_carry_branch(program, 2, 3), 1);
+    Ok(())
+}
+
+// Guards a symbolic index with `b.cs`, so the fallthrough must carry `x1 < 8`.
+fn symbolic_carry_guard(program: Vec<String>) -> std::io::Result<()> {
+    init();
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(8),
+    );
+    engine.add_abstract_from(1, "i".to_string());
+    // The carry guard only bounds the index from above.
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        AbstractExpression::Abstract("i".to_string()),
+        AbstractExpression::Immediate(0),
+    ));
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_ok());
+    Ok(())
+}
+
+#[test]
+fn example_symbolic_carry_bounds_index_via_b_cs() -> std::io::Result<()> {
+    symbolic_carry_guard(vec![
+        "start:".to_string(),
+        "cmp x1,#8".to_string(),
+        "b.cs done".to_string(),
+        "add x0,x0,x1".to_string(),
+        "ldr x2,[x0,#0]".to_string(),
+        "done:".to_string(),
+        "ret".to_string(),
+    ])
+}
+
+#[test]
+fn example_symbolic_carry_bounds_index_via_b_cc() -> std::io::Result<()> {
+    symbolic_carry_guard(vec![
+        "start:".to_string(),
+        "cmp x1,#8".to_string(),
+        "b.cc inbounds".to_string(),
+        "ret".to_string(),
+        "inbounds:".to_string(),
+        "add x0,x0,x1".to_string(),
+        "ldr x2,[x0,#0]".to_string(),
+        "ret".to_string(),
+    ])
+}
+
+// Addition does not cancel a shared base, so `cmn x1,x1` must not report equality.
+#[test]
+fn example_cmn_same_register_not_assumed_equal() -> std::io::Result<()> {
+    init();
+
+    let mut program = Vec::new();
+    program.push("start:".to_string());
+    program.push("cmn x1,x1".to_string());
+    program.push("b.ne bad".to_string());
+    program.push("ret".to_string());
+    program.push("bad:".to_string());
+    program.push("ldr x2,[x0,#64]".to_string());
+    program.push("ret".to_string());
+
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
+
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        AbstractExpression::Immediate(8),
+    );
+    engine.add_abstract_from(1, "val".to_string());
+
+    let res = engine.start("start".to_string());
+    assert!(res.is_err());
+    Ok(())
+}
