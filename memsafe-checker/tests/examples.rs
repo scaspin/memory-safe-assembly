@@ -907,6 +907,36 @@ fn example_cmn_no_carry_out_without_wrap() -> std::io::Result<()> {
     Ok(())
 }
 
+#[test]
+fn example_b_ls_is_unsigned() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.ls taken");
+    assert_eq!(run_carry_branch(program, usize::MAX, 1), 1);
+    Ok(())
+}
+
+#[test]
+fn example_b_le_is_signed() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.le taken");
+    assert_eq!(run_carry_branch(program, usize::MAX, 1), 2);
+    Ok(())
+}
+
+#[test]
+fn example_b_le_falls_through_when_greater() -> std::io::Result<()> {
+    let program = carry_branch_program("cmp x1,x2", "b.le taken");
+    assert_eq!(run_carry_branch(program, 9, 4), 1);
+    Ok(())
+}
+
+#[test]
+fn example_b_ls_and_b_le_agree_on_equality() -> std::io::Result<()> {
+    let ls = carry_branch_program("cmp x1,x2", "b.ls taken");
+    let le = carry_branch_program("cmp x1,x2", "b.le taken");
+    assert_eq!(run_carry_branch(ls, 5, 5), 2);
+    assert_eq!(run_carry_branch(le, 5, 5), 2);
+    Ok(())
+}
+
 // Guards a symbolic index with `b.cs`, so the fallthrough must carry `x1 < 8`.
 fn symbolic_carry_guard(program: Vec<String>) -> std::io::Result<()> {
     init();

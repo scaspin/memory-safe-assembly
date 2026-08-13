@@ -382,14 +382,46 @@ impl<'ctx> ARMCORTEXA<'_> {
                         }
                     }
                 }
-                "b.ls" | "b.le" => {
+                "b.ls" => {
                     if let Operand::Label(label) = &instruction.operands[0] {
                         match (&self.zero, &self.carry) {
                         (Some(zero), Some(carry)) => {
                             match  (zero, carry) {
-                            // b.ls is unsigned: Z == 1 or C == 0. b.le shares the arm and is signed.
+                            // b.ls is unsigned: Z == 1 or C == 0.
                             (FlagValue::Real(z), FlagValue::Real(c)) => {
                                if *z || !c {
+                                    return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                               } else {
+                                    return Ok(ExecuteReturnType::Next)
+                               }
+                            },
+                            // Carry keeps the operands themselves, so prefer it over the difference.
+                            (_, FlagValue::Abstract(c)) => {
+                                let expression = generate_comparison("<=", *c.left.clone(), *c.right.clone());
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
+                            },
+                            (FlagValue::Abstract(z), _) => {
+                                let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
+                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
+                            },
+                            }
+                        },
+                        (_, _) => return Err(
+                            "Flag cannot be branched on since it has not been set within the program yet"
+                                .to_string(),
+                        ),
+                    }
+                    }
+                    panic!("b.ls not invoked correctly with label");
+                }
+                "b.le" => {
+                    if let Operand::Label(label) = &instruction.operands[0] {
+                        match (&self.zero, &self.neg) {
+                        (Some(zero), Some(neg)) => {
+                            match  (zero, neg) {
+                            // neg holds the signed comparison, so b.le is Z == 1 or N == 1.
+                            (FlagValue::Real(z), FlagValue::Real(n)) => {
+                               if *z || *n {
                                     return Ok(ExecuteReturnType::JumpLabel(label.clone()));
                                } else {
                                     return Ok(ExecuteReturnType::Next)
@@ -407,7 +439,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                         ),
                     }
                     }
-                    panic!("b.ls not invoked correctly with label");
+                    panic!("b.le not invoked correctly with label");
                 }
                 "b.cs" | "b.hs" | "bcs" => {
                     if let Operand::Label(label) = &instruction.operands[0] {
