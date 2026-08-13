@@ -220,7 +220,7 @@ pub fn sha256_digest(msg: &[u8], output: &mut [u8]) {
 #[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
 fn sha256_block_data_order(context: &mut [u32; 8], input: &[u8]);
 
-extern "C" {
+unsafe extern "C" {
     #[link_name = "aws_lc_0_14_1_sha256_block_data_order"]
     fn aws_sha256_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
 }

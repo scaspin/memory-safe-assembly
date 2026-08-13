@@ -192,7 +192,7 @@ fn main() {
 mod tests {
     use super::*;
 
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "rav1d_1_0_0_ipred_reverse_8bpc_neon"]
         fn rav1d_ipred_reverse_8bpc_neon(dest: *mut u8, src: *const u8, num: usize);
     }

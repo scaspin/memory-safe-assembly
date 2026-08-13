@@ -60,7 +60,7 @@ pub(crate) mod indicator {
     }
 }
 
-extern "C" {
+unsafe extern "C" {
     #[link_name = "aws_lc_0_14_1_FIPS_service_indicator_before_call"]
     fn FIPS_service_indicator_before_call() -> u64;
 

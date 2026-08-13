@@ -1,5 +1,5 @@
 #![allow(improper_ctypes)]
-extern "C" {
+unsafe extern "C" {
     // fn ecp_nistz256_mul_mont();
     // fn ecp_nistz256_sqr_mont();
     // fn ecp_nistz256_div_by_2();

@@ -315,7 +315,7 @@ mod tests {
     use super::*;
     use aws_lc_sys;
 
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "aws_lc_0_14_1_bn_add_words"]
         fn aws_bn_add_words(output: *mut u8, a: *const u8, b: *const u8, len: usize);
 

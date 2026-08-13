@@ -364,7 +364,7 @@ mod tests {
     use super::*;
     mod cipher;
 
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "aws_lc_0_14_1_aes_hw_ctr32_encrypt_blocks"]
         fn aws_aes_hw_ctr32_encrypt_blocks(
             input_as_ptr: *const u8,

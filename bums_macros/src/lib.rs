@@ -643,7 +643,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             #struct_decs;
 
-            extern "C" {
+            // The macro crate is edition 2024, where extern blocks must be unsafe.
+            unsafe extern "C" {
                 #extern_fn #output;
             }
             unsafe {

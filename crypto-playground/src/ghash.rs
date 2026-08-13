@@ -13,7 +13,7 @@ mod tests {
     use super::*;
 
     #[allow(improper_ctypes)]
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "aws_lc_0_14_1_gcm_init_neon"]
         fn aws_gcm_init_neon(context: *mut u128, input: *const u64);
 
