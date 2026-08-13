@@ -31,10 +31,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                             }
                             None => Some(reg1base),
                         },
-                        None => match r2.clone().base {
-                            Some(reg2base) => Some(reg2base),
-                            None => None,
-                        },
+                        None => r2.clone().base,
                     };
                     self.set_register(
                         reg0,
@@ -80,10 +77,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     }
                     None => Some(reg1base),
                 },
-                None => match r1.clone().base {
-                    Some(reg2base) => Some(reg2base),
-                    None => None,
-                },
+                None => r1.clone().base,
             };
             self.set_register(
                 reg0,

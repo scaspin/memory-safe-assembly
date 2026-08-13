@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 
 // Unconditional jumps have no condition to resolve, so a cycle among them never reaches looping_too_deep.
 const MAX_UNCONDITIONAL_REVISITS: usize = 1000;
@@ -100,7 +100,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 }
                 code.push(Instruction::new(text));
 
-                line_number = line_number + 1;
+                line_number += 1;
             }
         }
 
@@ -109,7 +109,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
         // load computer static memory
         let mut address = 4;
         for def in defs.iter() {
-            let v: Vec<&str> = def.split(|c| c == '\t' || c == ',' || c == ' ').collect();
+            let v: Vec<&str> = def.split(['\t', ',', ' ']).collect();
             if v[0] == ".align" {
                 //let alignment = v[1].parse::<usize>().expect("engine");
                 // do nothing for now
@@ -128,7 +128,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     computer.add_memory_value("memory".to_string(), address, num);
                     // address = address + (alignment as i64);
                     // heap grows down
-                    address = address + 4;
+                    address += 4;
                 }
             } else if v[0] == ".quad" || v[0] == ".long" {
                 for i in v.iter().skip(1) {
@@ -143,7 +143,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         num = i.parse::<i64>().expect("engine4");
                     }
                     computer.add_memory_value("memory".to_string(), address, num);
-                    address = address + 8;
+                    address += 8;
                 }
             } else if v[0] == ".globl" || v[0] == ".private_extern" {
                 computer.memory_labels.insert(v[1].to_string(), address);
@@ -154,7 +154,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             }
         }
 
-        return ExecutionEngine {
+        ExecutionEngine {
             program: Program {
                 // defs,
                 code,
@@ -166,7 +166,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             in_loop: false,
             // abstracts: HashMap::new(),
             fail_fast: true,
-        };
+        }
     }
 
     pub fn add_region(&mut self, ty: RegionType, base: String, length: AbstractExpression) {
@@ -223,7 +223,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn get_register_output(&self, register: usize) -> RegisterValue {
-        return self.computer.registers[register].clone();
+        self.computer.registers[register].clone()
     }
 
     pub fn dont_fail_fast(&mut self) {
@@ -239,19 +239,14 @@ impl<'ctx> ExecutionEngine<'ctx> {
         match self.get_linenumber_of_label(start.trim_matches(|c| c == '_' || c == ':').to_string())
         {
             Some(n) => pc = n,
-            None => {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Start label not found in program",
-                ))
-            }
+            None => return Err(Error::other("Start label not found in program")),
         }
 
         // run is recursive
         let res = self.run(pc);
         match res {
             Ok(_) => (),
-            Err(err) => return Err(Error::new(ErrorKind::Other, err)),
+            Err(err) => return Err(Error::other(err)),
         }
 
         Ok(())
@@ -266,7 +261,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
 
             // skip instruction if it is a label
             if instruction.is_label() {
-                pc = pc + 1;
+                pc += 1;
                 instruction = self.program.code[pc].clone();
             }
 
@@ -277,7 +272,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
             match execute_result {
                 Ok(res) => match res {
                     ExecuteReturnType::Next => {
-                        pc = pc + 1;
+                        pc += 1;
 
                         continue;
                     }
@@ -295,7 +290,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                             }
                             None => {
                                 log::error!("No label line for label {}", label);
-                                return Err(Error::new(ErrorKind::Other, "No label 1"));
+                                return Err(Error::other("No label 1"));
                             }
                         }
                     }
@@ -306,7 +301,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     }
                     ExecuteReturnType::ConditionalJumpLabel(condition, label) => {
                         if self.looping_too_deep() {
-                            return Err(Error::new(ErrorKind::Other, "could not resolve loop"));
+                            return Err(Error::other("could not resolve loop"));
                         }
                         let jump_dest = self.resolve_jump_target(&label)?;
                         match self.take_conditional_branch(pc, condition, jump_dest)? {
@@ -346,7 +341,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 option1.base,
                                 option1.offset,
                             );
-                            pc = pc+1;
+                            pc += 1;
                         }
                         (SatResult::Unsat, SatResult::Sat) => {
                             self.add_constraint(condition.clone(), false);
@@ -356,7 +351,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 option2.base,
                                 option2.offset,
                             );
-                            pc = pc+1;
+                            pc += 1;
                         }
                         _ => {
                             let clone = &mut self.clone();
@@ -382,11 +377,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
                                 (Ok(_), Ok(_)) => return Ok(()),
                                 (Err(err), Ok(_)) | (Ok(_), Err(err)) => {
                                     log::error!("{:?}: {:?}", pc, err);
-                                    return Err(Error::new(ErrorKind::Other, err));
+                                    return Err(Error::other(err));
                                 }
                                 (Err(e1), Err(e2)) => {
-                                    return Err(Error::new(
-                                        ErrorKind::Other,
+                                    return Err(Error::other(
                                         e1.to_string() + &e2.to_string(),
                                     ));
                                 }
@@ -403,19 +397,20 @@ impl<'ctx> ExecutionEngine<'ctx> {
                         err
                     );
                     if self.fail_fast {
-                        return Err(Error::new(ErrorKind::Other, err));
+                        return Err(Error::other(err));
                     }
-                    pc = pc + 1;
+                    pc += 1;
                 }
             }
         }
-        Ok(self.computer.check_stack_pointer_restored())
+        self.computer.check_stack_pointer_restored();
+        Ok(())
     }
 
     fn get_linenumber_of_label(&self, label: String) -> Option<usize> {
         let label = label.strip_prefix("_").unwrap_or(&label);
         for l in self.program.labels.iter() {
-            if l.0.contains(&label) && label.contains(&l.0.clone()) {
+            if l.0.contains(label) && label.contains(&l.0.clone()) {
                 return Some(l.1);
             }
         }
@@ -430,13 +425,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
         *count += 1;
         if *count > MAX_UNCONDITIONAL_REVISITS {
             log::error!("unconditional jump cycle at line {}", dest);
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!(
-                    "could not resolve loop: unconditional jump to line {} repeated {} times",
-                    dest, count
-                ),
-            ));
+            return Err(Error::other(format!(
+                "could not resolve loop: unconditional jump to line {} repeated {} times",
+                dest, count
+            )));
         }
         Ok(())
     }
@@ -447,10 +439,10 @@ impl<'ctx> ExecutionEngine<'ctx> {
         }
         let (base, offset) = label
             .split_once('+')
-            .ok_or_else(|| Error::new(ErrorKind::Other, format!("No label found: {:?}", label)))?;
+            .ok_or_else(|| Error::other(format!("No label found: {:?}", label)))?;
         let line = self
             .get_linenumber_of_label(base.to_string())
-            .ok_or_else(|| Error::new(ErrorKind::Other, format!("No label found: {:?}", base)))?;
+            .ok_or_else(|| Error::other(format!("No label found: {:?}", base)))?;
         let parsed_offset = usize::from_str_radix(offset.trim_start_matches("0x"), 16)
             .expect("unable to parse label offset");
         Ok(line + (parsed_offset / 4))
@@ -500,12 +492,9 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     (Ok(_), Ok(_)) => Ok(BranchOutcome::BothExplored),
                     (Err(err), Ok(_)) | (Ok(_), Err(err)) => {
                         log::error!("{:?}: {:?}", pc, err);
-                        Err(Error::new(ErrorKind::Other, err))
+                        Err(Error::other(err))
                     }
-                    (Err(e1), Err(e2)) => Err(Error::new(
-                        ErrorKind::Other,
-                        e1.to_string() + &e2.to_string(),
-                    )),
+                    (Err(e1), Err(e2)) => Err(Error::other(e1.to_string() + &e2.to_string())),
                 }
             }
             Some(taken) => {
@@ -553,7 +542,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 let (last_jump, _, _, _, _) = h;
 
                 if last_jump == pc {
-                    loop_count = loop_count + 1;
+                    loop_count += 1;
                 }
             }
             if loop_count > 20 {
@@ -569,7 +558,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     // if true, we jump
@@ -754,7 +743,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 }
             }
 
-            return None;
+            None
 
         // in loop protocol
         } else {
@@ -857,7 +846,7 @@ impl<'ctx> ExecutionEngine<'ctx> {
                     // }
                 }
             }
-            return None;
+            None
         }
     }
 }

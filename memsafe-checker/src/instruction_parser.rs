@@ -119,10 +119,9 @@ pub fn operand_from_string(a: String) -> Operand {
     }
 
     if a.starts_with("0x") {
-        if let Ok(n) = i64::from_str_radix(
-            &a.strip_prefix("0x").expect("error converting from hex"),
-            16,
-        ) {
+        if let Ok(n) =
+            i64::from_str_radix(a.strip_prefix("0x").expect("error converting from hex"), 16)
+        {
             return Operand::Immediate(n);
         }
     }
@@ -160,13 +159,13 @@ pub fn operand_from_string(a: String) -> Operand {
 
     if a.starts_with("v") {
         if a.contains(".") {
-            let mut parts = a.split('.').into_iter();
+            let mut parts = a.split('.');
             let base = parts
                 .next()
                 .expect("require base register for simd register");
             let arrangement = parts.next().expect("require a valid simd arrangement");
             if arrangement.contains("[") {
-                let mut parts = arrangement.split(&['[', ']']).into_iter();
+                let mut parts = arrangement.split(&['[', ']']);
                 let a = Arrangement::from_string(
                     parts
                         .next()
@@ -191,7 +190,7 @@ pub fn operand_from_string(a: String) -> Operand {
                 return Operand::Vector(RePrefix::V, i, a);
             }
         } else if a.contains("[") && a.contains("]") {
-            let mut parts = a.split('[').into_iter();
+            let mut parts = a.split('[');
             let base = parts
                 .next()
                 .expect("require base register for simd register");
@@ -207,8 +206,6 @@ pub fn operand_from_string(a: String) -> Operand {
         let parts = a.split_at(1);
         if let Ok(value) = parts.1.parse::<usize>() {
             return Operand::VectorRegister(RePrefix::V, value);
-        } else {
-            ()
         }
     }
 
@@ -249,14 +246,14 @@ pub fn operand_from_string(a: String) -> Operand {
             if b.contains("]") && parts.peek().is_some() {
                 indexing = Some(true); // the notation for post-indexing is [address], <offset>
             }
-            base = b.trim_matches(&['[', ']', ',']).to_string();
+            base = b.trim_matches(['[', ']', ',']).to_string();
         }
 
         if let Some(o) = parts.next() {
             if o.starts_with("x") || o.starts_with("w") {
                 register_offset = Some(Box::new(operand_from_string(o.to_string())));
             } else {
-                offset = Some(string_to_int(o.trim_matches(&['[', ']', ',', '#', '!'])));
+                offset = Some(string_to_int(o.trim_matches(['[', ']', ',', '#', '!'])));
             }
         }
 
@@ -296,7 +293,7 @@ pub fn operand_from_string(a: String) -> Operand {
         return Operand::Label(stripped.to_string());
     }
 
-    return Operand::Other;
+    Operand::Other
 }
 
 fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
@@ -321,7 +318,7 @@ fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
         }
     }
 
-    return result;
+    result
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -384,7 +381,7 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
     {
         return InstructionType::ControlFlow;
     }
-    return InstructionType::Other;
+    InstructionType::Other
 }
 
 impl Instruction {
@@ -396,7 +393,7 @@ impl Instruction {
             .replace("\t", " ")
             .replace("}", "");
         let mut parts = delete_curly_brackets
-            .split(|c| c == '\t' || c == ',' || c == ' ')
+            .split(['\t', ',', ' '])
             .collect::<Vec<&str>>()
             .into_iter()
             .filter(|x| !x.is_empty());
@@ -406,7 +403,7 @@ impl Instruction {
             .to_string();
 
         let combine_brackets =
-            combine_addressing_modes_operands(parts.into_iter().map(|s| s.to_string()).collect());
+            combine_addressing_modes_operands(parts.map(|s| s.to_string()).collect());
 
         let operands: Vec<Operand> = combine_brackets
             .into_iter()
@@ -438,6 +435,57 @@ impl Instruction {
     pub fn is_label(&self) -> bool {
         self.ty == InstructionType::Label
     }
+}
+
+// // FIX: try to retire this function since errors are sometimes confusing
+pub fn string_to_int(s: &str) -> i64 {
+    let mut value = 1;
+    let v = s
+        .trim_matches(' ')
+        .trim_matches('#')
+        .trim_matches('(')
+        .trim_matches(')');
+    if v.contains('*') {
+        let parts = v.split('*');
+        for part in parts {
+            let m = string_to_int(part);
+            value *= m;
+        }
+    } else if v.contains('+') {
+        let parts = v.split('+');
+        for part in parts {
+            let m = string_to_int(part);
+            value += m;
+        }
+    } else if v.starts_with("0x") {
+        // FIX: store as two if i128 is needed
+        value = i128::from_str_radix(
+            v.strip_prefix("0x").expect("radix parse strip 0x failed"),
+            16,
+        )
+        .expect("radix parse failed") as i64;
+    } else if v.starts_with("-0x") {
+        // FIX: store as two if i128 is needed
+        value = -i128::from_str_radix(
+            v.strip_prefix("-0x").expect("radix parse strip -0x failed"),
+            16,
+        )
+        .expect("radix parse negative failed") as i64;
+    } else {
+        let clean = &v.replace(
+            &['(', ')', ',', '\"', '.', ';', ':', '\'', '#', '[', ']'][..],
+            "",
+        );
+        if clean == "~1<<6" {
+            value = -65
+        } else {
+            value = clean
+                .parse::<i64>()
+                .unwrap_or_else(|_| panic!("integer parsing failed {:?}", clean));
+        }
+    }
+
+    value
 }
 
 #[cfg(test)]
@@ -1108,55 +1156,4 @@ mod tests {
             good_result
         );
     }
-}
-
-// // FIX: try to retire this function since errors are sometimes confusing
-pub fn string_to_int(s: &str) -> i64 {
-    let mut value = 1;
-    let v = s
-        .trim_matches(' ')
-        .trim_matches('#')
-        .trim_matches('(')
-        .trim_matches(')');
-    if v.contains('*') {
-        let parts = v.split('*');
-        for part in parts {
-            let m = string_to_int(part);
-            value = value * m;
-        }
-    } else if v.contains('+') {
-        let parts = v.split('+');
-        for part in parts {
-            let m = string_to_int(part);
-            value = value + m;
-        }
-    } else if v.starts_with("0x") {
-        // FIX: store as two if i128 is needed
-        value = i128::from_str_radix(
-            v.strip_prefix("0x").expect("radix parse strip 0x failed"),
-            16,
-        )
-        .expect("radix parse failed") as i64;
-    } else if v.starts_with("-0x") {
-        // FIX: store as two if i128 is needed
-        value = -i128::from_str_radix(
-            v.strip_prefix("-0x").expect("radix parse strip -0x failed"),
-            16,
-        )
-        .expect("radix parse negative failed") as i64;
-    } else {
-        let clean = &v.replace(
-            &['(', ')', ',', '\"', '.', ';', ':', '\'', '#', '[', ']'][..],
-            "",
-        );
-        if clean == "~1<<6" {
-            value = -65
-        } else {
-            value = clean
-                .parse::<i64>()
-                .expect(&format!("integer parsing failed {:?}", clean));
-        }
-    }
-
-    return value;
 }

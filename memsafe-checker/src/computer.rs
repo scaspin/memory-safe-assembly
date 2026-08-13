@@ -110,7 +110,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             SimdRegister::new("v31"),
         ];
 
-        let solver = Solver::new(&context);
+        let solver = Solver::new(context);
         let mut memory = HashMap::new();
 
         let max = ast::Int::from_i64(context, i64::MAX);
@@ -151,14 +151,14 @@ impl<'ctx> ARMCORTEXA<'_> {
         Option<FlagValue>,
         Option<FlagValue>,
     ) {
-        return (
+        (
             self.registers.clone(),
             // self.simd_registers.clone(),
             self.zero.clone(),
             self.neg.clone(),
             self.carry.clone(),
             self.overflow.clone(),
-        );
+        )
     }
 
     pub fn set_immediate(&mut self, register: String, value: u64) {
@@ -264,7 +264,7 @@ impl<'ctx> ARMCORTEXA<'_> {
     }
 
     pub fn get_register(&mut self, reg: &Operand) -> RegisterValue {
-        return match reg {
+        match reg {
             // TODO: reimplement accessing half a register using w
             Operand::Register(prefix, index) => match prefix {
                 RePrefix::Fp => self.registers[29].clone(),
@@ -281,7 +281,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 self.simd_registers[*index].clone().get_as_register()
             }
             a => panic!("Not a valid register operand for get operation {:?}", a),
-        };
+        }
     }
 
     pub fn get_simd_register(&mut self, reg: &Operand) -> SimdRegister {
@@ -290,7 +290,7 @@ impl<'ctx> ARMCORTEXA<'_> {
             Operand::Vector(_, index, _) => self.simd_registers[*index].clone(),
             Operand::VectorAccess(_, index, _, _) => {
                 // FIX
-                return self.simd_registers[*index].clone();
+                self.simd_registers[*index].clone()
             }
             _ => panic!("cannot get register {:?} as a simd register", reg),
         }
@@ -346,7 +346,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
     fn label_to_memory_index(&self, _label: String) -> (String, i64) {
         // FIX: use label
-        return ("memory".to_string(), 0);
+        ("memory".to_string(), 0)
     }
 
     pub fn check_stack_pointer_restored(&self) {

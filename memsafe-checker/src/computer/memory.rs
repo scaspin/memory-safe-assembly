@@ -18,7 +18,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let region = self
                     .memory
                     .get(&region_name)
-                    .expect(format!("Need memory region to load from {:?}", region_name).as_str());
+                    .unwrap_or_else(|| panic!("Need memory region to load from {:?}", region_name));
                 match region.get(offset) {
                     Some(v) => {
                         self.set_register(&t, v.kind.clone(), v.base.clone(), v.offset);
@@ -32,13 +32,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                             base.clone(),
                             address.offset.clone()
                         );
-                        return Ok(());
+                        Ok(())
                     }
                     None => {
                         log::error!("No element at this address in region {:?}", region);
-                        return Err(MemorySafetyError::new(
+                        Err(MemorySafetyError::new(
                             "Cannot read element at this address from region",
-                        ));
+                        ))
                     }
                 }
             } else {
@@ -55,7 +55,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 Ok(())
             }
         } else {
-            return res;
+            res
         }
     }
 
@@ -76,7 +76,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 let region = self
                     .memory
                     .get(&region_name)
-                    .expect(format!("Need memory region to load from {:?}", region_name).as_str());
+                    .unwrap_or_else(|| panic!("Need memory region to load from {:?}", region_name));
                 match region.get(offset) {
                     Some(v) => {
                         self.set_register(&t, v.kind.clone(), v.base, v.offset);
@@ -90,13 +90,13 @@ impl<'ctx> ARMCORTEXA<'_> {
                             base.clone(),
                             address.offset.clone()
                         );
-                        return Ok(());
+                        Ok(())
                     }
                     None => {
                         log::error!("No element at this address in region {:?}", region);
-                        return Err(MemorySafetyError::new(
+                        Err(MemorySafetyError::new(
                             "Cannot read element at this address from region",
-                        ));
+                        ))
                     }
                 }
             } else {
@@ -113,7 +113,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 Ok(())
             }
         } else {
-            return res;
+            res
         }
     }
 
@@ -139,7 +139,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                 let register = &self.get_register(&register);
                 let region = self.memory.get_mut(&region).expect("No region");
-                region.insert(offset.clone(), register.clone());
+                region.insert(offset, register.clone());
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -151,7 +151,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     base,
                     offset: address.offset,
                 });
-                return Ok(());
+                Ok(())
             } else {
                 log::info!(
                     "Storing from an abstract but safe region of memory {:?}",
@@ -165,7 +165,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 Ok(())
             }
         } else {
-            return res;
+            res
         }
     }
 
@@ -187,7 +187,7 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                 let register = self.get_register(&register);
                 let region = self.memory.get_mut(&region).expect("No region");
-                region.insert(offset.clone(), register.clone());
+                region.insert(offset, register.clone());
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -199,7 +199,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                     base,
                     offset: address.offset,
                 });
-                return Ok(());
+                Ok(())
             } else {
                 log::info!(
                     "Storing from an abstract but safe region of memory {:?}",
@@ -213,19 +213,17 @@ impl<'ctx> ARMCORTEXA<'_> {
                 Ok(())
             }
         } else {
-            return res;
+            res
         }
     }
 
     fn get_memory_pointer(&self, base: String, offset: i64) -> (String, i64) {
-        if let Some(_) = self.memory.get(&base) {
-            return (base, offset);
+        if self.memory.get(&base).is_some() {
+            (base, offset)
+        } else if let Some(address) = self.memory_labels.get(&base) {
+            ("memory".to_string(), address + offset)
         } else {
-            if let Some(address) = self.memory_labels.get(&base) {
-                return ("memory".to_string(), address + offset);
-            } else {
-                return ("memory".to_string(), offset);
-            }
+            ("memory".to_string(), offset)
         }
     }
 
@@ -244,19 +242,17 @@ impl<'ctx> ARMCORTEXA<'_> {
                         ast::Int::new_const(self.context, regbase.clone()),
                         ast::Int::new_const(self.context, regbase),
                     )
+                } else if let Some(address) = self.memory_labels.get(&regbase.clone()) {
+                    offset += address;
+                    (
+                        self.memory
+                            .get(&"memory".to_string())
+                            .expect("memory should exist"),
+                        ast::Int::new_const(self.context, regbase.clone()),
+                        ast::Int::new_const(self.context, regbase),
+                    )
                 } else {
-                    if let Some(address) = self.memory_labels.get(&regbase.clone()) {
-                        offset = offset + address;
-                        (
-                            self.memory
-                                .get(&"memory".to_string())
-                                .expect("memory should exist"),
-                            ast::Int::new_const(self.context, regbase.clone()),
-                            ast::Int::new_const(self.context, regbase),
-                        )
-                    } else {
-                        todo!("memory regions in access check");
-                    }
+                    todo!("memory regions in access check");
                 }
             }
             _ => {
@@ -354,12 +350,12 @@ impl<'ctx> ARMCORTEXA<'_> {
                 log::info!("Memory unsafe with solver's check!");
             }
         }
-        return Err(MemorySafetyError::new(
+        Err(MemorySafetyError::new(
             format!(
                 "Accessing address outside allowable memory regions {:?}, {:?}",
                 base_expr, offset
             )
             .as_str(),
-        ));
+        ))
     }
 }

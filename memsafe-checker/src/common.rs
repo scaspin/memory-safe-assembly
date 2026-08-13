@@ -79,7 +79,7 @@ impl SimdRegister {
     // i.e. V3.S[2]  -> get_word(2)
     pub fn get_byte(&self, index: usize) -> (Option<AbstractExpression>, u8) {
         assert!(index < 16);
-        return (self.base[index].clone(), self.offset[index]);
+        (self.base[index].clone(), self.offset[index])
     }
     pub fn get_halfword(&self, index: usize) -> ([Option<AbstractExpression>; 2], [u8; 2]) {
         assert!(index <= 8);
@@ -87,7 +87,7 @@ impl SimdRegister {
         let base: [Option<AbstractExpression>; 2] =
             [self.base[index].clone(), self.base[index + 1].clone()];
         let offset: [u8; 2] = [self.offset[index], self.offset[index + 1]];
-        return (base, offset);
+        (base, offset)
     }
 
     pub fn get_word(&self, index: usize) -> ([Option<AbstractExpression>; 4], [u8; 4]) {
@@ -97,7 +97,7 @@ impl SimdRegister {
         base.clone_from_slice(&self.base[index..(index + 4)]);
         let mut offset: [u8; 4] = Default::default();
         offset.clone_from_slice(&self.offset[index..(index + 4)]);
-        return (base, offset);
+        (base, offset)
     }
 
     pub fn get_double(&self, index: usize) -> ([Option<AbstractExpression>; 8], [u8; 8]) {
@@ -107,7 +107,7 @@ impl SimdRegister {
         base.clone_from_slice(&self.base[index..(index + 8)]);
         let mut offset: [u8; 8] = Default::default();
         offset.clone_from_slice(&self.offset[index..(index + 8)]);
-        return (base, offset);
+        (base, offset)
     }
 
     pub fn set_byte(&mut self, index: usize, base: Option<AbstractExpression>, offset: u8) {
@@ -288,11 +288,11 @@ impl SimdRegister {
             ),
         );
 
-        return RegisterValue {
+        RegisterValue {
             kind: self.kind.clone(),
             base,
             offset,
-        };
+        }
     }
 }
 
@@ -310,13 +310,13 @@ pub fn generate_expression_from_options(
     b: Option<AbstractExpression>,
 ) -> Option<AbstractExpression> {
     if a.is_some() || b.is_some() {
-        return Some(generate_expression(
+        Some(generate_expression(
             op,
             a.clone().unwrap_or(AbstractExpression::Immediate(0)),
             b.clone().unwrap_or(AbstractExpression::Immediate(0)),
-        ));
+        ))
     } else {
-        return None;
+        None
     }
 }
 
@@ -378,21 +378,15 @@ impl AbstractExpression {
 
     pub fn contains(&self, token: &str) -> bool {
         match self {
-            AbstractExpression::Abstract(value) => {
-                if value.contains(token) {
-                    return true;
-                } else {
-                    return false;
-                }
-            }
+            AbstractExpression::Abstract(value) => value.contains(token),
             AbstractExpression::Register(reg) => match &reg.base {
-                Some(e) => return e.contains(token),
-                None => return false,
+                Some(e) => e.contains(token),
+                None => false,
             },
             AbstractExpression::Expression(_, arg1, arg2) => {
-                return arg1.contains(token) || arg2.contains(token);
+                arg1.contains(token) || arg2.contains(token)
             }
-            _ => return false,
+            _ => false,
         }
     }
 
@@ -402,9 +396,9 @@ impl AbstractExpression {
         }
         match self {
             AbstractExpression::Expression(_, arg1, arg2) => {
-                return arg1.contains_expression(expr) || arg2.contains_expression(expr);
+                arg1.contains_expression(expr) || arg2.contains_expression(expr)
             }
-            _ => return false,
+            _ => false,
         }
     }
 }
@@ -441,24 +435,12 @@ impl AbstractComparison {
         let left = *self.left.clone();
         let right = *self.right.clone();
         match self.op.as_str() {
-            "<" => {
-                return Self::new(">=", left, right);
-            }
-            ">" => {
-                return Self::new("<=", left, right);
-            }
-            ">=" => {
-                return Self::new("<", left, right);
-            }
-            "<=" => {
-                return Self::new(">", left, right);
-            }
-            "==" => {
-                return Self::new("!=", left, right);
-            }
-            "!=" => {
-                return Self::new("==", left, right);
-            }
+            "<" => Self::new(">=", left, right),
+            ">" => Self::new("<=", left, right),
+            ">=" => Self::new("<", left, right),
+            "<=" => Self::new(">", left, right),
+            "==" => Self::new("!=", left, right),
+            "!=" => Self::new("==", left, right),
             _ => todo!("unsupported op {:?}", self.op),
         }
     }
@@ -475,7 +457,7 @@ impl AbstractComparison {
     }
 
     pub fn contains(&self, token: &str) -> bool {
-        return self.left.contains(token) || self.right.contains(token);
+        self.left.contains(token) || self.right.contains(token)
     }
 }
 
@@ -509,7 +491,7 @@ pub enum FlagValue {
 impl FlagValue {
     pub fn to_abstract_expression(&self) -> AbstractComparison {
         match self {
-            Self::Abstract(a) => return a.clone(),
+            Self::Abstract(a) => a.clone(),
             Self::Real(r) => match r {
                 true => {
                     generate_comparison("==", AbstractExpression::Empty, AbstractExpression::Empty)
@@ -523,8 +505,8 @@ impl FlagValue {
 
     pub fn not(&self) -> Self {
         match self {
-            Self::Abstract(a) => return Self::Abstract(a.clone().not()),
-            Self::Real(r) => return Self::Real(!r),
+            Self::Abstract(a) => Self::Abstract(a.clone().not()),
+            Self::Real(r) => Self::Real(!r),
         }
     }
 }
@@ -532,9 +514,9 @@ impl FlagValue {
 impl PartialEq for FlagValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (FlagValue::Abstract(a), FlagValue::Abstract(b)) => return a == b,
-            (FlagValue::Real(a), FlagValue::Real(b)) => return a == b,
-            _ => return false,
+            (FlagValue::Abstract(a), FlagValue::Abstract(b)) => a == b,
+            (FlagValue::Real(a), FlagValue::Real(b)) => a == b,
+            _ => false,
         }
     }
 }
@@ -566,13 +548,10 @@ pub struct MemorySafeRegion {
 impl MemorySafeRegion {
     pub fn new(length: AbstractExpression, kind: RegionType) -> Self {
         let mut content = HashMap::new();
-        match length {
-            AbstractExpression::Immediate(l) => {
-                for i in 0..(l) {
-                    content.insert(i * 4, RegisterValue::new(RegisterKind::Number, None, 0));
-                }
+        if let AbstractExpression::Immediate(l) = length {
+            for i in 0..(l) {
+                content.insert(i * 4, RegisterValue::new(RegisterKind::Number, None, 0));
             }
-            _ => (),
         }
         Self {
             kind,
@@ -586,7 +565,7 @@ impl MemorySafeRegion {
 
     pub fn get(&self, address: i64) -> Option<RegisterValue> {
         let res = self.content.get(&address);
-        match res.clone() {
+        match res {
             Some(_) => res.cloned(),
             None => Some(RegisterValue::new(RegisterKind::Number, None, 0)),
         }
@@ -595,7 +574,7 @@ impl MemorySafeRegion {
     pub fn get_length(&self) -> AbstractExpression {
         match self.length {
             AbstractExpression::Immediate(_) => {
-                return AbstractExpression::Immediate((self.content.len() * 8) as i64)
+                AbstractExpression::Immediate((self.content.len() * 8) as i64)
             }
             _ => self.length.clone(),
         }
@@ -633,46 +612,42 @@ pub fn expression_to_ast(
     expression: AbstractExpression,
 ) -> Option<ast::Int<'_>> {
     match expression.clone() {
-        AbstractExpression::Immediate(num) => {
-            return Some(ast::Int::from_i64(context, num));
-        }
-        AbstractExpression::Abstract(a) => {
-            return Some(ast::Int::new_const(context, a));
-        }
+        AbstractExpression::Immediate(num) => Some(ast::Int::from_i64(context, num)),
+        AbstractExpression::Abstract(a) => Some(ast::Int::new_const(context, a)),
         AbstractExpression::Register(reg) => {
             if let Some(base) = reg.base.clone() {
                 let base = expression_to_ast(context, base).expect("common7");
                 let offset = ast::Int::from_i64(context, reg.offset);
-                return Some(ast::Int::add(context, &[&base, &offset]));
+                Some(ast::Int::add(context, &[&base, &offset]))
             } else {
-                return Some(ast::Int::from_i64(context, reg.offset));
+                Some(ast::Int::from_i64(context, reg.offset))
             }
         }
         AbstractExpression::Expression(op, old1, old2) => {
             let new1 = expression_to_ast(context, *old1).expect("common8");
             let new2 = expression_to_ast(context, *old2).expect("common8");
             match op.as_str() {
-                "+" => return Some(ast::Int::add(context, &[&new1, &new2])),
-                "-" => return Some(ast::Int::sub(context, &[&new1, &new2])),
-                "*" => return Some(ast::Int::mul(context, &[&new1, &new2])),
-                "/" => return Some(new1.div(&new2)),
+                "+" => Some(ast::Int::add(context, &[&new1, &new2])),
+                "-" => Some(ast::Int::sub(context, &[&new1, &new2])),
+                "*" => Some(ast::Int::mul(context, &[&new1, &new2])),
+                "/" => Some(new1.div(&new2)),
                 "lsl" => {
                     let two = ast::Int::from_i64(context, 2);
                     let multiplier = two.power(&new2).to_int();
-                    return Some(ast::Int::mul(context, &[&new1, &multiplier]));
+                    Some(ast::Int::mul(context, &[&new1, &multiplier]))
                 }
                 ">>" | "lsr" => {
                     let two = ast::Int::from_i64(context, 2);
                     let divisor = new2.div(&two);
-                    return Some(new1.div(&divisor));
+                    Some(new1.div(&divisor))
                 }
-                "%" => return Some(new1.modulo(&new2)),
+                "%" => Some(new1.modulo(&new2)),
                 _ => {
                     todo!("expression to AST {:?} {:?}", op, expression)
                 }
             }
         }
-        _ => return Some(ast::Int::from_i64(context, 0)),
+        _ => Some(ast::Int::from_i64(context, 0)),
     }
 }
 
@@ -683,18 +658,10 @@ pub fn comparison_to_ast(
     let left = expression_to_ast(context, *expression.left).expect("common10");
     let right = expression_to_ast(context, *expression.right).expect("common11");
     match expression.op.as_str() {
-        "<" => {
-            return Some(left.lt(&right));
-        }
-        ">" => {
-            return Some(left.gt(&right));
-        }
-        ">=" => {
-            return Some(left.ge(&right));
-        }
-        "<=" => {
-            return Some(left.le(&right));
-        }
+        "<" => Some(left.lt(&right)),
+        ">" => Some(left.gt(&right)),
+        ">=" => Some(left.ge(&right)),
+        "<=" => Some(left.le(&right)),
         "==" => {
             return Some(ast::Bool::and(
                 context,
