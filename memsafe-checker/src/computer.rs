@@ -9,6 +9,15 @@ mod instructions;
 mod memory;
 mod simd;
 
+// Registers plus the zero, neg, carry and overflow flags.
+pub type ComputerState = (
+    [RegisterValue; 33],
+    Option<FlagValue>,
+    Option<FlagValue>,
+    Option<FlagValue>,
+    Option<FlagValue>,
+);
+
 #[derive(Clone)]
 pub struct ARMCORTEXA<'ctx> {
     pub registers: [RegisterValue; 33],
@@ -25,11 +34,10 @@ pub struct ARMCORTEXA<'ctx> {
     pub solver: Solver<'ctx>,
 }
 
-impl<'ctx> fmt::Debug for ARMCORTEXA<'ctx> {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        println!("registers {:#?}", &self.registers);
-        println!("simd registers {:?}", &self.simd_registers);
-        Ok(())
+impl fmt::Debug for ARMCORTEXA<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "registers {:#?}", &self.registers)?;
+        write!(f, "simd registers {:?}", &self.simd_registers)
     }
 }
 
@@ -141,19 +149,9 @@ impl<'ctx> ARMCORTEXA<'_> {
         }
     }
 
-    pub fn get_state(
-        &self,
-    ) -> (
-        [RegisterValue; 33],
-        // [SimdRegister; 32],
-        Option<FlagValue>,
-        Option<FlagValue>,
-        Option<FlagValue>,
-        Option<FlagValue>,
-    ) {
+    pub fn get_state(&self) -> ComputerState {
         (
             self.registers.clone(),
-            // self.simd_registers.clone(),
             self.zero.clone(),
             self.neg.clone(),
             self.carry.clone(),

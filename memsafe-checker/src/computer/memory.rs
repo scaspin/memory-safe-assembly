@@ -1,6 +1,6 @@
 use crate::computer::*;
 
-impl<'ctx> ARMCORTEXA<'_> {
+impl ARMCORTEXA<'_> {
     /*
      * t: register name to load into
      * address: register with address as value
@@ -218,7 +218,7 @@ impl<'ctx> ARMCORTEXA<'_> {
     }
 
     fn get_memory_pointer(&self, base: String, offset: i64) -> (String, i64) {
-        if self.memory.get(&base).is_some() {
+        if self.memory.contains_key(&base) {
             (base, offset)
         } else if let Some(address) = self.memory_labels.get(&base) {
             ("memory".to_string(), address + offset)
@@ -245,9 +245,7 @@ impl<'ctx> ARMCORTEXA<'_> {
                 } else if let Some(address) = self.memory_labels.get(&regbase.clone()) {
                     offset += address;
                     (
-                        self.memory
-                            .get(&"memory".to_string())
-                            .expect("memory should exist"),
+                        self.memory.get("memory").expect("memory should exist"),
                         ast::Int::new_const(self.context, regbase.clone()),
                         ast::Int::new_const(self.context, regbase),
                     )
@@ -331,8 +329,8 @@ impl<'ctx> ARMCORTEXA<'_> {
         let u = access.ge(&up_access);
 
         match (
-            self.solver.check_assumptions(&[l.clone()]),
-            self.solver.check_assumptions(&[u.clone()]),
+            self.solver.check_assumptions(std::slice::from_ref(&l)),
+            self.solver.check_assumptions(std::slice::from_ref(&u)),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
                 log::info!("Memory safe with solver's check!");

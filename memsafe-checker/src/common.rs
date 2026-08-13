@@ -123,10 +123,8 @@ impl SimdRegister {
     ) {
         assert!(index <= 8);
         let index = index * 2;
-        for i in 0..2 {
-            self.base[index + i] = base[i].clone();
-            self.offset[index + i] = offset[i];
-        }
+        self.base[index..index + 2].clone_from_slice(&base);
+        self.offset[index..index + 2].copy_from_slice(&offset);
     }
 
     pub fn set_word(
@@ -137,10 +135,8 @@ impl SimdRegister {
     ) {
         assert!(index < 4);
         let index = index * 4;
-        for i in 0..4 {
-            self.base[index + i] = base[i].clone();
-            self.offset[index + i] = offset[i];
-        }
+        self.base[index..index + 4].clone_from_slice(&base);
+        self.offset[index..index + 4].copy_from_slice(&offset);
     }
 
     pub fn set_double(
@@ -151,10 +147,8 @@ impl SimdRegister {
     ) {
         assert!(index < 2);
         let index = index * 8;
-        for i in 0..8 {
-            self.base[index + i] = base[i].clone();
-            self.offset[index + i] = offset[i];
-        }
+        self.base[index..index + 8].clone_from_slice(&base);
+        self.offset[index..index + 8].copy_from_slice(&offset);
     }
 
     pub fn set_from_register(
@@ -182,7 +176,7 @@ impl SimdRegister {
                 } else {
                     self.base = [BASE_INIT; 16];
                 }
-                self.offset = [(offset as u8).try_into().expect("conversion to u8 failed"); 16];
+                self.offset = [offset as u8; 16];
             }
             Arrangement::H8 => {
                 let offset = offset as u16;

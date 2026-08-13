@@ -208,10 +208,7 @@ fn example_z3_abstract_bound_unsafe() -> std::io::Result<()> {
 fn example_z3_abstract_bound_unsafe_zero() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-
-    program.push("ldr x1,[x0,#0]".to_string());
+    let program = vec!["start:".to_string(), "ldr x1,[x0,#0]".to_string()];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -233,15 +230,16 @@ fn example_z3_abstract_bound_unsafe_zero() -> std::io::Result<()> {
 fn example_unrelated_unknowns_not_treated_as_equal() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("ldr x1,[x0,#0]".to_string());
-    program.push("ldr x2,[x0,#4]".to_string());
-    program.push("cmp x1,x2".to_string());
-    program.push("b.eq bad".to_string());
-    program.push("ret".to_string());
-    program.push("bad:".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "ldr x1,[x0,#0]".to_string(),
+        "ldr x2,[x0,#4]".to_string(),
+        "cmp x1,x2".to_string(),
+        "b.eq bad".to_string(),
+        "ret".to_string(),
+        "bad:".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -264,15 +262,16 @@ fn example_unrelated_unknowns_not_treated_as_equal() -> std::io::Result<()> {
 fn example_unrelated_unknowns_not_treated_as_equal_cmn() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("ldr x1,[x0,#0]".to_string());
-    program.push("ldr x2,[x0,#4]".to_string());
-    program.push("cmn x1,x2".to_string());
-    program.push("b.eq bad".to_string());
-    program.push("ret".to_string());
-    program.push("bad:".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "ldr x1,[x0,#0]".to_string(),
+        "ldr x2,[x0,#4]".to_string(),
+        "cmn x1,x2".to_string(),
+        "b.eq bad".to_string(),
+        "ret".to_string(),
+        "bad:".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -294,11 +293,11 @@ fn example_unrelated_unknowns_not_treated_as_equal_cmn() -> std::io::Result<()> 
 fn example_z3_real_bound_safe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-
-    program.push("ldr x1,[x0,#0]".to_string());
-    program.push("ldr x1,[x0,#4]".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "ldr x1,[x0,#0]".to_string(),
+        "ldr x1,[x0,#4]".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -321,10 +320,11 @@ fn example_z3_real_bound_safe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("add x0,x0,#8".to_string());
-    program.push("ldr x1,[x0,#0]".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "add x0,x0,#8".to_string(),
+        "ldr x1,[x0,#0]".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -347,10 +347,11 @@ fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("add x0,x0,#4".to_string());
-    program.push("ldr x1,[x0,#0]".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "add x0,x0,#4".to_string(),
+        "ldr x1,[x0,#0]".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -373,10 +374,11 @@ fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("add x0,x0,#7".to_string());
-    program.push("ldr x1,[x0,#0]".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "add x0,x0,#7".to_string(),
+        "ldr x1,[x0,#0]".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -399,10 +401,11 @@ fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_below_region_unsafe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("sub x0,x0,#8".to_string());
-    program.push("ldr x1,[x0,#0]".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "sub x0,x0,#8".to_string(),
+        "ldr x1,[x0,#0]".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -425,9 +428,7 @@ fn example_z3_symbolic_base_below_region_unsafe() -> std::io::Result<()> {
 fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("str x1,[x0,#0]".to_string());
+    let program = vec!["start:".to_string(), "str x1,[x0,#0]".to_string()];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -450,9 +451,7 @@ fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
 fn example_z3_read_from_write_region_safe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("ldr x1,[x0,#0]".to_string());
+    let program = vec!["start:".to_string(), "ldr x1,[x0,#0]".to_string()];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -474,10 +473,11 @@ fn example_z3_read_from_write_region_safe() -> std::io::Result<()> {
 fn example_z3_real_bound_unsafe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("ldr x1,[x0,#0]".to_string());
-    program.push("ldr x1,[x0,#16]".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "ldr x1,[x0,#0]".to_string(),
+        "ldr x1,[x0,#16]".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -504,15 +504,16 @@ fn example_z3_real_bound_unsafe() -> std::io::Result<()> {
 fn example_z3_simple_loop_with_no_mem_access() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("add x1,#0,#0".to_string());
-    program.push("add x2,#0,#4".to_string());
-    program.push("loop:".to_string());
-    program.push("add x1,x1,#1".to_string());
-    program.push("cmp x1,x2".to_string());
-    program.push("b.ne loop".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "add x1,#0,#0".to_string(),
+        "add x2,#0,#4".to_string(),
+        "loop:".to_string(),
+        "add x1,x1,#1".to_string(),
+        "cmp x1,x2".to_string(),
+        "b.ne loop".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -527,17 +528,18 @@ fn example_z3_simple_loop_with_no_mem_access() -> std::io::Result<()> {
 fn example_z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("add x1,#0,#0".to_string());
-    program.push("add x2,#0,#4".to_string());
-    program.push("loop:".to_string());
-    program.push("ldr x3,[x0,#0]".to_string());
-    program.push("add x1,x1,#1".to_string());
-    program.push("add x0,x0,#4".to_string());
-    program.push("cmp x1,x2".to_string());
-    program.push("b.ne loop".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "add x1,#0,#0".to_string(),
+        "add x2,#0,#4".to_string(),
+        "loop:".to_string(),
+        "ldr x3,[x0,#0]".to_string(),
+        "add x1,x1,#1".to_string(),
+        "add x0,x0,#4".to_string(),
+        "cmp x1,x2".to_string(),
+        "b.ne loop".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -595,17 +597,18 @@ fn example_z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
 fn example_z3_complex_loop_with_mem_access_unsafe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("add x1,x0,x1".to_string());
-    program.push("loop:".to_string());
-    program.push("cmp x0,x1".to_string());
-    program.push("b.eq end".to_string());
-    program.push("ldr x3,[x0,#0]".to_string());
-    program.push("add x0,x0,#4".to_string());
-    program.push("b loop".to_string());
-    program.push("end:".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "add x1,x0,x1".to_string(),
+        "loop:".to_string(),
+        "cmp x0,x1".to_string(),
+        "b.eq end".to_string(),
+        "ldr x3,[x0,#0]".to_string(),
+        "add x0,x0,#4".to_string(),
+        "b loop".to_string(),
+        "end:".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -628,16 +631,17 @@ fn example_z3_complex_loop_with_mem_access_unsafe() -> std::io::Result<()> {
 fn example_z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("add x1,x0,x1".to_string());
-    program.push("loop:".to_string());
-    program.push("cmp x0,x1".to_string());
-    program.push("b.eq end".to_string());
-    program.push("add x0,x0,#4".to_string());
-    program.push("b loop".to_string());
-    program.push("end:".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "add x1,x0,x1".to_string(),
+        "loop:".to_string(),
+        "cmp x0,x1".to_string(),
+        "b.eq end".to_string(),
+        "add x0,x0,#4".to_string(),
+        "b loop".to_string(),
+        "end:".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -661,16 +665,17 @@ fn example_z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
 fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("test:".to_string());
-    program.push("str x30,[sp,#0]".to_string());
-    program.push("bl sub".to_string());
-    program.push("ldr x30,[sp,#0]".to_string());
-    program.push("add x0,x0,#1".to_string());
-    program.push("ret".to_string());
-    program.push("sub:".to_string());
-    program.push("add x0,x0,#10".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "test:".to_string(),
+        "str x30,[sp,#0]".to_string(),
+        "bl sub".to_string(),
+        "ldr x30,[sp,#0]".to_string(),
+        "add x0,x0,#1".to_string(),
+        "ret".to_string(),
+        "sub:".to_string(),
+        "add x0,x0,#10".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -691,10 +696,11 @@ fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
 fn example_unconditional_self_loop_bounded() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("spin:".to_string());
-    program.push("add x0,x0,#1".to_string());
-    program.push("b spin".to_string());
+    let program = vec![
+        "spin:".to_string(),
+        "add x0,x0,#1".to_string(),
+        "b spin".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -712,10 +718,11 @@ fn example_unconditional_self_loop_bounded() -> std::io::Result<()> {
 fn example_ret_to_self_bounded() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("test:".to_string());
-    program.push("mov x30,#0".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "test:".to_string(),
+        "mov x30,#0".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -731,14 +738,15 @@ fn example_ret_to_self_bounded() -> std::io::Result<()> {
 fn example_unconditional_forward_jump_terminates() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("test:".to_string());
-    program.push("add x0,x0,#1".to_string());
-    program.push("b second".to_string());
-    program.push("add x0,x0,#100".to_string());
-    program.push("second:".to_string());
-    program.push("add x0,x0,#10".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "test:".to_string(),
+        "add x0,x0,#1".to_string(),
+        "b second".to_string(),
+        "add x0,x0,#100".to_string(),
+        "second:".to_string(),
+        "add x0,x0,#10".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -759,22 +767,23 @@ fn example_unconditional_forward_jump_terminates() -> std::io::Result<()> {
 fn example_nested_call_two_levels_returns_to_call_sites() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("test:".to_string());
-    program.push("str x30,[sp,#0]".to_string());
-    program.push("bl outer".to_string());
-    program.push("ldr x30,[sp,#0]".to_string());
-    program.push("add x0,x0,#1".to_string());
-    program.push("ret".to_string());
-    program.push("outer:".to_string());
-    program.push("str x30,[sp,#8]".to_string());
-    program.push("bl inner".to_string());
-    program.push("ldr x30,[sp,#8]".to_string());
-    program.push("add x0,x0,#10".to_string());
-    program.push("ret".to_string());
-    program.push("inner:".to_string());
-    program.push("add x0,x0,#100".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "test:".to_string(),
+        "str x30,[sp,#0]".to_string(),
+        "bl outer".to_string(),
+        "ldr x30,[sp,#0]".to_string(),
+        "add x0,x0,#1".to_string(),
+        "ret".to_string(),
+        "outer:".to_string(),
+        "str x30,[sp,#8]".to_string(),
+        "bl inner".to_string(),
+        "ldr x30,[sp,#8]".to_string(),
+        "add x0,x0,#10".to_string(),
+        "ret".to_string(),
+        "inner:".to_string(),
+        "add x0,x0,#100".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -794,16 +803,17 @@ fn example_nested_call_two_levels_returns_to_call_sites() -> std::io::Result<()>
 fn example_z3_example_branch() -> std::io::Result<()> {
     //env_logger::init();;
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("cmp x1,x2".to_string());
-    program.push("b.ne branch".to_string());
-    program.push("add x0,x0,#4".to_string());
-    program.push("b end".to_string());
-    program.push("branch:".to_string());
-    program.push("add x0,x0,#2".to_string());
-    program.push("end:".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "cmp x1,x2".to_string(),
+        "b.ne branch".to_string(),
+        "add x0,x0,#4".to_string(),
+        "b end".to_string(),
+        "branch:".to_string(),
+        "add x0,x0,#2".to_string(),
+        "end:".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);
@@ -995,14 +1005,15 @@ fn example_symbolic_carry_bounds_index_via_b_cc() -> std::io::Result<()> {
 fn example_cmn_same_register_not_assumed_equal() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    program.push("cmn x1,x1".to_string());
-    program.push("b.ne bad".to_string());
-    program.push("ret".to_string());
-    program.push("bad:".to_string());
-    program.push("ldr x2,[x0,#64]".to_string());
-    program.push("ret".to_string());
+    let program = vec![
+        "start:".to_string(),
+        "cmn x1,x1".to_string(),
+        "b.ne bad".to_string(),
+        "ret".to_string(),
+        "bad:".to_string(),
+        "ldr x2,[x0,#64]".to_string(),
+        "ret".to_string(),
+    ];
 
     let cfg = Config::new();
     let ctx = Context::new(&cfg);

@@ -230,8 +230,6 @@ pub fn operand_from_string(a: String) -> Operand {
 
         if let Ok(value) = parts.1.parse::<usize>() {
             return Operand::Vector(RePrefix::V, value, arr);
-        } else {
-            ();
         }
     }
 
@@ -301,8 +299,8 @@ fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
 
     // start at 1 to ignore cases like fmov example
     let mut last_instance = parts.len() + 1;
-    for i in 1..parts.len() {
-        if parts[i].contains("[") {
+    for (i, part) in parts.iter().enumerate().skip(1) {
+        if part.contains("[") {
             last_instance = i;
         }
     }
@@ -424,11 +422,11 @@ impl Instruction {
     }
 
     pub fn is_simd(&self) -> bool {
-        self.operands.iter().any(|op| match op {
-            Operand::VectorRegister(..) => true,
-            Operand::Vector(..) => true,
-            Operand::VectorAccess(..) => true,
-            _ => false,
+        self.operands.iter().any(|op| {
+            matches!(
+                op,
+                Operand::VectorRegister(..) | Operand::Vector(..) | Operand::VectorAccess(..)
+            )
         })
     }
 

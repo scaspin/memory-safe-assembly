@@ -23,27 +23,22 @@ struct Program {
     // ifdefs: Vec<((String, usize), usize)>,
 }
 
+// pc, whether the jump was taken, the comparison used, accesses since, and state.
+type JumpRecord = (
+    usize,
+    bool,
+    AbstractComparison,
+    Vec<MemoryAccess>,
+    ComputerState,
+);
+
 #[derive(Clone)]
 pub struct ExecutionEngine<'ctx> {
     program: Program,
     computer: ARMCORTEXA<'ctx>,
     // abstracts: HashMap<String, String>,
     in_loop: bool,
-    jump_history: Vec<(
-        usize,              // pc
-        bool,               // jump decision (true = took, false = continue)
-        AbstractComparison, // comparison used
-        Vec<MemoryAccess>,
-        (
-            // relevent state
-            [RegisterValue; 33],
-            // [SimdRegister; 32],
-            Option<FlagValue>,
-            Option<FlagValue>,
-            Option<FlagValue>,
-            Option<FlagValue>,
-        ),
-    )>,
+    jump_history: Vec<JumpRecord>,
     fail_fast: bool,
 }
 
@@ -69,16 +64,12 @@ impl<'ctx> ExecutionEngine<'ctx> {
         for line in lines {
             // trim trailing comments and whitespace
             let trimmed = line.trim();
-            let nocomment = trimmed.split_once("//");
-            let text: String;
-            match nocomment {
-                Some(strings) => text = strings.0.to_string(),
-                None => text = trimmed.to_string(),
-            }
+            let text = match trimmed.split_once("//") {
+                Some(strings) => strings.0.to_string(),
+                None => trimmed.to_string(),
+            };
 
-            if text.is_empty() {
-                continue;
-            } else if text.starts_with("#") {
+            if text.is_empty() || text.starts_with("#") {
                 continue;
             } else if text.starts_with('.') {
                 defs.push(text);
@@ -115,16 +106,15 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 // do nothing for now
             } else if v[0] == ".byte" {
                 for i in v.iter().skip(1) {
-                    let num: i64;
-                    if i.contains("x") {
-                        num = u64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
-                            .expect("engine3") as i64;
-                    } else {
-                        if i.is_empty() {
-                            continue;
-                        }
-                        num = i.parse::<i64>().expect("engine4");
+                    if i.is_empty() {
+                        continue;
                     }
+                    let num = if i.contains("x") {
+                        u64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
+                            .expect("engine3") as i64
+                    } else {
+                        i.parse::<i64>().expect("engine4")
+                    };
                     computer.add_memory_value("memory".to_string(), address, num);
                     // address = address + (alignment as i64);
                     // heap grows down
@@ -132,16 +122,15 @@ impl<'ctx> ExecutionEngine<'ctx> {
                 }
             } else if v[0] == ".quad" || v[0] == ".long" {
                 for i in v.iter().skip(1) {
-                    let num: i64;
-                    if i.contains("x") {
-                        num = u64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
-                            .expect("engine3") as i64;
-                    } else {
-                        if i.is_empty() {
-                            continue;
-                        }
-                        num = i.parse::<i64>().expect("engine4");
+                    if i.is_empty() {
+                        continue;
                     }
+                    let num = if i.contains("x") {
+                        u64::from_str_radix(i.strip_prefix("0x").expect("engine2"), 16)
+                            .expect("engine3") as i64
+                    } else {
+                        i.parse::<i64>().expect("engine4")
+                    };
                     computer.add_memory_value("memory".to_string(), address, num);
                     address += 8;
                 }
@@ -235,12 +224,12 @@ impl<'ctx> ExecutionEngine<'ctx> {
     }
 
     pub fn start(&mut self, start: String) -> std::io::Result<()> {
-        let pc;
-        match self.get_linenumber_of_label(start.trim_matches(|c| c == '_' || c == ':').to_string())
+        let pc = match self
+            .get_linenumber_of_label(start.trim_matches(|c| c == '_' || c == ':').to_string())
         {
-            Some(n) => pc = n,
+            Some(n) => n,
             None => return Err(Error::other("Start label not found in program")),
-        }
+        };
 
         // run is recursive
         let res = self.run(pc);
@@ -857,9 +846,7 @@ mod tests {
 
     #[test]
     fn test_label_parsing_simple() {
-        let mut asm = Vec::new();
-        asm.push("start:".to_string());
-        asm.push("add x0, x1, x2".to_string());
+        let asm = vec!["start:".to_string(), "add x0, x1, x2".to_string()];
 
         let mut cfg = Config::new();
         cfg.set_proof_generation(true);
@@ -873,13 +860,14 @@ mod tests {
 
     #[test]
     fn test_label_parsing_multi() {
-        let mut asm = Vec::new();
-        asm.push("start:".to_string());
-        asm.push("add x0, x1, x2".to_string());
-        asm.push("add x0, x1, x2".to_string());
-        asm.push("add x0, x1, x2".to_string());
-        asm.push("end:".to_string());
-        asm.push("ret".to_string());
+        let asm = vec![
+            "start:".to_string(),
+            "add x0, x1, x2".to_string(),
+            "add x0, x1, x2".to_string(),
+            "add x0, x1, x2".to_string(),
+            "end:".to_string(),
+            "ret".to_string(),
+        ];
 
         let mut cfg = Config::new();
         cfg.set_proof_generation(true);
@@ -894,9 +882,7 @@ mod tests {
 
     #[test]
     fn test_running_small_program_no_mem_access() {
-        let mut asm = Vec::new();
-        asm.push("start:".to_string());
-        asm.push("add x0, x1, x2".to_string());
+        let asm = vec!["start:".to_string(), "add x0, x1, x2".to_string()];
 
         let mut cfg = Config::new();
         cfg.set_proof_generation(true);

@@ -1,6 +1,6 @@
 use crate::computer::*;
 
-impl<'ctx> ARMCORTEXA<'_> {
+impl ARMCORTEXA<'_> {
     pub fn arithmetic(
         &mut self,
         op_string: &str,
@@ -94,19 +94,14 @@ impl<'ctx> ARMCORTEXA<'_> {
     pub fn shift_reg(&mut self, reg1: &Operand, reg2: &Operand, reg3: &Operand) {
         let r2 = self.get_register(reg2);
 
-        let shifted_reg;
-        match reg3 {
-            Operand::Bitwise(op, shift) => {
-                shifted_reg = shift_imm(op.to_string(), r2, *shift);
-            }
-            Operand::Immediate(shift) => {
-                shifted_reg = shift_imm("lsl".to_string(), r2, *shift);
-            }
+        let shifted_reg = match reg3 {
+            Operand::Bitwise(op, shift) => shift_imm(op.to_string(), r2, *shift),
+            Operand::Immediate(shift) => shift_imm("lsl".to_string(), r2, *shift),
             _ => {
                 log::error!("Cannot shift with this operand: {:?}", reg3);
                 return;
             }
-        }
+        };
 
         self.set_register(reg1, shifted_reg.kind, shifted_reg.base, shifted_reg.offset);
     }
