@@ -22,10 +22,10 @@ struct CallColon {
 
 impl Parse for CallColon {
     fn parse(input: ParseStream) -> Result<Self> {
-        return Ok(Self {
+        Ok(Self {
             item_fn: input.parse()?,
             _end_token: input.parse()?,
-        });
+        })
     }
 }
 
@@ -38,11 +38,11 @@ struct AttributeList {
 
 impl Parse for AttributeList {
     fn parse(input: ParseStream) -> Result<Self> {
-        return Ok(Self {
+        Ok(Self {
             filename: input.parse()?,
             _separator: input.parse()?,
             argument_list: punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)?,
-        });
+        })
     }
 }
 
@@ -61,7 +61,7 @@ fn calculate_size_of(ty: String) -> usize {
         "isize" => std::mem::size_of::<isize>(),
         p => {
             if let Ok(v) = p.parse::<usize>() {
-                return v;
+                v
             } else {
                 todo!("size of undefined type")
             }
@@ -70,68 +70,50 @@ fn calculate_size_of(ty: String) -> usize {
 }
 
 fn calculate_size_of_array(a: &TypeArray) -> usize {
-    let elem: String;
-    let len;
-    match &*a.elem {
-        Type::Path(b) => {
-            elem = b.path.segments[0].ident.to_string();
-        }
+    let elem = match &*a.elem {
+        Type::Path(b) => b.path.segments[0].ident.to_string(),
         _ => todo!("calculate size of array that is not given using path"),
-    }
-    match &a.len {
+    };
+    let len = match &a.len {
         Expr::Lit(b) => match &b.lit {
-            Lit::Int(i) => {
-                len = i
-                    .token()
-                    .to_string()
-                    .parse::<usize>()
-                    .expect("calculate_size_array");
-            }
+            Lit::Int(i) => i
+                .token()
+                .to_string()
+                .parse::<usize>()
+                .expect("calculate_size_array"),
             _ => todo!("size of array1"),
         },
         _ => todo!("size of array2"),
-    }
-    return calculate_size_of(elem) * len;
+    };
+    calculate_size_of(elem) * len
 }
 
 fn calculate_type_of_array_ptr(a: &TypeArray) -> String {
-    let elem: String;
     match &*a.elem {
-        Type::Path(b) => {
-            elem = b.path.segments[0].ident.to_string();
-        }
+        Type::Path(b) => b.path.segments[0].ident.to_string(),
         Type::Array(r) => {
-            let inner;
-            let size;
-            match &*r.elem {
-                Type::Path(p) => {
-                    inner = p.path.segments[0].ident.to_string();
-                }
+            let inner = match &*r.elem {
+                Type::Path(p) => p.path.segments[0].ident.to_string(),
                 _ => todo!("calculate type of array not with path {:?}", r),
-            }
-            match &r.len {
+            };
+            let size = match &r.len {
                 Expr::Lit(l) => match &l.lit {
-                    Lit::Int(i) => size = i.to_string(),
+                    Lit::Int(i) => i.to_string(),
                     _ => todo!(),
                 },
                 _ => todo!(),
-            }
-            elem = "[".to_owned() + &inner + &";" + &size + "]";
+            };
+            "[".to_owned() + &inner + ";" + &size + "]"
         }
         _ => todo!("calculate type of array not with path {:?}", a),
     }
-    return elem;
 }
 
 fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
-    let elem: String;
     match &*a.elem {
-        Type::Path(b) => {
-            elem = b.path.segments[0].ident.to_string();
-        }
+        Type::Path(b) => b.path.segments[0].ident.to_string(),
         _ => todo!("calculate type of slice"),
     }
-    return elem;
 }
 
 fn calculate_hash<T: Hash>(t: &T) -> u64 {
@@ -145,11 +127,11 @@ fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
     let right_expr = syn_expr_to_abstract_expression(&input.right);
 
     match input.op {
-        BinOp::Add(_) => return generate_expression("+", left_expr, right_expr),
-        BinOp::Sub(_) => return generate_expression("-", left_expr, right_expr),
-        BinOp::Div(_) => return generate_expression("/", left_expr, right_expr),
-        BinOp::Mul(_) => return generate_expression("*", left_expr, right_expr),
-        BinOp::Rem(_) => return generate_expression("%", left_expr, right_expr),
+        BinOp::Add(_) => generate_expression("+", left_expr, right_expr),
+        BinOp::Sub(_) => generate_expression("-", left_expr, right_expr),
+        BinOp::Div(_) => generate_expression("/", left_expr, right_expr),
+        BinOp::Mul(_) => generate_expression("*", left_expr, right_expr),
+        BinOp::Rem(_) => generate_expression("%", left_expr, right_expr),
         _ => todo!("expression binary to abstract {:?}", input.op),
     }
 }
@@ -159,20 +141,20 @@ fn binary_to_abstract_comparison(input: &ExprBinary) -> AbstractComparison {
     let right_expr = syn_expr_to_abstract_expression(&input.right);
 
     match input.op {
-        BinOp::Eq(_) => return generate_comparison("==", left_expr, right_expr),
-        BinOp::Lt(_) => return generate_comparison("<", left_expr, right_expr),
-        BinOp::Le(_) => return generate_comparison("<=", left_expr, right_expr),
-        BinOp::Ne(_) => return generate_comparison("!=", left_expr, right_expr),
-        BinOp::Ge(_) => return generate_comparison(">=", left_expr, right_expr),
-        BinOp::Gt(_) => return generate_comparison(">", left_expr, right_expr),
+        BinOp::Eq(_) => generate_comparison("==", left_expr, right_expr),
+        BinOp::Lt(_) => generate_comparison("<", left_expr, right_expr),
+        BinOp::Le(_) => generate_comparison("<=", left_expr, right_expr),
+        BinOp::Ne(_) => generate_comparison("!=", left_expr, right_expr),
+        BinOp::Ge(_) => generate_comparison(">=", left_expr, right_expr),
+        BinOp::Gt(_) => generate_comparison(">", left_expr, right_expr),
         _ => todo!("comparison conversion"),
     }
 }
 fn unary_to_abstract_expression(input: &ExprUnary) -> AbstractExpression {
     let expr = syn_expr_to_abstract_expression(&input.expr);
     match input.op {
-        UnOp::Not(_) => return generate_expression("!", expr, AbstractExpression::Empty),
-        UnOp::Neg(_) => return generate_expression("-", expr, AbstractExpression::Empty),
+        UnOp::Not(_) => generate_expression("!", expr, AbstractExpression::Empty),
+        UnOp::Neg(_) => generate_expression("-", expr, AbstractExpression::Empty),
         _ => todo!("unary conversion"),
     }
 }
@@ -180,16 +162,14 @@ fn unary_to_abstract_expression(input: &ExprUnary) -> AbstractExpression {
 fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
     match &input {
         Expr::Lit(l) => match &l.lit {
-            Lit::Str(s) => return AbstractExpression::Abstract(s.value()),
+            Lit::Str(s) => AbstractExpression::Abstract(s.value()),
             Lit::Int(i) => {
-                return AbstractExpression::Immediate(
-                    i.base10_parse::<i64>().expect("undefined integer"),
-                )
+                AbstractExpression::Immediate(i.base10_parse::<i64>().expect("undefined integer"))
             }
             _ => todo!("Input Literal type"),
         },
-        Expr::Binary(b) => return binary_to_abstract_expression(b),
-        Expr::Unary(b) => return unary_to_abstract_expression(b),
+        Expr::Binary(b) => binary_to_abstract_expression(b),
+        Expr::Unary(b) => unary_to_abstract_expression(b),
         Expr::MethodCall(c) => {
             let mut var_name: String;
             match *c.receiver.clone() {
@@ -200,21 +180,19 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
             }
             match c.method.to_string().as_str() {
                 "len" => {
-                    var_name = var_name + "_len";
+                    var_name += "_len";
                 }
                 "as_ptr" => {
-                    var_name = var_name + "_as_ptr";
+                    var_name += "_as_ptr";
                 }
                 "as_mut_ptr" => {
-                    var_name = var_name + "_as_mut_ptr";
+                    var_name += "_as_mut_ptr";
                 }
                 _ => todo!("method matching"),
             };
-            return AbstractExpression::Abstract(var_name);
+            AbstractExpression::Abstract(var_name)
         }
-        Expr::Path(p) => {
-            return AbstractExpression::Abstract(p.path.segments[0].ident.to_string());
-        }
+        Expr::Path(p) => AbstractExpression::Abstract(p.path.segments[0].ident.to_string()),
         Expr::Field(f) => {
             let base = match &*f.base {
                 Expr::Path(p) => p.clone().path.segments[0].ident.to_string(),
@@ -225,7 +203,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
                 Member::Unnamed(n) => n.index.to_string(),
             };
             let new_name = base.to_owned() + "_field" + &index;
-            return AbstractExpression::Abstract(new_name);
+            AbstractExpression::Abstract(new_name)
         }
         _ => todo!("Input type {:?}", input),
     }
@@ -310,13 +288,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             match i {
                 FnArg::Typed(pat_type) => {
                     // get name
-                    let name;
-                    match &*pat_type.pat {
-                        Pat::Ident(b) => {
-                            name = b.ident.clone().to_string();
-                        }
+                    let name = match &*pat_type.pat {
+                        Pat::Ident(b) => b.ident.clone().to_string(),
                         _ => todo!("non-ident typed name in inputs"),
-                    }
+                    };
                     let ty = &*pat_type.ty;
                     input_types.insert(name.clone(), ty);
                     match ty {
@@ -344,16 +319,16 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 for e in &t.elems {
                                     match e {
                                         Type::Array(a) => {
-                                            size = size + calculate_size_of_array(&a);
+                                            size += calculate_size_of_array(a);
                                         }
                                         Type::Path(p) => {
                                             for i in &p.path.segments {
                                                 match i.ident.to_string().as_str() {
                                                     "usize" => {
-                                                        size = size + std::mem::size_of::<usize>();
+                                                        size += std::mem::size_of::<usize>();
                                                     }
                                                     "u32" => {
-                                                        size = size + std::mem::size_of::<u32>();
+                                                        size += std::mem::size_of::<u32>();
                                                     }
                                                     _ => todo!("path size"),
                                                 }
@@ -387,23 +362,21 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
 
                 let mut fields = quote! {};
-                let mut i = 0;
-                let struct_ident = Ident::new(&struct_name, proc_macro2::Span::call_site().into());
-                for f in &new_structs
+                let struct_ident = Ident::new(&struct_name, proc_macro2::Span::call_site());
+                for (i, f) in new_structs
                     .get(&struct_name)
                     .expect("Need established struct")
                     .fields
+                    .iter()
+                    .enumerate()
                 {
                     let fieldname = f.ident.clone().expect("Need field name");
                     let lit: Lit = Lit::new(proc_macro2::Literal::usize_unsuffixed(i));
                     fields = quote! { #fields #fieldname: #struct_ident.#lit, };
-                    i = i + 1;
                 }
 
-                let real_struct_name = Ident::new(
-                    &(struct_name + "_struct"),
-                    proc_macro2::Span::call_site().into(),
-                );
+                let real_struct_name =
+                    Ident::new(&(struct_name + "_struct"), proc_macro2::Span::call_site());
                 arguments_to_pass
                     .push(parse_quote! {&#real_struct_name { #fields } as *const #real_struct_name})
             } else {
@@ -454,11 +427,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     };
                     match a.method.to_string().as_str() {
                         "len" => {
-                            let n = Ident::new(&(var_name + "_len"), span.into());
+                            let n = Ident::new(&(var_name + "_len"), span);
                             new_args.push(parse_quote! {#n: usize});
                         }
                         "as_ptr" => {
-                            let n = Ident::new(&(var_name.clone() + "_as_ptr"), span.into());
+                            let n = Ident::new(&(var_name.clone() + "_as_ptr"), span);
                             if let Some(size) = pointer_sizes.get(&var_name) {
                                 match size.as_str() {
                                     "u8" => new_args.push(parse_quote! {#n: *const u8}),
@@ -475,7 +448,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                         }
                         "as_mut_ptr" => {
-                            let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span.into());
+                            let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span);
                             if let Some(size) = pointer_sizes.get(&var_name) {
                                 match size.as_str() {
                                     "u8" => new_args.push(parse_quote! {#n: *mut u8}),
@@ -508,21 +481,21 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     let exp = quote! {#b}.to_string();
                     let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
                     input_expressions.insert(name.clone(), i);
-                    let n = Ident::new(&name, span.into());
+                    let n = Ident::new(&name, span);
                     new_args.push(parse_quote! {#n : usize});
                 }
                 Expr::Unary(ref b) => {
                     let exp = quote! {#b}.to_string();
                     let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
                     input_expressions.insert(name.clone(), i);
-                    let n = Ident::new(&name, span.into());
+                    let n = Ident::new(&name, span);
                     new_args.push(parse_quote! {#n : isize});
                 }
                 Expr::Lit(ref b) => {
                     let exp = quote! {#b}.to_string();
                     let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
                     input_expressions.insert(name.clone(), i);
-                    let n = Ident::new(&name, span.into());
+                    let n = Ident::new(&name, span);
                     new_args.push(parse_quote! {#n : usize});
                 }
                 Expr::Cast(c) => {
@@ -540,12 +513,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         _ => todo!("name of cast expr types {:?}", c.expr),
                     }
 
-                    let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span.into());
+                    let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span);
                     let ty = c.ty.clone();
                     if let Type::Ptr(p) = *ty.clone() {
                         if let Type::Infer(_) = *p.elem {
-                            let struct_name =
-                                Ident::new(&(var_name.clone() + "_struct"), span.into());
+                            let struct_name = Ident::new(&(var_name.clone() + "_struct"), span);
                             new_args.push(parse_quote! {#n : *const #struct_name});
                         } else {
                             new_args.push(parse_quote! {#n : #ty});
@@ -580,13 +552,13 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 let pointer_size = pointer_sizes
                                     .get(&var_name)
                                     .expect("can't find size of  slice");
-                                let pointer_type = Ident::new(&pointer_size.clone(), span.into());
+                                let pointer_type = Ident::new(&pointer_size.clone(), span);
                                 match f.member {
                                     syn::Member::Named(name) => match name.to_string().as_str() {
                                         "end" => {
                                             let n = Ident::new(
                                                 &(var_name.clone() + "_end_ptr_range"),
-                                                span.into(),
+                                                span,
                                             );
                                             new_args.push(parse_quote! {#n : *const #pointer_type});
                                         }
@@ -596,14 +568,14 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                         0 => {
                                             let n = Ident::new(
                                                 &(var_name.clone() + "_start_ptr_range"),
-                                                span.into(),
+                                                span,
                                             );
                                             new_args.push(parse_quote! {#n : _});
                                         }
                                         1 => {
                                             let n = Ident::new(
                                                 &(var_name.clone() + "_end_ptr_range"),
-                                                span.into(),
+                                                span,
                                             );
                                             new_args.push(parse_quote! {#n : _});
                                         }
@@ -663,11 +635,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             .iter()
             .collect();
     let res = File::open(assembly_file);
-    let file: File;
-    match res {
-        Ok(opened) => {
-            file = opened;
-        }
+    let file = match res {
+        Ok(opened) => opened,
         Err(error) => {
             // make more specific using span
             abort_call_site!(error);
@@ -685,10 +654,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut engine = bums::engine::ExecutionEngine::new(program, &ctx);
 
     // add memory safe regions
-    for i in 0..arguments_to_memory_safe_regions.len() {
+    for (i, a) in arguments_to_memory_safe_regions.iter().enumerate() {
         let name;
 
-        let a = &arguments_to_memory_safe_regions[i];
         match a {
             FnArg::Typed(pat_type) => {
                 // get name
@@ -706,12 +674,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 //get type to get size
                 match &*pat_type.ty {
                     Type::Path(_) => {
-                        if let Some(binary) = input_expressions.get(&name).clone() {
+                        if let Some(binary) = input_expressions.get(&name) {
                             match binary {
                                 Expr::Binary(b) => {
                                     engine.add_abstract_expression_from(
                                         i,
-                                        binary_to_abstract_expression(&b),
+                                        binary_to_abstract_expression(b),
                                     );
                                 }
                                 _ => {
@@ -740,7 +708,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                         //derive memory safe region based on length
                         let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
-                        let no_range = name.strip_suffix("_end_ptr_range").unwrap_or(&no_mut_name);
+                        let no_range = name.strip_suffix("_end_ptr_range").unwrap_or(no_mut_name);
                         let no_suffix = no_range.strip_suffix("_as_ptr").unwrap_or(no_range);
 
                         match &*a.elem {
@@ -759,7 +727,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                             engine.add_region(
                                                 RegionType::READ,
                                                 name.clone(),
-                                                AbstractExpression::Immediate(bound.clone() as i64),
+                                                AbstractExpression::Immediate(*bound as i64),
                                             );
                                         }
                                     }
@@ -767,7 +735,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     let s = new_structs
                                         .get(no_suffix)
                                         .expect("Need well defined struct");
-                                    let mut i = 0;
                                     let mut index = 0;
                                     for e in &s.fields {
                                         match e.ty.clone() {
@@ -804,14 +771,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                                 }
                                             }
                                             Type::Array(a) => {
-                                                if let Some(_) = input_sizes.get(no_suffix) {
-                                                    index = index
-                                                        + ((calculate_size_of_array(&a)) as i64);
+                                                if input_sizes.contains_key(no_suffix) {
+                                                    index += (calculate_size_of_array(&a)) as i64;
                                                 }
                                             }
                                             _ => todo!("unsupported tuple type {:?}", e),
                                         }
-                                        i = i + 1;
                                     }
                                     continue;
                                 }
@@ -853,7 +818,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                         engine.add_region(
                                             RegionType::READ,
                                             name.clone(),
-                                            AbstractExpression::Immediate(bound.clone() as i64),
+                                            AbstractExpression::Immediate(*bound as i64),
                                         );
                                     }
                                     continue;
