@@ -20,6 +20,13 @@ impl ARMCORTEXA {
             r2 = shift_imm(op.to_string(), r2.clone(), *num);
         }
 
+        // Only + and - distribute over the base/offset split; the rest need the whole value.
+        if !matches!(op_string, "+" | "-") && (r1.base.is_some() || r2.base.is_some()) {
+            let whole = generate_expression(op_string, r1.expression(), r2.expression());
+            self.set_register(reg0, RegisterKind::RegisterBase, Some(whole), 0);
+            return;
+        }
+
         if r1.kind == r2.kind {
             match r1.kind {
                 RegisterKind::RegisterBase => {
@@ -91,12 +98,13 @@ impl ARMCORTEXA {
         }
     }
 
-    pub fn shift_reg(&mut self, reg1: &Operand, reg2: &Operand, reg3: &Operand) {
+    // `op` is the opcode, since a bare immediate carries no shift direction.
+    pub fn shift_reg(&mut self, op: &str, reg1: &Operand, reg2: &Operand, reg3: &Operand) {
         let r2 = self.get_register(reg2);
 
         let shifted_reg = match reg3 {
             Operand::Bitwise(op, shift) => shift_imm(op.to_string(), r2, *shift),
-            Operand::Immediate(shift) => shift_imm("lsl".to_string(), r2, *shift),
+            Operand::Immediate(shift) => shift_imm(op.to_string(), r2, *shift),
             _ => {
                 log::error!("Cannot shift with this operand: {:?}", reg3);
                 return;
@@ -318,7 +326,7 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
             }
         }
         "lsr" => {
-            let new_offset = register.offset << shift;
+            let new_offset = register.offset >> shift;
             RegisterValue {
                 kind: register.kind,
                 base: Some(generate_expression(
@@ -357,6 +365,6 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
                 offset: register.offset,
             }
         }
-        _ => todo!("{}", op),
+        _ => todo!("unsupported extend or shift operator {op}"),
     }
 }

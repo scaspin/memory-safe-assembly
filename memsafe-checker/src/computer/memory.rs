@@ -1,15 +1,30 @@
 use crate::computer::*;
 
+// Reads better than "base + -4" when the access is below its base.
+fn format_address(base: &AbstractExpression, offset: i64) -> String {
+    if offset < 0 {
+        format!("{base} - {}", -offset)
+    } else {
+        format!("{base} + {offset}")
+    }
+}
+
 impl ARMCORTEXA {
     /*
      * t: register name to load into
      * address: register with address as value
      */
-    pub fn load(&mut self, t: Operand, address: RegisterValue) -> Result<(), MemorySafetyError> {
+    pub fn load(
+        &mut self,
+        t: Operand,
+        address: RegisterValue,
+        width: i64,
+    ) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
             address.base.clone().expect("Need a name for region"),
             address.offset,
             RegionType::READ,
+            width,
         );
 
         if res.is_ok() {
@@ -24,7 +39,7 @@ impl ARMCORTEXA {
                         self.set_register(&t, v.kind.clone(), v.base.clone(), v.offset);
                         self.rw_queue.push(MemoryAccess {
                             kind: RegionType::READ,
-                            base: base.clone(),
+                            base: AbstractExpression::Abstract(base.clone()),
                             offset: address.offset,
                         });
                         log::info!(
@@ -34,12 +49,10 @@ impl ARMCORTEXA {
                         );
                         Ok(())
                     }
-                    None => {
-                        log::error!("No element at this address in region {:?}", region);
-                        Err(MemorySafetyError::new(
-                            "Cannot read element at this address from region",
-                        ))
-                    }
+                    None => Err(MemorySafetyError::new(&format!(
+                        "read of never-written memory at {}",
+                        format_address(&AbstractExpression::Abstract(base), address.offset)
+                    ))),
                 }
             } else {
                 log::info!(
@@ -48,7 +61,7 @@ impl ARMCORTEXA {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
-                    base: address.base.expect("Need base").to_string(),
+                    base: address.base.expect("Need base"),
                     offset: address.offset,
                 });
                 self.set_register(&t, RegisterKind::Number, None, 0);
@@ -63,11 +76,13 @@ impl ARMCORTEXA {
         &mut self,
         t: Operand,
         address: RegisterValue,
+        width: i64,
     ) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
             address.base.clone().expect("Need a name for region"),
             address.offset,
             RegionType::READ,
+            width,
         );
 
         if res.is_ok() {
@@ -82,7 +97,7 @@ impl ARMCORTEXA {
                         self.set_register(&t, v.kind.clone(), v.base, v.offset);
                         self.rw_queue.push(MemoryAccess {
                             kind: RegionType::READ,
-                            base: base.clone(),
+                            base: AbstractExpression::Abstract(base.clone()),
                             offset: address.offset,
                         });
                         log::info!(
@@ -92,12 +107,10 @@ impl ARMCORTEXA {
                         );
                         Ok(())
                     }
-                    None => {
-                        log::error!("No element at this address in region {:?}", region);
-                        Err(MemorySafetyError::new(
-                            "Cannot read element at this address from region",
-                        ))
-                    }
+                    None => Err(MemorySafetyError::new(&format!(
+                        "read of never-written memory at {}",
+                        format_address(&AbstractExpression::Abstract(base), address.offset)
+                    ))),
                 }
             } else {
                 log::info!(
@@ -106,7 +119,7 @@ impl ARMCORTEXA {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
-                    base: address.base.expect("Need base").to_string(),
+                    base: address.base.expect("Need base"),
                     offset: address.offset,
                 });
                 self.set_register(&t, RegisterKind::Number, None, 0);
@@ -125,12 +138,14 @@ impl ARMCORTEXA {
         &mut self,
         register: Operand,
         address: RegisterValue,
+        width: i64,
     ) -> Result<(), MemorySafetyError> {
         let region = address.base.clone();
         let res = self.mem_safe_access(
             region.clone().expect("Need region base"),
             address.offset,
             RegionType::WRITE,
+            width,
         );
 
         if res.is_ok() {
@@ -138,7 +153,10 @@ impl ARMCORTEXA {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let register = &self.get_register(&register);
-                let region = self.memory.get_mut(&region).expect("No region");
+                let region = self
+                    .memory
+                    .get_mut(&region)
+                    .expect("region named by get_memory_pointer");
                 region.insert(offset, register.clone());
 
                 log::info!(
@@ -148,7 +166,7 @@ impl ARMCORTEXA {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base,
+                    base: AbstractExpression::Abstract(base),
                     offset: address.offset,
                 });
                 Ok(())
@@ -159,7 +177,7 @@ impl ARMCORTEXA {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base: address.base.expect("Need base").to_string(),
+                    base: address.base.expect("Need base"),
                     offset: address.offset,
                 });
                 Ok(())
@@ -173,12 +191,14 @@ impl ARMCORTEXA {
         &mut self,
         register: Operand,
         address: RegisterValue,
+        width: i64,
     ) -> Result<(), MemorySafetyError> {
         let region = address.base.clone();
         let res = self.mem_safe_access(
             region.clone().expect("Need region base"),
             address.offset,
             RegionType::WRITE,
+            width,
         );
 
         if res.is_ok() {
@@ -186,7 +206,10 @@ impl ARMCORTEXA {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let register = self.get_register(&register);
-                let region = self.memory.get_mut(&region).expect("No region");
+                let region = self
+                    .memory
+                    .get_mut(&region)
+                    .expect("region named by get_memory_pointer");
                 region.insert(offset, register.clone());
 
                 log::info!(
@@ -196,7 +219,7 @@ impl ARMCORTEXA {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base,
+                    base: AbstractExpression::Abstract(base),
                     offset: address.offset,
                 });
                 Ok(())
@@ -207,7 +230,7 @@ impl ARMCORTEXA {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base: address.base.expect("Need base").to_string(),
+                    base: address.base.expect("Need base"),
                     offset: address.offset,
                 });
                 Ok(())
@@ -233,6 +256,7 @@ impl ARMCORTEXA {
         base_expr: AbstractExpression,
         mut offset: i64,
         ty: RegionType,
+        width: i64,
     ) -> Result<(), MemorySafetyError> {
         let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => {
@@ -245,12 +269,14 @@ impl ARMCORTEXA {
                 } else if let Some(address) = self.memory_labels.get(&regbase.clone()) {
                     offset += address;
                     (
-                        self.memory.get("memory").expect("memory should exist"),
+                        self.memory
+                            .get("memory")
+                            .expect("labelled data lives in the memory region"),
                         ast::Int::new_const(regbase.clone()),
                         ast::Int::new_const(regbase),
                     )
                 } else {
-                    todo!("memory regions in access check");
+                    todo!("no region or label declared for base {regbase}")
                 }
             }
             _ => {
@@ -259,10 +285,13 @@ impl ARMCORTEXA {
                 for r in self.memory.keys() {
                     if abstracts.contains(r) {
                         result = Some((
-                            self.memory.get(r).expect("Region not in memory 2"),
+                            // Keyed by the name just matched, so the lookup cannot miss.
+                            self.memory.get(r).expect("region named by its own key"),
                             expression_to_ast(AbstractExpression::Abstract(r.to_string()))
-                                .expect("computer25"),
-                            expression_to_ast(base_expr.clone()).expect("computer251"),
+                                .expect("an abstract always translates"),
+                            expression_to_ast(base_expr.clone()).unwrap_or_else(|| {
+                                panic!("no translation for access base {base_expr}")
+                            }),
                         ));
                         break;
                     }
@@ -272,10 +301,14 @@ impl ARMCORTEXA {
                         {
                             offset = *address;
                             result = Some((
-                                self.memory.get("memory").expect("Region not in memory 2"),
+                                self.memory
+                                    .get("memory")
+                                    .expect("labelled data lives in the memory region"),
                                 expression_to_ast(AbstractExpression::Abstract(r.0.to_string()))
-                                    .expect("computer25"),
-                                expression_to_ast(base_expr.clone()).expect("computer251"),
+                                    .expect("an abstract always translates"),
+                                expression_to_ast(base_expr.clone()).unwrap_or_else(|| {
+                                    panic!("no translation for access base {base_expr}")
+                                }),
                             ));
                             break;
                         }
@@ -284,21 +317,18 @@ impl ARMCORTEXA {
                 if let Some(res) = result {
                     res
                 } else {
-                    return Err(MemorySafetyError::new(
-                        format!(
-                            "No matching region found for access {:?}, {:?}",
-                            base_expr, offset
-                        )
-                        .as_str(),
-                    ));
+                    return Err(MemorySafetyError::new(&format!(
+                        "no region declared for {ty} at {}",
+                        format_address(&base_expr, offset)
+                    )));
                 }
             }
         };
 
         if ty == RegionType::WRITE && region.kind == RegionType::READ {
             return Err(MemorySafetyError::new(&format!(
-                "Access does not match region type {:#?} {:?} {:?}",
-                region.kind, ty, base_expr
+                "write at {base_expr} targets a {} region",
+                region.kind
             )));
         }
 
@@ -307,43 +337,48 @@ impl ARMCORTEXA {
             abs_offset = ast::Int::from_i64(offset.abs());
         }
         let access = ast::Int::add(&[&base_access, &abs_offset]);
+        // The access spans `width` bytes, so its last byte must also be in range.
+        let last_byte = ast::Int::add(&[&access, &ast::Int::from_i64(width - 1)]);
 
-        // let width = ast::Int::from_i64(2);    // how wide is memory access, two bytes
         let lowerbound_value = ast::Int::from_i64(0);
         let low_access = ast::Int::add(&[&base, &lowerbound_value]);
-        let upperbound_value = expression_to_ast(region.get_length()).expect("computer26");
+        let upperbound_value = expression_to_ast(region.get_length())
+            .unwrap_or_else(|| panic!("no translation for region length {}", region.get_length()));
         let up_access = ast::Int::add(&[&base, &upperbound_value]);
         let l = access.lt(&low_access);
         // Valid accesses lie in [base, base+length): an access landing exactly
         // on base+length is one byte past the end of the region and unsafe.
-        let u = access.ge(&up_access);
+        let u = last_byte.ge(&up_access);
 
         match (
             self.solver.check_assumptions(std::slice::from_ref(&l)),
             self.solver.check_assumptions(std::slice::from_ref(&u)),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
-                log::info!("Memory safe with solver's check!");
-                log::info!("Unsat core {:?}", self.solver.get_unsat_core());
-                return Ok(());
+                // Both queries are vacuously unsat when the path itself has no model.
+                if self.solver.check() == SatResult::Sat {
+                    log::info!(
+                        "{ty} at {} proved in bounds",
+                        format_address(&base_expr, offset)
+                    );
+                    return Ok(());
+                }
+                Err(MemorySafetyError::new(&format!(
+                    "{ty} of {width} bytes at {} unprovable: path has no model",
+                    format_address(&base_expr, offset)
+                )))
             }
             (a, b) => {
-                log::info!("Load from address {:?} + {} unsafe", base_expr, offset);
                 log::info!(
-                    "impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}",
-                    a,
-                    b,
+                    "below-region is {a:?} and past-end is {b:?}, model: {:?}",
                     self.solver.get_model()
                 );
-                log::info!("Memory unsafe with solver's check!");
+                Err(MemorySafetyError::new(&format!(
+                    "{ty} of {width} bytes at {} not provably within region of length {}",
+                    format_address(&base_expr, offset),
+                    region.get_length()
+                )))
             }
         }
-        Err(MemorySafetyError::new(
-            format!(
-                "Accessing address outside allowable memory regions {:?}, {:?}",
-                base_expr, offset
-            )
-            .as_str(),
-        ))
     }
 }

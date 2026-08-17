@@ -21,7 +21,9 @@ pub type ComputerState = (
 #[derive(Clone)]
 pub struct ARMCORTEXA {
     pub registers: [RegisterValue; 33],
-    pub simd_registers: [SimdRegister; 32],
+    // Boxed: 32 x 664 bytes dominated the engine, and the engine is cloned onto the
+    // stack for every explored branch.
+    pub simd_registers: Box<[SimdRegister; 32]>,
     zero: Option<FlagValue>,
     neg: Option<FlagValue>,
     pub carry: Option<FlagValue>,
@@ -88,7 +90,7 @@ impl ARMCORTEXA {
             RegisterValue::new(RegisterKind::Immediate, None, 0), // 64-bit zero
         ];
 
-        let simd_registers = [
+        let simd_registers = Box::new([
             SimdRegister::new("v0"),
             SimdRegister::new("v1"),
             SimdRegister::new("v2"),
@@ -121,7 +123,7 @@ impl ARMCORTEXA {
             SimdRegister::new("v29"),
             SimdRegister::new("v30"),
             SimdRegister::new("v31"),
-        ];
+        ]);
 
         let solver = Solver::new();
         let mut memory = HashMap::new();
@@ -163,6 +165,24 @@ impl ARMCORTEXA {
         )
     }
 
+    pub fn set_state(&mut self, state: ComputerState) {
+        let (registers, zero, neg, carry, overflow) = state;
+        self.registers = registers;
+        self.zero = zero;
+        self.neg = neg;
+        self.carry = carry;
+        self.overflow = overflow;
+    }
+
+    // Ordered as ComputerState holds them: zero, neg, carry, overflow.
+    pub fn set_flags(&mut self, flags: [Option<FlagValue>; 4]) {
+        let [zero, neg, carry, overflow] = flags;
+        self.zero = zero;
+        self.neg = neg;
+        self.carry = carry;
+        self.overflow = overflow;
+    }
+
     pub fn set_immediate(&mut self, register: String, value: u64) {
         self.set_register(
             &operand_from_string(register),
@@ -187,7 +207,10 @@ impl ARMCORTEXA {
         base: Option<AbstractExpression>,
         offset: i64,
     ) {
-        let stack = self.memory.get_mut("sp").expect("Stack not found");
+        let stack = self
+            .memory
+            .get_mut("sp")
+            .expect("stack region created at startup");
         stack.insert(
             address,
             RegisterValue {
@@ -210,7 +233,8 @@ impl ARMCORTEXA {
                 RePrefix::X => self.registers[*num].set(kind, base, offset),
                 RePrefix::W => {
                     if *num < 31 {
-                        self.registers[*num].set(kind, base, (offset as i32) as i64);
+                        let (base, offset) = narrow_to_32(base, offset);
+                        self.registers[*num].set(kind, base, offset);
                     } else {
                         log::error!("Cannot set W register for xzr or sp");
                     }
@@ -267,13 +291,17 @@ impl ARMCORTEXA {
 
     pub fn get_register(&mut self, reg: &Operand) -> RegisterValue {
         match reg {
-            // TODO: reimplement accessing half a register using w
             Operand::Register(prefix, index) => match prefix {
                 RePrefix::Fp => self.registers[29].clone(),
                 RePrefix::Ra => self.registers[30].clone(),
                 RePrefix::Sp => self.registers[31].clone(),
                 RePrefix::Ze => self.registers[32].clone(),
-                RePrefix::X | RePrefix::W => self.registers[*index].clone(),
+                RePrefix::X => self.registers[*index].clone(),
+                RePrefix::W => {
+                    let whole = self.registers[*index].clone();
+                    let (base, offset) = narrow_to_32(whole.base, whole.offset);
+                    RegisterValue::new(whole.kind, base, offset)
+                }
                 RePrefix::V => unreachable!(),
             },
             Operand::Immediate(value) => RegisterValue::new_imm(*value),
@@ -306,16 +334,18 @@ impl ARMCORTEXA {
         }
     }
 
-    pub fn add_memory_value(&mut self, region: String, address: i64, value: i64) {
+    pub fn add_memory_value(&mut self, region: String, address: i64, value: i64, width: i64) {
         let reg_value = RegisterValue::new(RegisterKind::Immediate, None, value);
         match self.memory.get_mut(&region) {
             Some(r) => {
                 r.insert(address, reg_value);
+                r.grow_to(address + width);
             }
             None => {
                 let mut region_map =
                     MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW);
                 region_map.insert(address, reg_value);
+                region_map.grow_to(address + width);
                 self.memory.insert(region, region_map);
             }
         }
@@ -338,6 +368,12 @@ impl ARMCORTEXA {
                 region_map.insert(address, reg_value);
                 self.memory.insert(region, region_map);
             }
+        }
+    }
+
+    pub fn grow_memory_region(&mut self, name: String, end: i64) {
+        if let Some(r) = self.memory.get_mut(&name) {
+            r.grow_to(end);
         }
     }
 
@@ -437,6 +473,32 @@ mod tests {
                 kind: RegisterKind::RegisterBase,
                 base: Some(AbstractExpression::Abstract("hello,".to_string())),
                 offset: 5,
+            }
+        );
+    }
+
+    #[test]
+    fn test_arithmetic_and_abstract_and_imm() {
+        let mut computer = ARMCORTEXA::new();
+
+        computer.set_register(
+            &Operand::Register(RePrefix::X, 1),
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract("len".to_string())),
+            0,
+        );
+        let _ = computer.execute(0, &Instruction::new("and x0, x1, #1".to_string()));
+        let result = computer.get_register(&Operand::Register(RePrefix::X, 0));
+        assert_eq!(
+            result,
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(generate_expression(
+                    "&",
+                    AbstractExpression::Abstract("len".to_string()),
+                    AbstractExpression::Immediate(1),
+                )),
+                offset: 0,
             }
         );
     }

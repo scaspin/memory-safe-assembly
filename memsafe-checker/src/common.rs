@@ -44,6 +44,17 @@ impl RegisterValue {
         self.base = base;
         self.offset = offset;
     }
+
+    // The register as a single expression, for operators that do not distribute over base+offset.
+    pub fn expression(&self) -> AbstractExpression {
+        match (&self.base, self.offset) {
+            (Some(base), 0) => base.clone(),
+            (Some(base), offset) => {
+                generate_expression("+", base.clone(), AbstractExpression::Immediate(offset))
+            }
+            (None, offset) => AbstractExpression::Immediate(offset),
+        }
+    }
 }
 
 // TODO: add way to mark endianess if necessary
@@ -290,6 +301,10 @@ impl SimdRegister {
     }
 }
 
+pub fn abstract_of(name: impl Into<String>) -> AbstractExpression {
+    AbstractExpression::Abstract(name.into())
+}
+
 pub fn generate_expression(
     op: &str,
     a: AbstractExpression,
@@ -323,6 +338,18 @@ pub enum AbstractExpression {
     Expression(String, Box<AbstractExpression>, Box<AbstractExpression>),
 }
 
+// How tightly an operator binds, so printing can drop the parentheses it implies.
+fn binding_power(op: &str) -> u8 {
+    match op {
+        "|" => 1,
+        "^" => 2,
+        "&" => 3,
+        "<<" | ">>" | "lsl" | "lsr" | "asr" => 4,
+        "+" | "-" => 5,
+        _ => 6,
+    }
+}
+
 impl fmt::Display for AbstractExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -332,9 +359,40 @@ impl fmt::Display for AbstractExpression {
             AbstractExpression::Register(reg) => {
                 write!(f, "({:?})", reg)
             }
-            AbstractExpression::Expression(func, arg1, arg2) => {
-                write!(f, "({} {} {})", arg1, func, arg2)
+            // Adding a negative immediate reads as a subtraction.
+            AbstractExpression::Expression(op, left, right)
+                if op == "+" && matches!(**right, AbstractExpression::Immediate(n) if n < 0) =>
+            {
+                let AbstractExpression::Immediate(n) = **right else {
+                    unreachable!()
+                };
+                write!(f, "{} - {}", Parenthesized(left, 5, false), -n)
             }
+            AbstractExpression::Expression(op, left, right) => {
+                let outer = binding_power(op);
+                // The right operand of a non-associative operator still needs them.
+                let tight = matches!(op.as_str(), "-" | "/" | "%" | "<<" | ">>");
+                write!(f, "{}", Parenthesized(left, outer, false))?;
+                write!(f, " {} ", op)?;
+                write!(f, "{}", Parenthesized(right, outer, tight))
+            }
+        }
+    }
+}
+
+// An operand, wrapped in parentheses only where its own operator binds too loosely.
+struct Parenthesized<'a>(&'a AbstractExpression, u8, bool);
+
+impl fmt::Display for Parenthesized<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Parenthesized(inner, outer, tight) = self;
+        match inner {
+            AbstractExpression::Expression(op, _, _)
+                if binding_power(op) < *outer || (*tight && binding_power(op) == *outer) =>
+            {
+                write!(f, "({})", inner)
+            }
+            _ => write!(f, "{}", inner),
         }
     }
 }
@@ -455,10 +513,50 @@ impl AbstractComparison {
     }
 }
 
-#[derive(Debug, Clone)]
+// A w register holds the low 32 bits of x, zero extended when written. Modulo
+// expresses that directly, and unlike a cast it also applies to a symbolic base.
+pub fn narrow_to_32(
+    base: Option<AbstractExpression>,
+    offset: i64,
+) -> (Option<AbstractExpression>, i64) {
+    const MODULUS: i64 = 1 << 32;
+    match base {
+        None => (None, offset.rem_euclid(MODULUS)),
+        // The value is base + offset, so the sum is what narrows.
+        Some(b) => {
+            let whole = if offset == 0 {
+                b
+            } else {
+                generate_expression("+", b, AbstractExpression::Immediate(offset))
+            };
+            let narrowed = generate_expression("%", whole, AbstractExpression::Immediate(MODULUS));
+            (Some(narrowed), 0)
+        }
+    }
+}
+
+// Bytes touched by one access, from the opcode suffix and the register form.
+pub fn access_width(opcode: &str, register: &instruction_parser::Operand) -> i64 {
+    if opcode.ends_with('b') {
+        return 1;
+    }
+    if opcode.ends_with('h') {
+        return 2;
+    }
+    match register {
+        instruction_parser::Operand::Register(instruction_parser::RePrefix::W, _) => 4,
+        instruction_parser::Operand::VectorRegister(..)
+        | instruction_parser::Operand::Vector(..)
+        | instruction_parser::Operand::VectorAccess(..) => 16,
+        _ => 8,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct MemoryAccess {
     pub kind: RegionType,
-    pub base: String,
+    // Symbolic so an access inside a summarized loop stays parametric in its counter.
+    pub base: AbstractExpression,
     pub offset: i64,
 }
 
@@ -467,14 +565,6 @@ impl fmt::Display for MemoryAccess {
         write!(f, "{:?}, {}, {:?}", self.kind, self.base, self.offset)
     }
 }
-
-impl PartialEq for MemoryAccess {
-    fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.base == other.base && self.offset == other.offset
-    }
-}
-
-impl Eq for MemoryAccess {}
 
 #[derive(Debug, Clone)]
 pub enum FlagValue {
@@ -525,9 +615,9 @@ pub enum RegionType {
 impl fmt::Display for RegionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RegionType::READ => write!(f, "Read"),
-            RegionType::WRITE => write!(f, "Write"),
-            RegionType::RW => write!(f, "Read and Write"),
+            RegionType::READ => write!(f, "read"),
+            RegionType::WRITE => write!(f, "write"),
+            RegionType::RW => write!(f, "read/write"),
         }
     }
 }
@@ -540,21 +630,25 @@ pub struct MemorySafeRegion {
 }
 
 impl MemorySafeRegion {
+    // `length` is in bytes; content is sparse, since get() defaults for absent addresses.
     pub fn new(length: AbstractExpression, kind: RegionType) -> Self {
-        let mut content = HashMap::new();
-        if let AbstractExpression::Immediate(l) = length {
-            for i in 0..(l) {
-                content.insert(i * 4, RegisterValue::new(RegisterKind::Number, None, 0));
-            }
-        }
         Self {
             kind,
             length,
-            content,
+            content: HashMap::new(),
         }
     }
     pub fn insert(&mut self, address: i64, value: RegisterValue) {
         self.content.insert(address, value);
+    }
+
+    // Static data is laid out by writing into it, so the extent grows to match.
+    pub fn grow_to(&mut self, end: i64) {
+        if let AbstractExpression::Immediate(l) = self.length
+            && l < end
+        {
+            self.length = AbstractExpression::Immediate(end);
+        }
     }
 
     pub fn get(&self, address: i64) -> Option<RegisterValue> {
@@ -566,12 +660,7 @@ impl MemorySafeRegion {
     }
 
     pub fn get_length(&self) -> AbstractExpression {
-        match self.length {
-            AbstractExpression::Immediate(_) => {
-                AbstractExpression::Immediate((self.content.len() * 8) as i64)
-            }
-            _ => self.length.clone(),
-        }
+        self.length.clone()
     }
 }
 
@@ -601,13 +690,26 @@ pub fn get_register_name_string(r: String) -> String {
         .to_string()
 }
 
+// An all-ones mask 2^k - 1 keeps the low k bits, so masking by it is a modulo by 2^k.
+fn mask_modulus(expression: &AbstractExpression) -> Option<i64> {
+    match expression {
+        AbstractExpression::Immediate(mask) if *mask > 0 && *mask < i64::MAX => {
+            (mask.wrapping_add(1) as u64)
+                .is_power_of_two()
+                .then_some(mask + 1)
+        }
+        _ => None,
+    }
+}
+
 pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
     match expression.clone() {
         AbstractExpression::Immediate(num) => Some(ast::Int::from_i64(num)),
         AbstractExpression::Abstract(a) => Some(ast::Int::new_const(a)),
         AbstractExpression::Register(reg) => {
             if let Some(base) = reg.base.clone() {
-                let base = expression_to_ast(base).expect("common7");
+                let base = expression_to_ast(base.clone())
+                    .unwrap_or_else(|| panic!("no translation for register base {base}"));
                 let offset = ast::Int::from_i64(reg.offset);
                 Some(ast::Int::add(&[&base, &offset]))
             } else {
@@ -615,8 +717,10 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
             }
         }
         AbstractExpression::Expression(op, old1, old2) => {
-            let new1 = expression_to_ast(*old1).expect("common8");
-            let new2 = expression_to_ast(*old2).expect("common8");
+            let new1 = expression_to_ast(*old1.clone())
+                .unwrap_or_else(|| panic!("no translation for left operand of {op}: {old1}"));
+            let new2 = expression_to_ast(*old2.clone())
+                .unwrap_or_else(|| panic!("no translation for right operand of {op}: {old2}"));
             match op.as_str() {
                 "+" => Some(ast::Int::add(&[&new1, &new2])),
                 "-" => Some(ast::Int::sub(&[&new1, &new2])),
@@ -629,22 +733,64 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 }
                 ">>" | "lsr" => {
                     let two = ast::Int::from_i64(2);
-                    let divisor = new2.div(&two);
+                    let divisor = two.power(&new2).to_int();
                     Some(new1.div(&divisor))
                 }
                 "%" => Some(new1.modulo(&new2)),
-                _ => {
-                    todo!("expression to AST {:?} {:?}", op, expression)
-                }
+                // A mask of all ones keeps the low bits, which is the same as a modulo.
+                "&" => match (mask_modulus(&old1), mask_modulus(&old2)) {
+                    (_, Some(modulus)) => Some(new1.modulo(ast::Int::from_i64(modulus))),
+                    (Some(modulus), _) => Some(new2.modulo(ast::Int::from_i64(modulus))),
+                    // Only a mask of all ones is expressible; any other is a real bitwise and.
+                    _ => todo!("no translation for bitwise and in {expression}"),
+                },
+                _ => todo!("no translation for operator {op} in {expression}"),
             }
         }
         _ => Some(ast::Int::from_i64(0)),
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mask_modulus_recognizes_all_ones() {
+        assert_eq!(mask_modulus(&AbstractExpression::Immediate(1)), Some(2));
+        assert_eq!(mask_modulus(&AbstractExpression::Immediate(15)), Some(16));
+        assert_eq!(mask_modulus(&AbstractExpression::Immediate(6)), None);
+        assert_eq!(mask_modulus(&AbstractExpression::Immediate(0)), None);
+        assert_eq!(mask_modulus(&AbstractExpression::Immediate(-1)), None);
+        assert_eq!(mask_modulus(&AbstractExpression::Immediate(i64::MAX)), None);
+        assert_eq!(mask_modulus(&abstract_of("len")), None);
+    }
+
+    #[test]
+    fn masked_length_is_zero_when_even() {
+        let solver = Solver::new();
+        let masked = expression_to_ast(generate_expression(
+            "&",
+            abstract_of("len"),
+            AbstractExpression::Immediate(1),
+        ))
+        .expect("mask is translatable");
+        let len = ast::Int::new_const("len");
+        let two = ast::Int::from_i64(2);
+        solver.assert(len.modulo(&two).eq(ast::Int::from_i64(0)));
+        assert_eq!(
+            solver.check_assumptions(&[masked.eq(ast::Int::from_i64(0)).not()]),
+            SatResult::Unsat
+        );
+    }
+}
+
 pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
-    let left = expression_to_ast(*expression.left).expect("common10");
-    let right = expression_to_ast(*expression.right).expect("common11");
+    let (l, r) = (expression.left.clone(), expression.right.clone());
+    let left = expression_to_ast(*expression.left)
+        .unwrap_or_else(|| panic!("no translation for left side of comparison: {l}"));
+    let right = expression_to_ast(*expression.right)
+        .unwrap_or_else(|| panic!("no translation for right side of comparison: {r}"));
     match expression.op.as_str() {
         "<" => Some(left.lt(&right)),
         ">" => Some(left.gt(&right)),

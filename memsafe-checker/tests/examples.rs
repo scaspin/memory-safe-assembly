@@ -9,16 +9,16 @@ fn example_stack_push_pop() {
     init();
 
     let mut program = Vec::new();
-    let start_label = "test".to_string();
-    program.push("test:".to_string());
-    program.push("add x3,x3,#21".to_string());
-    program.push("str x3,[sp,#4]".to_string());
-    program.push("ldr x0,[sp,#4]".to_string());
-    program.push("ret".to_string());
+    let start_label = "test";
+    program.push("test:");
+    program.push("add x3,x3,#21");
+    program.push("str x3,[sp,#4]");
+    program.push("ldr x0,[sp,#4]");
+    program.push("ret");
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_immediate(String::from("x3"), 1);
+    engine.add_immediate("x3", 1);
 
     let res = engine.start(start_label);
 
@@ -35,26 +35,26 @@ fn example_basic_abstract_loop() -> std::io::Result<()> {
     init();
 
     let mut program = Vec::new();
-    let start_label = "test".to_string();
-    program.push("test:".to_string());
-    program.push("add x3,x1,x2".to_string());
-    program.push("loop:".to_string());
-    program.push("ldr x4,[x1]".to_string());
-    program.push("add x1,x1,#4".to_string());
-    program.push("cmp x1,x3".to_string());
-    program.push("b.ne loop".to_string());
-    program.push("add x4,x4,#4".to_string());
-    program.push("ret".to_string());
+    let start_label = "test";
+    program.push("test:");
+    program.push("add x3,x1,x2");
+    program.push("loop:");
+    program.push("ldr x4,[x1]");
+    program.push("add x1,x1,#4");
+    program.push("cmp x1,x3");
+    program.push("b.ne loop");
+    program.push("add x4,x4,#4");
+    program.push("ret");
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    let length = AbstractExpression::Abstract("Length".to_string());
-    let base = AbstractExpression::Abstract("Base".to_string());
+    let length = abstract_of("Length");
+    let base = abstract_of("Base");
     // Base is the base address of the input buffer
-    engine.add_abstract(String::from("x1"), base.clone());
-    engine.add_region(RegionType::READ, "Base".to_string(), length.clone());
+    engine.add_abstract("x1", base.clone());
+    engine.add_region(RegionType::READ, "Base", length.clone());
 
-    engine.add_abstract(String::from("x2"), length);
+    engine.add_abstract("x2", length);
 
     engine.change_alignment(1);
     let res = engine.start(start_label);
@@ -67,25 +67,25 @@ fn example_bad_increment_abstract_loop() -> std::io::Result<()> {
     init();
 
     let mut program = Vec::new();
-    let start_label = "test".to_string();
-    program.push("test:".to_string());
-    program.push("add x3,x1,x2".to_string());
-    program.push("loop:".to_string());
-    program.push("add x1,x1,#1".to_string());
-    program.push("ldr x4,[x1]".to_string());
-    program.push("cmp x1,x3".to_string());
-    program.push("b.ne loop".to_string());
-    program.push("add x4,x4,#4".to_string());
+    let start_label = "test";
+    program.push("test:");
+    program.push("add x3,x1,x2");
+    program.push("loop:");
+    program.push("add x1,x1,#1");
+    program.push("ldr x4,[x1]");
+    program.push("cmp x1,x3");
+    program.push("b.ne loop");
+    program.push("add x4,x4,#4");
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    let length = AbstractExpression::Abstract("Length".to_string());
-    let base = AbstractExpression::Abstract("Base".to_string());
+    let length = abstract_of("Length");
+    let base = abstract_of("Base");
     // Base is the base address of the input buffer
-    engine.add_abstract(String::from("x1"), base.clone());
-    engine.add_region(RegionType::READ, "Base".to_string(), length.clone());
+    engine.add_abstract("x1", base.clone());
+    engine.add_region(RegionType::READ, "Base", length.clone());
 
-    engine.add_abstract(String::from("x2"), length);
+    engine.add_abstract("x2", length);
 
     engine.change_alignment(1);
     let res = engine.start(start_label);
@@ -102,26 +102,26 @@ fn example_loop_on_input_abstract_loop() -> std::io::Result<()> {
     init();
 
     let mut program = Vec::new();
-    let start_label = "test".to_string();
-    program.push("test:".to_string());
-    program.push("add x3,x1,x2".to_string());
-    program.push("loop:".to_string());
-    program.push("ldr x5,[x1]".to_string());
-    program.push("add x1,x1,#1".to_string());
-    program.push("cmp x1,x3".to_string());
-    program.push("b.ne loop".to_string());
-    program.push("add x4,x4,#4".to_string());
-    program.push("ret".to_string());
+    let start_label = "test";
+    program.push("test:");
+    program.push("add x3,x1,x2");
+    program.push("loop:");
+    program.push("ldr x5,[x1]");
+    program.push("add x1,x1,#1");
+    program.push("cmp x1,x3");
+    program.push("b.ne loop");
+    program.push("add x4,x4,#4");
+    program.push("ret");
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    let length1 = AbstractExpression::Abstract("Length1".to_string());
-    let length2 = AbstractExpression::Abstract("Length2".to_string());
-    let base1 = AbstractExpression::Abstract("Base1".to_string());
+    let length1 = abstract_of("Length1");
+    let length2 = abstract_of("Length2");
+    let base1 = abstract_of("Base1");
 
-    engine.add_abstract(String::from("x1"), base1.clone());
-    engine.add_region(RegionType::READ, "Base1".to_string(), length1);
-    engine.add_abstract(String::from("x2"), length2.clone());
+    engine.add_abstract("x1", base1.clone());
+    engine.add_region(RegionType::READ, "Base1", length1);
+    engine.add_abstract("x2", length2.clone());
 
     engine.change_alignment(1);
     let res = engine.start(start_label);
@@ -134,33 +134,33 @@ fn example_loop_on_input_abstract_loop() -> std::io::Result<()> {
 //     init();
 
 //     let mut program = Vec::new();
-//     let start_label = "test".to_string();
-//     program.push("test:".to_string());
-//     program.push("add x3,x1,x2".to_string());
-//     program.push("add x4,x1,#0".to_string());
-//     program.push("loop_1:".to_string());
-//     program.push("ldr x5,[x1]".to_string());
-//     program.push("add x1,x1,#1".to_string());
-//     program.push("cmp x1,x3".to_string());
-//     program.push("b.ne loop_1".to_string());
-//     program.push("loop_2:".to_string());
-//     program.push("sub x1,x1,#1".to_string());
-//     program.push("ldr x5,[x1]".to_string());
-//     program.push("cmp x1,x4".to_string());
-//     program.push("b.ne loop_2".to_string());
-//     program.push("ret".to_string());
+//     let start_label = "test";
+//     program.push("test:");
+//     program.push("add x3,x1,x2");
+//     program.push("add x4,x1,#0");
+//     program.push("loop_1:");
+//     program.push("ldr x5,[x1]");
+//     program.push("add x1,x1,#1");
+//     program.push("cmp x1,x3");
+//     program.push("b.ne loop_1");
+//     program.push("loop_2:");
+//     program.push("sub x1,x1,#1");
+//     program.push("ldr x5,[x1]");
+//     program.push("cmp x1,x4");
+//     program.push("b.ne loop_2");
+//     program.push("ret");
 
 //     let cfg = Config::new();
 //     let ctx = Context::new(&cfg);
 //     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-//     let length = AbstractExpression::Abstract("Length".to_string());
-//     let base = AbstractExpression::Abstract("Base".to_string());
+//     let length = abstract_of("Length");
+//     let base = abstract_of("Base");
 //     // Base is the base address of the input buffer
-//     engine.add_abstract(String::from("x1"), base.clone());
-//     engine.add_abstract(String::from("x2"), length.clone());
+//     engine.add_abstract("x1", base.clone());
+//     engine.add_abstract("x2", length.clone());
 
-//     engine.add_region(RegionType::READ, "Base".to_string(), length.clone());
+//     engine.add_region(RegionType::READ, "Base", length.clone());
 //     engine.add_invariant(generate_comparison("<", AbstractExpression::Immediate(0), length));
 
 //     engine.change_alignment(1);
@@ -173,22 +173,15 @@ fn example_loop_on_input_abstract_loop() -> std::io::Result<()> {
 fn example_z3_abstract_bound_unsafe() -> std::io::Result<()> {
     init();
 
-    let mut program = Vec::new();
-    program.push("start:".to_string());
-    for _ in 0..5 {
-        program.push("ldr x1,[x0,#4]".to_string());
-    }
+    let mut program = vec!["start:"];
+    program.extend(["ldr x1,[x0,#4]"; 5]);
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Abstract("length".to_string()),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("length"));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     Ok(())
 }
@@ -197,18 +190,14 @@ fn example_z3_abstract_bound_unsafe() -> std::io::Result<()> {
 fn example_z3_abstract_bound_unsafe_zero() -> std::io::Result<()> {
     init();
 
-    let program = vec!["start:".to_string(), "ldr x1,[x0,#0]".to_string()];
+    let program = vec!["start:", "ldr x1,[x0,#0]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Abstract("length".to_string()),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("length"));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     Ok(())
 }
@@ -218,26 +207,22 @@ fn example_unrelated_unknowns_not_treated_as_equal() -> std::io::Result<()> {
     init();
 
     let program = vec![
-        "start:".to_string(),
-        "ldr x1,[x0,#0]".to_string(),
-        "ldr x2,[x0,#4]".to_string(),
-        "cmp x1,x2".to_string(),
-        "b.eq bad".to_string(),
-        "ret".to_string(),
-        "bad:".to_string(),
-        "ret".to_string(),
+        "start:",
+        "ldr x1,[x0,#0]",
+        "ldr x2,[x0,#4]",
+        "cmp x1,x2",
+        "b.eq bad",
+        "ret",
+        "bad:",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(8),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     Ok(())
 }
@@ -248,26 +233,22 @@ fn example_unrelated_unknowns_not_treated_as_equal_cmn() -> std::io::Result<()> 
     init();
 
     let program = vec![
-        "start:".to_string(),
-        "ldr x1,[x0,#0]".to_string(),
-        "ldr x2,[x0,#4]".to_string(),
-        "cmn x1,x2".to_string(),
-        "b.eq bad".to_string(),
-        "ret".to_string(),
-        "bad:".to_string(),
-        "ret".to_string(),
+        "start:",
+        "ldr x1,[x0,#0]",
+        "ldr x2,[x0,#4]",
+        "cmn x1,x2",
+        "b.eq bad",
+        "ret",
+        "bad:",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(8),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     Ok(())
 }
@@ -276,22 +257,15 @@ fn example_unrelated_unknowns_not_treated_as_equal_cmn() -> std::io::Result<()> 
 fn example_z3_real_bound_safe() -> std::io::Result<()> {
     init();
 
-    let program = vec![
-        "start:".to_string(),
-        "ldr x1,[x0,#0]".to_string(),
-        "ldr x1,[x0,#4]".to_string(),
-    ];
+    let program = vec!["start:", "ldr x1,[x0,#0]", "ldr x1,[x0,#4]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(8),
-    );
+    engine.add_abstract_from(0, "base");
+    // The load at offset 4 spans bytes 4..11.
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(12));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
@@ -301,22 +275,14 @@ fn example_z3_real_bound_safe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
     init();
 
-    let program = vec![
-        "start:".to_string(),
-        "add x0,x0,#8".to_string(),
-        "ldr x1,[x0,#0]".to_string(),
-    ];
+    let program = vec!["start:", "add x0,x0,#8", "ldr x1,[x0,#0]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(1),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(1));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     Ok(())
 }
@@ -326,22 +292,15 @@ fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
     init();
 
-    let program = vec![
-        "start:".to_string(),
-        "add x0,x0,#4".to_string(),
-        "ldr x1,[x0,#0]".to_string(),
-    ];
+    let program = vec!["start:", "add x0,x0,#4", "ldr x1,[x0,#0]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(1),
-    );
+    engine.add_abstract_from(0, "base");
+    // The load spans bytes 4..11.
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(12));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
@@ -351,22 +310,14 @@ fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
     init();
 
-    let program = vec![
-        "start:".to_string(),
-        "add x0,x0,#7".to_string(),
-        "ldr x1,[x0,#0]".to_string(),
-    ];
+    let program = vec!["start:", "add x0,x0,#7", "ldrb w1,[x0,#0]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(1),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
@@ -376,22 +327,14 @@ fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_below_region_unsafe() -> std::io::Result<()> {
     init();
 
-    let program = vec![
-        "start:".to_string(),
-        "sub x0,x0,#8".to_string(),
-        "ldr x1,[x0,#0]".to_string(),
-    ];
+    let program = vec!["start:", "sub x0,x0,#8", "ldr x1,[x0,#0]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(1),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(1));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     Ok(())
 }
@@ -401,18 +344,14 @@ fn example_z3_symbolic_base_below_region_unsafe() -> std::io::Result<()> {
 fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
     init();
 
-    let program = vec!["start:".to_string(), "str x1,[x0,#0]".to_string()];
+    let program = vec!["start:", "str x1,[x0,#0]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(8),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     Ok(())
 }
@@ -422,18 +361,14 @@ fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
 fn example_z3_read_from_write_region_safe() -> std::io::Result<()> {
     init();
 
-    let program = vec!["start:".to_string(), "ldr x1,[x0,#0]".to_string()];
+    let program = vec!["start:", "ldr x1,[x0,#0]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::WRITE,
-        "base".to_string(),
-        AbstractExpression::Immediate(8),
-    );
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::WRITE, "base", AbstractExpression::Immediate(8));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
@@ -442,27 +377,20 @@ fn example_z3_read_from_write_region_safe() -> std::io::Result<()> {
 fn example_z3_real_bound_unsafe() -> std::io::Result<()> {
     init();
 
-    let program = vec![
-        "start:".to_string(),
-        "ldr x1,[x0,#0]".to_string(),
-        "ldr x1,[x0,#16]".to_string(),
-    ];
+    let program = vec!["start:", "ldr x1,[x0,#0]", "ldr x1,[x0,#16]"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(1),
-    );
+    engine.add_abstract_from(0, "base");
+    // Big enough for the first load, so the second is what fails.
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     let Err(e) = res else { panic!() };
     assert_eq!(
         e.to_string(),
-        "Accessing address outside allowable memory regions Abstract(\"base\"), 16"
+        "line 2 (ldr): read of 8 bytes at base + 16 not provably within region of length 8"
     );
     Ok(())
 }
@@ -472,19 +400,19 @@ fn example_z3_simple_loop_with_no_mem_access() -> std::io::Result<()> {
     init();
 
     let program = vec![
-        "start:".to_string(),
-        "add x1,#0,#0".to_string(),
-        "add x2,#0,#4".to_string(),
-        "loop:".to_string(),
-        "add x1,x1,#1".to_string(),
-        "cmp x1,x2".to_string(),
-        "b.ne loop".to_string(),
-        "ret".to_string(),
+        "start:",
+        "add x1,#0,#0",
+        "add x2,#0,#4",
+        "loop:",
+        "add x1,x1,#1",
+        "cmp x1,x2",
+        "b.ne loop",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
@@ -494,28 +422,25 @@ fn example_z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
     init();
 
     let program = vec![
-        "start:".to_string(),
-        "add x1,#0,#0".to_string(),
-        "add x2,#0,#4".to_string(),
-        "loop:".to_string(),
-        "ldr x3,[x0,#0]".to_string(),
-        "add x1,x1,#1".to_string(),
-        "add x0,x0,#4".to_string(),
-        "cmp x1,x2".to_string(),
-        "b.ne loop".to_string(),
-        "ret".to_string(),
+        "start:",
+        "add x1,#0,#0",
+        "add x2,#0,#4",
+        "loop:",
+        "ldr x3,[x0,#0]",
+        "add x1,x1,#1",
+        "add x0,x0,#4",
+        "cmp x1,x2",
+        "b.ne loop",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(16),
-    );
+    engine.add_abstract_from(0, "base");
+    // Four iterations stepping 4, and the last load spans bytes 12..19.
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(20));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
@@ -525,33 +450,33 @@ fn example_z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
 //     init();
 
 //     let mut program = Vec::new();
-//     program.push("start:".to_string());
-//     program.push("add x1,x0,x1,lsl#2".to_string());
-//     program.push("loop:".to_string());
-//     program.push("cmp x0,x1".to_string());
-//     program.push("b.eq end".to_string());
-//     program.push("ldr x3,[x0,#0]".to_string());
-//     program.push("add x0,x0,#4".to_string());
-//     program.push("b loop".to_string());
-//     program.push("end:".to_string());
-//     program.push("ret".to_string());
+//     program.push("start:");
+//     program.push("add x1,x0,x1,lsl#2");
+//     program.push("loop:");
+//     program.push("cmp x0,x1");
+//     program.push("b.eq end");
+//     program.push("ldr x3,[x0,#0]");
+//     program.push("add x0,x0,#4");
+//     program.push("b loop");
+//     program.push("end:");
+//     program.push("ret");
 
 //     let mut cfg = Config::new();
 //     cfg.set_proof_generation(true);
 //     let ctx = Context::new(&cfg);
 //     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-//     engine.add_abstract_from(0, "base".to_string());
-//     engine.add_abstract_from(1, "blocks".to_string());
+//     engine.add_abstract_from(0, "base");
+//     engine.add_abstract_from(1, "blocks");
 
 //     let length = AbstractExpression::Expression(
-//         "lsl".to_string(),
-//         Box::new(AbstractExpression::Abstract("blocks".to_string())),
+//         "lsl",
+//         Box::new(abstract_of("blocks")),
 //         Box::new(AbstractExpression::Immediate(2)),
 //     );
-//     engine.add_region(RegionType::READ, "base".to_string(), length);
+//     engine.add_region(RegionType::READ, "base", length);
 
-//     let res = engine.start("start".to_string());
+//     let res = engine.start("start");
 //     assert!(res.is_ok());
 //     Ok(())
 // }
@@ -561,29 +486,25 @@ fn example_z3_complex_loop_with_mem_access_unsafe() -> std::io::Result<()> {
     init();
 
     let program = vec![
-        "start:".to_string(),
-        "add x1,x0,x1".to_string(),
-        "loop:".to_string(),
-        "cmp x0,x1".to_string(),
-        "b.eq end".to_string(),
-        "ldr x3,[x0,#0]".to_string(),
-        "add x0,x0,#4".to_string(),
-        "b loop".to_string(),
-        "end:".to_string(),
-        "ret".to_string(),
+        "start:",
+        "add x1,x0,x1",
+        "loop:",
+        "cmp x0,x1",
+        "b.eq end",
+        "ldr x3,[x0,#0]",
+        "add x0,x0,#4",
+        "b loop",
+        "end:",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Abstract("length".to_string()),
-    );
-    engine.add_abstract_from(1, "length".to_string());
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("length"));
+    engine.add_abstract_from(1, "length");
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
     Ok(())
 }
@@ -593,28 +514,24 @@ fn example_z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
     init();
 
     let program = vec![
-        "start:".to_string(),
-        "add x1,x0,x1".to_string(),
-        "loop:".to_string(),
-        "cmp x0,x1".to_string(),
-        "b.eq end".to_string(),
-        "add x0,x0,#4".to_string(),
-        "b loop".to_string(),
-        "end:".to_string(),
-        "ret".to_string(),
+        "start:",
+        "add x1,x0,x1",
+        "loop:",
+        "cmp x0,x1",
+        "b.eq end",
+        "add x0,x0,#4",
+        "b loop",
+        "end:",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Abstract("length".to_string()),
-    );
-    engine.add_abstract_from(1, "length".to_string());
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("length"));
+    engine.add_abstract_from(1, "length");
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
@@ -625,22 +542,22 @@ fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
     init();
 
     let program = vec![
-        "test:".to_string(),
-        "str x30,[sp,#0]".to_string(),
-        "bl sub".to_string(),
-        "ldr x30,[sp,#0]".to_string(),
-        "add x0,x0,#1".to_string(),
-        "ret".to_string(),
-        "sub:".to_string(),
-        "add x0,x0,#10".to_string(),
-        "ret".to_string(),
+        "test:",
+        "str x30,[sp,#0]",
+        "bl sub",
+        "ldr x30,[sp,#0]",
+        "add x0,x0,#1",
+        "ret",
+        "sub:",
+        "add x0,x0,#10",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_immediate(String::from("x0"), 0);
+    engine.add_immediate("x0", 0);
 
-    let res = engine.start("test".to_string());
+    let res = engine.start("test");
 
     assert!(res.is_ok());
     assert_eq!(engine.get_register_output(0).base, None);
@@ -653,17 +570,13 @@ fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
 fn example_unconditional_self_loop_bounded() -> std::io::Result<()> {
     init();
 
-    let program = vec![
-        "spin:".to_string(),
-        "add x0,x0,#1".to_string(),
-        "b spin".to_string(),
-    ];
+    let program = vec!["spin:", "add x0,x0,#1", "b spin"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_immediate(String::from("x0"), 0);
+    engine.add_immediate("x0", 0);
 
-    let res = engine.start("spin".to_string());
+    let res = engine.start("spin");
     assert!(res.is_err());
     Ok(())
 }
@@ -673,15 +586,11 @@ fn example_unconditional_self_loop_bounded() -> std::io::Result<()> {
 fn example_ret_to_self_bounded() -> std::io::Result<()> {
     init();
 
-    let program = vec![
-        "test:".to_string(),
-        "mov x30,#0".to_string(),
-        "ret".to_string(),
-    ];
+    let program = vec!["test:", "mov x30,#0", "ret"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    let res = engine.start("test".to_string());
+    let res = engine.start("test");
     assert!(res.is_err());
     Ok(())
 }
@@ -692,20 +601,20 @@ fn example_unconditional_forward_jump_terminates() -> std::io::Result<()> {
     init();
 
     let program = vec![
-        "test:".to_string(),
-        "add x0,x0,#1".to_string(),
-        "b second".to_string(),
-        "add x0,x0,#100".to_string(),
-        "second:".to_string(),
-        "add x0,x0,#10".to_string(),
-        "ret".to_string(),
+        "test:",
+        "add x0,x0,#1",
+        "b second",
+        "add x0,x0,#100",
+        "second:",
+        "add x0,x0,#10",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_immediate(String::from("x0"), 0);
+    engine.add_immediate("x0", 0);
 
-    let res = engine.start("test".to_string());
+    let res = engine.start("test");
 
     assert!(res.is_ok());
     assert_eq!(engine.get_register_output(0).base, None);
@@ -719,28 +628,28 @@ fn example_nested_call_two_levels_returns_to_call_sites() -> std::io::Result<()>
     init();
 
     let program = vec![
-        "test:".to_string(),
-        "str x30,[sp,#0]".to_string(),
-        "bl outer".to_string(),
-        "ldr x30,[sp,#0]".to_string(),
-        "add x0,x0,#1".to_string(),
-        "ret".to_string(),
-        "outer:".to_string(),
-        "str x30,[sp,#8]".to_string(),
-        "bl inner".to_string(),
-        "ldr x30,[sp,#8]".to_string(),
-        "add x0,x0,#10".to_string(),
-        "ret".to_string(),
-        "inner:".to_string(),
-        "add x0,x0,#100".to_string(),
-        "ret".to_string(),
+        "test:",
+        "str x30,[sp,#0]",
+        "bl outer",
+        "ldr x30,[sp,#0]",
+        "add x0,x0,#1",
+        "ret",
+        "outer:",
+        "str x30,[sp,#8]",
+        "bl inner",
+        "ldr x30,[sp,#8]",
+        "add x0,x0,#10",
+        "ret",
+        "inner:",
+        "add x0,x0,#100",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_immediate(String::from("x0"), 0);
+    engine.add_immediate("x0", 0);
 
-    let res = engine.start("test".to_string());
+    let res = engine.start("test");
 
     assert!(res.is_ok());
     assert_eq!(engine.get_register_output(0).base, None);
@@ -753,51 +662,51 @@ fn example_z3_example_branch() -> std::io::Result<()> {
     //env_logger::init();;
 
     let program = vec![
-        "start:".to_string(),
-        "cmp x1,x2".to_string(),
-        "b.ne branch".to_string(),
-        "add x0,x0,#4".to_string(),
-        "b end".to_string(),
-        "branch:".to_string(),
-        "add x0,x0,#2".to_string(),
-        "end:".to_string(),
-        "ret".to_string(),
+        "start:",
+        "cmp x1,x2",
+        "b.ne branch",
+        "add x0,x0,#4",
+        "b end",
+        "branch:",
+        "add x0,x0,#2",
+        "end:",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "left".to_string());
-    engine.add_abstract_from(1, "right".to_string());
+    engine.add_abstract_from(0, "left");
+    engine.add_abstract_from(1, "right");
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
 
 // Records which side of a carry-driven branch ran: 2 for taken, 1 for fallthrough.
-fn carry_branch_program(compare: &str, branch: &str) -> Vec<String> {
+fn carry_branch_program<'a>(compare: &'a str, branch: &'a str) -> Vec<&'a str> {
     vec![
-        "start:".to_string(),
-        compare.to_string(),
-        branch.to_string(),
-        "add x0,x0,#1".to_string(),
-        "ret".to_string(),
-        "taken:".to_string(),
-        "add x0,x0,#2".to_string(),
-        "ret".to_string(),
+        "start:",
+        compare,
+        branch,
+        "add x0,x0,#1",
+        "ret",
+        "taken:",
+        "add x0,x0,#2",
+        "ret",
     ]
 }
 
-fn run_carry_branch(program: Vec<String>, x1: usize, x2: usize) -> i64 {
+fn run_carry_branch(program: Vec<&str>, x1: usize, x2: usize) -> i64 {
     init();
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_immediate(String::from("x0"), 0);
-    engine.add_immediate(String::from("x1"), x1);
-    engine.add_immediate(String::from("x2"), x2);
+    engine.add_immediate("x0", 0);
+    engine.add_immediate("x1", x1);
+    engine.add_immediate("x2", x2);
 
-    engine.start("start".to_string()).expect("program runs");
+    engine.start("start").expect("program runs");
     engine.get_register_output(0).offset
 }
 
@@ -892,26 +801,23 @@ fn example_b_ls_and_b_le_agree_on_equality() -> std::io::Result<()> {
 }
 
 // Guards a symbolic index with `b.cs`, so the fallthrough must carry `x1 < 8`.
-fn symbolic_carry_guard(program: Vec<String>) -> std::io::Result<()> {
+fn symbolic_carry_guard(program: Vec<&str>) -> std::io::Result<()> {
     init();
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(8),
-    );
-    engine.add_abstract_from(1, "i".to_string());
+    engine.add_abstract_from(0, "base");
+    // The guard bounds i below 8, and the load at base+i spans 8 bytes.
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(16));
+    engine.add_abstract_from(1, "i");
     // The carry guard only bounds the index from above.
     engine.add_invariant(AbstractComparison::new(
         ">=",
-        AbstractExpression::Abstract("i".to_string()),
+        abstract_of("i"),
         AbstractExpression::Immediate(0),
     ));
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
@@ -919,27 +825,27 @@ fn symbolic_carry_guard(program: Vec<String>) -> std::io::Result<()> {
 #[test]
 fn example_symbolic_carry_bounds_index_via_b_cs() -> std::io::Result<()> {
     symbolic_carry_guard(vec![
-        "start:".to_string(),
-        "cmp x1,#8".to_string(),
-        "b.cs done".to_string(),
-        "add x0,x0,x1".to_string(),
-        "ldr x2,[x0,#0]".to_string(),
-        "done:".to_string(),
-        "ret".to_string(),
+        "start:",
+        "cmp x1,#8",
+        "b.cs done",
+        "add x0,x0,x1",
+        "ldr x2,[x0,#0]",
+        "done:",
+        "ret",
     ])
 }
 
 #[test]
 fn example_symbolic_carry_bounds_index_via_b_cc() -> std::io::Result<()> {
     symbolic_carry_guard(vec![
-        "start:".to_string(),
-        "cmp x1,#8".to_string(),
-        "b.cc inbounds".to_string(),
-        "ret".to_string(),
-        "inbounds:".to_string(),
-        "add x0,x0,x1".to_string(),
-        "ldr x2,[x0,#0]".to_string(),
-        "ret".to_string(),
+        "start:",
+        "cmp x1,#8",
+        "b.cc inbounds",
+        "ret",
+        "inbounds:",
+        "add x0,x0,x1",
+        "ldr x2,[x0,#0]",
+        "ret",
     ])
 }
 
@@ -949,26 +855,49 @@ fn example_cmn_same_register_not_assumed_equal() -> std::io::Result<()> {
     init();
 
     let program = vec![
-        "start:".to_string(),
-        "cmn x1,x1".to_string(),
-        "b.ne bad".to_string(),
-        "ret".to_string(),
-        "bad:".to_string(),
-        "ldr x2,[x0,#64]".to_string(),
-        "ret".to_string(),
+        "start:",
+        "cmn x1,x1",
+        "b.ne bad",
+        "ret",
+        "bad:",
+        "ldr x2,[x0,#64]",
+        "ret",
     ];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    engine.add_abstract_from(0, "base".to_string());
-    engine.add_region(
-        RegionType::READ,
-        "base".to_string(),
-        AbstractExpression::Immediate(8),
-    );
-    engine.add_abstract_from(1, "val".to_string());
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
+    engine.add_abstract_from(1, "val");
 
-    let res = engine.start("start".to_string());
+    let res = engine.start("start");
     assert!(res.is_err());
+    Ok(())
+}
+
+// Contradictory invariants make every bounds query vacuously unsat.
+#[test]
+fn example_infeasible_path_does_not_prove_access_safe() -> std::io::Result<()> {
+    init();
+
+    let program = vec!["start:", "ldr x2,[x0,#0]", "ret"];
+
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("length"));
+    engine.add_invariant(AbstractComparison::new(
+        ">",
+        abstract_of("length"),
+        AbstractExpression::Immediate(10),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "<",
+        abstract_of("length"),
+        AbstractExpression::Immediate(5),
+    ));
+
+    let err = engine.start("start").unwrap_err().to_string();
+    assert!(err.contains("path has no model"), "{err}");
     Ok(())
 }

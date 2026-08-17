@@ -1,5 +1,21 @@
 use crate::computer::*;
 
+// Post-index accesses the base and updates after; pre-index does both at base+offset.
+// `mode` is Some(false) for pre-index, Some(true) for post-index, None for a plain offset.
+fn indexed_address(
+    base: RegisterValue,
+    offset: i64,
+    mode: Option<bool>,
+) -> (RegisterValue, Option<RegisterValue>) {
+    let mut shifted = base.clone();
+    shifted.offset += offset;
+    match mode {
+        Some(true) => (base, Some(shifted)),
+        Some(false) => (shifted.clone(), Some(shifted)),
+        None => (shifted, None),
+    }
+}
+
 impl ARMCORTEXA {
     pub fn execute(
         &mut self,
@@ -48,7 +64,7 @@ impl ARMCORTEXA {
                     let reg1 = reg_iter.next().expect("Need first source register");
                     let reg2 = reg_iter.next().expect("Need second source register");
 
-                    self.shift_reg(reg0, reg1, reg2);
+                    self.shift_reg(&instruction.opcode, reg0, reg1, reg2);
                 }
                 "ands" => {
                     self.cmp(&instruction.operands[0], &instruction.operands[1]);
@@ -67,7 +83,7 @@ impl ARMCORTEXA {
                                 self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
                             }
                         }
-                        _ => todo!("adcs carry is not real not supported yet"),
+                        _ => todo!("adc needs a concrete carry flag"),
                         // Some(FlagValue::Abstract(c)) => {
                         //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
                         //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
@@ -111,7 +127,7 @@ impl ARMCORTEXA {
                                 self.cmn(reg1, reg2);
                             }
                         }
-                        _ => todo!("adcs carry not real 2"),
+                        _ => todo!("adcs needs a concrete carry flag"),
                     }
                 }
                 "sbc" => match &self.carry {
@@ -122,7 +138,7 @@ impl ARMCORTEXA {
                             self.arithmetic("+", |x, y| x - y - 1, instruction.operands.clone());
                         }
                     }
-                    _ => todo!("sbc todo"),
+                    _ => todo!("sbc needs a concrete carry flag"),
                 },
                 "sbcs" => {
                     let mut reg_iter = instruction.operands.iter().clone();
@@ -144,7 +160,7 @@ impl ARMCORTEXA {
                                 self.cmp(reg1, reg2);
                             }
                         }
-                        _ => todo!("sbcs todo"),
+                        _ => todo!("sbcs needs a concrete carry flag"),
                     }
                 }
                 "clz" => {
@@ -292,13 +308,15 @@ impl ARMCORTEXA {
                                     }
                                 }
                                 FlagValue::Abstract(s) => {
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone().not(), label.clone()));
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                        s.clone().not(),
+                                        label.clone(),
+                                    ));
                                 }
                             },
-                            None => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
+                            None => {
+                                return Err("branch reads a flag the program never set".to_string());
+                            }
                         }
                     }
                     panic!("bne not invoked correctly with label");
@@ -316,13 +334,15 @@ impl ARMCORTEXA {
                                     }
                                 }
                                 FlagValue::Abstract(s) => {
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), label.clone()));
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                        s.clone(),
+                                        label.clone(),
+                                    ));
                                 }
                             },
-                            None => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
+                            None => {
+                                return Err("branch reads a flag the program never set".to_string());
+                            }
                         }
                     }
                     panic!("beq not invoked correctly with label");
@@ -331,26 +351,36 @@ impl ARMCORTEXA {
                     if let Operand::Label(label) = &instruction.operands[0] {
                         match (&self.zero, &self.neg, &self.overflow) {
                             (Some(zero), Some(neg), Some(ove)) => {
-                                match  (zero, neg, ove) {
-                                // neg holds the signed comparison, not the raw N bit, so V stays out.
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(_)) => {
-                                   if !z && !n {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()))
-                                   } else {
-                                        return Ok(ExecuteReturnType::Next)
-                                   }
-                                },
-                                (FlagValue::Abstract(z) , _, _ ) =>  {
-                                    let expression = generate_comparison(">", *z.left.clone(), *z.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                                },
-                                (_,_,_) => todo!("match on undefined flags!")
+                                match (zero, neg, ove) {
+                                    // neg holds the signed comparison, not the raw N bit, so V stays out.
+                                    (
+                                        FlagValue::Real(z),
+                                        FlagValue::Real(n),
+                                        FlagValue::Real(_),
+                                    ) => {
+                                        if !z && !n {
+                                            return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                                        } else {
+                                            return Ok(ExecuteReturnType::Next);
+                                        }
+                                    }
+                                    (FlagValue::Abstract(z), _, _) => {
+                                        let expression = generate_comparison(
+                                            ">",
+                                            *z.left.clone(),
+                                            *z.right.clone(),
+                                        );
+                                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                            expression,
+                                            label.clone(),
+                                        ));
+                                    }
+                                    (_, _, _) => todo!("branch needs concrete flags"),
                                 }
-                            },
-                            (_, _, _) => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
+                            }
+                            (_, _, _) => {
+                                return Err("branch reads a flag the program never set".to_string());
+                            }
                         }
                     }
                     panic!("b.gt not invoked correctly with label");
@@ -359,136 +389,170 @@ impl ARMCORTEXA {
                     if let Operand::Label(label) = &instruction.operands[0] {
                         match (&self.zero, &self.neg, &self.overflow) {
                             (Some(zero), Some(neg), Some(ove)) => {
-                                match  (zero, neg, ove) {
-                                // neg holds the signed comparison, not the raw N bit, so V stays out.
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(_)) => {
-                                   if !z && *n {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()))
-                                   } else {
-                                        return Ok(ExecuteReturnType::Next)
-                                   }
-                                },
-                                (FlagValue::Abstract(z) , _, _ ) =>  {
-                                    let expression = generate_comparison("<", *z.left.clone(), *z.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, label.clone()));
-                                },
-                                (_,_,_) => todo!("match on undefined flags!")
+                                match (zero, neg, ove) {
+                                    // neg holds the signed comparison, not the raw N bit, so V stays out.
+                                    (
+                                        FlagValue::Real(z),
+                                        FlagValue::Real(n),
+                                        FlagValue::Real(_),
+                                    ) => {
+                                        if !z && *n {
+                                            return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                                        } else {
+                                            return Ok(ExecuteReturnType::Next);
+                                        }
+                                    }
+                                    (FlagValue::Abstract(z), _, _) => {
+                                        let expression = generate_comparison(
+                                            "<",
+                                            *z.left.clone(),
+                                            *z.right.clone(),
+                                        );
+                                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                            expression,
+                                            label.clone(),
+                                        ));
+                                    }
+                                    (_, _, _) => todo!("branch needs concrete flags"),
                                 }
-                            },
-                            (_, _, _) => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
+                            }
+                            (_, _, _) => {
+                                return Err("branch reads a flag the program never set".to_string());
+                            }
                         }
                     }
                 }
                 "b.ls" => {
                     if let Operand::Label(label) = &instruction.operands[0] {
                         match (&self.zero, &self.carry) {
-                        (Some(zero), Some(carry)) => {
-                            match  (zero, carry) {
-                            // b.ls is unsigned: Z == 1 or C == 0.
-                            (FlagValue::Real(z), FlagValue::Real(c)) => {
-                               if *z || !c {
-                                    return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                               } else {
-                                    return Ok(ExecuteReturnType::Next)
-                               }
-                            },
-                            // Carry keeps the operands themselves, so prefer it over the difference.
-                            (_, FlagValue::Abstract(c)) => {
-                                let expression = generate_comparison("<=", *c.left.clone(), *c.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                            },
-                            (FlagValue::Abstract(z), _) => {
-                                let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                            },
+                            (Some(zero), Some(carry)) => {
+                                match (zero, carry) {
+                                    // b.ls is unsigned: Z == 1 or C == 0.
+                                    (FlagValue::Real(z), FlagValue::Real(c)) => {
+                                        if *z || !c {
+                                            return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                                        } else {
+                                            return Ok(ExecuteReturnType::Next);
+                                        }
+                                    }
+                                    // Carry keeps the operands themselves, so prefer it over the difference.
+                                    (_, FlagValue::Abstract(c)) => {
+                                        let expression = generate_comparison(
+                                            "<=",
+                                            *c.left.clone(),
+                                            *c.right.clone(),
+                                        );
+                                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                            expression,
+                                            label.clone(),
+                                        ));
+                                    }
+                                    (FlagValue::Abstract(z), _) => {
+                                        let expression = generate_comparison(
+                                            "<=",
+                                            *z.left.clone(),
+                                            *z.right.clone(),
+                                        );
+                                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                            expression,
+                                            label.clone(),
+                                        ));
+                                    }
+                                }
                             }
-                        },
-                        (_, _) => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
+                            (_, _) => {
+                                return Err("branch reads a flag the program never set".to_string());
+                            }
+                        }
                     }
                     panic!("b.ls not invoked correctly with label");
                 }
                 "b.le" => {
                     if let Operand::Label(label) = &instruction.operands[0] {
                         match (&self.zero, &self.neg) {
-                        (Some(zero), Some(neg)) => {
-                            match  (zero, neg) {
-                            // neg holds the signed comparison, so b.le is Z == 1 or N == 1.
-                            (FlagValue::Real(z), FlagValue::Real(n)) => {
-                               if *z || *n {
-                                    return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                               } else {
-                                    return Ok(ExecuteReturnType::Next)
-                               }
-                            },
-                            (FlagValue::Abstract(z) , _ ) | (_, FlagValue::Abstract(z) ) =>  {
-                                let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                            },
+                            (Some(zero), Some(neg)) => {
+                                match (zero, neg) {
+                                    // neg holds the signed comparison, so b.le is Z == 1 or N == 1.
+                                    (FlagValue::Real(z), FlagValue::Real(n)) => {
+                                        if *z || *n {
+                                            return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                                        } else {
+                                            return Ok(ExecuteReturnType::Next);
+                                        }
+                                    }
+                                    (FlagValue::Abstract(z), _) | (_, FlagValue::Abstract(z)) => {
+                                        let expression = generate_comparison(
+                                            "<=",
+                                            *z.left.clone(),
+                                            *z.right.clone(),
+                                        );
+                                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                            expression,
+                                            label.clone(),
+                                        ));
+                                    }
+                                }
                             }
-                        },
-                        (_, _) => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
+                            (_, _) => {
+                                return Err("branch reads a flag the program never set".to_string());
+                            }
+                        }
                     }
                     panic!("b.le not invoked correctly with label");
                 }
                 "b.cs" | "b.hs" | "bcs" => {
                     if let Operand::Label(label) = &instruction.operands[0] {
-                        match&self.carry{
-                            Some(carry) => {
-                                match  carry {
+                        match &self.carry {
+                            Some(carry) => match carry {
                                 FlagValue::Real(c) => {
-                                   if *c {
+                                    if *c {
                                         return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                   } else {
-                                        return Ok(ExecuteReturnType::Next)
-                                   }
-                                },
-                                FlagValue::Abstract(c) =>  {
-                                    let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                                },
+                                    } else {
+                                        return Ok(ExecuteReturnType::Next);
+                                    }
+                                }
+                                FlagValue::Abstract(c) => {
+                                    let expression = generate_comparison(
+                                        ">=",
+                                        *c.left.clone(),
+                                        *c.right.clone(),
+                                    );
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                        expression,
+                                        label.clone(),
+                                    ));
                                 }
                             },
-                            None => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
+                            None => {
+                                return Err("branch reads a flag the program never set".to_string());
+                            }
                         }
                     }
                     panic!("b.cs not invoked correctly");
                 }
                 "b.cc" | "b.lo" | "blo" => {
                     if let Operand::Label(label) = &instruction.operands[0] {
-                        match&self.carry{
-                            Some(carry) => {
-                                match  carry {
+                        match &self.carry {
+                            Some(carry) => match carry {
                                 FlagValue::Real(c) => {
-                                   if !*c {
+                                    if !*c {
                                         return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                   } else {
-                                        return Ok(ExecuteReturnType::Next)
-                                   }
-                                },
-                                FlagValue::Abstract(c) =>  {
-                                    let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                                },
+                                    } else {
+                                        return Ok(ExecuteReturnType::Next);
+                                    }
+                                }
+                                FlagValue::Abstract(c) => {
+                                    let expression =
+                                        generate_comparison("<", *c.left.clone(), *c.right.clone());
+                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                        expression,
+                                        label.clone(),
+                                    ));
                                 }
                             },
-                            None => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
+                            None => {
+                                return Err("branch reads a flag the program never set".to_string());
+                            }
                         }
                     }
                     panic!("b.cc/lo/blo not invoked correctly");
@@ -503,7 +567,11 @@ impl ARMCORTEXA {
                     };
 
                     match cond.as_str() {
-                        "cs" => match self.carry.clone().expect("Need carry flag set cset cs") {
+                        "cs" => match self
+                            .carry
+                            .clone()
+                            .expect("cset cs reads a carry flag the program never set")
+                        {
                             FlagValue::Real(b) => {
                                 if b {
                                     self.set_register_from_tuple(
@@ -522,12 +590,15 @@ impl ARMCORTEXA {
                                 }
                             }
                             FlagValue::Abstract(_) => {
-                                log::error!("Can't support this yet :)");
-                                todo!("Abstract Flag Expression3");
+                                todo!("cset needs a concrete carry flag");
                             }
                         },
                         "cc" | "lo" => {
-                            match self.carry.clone().expect("Need carry flag set cset cc") {
+                            match self
+                                .carry
+                                .clone()
+                                .expect("cset cc reads a carry flag the program never set")
+                            {
                                 FlagValue::Real(b) => {
                                     if !b {
                                         self.set_register_from_tuple(
@@ -546,8 +617,7 @@ impl ARMCORTEXA {
                                     }
                                 }
                                 FlagValue::Abstract(_) => {
-                                    log::error!("Can't support this yet :)");
-                                    todo!("Abstract Flag Expression3");
+                                    todo!("cset needs a concrete carry flag");
                                 }
                             }
                         }
@@ -567,7 +637,11 @@ impl ARMCORTEXA {
 
                     match cond.as_str() {
                         "cc" | "lo" => {
-                            match self.carry.clone().expect("Need carry flag set csel cc") {
+                            match self
+                                .carry
+                                .clone()
+                                .expect("csel cc reads a carry flag the program never set")
+                            {
                                 FlagValue::Real(b) => {
                                     if b {
                                         self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
@@ -615,7 +689,11 @@ impl ARMCORTEXA {
                             }
                         },
                         "eq" => {
-                            match self.zero.clone().expect("Need zero flag set") {
+                            match self
+                                .zero
+                                .clone()
+                                .expect("reads a zero flag the program never set")
+                            {
                                 FlagValue::Real(z) => {
                                     if z {
                                         self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
@@ -645,7 +723,11 @@ impl ARMCORTEXA {
                     };
 
                     match cond.as_str() {
-                        "eq" => match self.zero.clone().expect("Need zero flag set") {
+                        "eq" => match self
+                            .zero
+                            .clone()
+                            .expect("reads a zero flag the program never set")
+                        {
                             FlagValue::Real(b) => {
                                 if b {
                                     self.set_register(dest, RegisterKind::Immediate, None, 1);
@@ -693,7 +775,7 @@ impl ARMCORTEXA {
                 ),
             },
             InstructionType::Memory => match instruction.opcode.as_str() {
-                "ldr" | "ldrb" => {
+                "ldr" | "ldrb" | "ldrh" => {
                     // TODO: split, have to rewrite load or do post-processing after load to extract meaningful byte
                     let mut reg_iter = instruction.operands.iter();
 
@@ -702,36 +784,25 @@ impl ARMCORTEXA {
 
                     match src_addr {
                         Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
+                            let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
-                            address.offset += offset.unwrap_or(0);
+                            let (address, writeback) =
+                                indexed_address(base, offset.unwrap_or(0), *mode);
 
-                            let res = self.load(dst.clone(), address.clone());
+                            let width = access_width(&instruction.opcode, dst);
+                            let res = self.load(dst.clone(), address, width);
                             if let Err(e) = res {
                                 return Err(e.to_string());
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0),
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
+                            if let Some(updated) = writeback {
+                                self.set_register(
+                                    &Operand::Register(w.clone(), *reg_num),
+                                    updated.kind,
+                                    updated.base,
+                                    updated.offset,
+                                );
                             }
                         }
                         _ => {
@@ -748,14 +819,17 @@ impl ARMCORTEXA {
 
                     match src_addr {
                         Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
+                            let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
-                            address.offset += offset.unwrap_or(0);
+                            let (address, writeback) =
+                                indexed_address(base, offset.unwrap_or(0), *mode);
 
-                            let res1 = self.load(dst1.clone(), address.clone());
-                            address.offset += 8;
-                            let res2 = self.load(dst2.clone(), address.clone());
+                            let width = access_width(&instruction.opcode, dst1);
+                            let mut second = address.clone();
+                            second.offset += width;
+                            let res1 = self.load(dst1.clone(), address, width);
+                            let res2 = self.load(dst2.clone(), second, width);
                             if let Err(e) = res1 {
                                 return Err(e.to_string());
                             }
@@ -763,26 +837,13 @@ impl ARMCORTEXA {
                                 return Err(e.to_string());
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0) - 8,
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
+                            if let Some(updated) = writeback {
+                                self.set_register(
+                                    &Operand::Register(w.clone(), *reg_num),
+                                    updated.kind,
+                                    updated.base,
+                                    updated.offset,
+                                );
                             }
                         }
                         _ => {
@@ -790,7 +851,7 @@ impl ARMCORTEXA {
                         }
                     }
                 }
-                "str" | "strb" => {
+                "str" | "strb" | "strh" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("ldr dst");
@@ -798,36 +859,25 @@ impl ARMCORTEXA {
 
                     match src_addr {
                         Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
+                            let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
-                            address.offset += offset.unwrap_or(0);
+                            let (address, writeback) =
+                                indexed_address(base, offset.unwrap_or(0), *mode);
 
-                            let res = self.store(dst.clone(), address.clone());
+                            let width = access_width(&instruction.opcode, dst);
+                            let res = self.store(dst.clone(), address, width);
                             if let Err(e) = res {
                                 return Err(e.to_string());
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0),
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
+                            if let Some(updated) = writeback {
+                                self.set_register(
+                                    &Operand::Register(w.clone(), *reg_num),
+                                    updated.kind,
+                                    updated.base,
+                                    updated.offset,
+                                );
                             }
                         }
                         _ => {
@@ -844,14 +894,17 @@ impl ARMCORTEXA {
 
                     match src_addr {
                         Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
+                            let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
-                            address.offset += offset.unwrap_or(0);
+                            let (address, writeback) =
+                                indexed_address(base, offset.unwrap_or(0), *mode);
 
-                            let res1 = self.store(dst1.clone(), address.clone());
-                            address.offset += 8;
-                            let res2 = self.store(dst2.clone(), address.clone());
+                            let width = access_width(&instruction.opcode, dst1);
+                            let mut second = address.clone();
+                            second.offset += width;
+                            let res1 = self.store(dst1.clone(), address, width);
+                            let res2 = self.store(dst2.clone(), second, width);
                             if let Err(e) = res1 {
                                 return Err(e.to_string());
                             }
@@ -859,26 +912,13 @@ impl ARMCORTEXA {
                                 return Err(e.to_string());
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0) - 8,
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
+                            if let Some(updated) = writeback {
+                                self.set_register(
+                                    &Operand::Register(w.clone(), *reg_num),
+                                    updated.kind,
+                                    updated.base,
+                                    updated.offset,
+                                );
                             }
                         }
                         _ => {
@@ -1046,7 +1086,7 @@ impl ARMCORTEXA {
                     if let Some(Operand::Memory(prefix, num, _, _, _)) = reg_iter.next() {
                         let a = self.get_register(&Operand::Register(prefix.clone(), *num));
 
-                        if let Err(e) = self.load_vector(dst.clone(), a) {
+                        if let Err(e) = self.load_vector(dst.clone(), a, 16) {
                             return Err(e.to_string());
                         }
                     }
@@ -1071,7 +1111,7 @@ impl ARMCORTEXA {
                     if let Some(Operand::Memory(prefix, num, offset, _, index)) = addr {
                         let a = self.get_register(&Operand::Register(prefix.clone(), *num));
                         for d in destinations {
-                            if let Err(e) = self.load_vector(d.clone(), a.clone()) {
+                            if let Err(e) = self.load_vector(d.clone(), a.clone(), 16) {
                                 return Err(e.to_string());
                             }
                         }
@@ -1110,7 +1150,7 @@ impl ARMCORTEXA {
                     {
                         let a = self.get_register(&Operand::Register(prefix.clone(), *num));
                         for d in sources.clone() {
-                            if let Err(e) = self.store_vector(d.clone(), a.clone()) {
+                            if let Err(e) = self.store_vector(d.clone(), a.clone(), 16) {
                                 return Err(e.to_string());
                             }
                         }
@@ -1148,14 +1188,16 @@ impl ARMCORTEXA {
 
                     match src_addr {
                         Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
+                            let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
-                            address.offset += offset.unwrap_or(0);
+                            let (address, writeback) =
+                                indexed_address(base, offset.unwrap_or(0), *mode);
 
-                            let res1 = self.store_vector(dst1.clone(), address.clone());
-                            address.offset += 8;
-                            let res2 = self.store_vector(dst2.clone(), address.clone());
+                            let mut second = address.clone();
+                            second.offset += 16;
+                            let res1 = self.store_vector(dst1.clone(), address, 16);
+                            let res2 = self.store_vector(dst2.clone(), second, 16);
                             if let Err(e) = res1 {
                                 return Err(e.to_string());
                             }
@@ -1163,26 +1205,13 @@ impl ARMCORTEXA {
                                 return Err(e.to_string());
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0) - 8,
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
+                            if let Some(updated) = writeback {
+                                self.set_register(
+                                    &Operand::Register(w.clone(), *reg_num),
+                                    updated.kind,
+                                    updated.base,
+                                    updated.offset,
+                                );
                             }
                         }
                         _ => {
@@ -1218,7 +1247,9 @@ impl ARMCORTEXA {
                                 }
                             }
                             return Ok(ExecuteReturnType::JumpAddress(
-                                x30.offset.try_into().expect("computer4"),
+                                x30.offset
+                                    .try_into()
+                                    .expect("ret: return address must be non-negative"),
                             ));
                         }
                         RegisterKind::Immediate => {
@@ -1248,7 +1279,7 @@ impl ARMCORTEXA {
                             Operand::Bitwise(op, shift) => {
                                 r1 = instruction_aux::shift_imm(op.to_string(), r1, *shift);
                             }
-                            _ => todo!("not sure what else can show up here"),
+                            other => todo!("unsupported trailing operand {other:?}"),
                         }
                     }
 

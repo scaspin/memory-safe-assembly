@@ -56,7 +56,7 @@ fn calculate_size_of(ty: String) -> usize {
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
         "u128" => std::mem::size_of::<u128>(),
-        "usize" => std::mem::size_of::<u128>(),
+        "usize" => std::mem::size_of::<usize>(),
         "isize" => std::mem::size_of::<isize>(),
         p => {
             if let Ok(v) = p.parse::<usize>() {
@@ -65,6 +65,19 @@ fn calculate_size_of(ty: String) -> usize {
                 todo!("size of undefined type")
             }
         }
+    }
+}
+
+// A `_len` abstract counts elements, so scale it by the element size to get bytes.
+fn byte_length(bound: &str, element_type: Option<&String>) -> AbstractExpression {
+    let elements = AbstractExpression::Abstract(bound.to_string());
+    match element_type {
+        Some(ty) => generate_expression(
+            "*",
+            elements,
+            AbstractExpression::Immediate(calculate_size_of(ty.clone()) as i64),
+        ),
+        None => elements,
     }
 }
 
@@ -297,7 +310,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         Type::Array(a) => {
                             let ty = calculate_type_of_array_ptr(a);
                             let size = calculate_size_of_array(a);
-                            input_sizes.insert(name.clone(), size * 2);
+                            input_sizes.insert(name.clone(), size);
                             pointer_sizes.insert(name, ty);
                         }
                         Type::Reference(a) => match &*a.elem {
@@ -305,7 +318,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 let ty = calculate_type_of_array_ptr(b);
                                 let size = calculate_size_of_array(b);
                                 pointer_sizes.insert(name.clone(), ty);
-                                input_sizes.insert(name, size * 2);
+                                input_sizes.insert(name, size);
                             }
                             Type::Slice(b) => {
                                 let ty = calculate_type_of_slice_ptr(b);
@@ -343,7 +356,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         Type::Path(p) => {
                             let ty = p.path.segments[0].ident.to_string();
                             let size = calculate_size_of(ty);
-                            input_sizes.insert(name, size * 2);
+                            input_sizes.insert(name, size);
                         }
                         _ => todo!("Standard Input type {:?}", ty),
                     }
@@ -787,7 +800,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     engine.add_region(
                                         RegionType::READ,
                                         pointer_name.clone(),
-                                        AbstractExpression::Abstract(bound.clone()),
+                                        byte_length(&bound, pointer_sizes.get(no_suffix)),
                                     );
 
                                     //overwrite
@@ -821,19 +834,13 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     continue;
                                 }
 
+                                // `len` counts elements, and a region length is in bytes.
                                 let bound = no_suffix.to_owned() + "_len";
+                                let length = byte_length(&bound, pointer_sizes.get(no_suffix));
                                 if a.mutability.is_some() {
-                                    engine.add_region(
-                                        RegionType::WRITE,
-                                        name.clone(),
-                                        AbstractExpression::Abstract(bound),
-                                    );
+                                    engine.add_region(RegionType::WRITE, name.clone(), length);
                                 } else {
-                                    engine.add_region(
-                                        RegionType::READ,
-                                        name.clone(),
-                                        AbstractExpression::Abstract(bound),
-                                    );
+                                    engine.add_region(RegionType::READ, name.clone(), length);
                                 }
                             }
                             _ => todo!("unsupported pointer type to pass to asm {:?}", a.elem),

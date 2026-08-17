@@ -2,6 +2,7 @@ pub mod common;
 pub mod computer;
 pub mod engine;
 pub mod instruction_parser;
+pub mod widening;
 
 #[macro_export]
 macro_rules! extract_three_registers {
