@@ -1,5 +1,17 @@
 use crate::computer::*;
 
+fn is_byte_vector(operand: &Operand) -> bool {
+    matches!(operand, Operand::Vector(_, _, Arrangement::B16))
+}
+
+fn immediate(value: i64) -> RegisterValue {
+    RegisterValue {
+        kind: RegisterKind::Immediate,
+        base: None,
+        offset: value,
+    }
+}
+
 // Post-index accesses the base and updates after; pre-index does both at base+offset.
 // `mode` is Some(false) for pre-index, Some(true) for post-index, None for a plain offset.
 fn indexed_address(
@@ -70,43 +82,26 @@ impl ARMCORTEXA {
                     self.cmp(&instruction.operands[0], &instruction.operands[1]);
                     self.arithmetic("&", |x, y| x & y, instruction.operands.clone());
                 }
-                "adc" => {
-                    match &self.carry {
-                        Some(FlagValue::Real(b)) => {
-                            if *b {
-                                self.arithmetic(
-                                    "+",
-                                    |x, y| x + y + 1,
-                                    instruction.operands.clone(),
-                                );
-                            } else {
-                                self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
-                            }
+                "adc" => match &self.carry {
+                    Some(FlagValue::Real(b)) => {
+                        if *b {
+                            self.arithmetic("+", |x, y| x + y + 1, instruction.operands.clone());
+                        } else {
+                            self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
                         }
-                        _ => todo!("adc needs a concrete carry flag"),
-                        // Some(FlagValue::Abstract(c)) => {
-                        //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
-                        //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
-
-                        //     return Ok(ExecuteReturnType::Select(c.clone(), reg0.clone(), opt0, opt1));
-                        // }
-                        // None => {
-                        //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
-                        //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
-
-                        //     return Ok(ExecuteReturnType::Select(
-                        //         AbstractComparison::new(
-                        //             "==",
-                        //             AbstractExpression::Abstract("carry".to_string()),
-                        //             AbstractExpression::Immediate(1),
-                        //         ),
-                        //         reg0.clone(),
-                        //         opt0,
-                        //         opt1,
-                        //     ));
-                        // }
                     }
-                }
+                    Some(FlagValue::Abstract(c)) => {
+                        let c = c.clone();
+                        return self.carry_select(
+                            "+",
+                            |x, y| x + y + 1,
+                            |x, y| x + y,
+                            &c,
+                            &instruction.operands,
+                        );
+                    }
+                    None => todo!("adc reads a carry flag the program never set"),
+                },
                 "adcs" => {
                     let mut reg_iter = instruction.operands.iter().clone();
                     let _ = reg_iter.next().expect("Need destination register");
@@ -127,7 +122,20 @@ impl ARMCORTEXA {
                                 self.cmn(reg1, reg2);
                             }
                         }
-                        _ => todo!("adcs needs a concrete carry flag"),
+                        Some(FlagValue::Abstract(c)) => {
+                            let c = c.clone();
+                            // Which result the flags describe depends on the carry, so they
+                            // are unknown until the engine picks a side.
+                            self.set_unknown_flags();
+                            return self.carry_select(
+                                "+",
+                                |x, y| x + y + 1,
+                                |x, y| x + y,
+                                &c,
+                                &instruction.operands,
+                            );
+                        }
+                        None => todo!("adcs reads a carry flag the program never set"),
                     }
                 }
                 "sbc" => match &self.carry {
@@ -135,10 +143,20 @@ impl ARMCORTEXA {
                         if *b {
                             self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
                         } else {
-                            self.arithmetic("+", |x, y| x - y - 1, instruction.operands.clone());
+                            self.arithmetic("-", |x, y| x - y - 1, instruction.operands.clone());
                         }
                     }
-                    _ => todo!("sbc needs a concrete carry flag"),
+                    Some(FlagValue::Abstract(c)) => {
+                        let c = c.clone();
+                        return self.carry_select(
+                            "-",
+                            |x, y| x - y,
+                            |x, y| x - y - 1,
+                            &c,
+                            &instruction.operands,
+                        );
+                    }
+                    None => todo!("sbc reads a carry flag the program never set"),
                 },
                 "sbcs" => {
                     let mut reg_iter = instruction.operands.iter().clone();
@@ -160,7 +178,18 @@ impl ARMCORTEXA {
                                 self.cmp(reg1, reg2);
                             }
                         }
-                        _ => todo!("sbcs needs a concrete carry flag"),
+                        Some(FlagValue::Abstract(c)) => {
+                            let c = c.clone();
+                            self.set_unknown_flags();
+                            return self.carry_select(
+                                "-",
+                                |x, y| x - y,
+                                |x, y| x - y - 1,
+                                &c,
+                                &instruction.operands,
+                            );
+                        }
+                        None => todo!("sbcs reads a carry flag the program never set"),
                     }
                 }
                 "clz" => {
@@ -561,7 +590,8 @@ impl ARMCORTEXA {
                     // match on condition based on flags
                     let mut reg_iter = instruction.operands.iter();
 
-                    let register = register_to_tuple(reg_iter.next().expect("cset register"));
+                    let dest = reg_iter.next().expect("cset register");
+                    let register = register_to_tuple(dest);
                     let Operand::Label(cond) = reg_iter.next().expect("cset condition code") else {
                         panic!("not a valid condition code")
                     };
@@ -573,24 +603,21 @@ impl ARMCORTEXA {
                             .expect("cset cs reads a carry flag the program never set")
                         {
                             FlagValue::Real(b) => {
-                                if b {
-                                    self.set_register_from_tuple(
-                                        register,
-                                        RegisterKind::Immediate,
-                                        None,
-                                        1,
-                                    );
-                                } else {
-                                    self.set_register_from_tuple(
-                                        register,
-                                        RegisterKind::Immediate,
-                                        None,
-                                        0,
-                                    );
-                                }
+                                self.set_register_from_tuple(
+                                    register,
+                                    RegisterKind::Immediate,
+                                    None,
+                                    b as i64,
+                                );
                             }
-                            FlagValue::Abstract(_) => {
-                                todo!("cset needs a concrete carry flag");
+                            // The comparison holds exactly when the carry is set.
+                            FlagValue::Abstract(c) => {
+                                return Ok(ExecuteReturnType::Select(
+                                    c,
+                                    dest.clone(),
+                                    immediate(1),
+                                    immediate(0),
+                                ));
                             }
                         },
                         "cc" | "lo" => {
@@ -600,24 +627,20 @@ impl ARMCORTEXA {
                                 .expect("cset cc reads a carry flag the program never set")
                             {
                                 FlagValue::Real(b) => {
-                                    if !b {
-                                        self.set_register_from_tuple(
-                                            register,
-                                            RegisterKind::Immediate,
-                                            None,
-                                            1,
-                                        );
-                                    } else {
-                                        self.set_register_from_tuple(
-                                            register,
-                                            RegisterKind::Immediate,
-                                            None,
-                                            0,
-                                        );
-                                    }
+                                    self.set_register_from_tuple(
+                                        register,
+                                        RegisterKind::Immediate,
+                                        None,
+                                        !b as i64,
+                                    );
                                 }
-                                FlagValue::Abstract(_) => {
-                                    todo!("cset needs a concrete carry flag");
+                                FlagValue::Abstract(c) => {
+                                    return Ok(ExecuteReturnType::Select(
+                                        c.not(),
+                                        dest.clone(),
+                                        immediate(1),
+                                        immediate(0),
+                                    ));
                                 }
                             }
                         }
@@ -642,16 +665,18 @@ impl ARMCORTEXA {
                                 .clone()
                                 .expect("csel cc reads a carry flag the program never set")
                             {
+                                // cc holds when the carry is clear, so it takes the first
+                                // operand in the case cs would not.
                                 FlagValue::Real(b) => {
                                     if b {
-                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                    } else {
                                         self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                                    } else {
+                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
                                     }
                                 }
                                 FlagValue::Abstract(a) => {
                                     return Ok(ExecuteReturnType::Select(
-                                        a,
+                                        a.not(),
                                         dest.clone(),
                                         opt1,
                                         opt2,
@@ -661,19 +686,14 @@ impl ARMCORTEXA {
                         }
                         "cs" => match self.carry.clone() {
                             Some(FlagValue::Real(b)) => {
-                                if !b {
+                                if b {
                                     self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
                                 } else {
                                     self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
                                 }
                             }
                             Some(FlagValue::Abstract(a)) => {
-                                return Ok(ExecuteReturnType::Select(
-                                    a.not(),
-                                    dest.clone(),
-                                    opt1,
-                                    opt2,
-                                ));
+                                return Ok(ExecuteReturnType::Select(a, dest.clone(), opt1, opt2));
                             }
                             None => {
                                 return Ok(ExecuteReturnType::Select(
@@ -728,37 +748,22 @@ impl ARMCORTEXA {
                             .clone()
                             .expect("reads a zero flag the program never set")
                         {
+                            // csetm writes all ones, not one, so the result works as a mask.
                             FlagValue::Real(b) => {
-                                if b {
-                                    self.set_register(dest, RegisterKind::Immediate, None, 1);
-                                } else {
-                                    self.set_register(dest, RegisterKind::Immediate, None, 0);
-                                }
+                                let value = if b { -1 } else { 0 };
+                                self.set_register(dest, RegisterKind::Immediate, None, value);
                             }
                             FlagValue::Abstract(a) => {
-                                let opt1 = RegisterValue {
-                                    kind: RegisterKind::Immediate,
-                                    base: None,
-                                    offset: 1,
-                                };
-                                let opt2 = RegisterValue {
-                                    kind: RegisterKind::Immediate,
-                                    base: None,
-                                    offset: 1,
-                                };
-
-                                return Ok(ExecuteReturnType::Select(a, dest.clone(), opt1, opt2));
+                                return Ok(ExecuteReturnType::Select(
+                                    a,
+                                    dest.clone(),
+                                    immediate(-1),
+                                    immediate(0),
+                                ));
                             }
                         },
                         _ => todo!("unsupported condition code for csetm {:?}", cond),
                     }
-                }
-                // BIG TODO: reimplement these
-                "tst" => {
-                    let mut reg_iter = instruction.operands.iter();
-
-                    let dst = reg_iter.next().expect("Need destination register");
-                    self.set_register(dst, RegisterKind::Number, None, 0);
                 }
                 "mov" | "movz" | "movk" => {
                     let mut reg_iter = instruction.operands.iter().clone();
@@ -933,7 +938,8 @@ impl ARMCORTEXA {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dest_op = reg_iter.next().expect("rev64 dst");
-                    let dest = &mut self.get_simd_register(dest_op);
+                    let mut result = self.get_simd_register(dest_op);
+                    let dest = &mut result;
                     let src = self.get_simd_register(reg_iter.next().expect("rev64 src"));
 
                     match dest_op {
@@ -973,6 +979,55 @@ impl ARMCORTEXA {
                         }
                         a => todo!("unsupported operand in simd rev64 {:?}", a),
                     }
+                    self.set_simd_register(dest_op, result);
+                }
+                "mov" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dest = reg_iter.next().expect("mov dst");
+                    let src = self.get_simd_register(reg_iter.next().expect("mov src"));
+                    self.set_simd_register(dest, src);
+                }
+                "tbl" => {
+                    let dest = instruction.operands.first().expect("tbl dst");
+                    self.set_simd_register(dest, SimdRegister::default());
+                }
+                "ushr" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dest = reg_iter.next().expect("ushr dst");
+                    let src = self.get_simd_register(reg_iter.next().expect("ushr src"));
+                    let Some(Operand::Immediate(shift)) = reg_iter.next() else {
+                        todo!("ushr by a register")
+                    };
+                    let mut result = SimdRegister::default();
+                    if is_byte_vector(dest) && *shift < 8 {
+                        for i in 0..16 {
+                            let (_, byte) = src.get_byte(i);
+                            result.set_byte(i, None, byte >> shift);
+                        }
+                    }
+                    self.set_simd_register(dest, result);
+                }
+                "ext" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dest = reg_iter.next().expect("ext dst");
+                    let low = self.get_simd_register(reg_iter.next().expect("ext low source"));
+                    let high = self.get_simd_register(reg_iter.next().expect("ext high source"));
+                    let Some(Operand::Immediate(index)) = reg_iter.next() else {
+                        todo!("ext without an immediate index")
+                    };
+                    let index = *index as usize;
+                    let mut result = SimdRegister::default();
+                    if is_byte_vector(dest) && index < 16 {
+                        for i in 0..16 {
+                            let (base, byte) = if index + i < 16 {
+                                low.get_byte(index + i)
+                            } else {
+                                high.get_byte(index + i - 16)
+                            };
+                            result.set_byte(i, base, byte);
+                        }
+                    }
+                    self.set_simd_register(dest, result);
                 }
                 "and" => {
                     self.vector_arithmetic(
@@ -1065,10 +1120,9 @@ impl ARMCORTEXA {
 
                     self.set_simd_register(dst, dst_reg);
                 }
-                "aese" | "aesmc" | "movi" | "ext" | "ushr" | "dup" | "sshr" | "pmull"
-                | "pmull2" | "zip1" | "zip2" | "trn1" | "trn2" | "bit" | "uaddl" | "uaddl2"
-                | "sqrshrun" | "sqrshrun2" | "umull" | "umull2" | "umlal" | "umlal2" | "rshrn"
-                | "rshrn2" => {
+                "aese" | "aesmc" | "movi" | "dup" | "sshr" | "pmull" | "pmull2" | "zip1"
+                | "zip2" | "trn1" | "trn2" | "bit" | "uaddl" | "uaddl2" | "sqrshrun"
+                | "sqrshrun2" | "umull" | "umull2" | "umlal" | "umlal2" | "rshrn" | "rshrn2" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
@@ -1101,7 +1155,7 @@ impl ARMCORTEXA {
                     let mut addr = None;
                     for o in instruction.operands.iter() {
                         match o {
-                            Operand::Vector(..) => destinations.push(o),
+                            Operand::Vector(..) | Operand::VectorAccess(..) => destinations.push(o),
                             Operand::VectorRegister(..) => addr = Some(o),
                             Operand::Memory(..) => addr = Some(o),
                             _ => panic!("not a valid operand for instruction ld1"),
@@ -1235,6 +1289,9 @@ impl ARMCORTEXA {
                 "cmn" => {
                     self.cmn(&instruction.operands[0], &instruction.operands[1]);
                 }
+                "tst" => {
+                    self.tst(&instruction.operands[0], &instruction.operands[1]);
+                }
                 "ret" => {
                     let x30 = self.get_register(&Operand::Register(RePrefix::X, 30));
                     match x30.kind {
@@ -1273,14 +1330,35 @@ impl ARMCORTEXA {
                     let reg1 = reg_iter.next().expect("Need register output for mov");
 
                     let mut r1 = self.get_register(reg1);
+                    let mut shift = 0;
 
                     if let Some(a) = reg_iter.next() {
                         match a {
-                            Operand::Bitwise(op, shift) => {
-                                r1 = instruction_aux::shift_imm(op.to_string(), r1, *shift);
+                            Operand::Bitwise(op, s) => {
+                                shift = *s;
+                                r1 = instruction_aux::shift_imm(op.to_string(), r1, *s);
                             }
                             other => todo!("unsupported trailing operand {other:?}"),
                         }
+                    }
+
+                    if instruction.opcode == "movk" {
+                        let r0 = self.get_register(reg0);
+                        r1 = if r0.kind == RegisterKind::Immediate
+                            && r1.kind == RegisterKind::Immediate
+                        {
+                            RegisterValue {
+                                kind: RegisterKind::Immediate,
+                                base: None,
+                                offset: (r0.offset & !(0xffff << shift)) | r1.offset,
+                            }
+                        } else {
+                            RegisterValue {
+                                kind: RegisterKind::Number,
+                                base: None,
+                                offset: 0,
+                            }
+                        };
                     }
 
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);

@@ -67,6 +67,12 @@ pub struct SimdRegister {
 
 pub const BASE_INIT: Option<AbstractExpression> = None;
 
+impl Default for SimdRegister {
+    fn default() -> Self {
+        Self::new("")
+    }
+}
+
 impl SimdRegister {
     pub fn new(_name: &str) -> Self {
         // let string_name = name.to_string();
@@ -702,6 +708,31 @@ fn mask_modulus(expression: &AbstractExpression) -> Option<i64> {
     }
 }
 
+fn single_bit(expression: &AbstractExpression) -> Option<i64> {
+    match expression {
+        AbstractExpression::Immediate(mask) if *mask > 0 => {
+            (*mask as u64).is_power_of_two().then_some(*mask)
+        }
+        _ => None,
+    }
+}
+
+fn cleared_bit(expression: &AbstractExpression) -> Option<i64> {
+    match expression {
+        AbstractExpression::Immediate(mask) if *mask < 0 => {
+            let bit = !*mask;
+            (bit > 0 && (bit as u64).is_power_of_two()).then_some(bit)
+        }
+        _ => None,
+    }
+}
+
+fn bit_of(value: &ast::Int, bit: i64) -> ast::Int {
+    let weight = ast::Int::from_i64(bit);
+    let two = ast::Int::from_i64(2);
+    ast::Int::mul(&[&value.div(&weight).modulo(&two), &weight])
+}
+
 pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
     match expression.clone() {
         AbstractExpression::Immediate(num) => Some(ast::Int::from_i64(num)),
@@ -738,12 +769,23 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 }
                 "%" => Some(new1.modulo(&new2)),
                 // A mask of all ones keeps the low bits, which is the same as a modulo.
-                "&" => match (mask_modulus(&old1), mask_modulus(&old2)) {
-                    (_, Some(modulus)) => Some(new1.modulo(ast::Int::from_i64(modulus))),
-                    (Some(modulus), _) => Some(new2.modulo(ast::Int::from_i64(modulus))),
-                    // Only a mask of all ones is expressible; any other is a real bitwise and.
-                    _ => todo!("no translation for bitwise and in {expression}"),
-                },
+                "&" => {
+                    if let Some(modulus) = mask_modulus(&old2) {
+                        Some(new1.modulo(ast::Int::from_i64(modulus)))
+                    } else if let Some(modulus) = mask_modulus(&old1) {
+                        Some(new2.modulo(ast::Int::from_i64(modulus)))
+                    } else if let Some(bit) = single_bit(&old2) {
+                        Some(bit_of(&new1, bit))
+                    } else if let Some(bit) = single_bit(&old1) {
+                        Some(bit_of(&new2, bit))
+                    } else if let Some(bit) = cleared_bit(&old2) {
+                        Some(ast::Int::sub(&[&new1, &bit_of(&new1, bit)]))
+                    } else if let Some(bit) = cleared_bit(&old1) {
+                        Some(ast::Int::sub(&[&new2, &bit_of(&new2, bit)]))
+                    } else {
+                        todo!("no translation for bitwise and in {expression}")
+                    }
+                }
                 _ => todo!("no translation for operator {op} in {expression}"),
             }
         }
@@ -764,6 +806,34 @@ mod tests {
         assert_eq!(mask_modulus(&AbstractExpression::Immediate(-1)), None);
         assert_eq!(mask_modulus(&AbstractExpression::Immediate(i64::MAX)), None);
         assert_eq!(mask_modulus(&abstract_of("len")), None);
+    }
+
+    fn masked(value: i64, mask: i64) -> ast::Int {
+        expression_to_ast(generate_expression(
+            "&",
+            AbstractExpression::Immediate(value),
+            AbstractExpression::Immediate(mask),
+        ))
+        .expect("mask is translatable")
+    }
+
+    fn equals(left: &ast::Int, value: i64) -> bool {
+        let solver = Solver::new();
+        solver.check_assumptions(&[left.eq(ast::Int::from_i64(value)).not()]) == SatResult::Unsat
+    }
+
+    #[test]
+    fn a_single_bit_mask_keeps_only_that_bit() {
+        assert!(equals(&masked(0b1101, 8), 8));
+        assert!(equals(&masked(0b0101, 8), 0));
+        assert!(equals(&masked(0b1101, 4), 4));
+    }
+
+    #[test]
+    fn a_negated_single_bit_mask_clears_only_that_bit() {
+        assert!(equals(&masked(0b1101, !8), 0b0101));
+        assert!(equals(&masked(0b0101, !8), 0b0101));
+        assert!(equals(&masked(200, -65), 200 & -65));
     }
 
     #[test]

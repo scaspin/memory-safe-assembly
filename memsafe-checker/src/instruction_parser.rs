@@ -356,7 +356,8 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
         return InstructionType::Memory;
     } else if operands.iter().any(|op| matches!(op, Operand::Address(..))) {
         return InstructionType::ControlFlow;
-    } else if operands.len() > 2
+    } else if !matches!(opcode, "mov" | "movz" | "movk")
+        && operands.len() > 2
         && operands.iter().all(|op| {
             matches!(op, Operand::Register(..))
                 || matches!(op, Operand::Immediate(_))
@@ -381,6 +382,36 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
     InstructionType::Other
 }
 
+// Separators inside parentheses belong to the operand, so an assembled immediate such as
+// `#(1 << 3)` survives as one piece rather than three.
+fn split_operands(input: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0usize;
+    for c in input.chars() {
+        match c {
+            '(' => {
+                depth += 1;
+                current.push(c);
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                current.push(c);
+            }
+            ',' | ' ' | '\t' if depth == 0 => {
+                if !current.is_empty() {
+                    parts.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(c),
+        }
+    }
+    if !current.is_empty() {
+        parts.push(current);
+    }
+    parts
+}
+
 impl Instruction {
     pub fn new(input: String) -> Self {
         let delete_curly_brackets = input
@@ -389,11 +420,7 @@ impl Instruction {
             .replace("{", " ")
             .replace("\t", " ")
             .replace("}", "");
-        let mut parts = delete_curly_brackets
-            .split(['\t', ',', ' '])
-            .collect::<Vec<&str>>()
-            .into_iter()
-            .filter(|x| !x.is_empty());
+        let mut parts = split_operands(&delete_curly_brackets).into_iter();
         let mut opcode = parts
             .next()
             .expect("Require opcode for instruction")
@@ -437,12 +464,16 @@ impl Instruction {
 // // FIX: try to retire this function since errors are sometimes confusing
 pub fn string_to_int(s: &str) -> i64 {
     let mut value = 1;
-    let v = s
-        .trim_matches(' ')
-        .trim_matches('#')
-        .trim_matches('(')
-        .trim_matches(')');
-    if v.contains('*') {
+    let v = s.trim().trim_start_matches('#').trim();
+    if let Some(rest) = v.strip_prefix('~') {
+        return !string_to_int(rest);
+    }
+    if let Some(inner) = v.strip_prefix('(').and_then(|i| i.strip_suffix(')')) {
+        return string_to_int(inner);
+    }
+    if let Some((base, shift)) = v.split_once("<<") {
+        value = string_to_int(base) << string_to_int(shift);
+    } else if v.contains('*') {
         let parts = v.split('*');
         for part in parts {
             let m = string_to_int(part);
@@ -473,13 +504,9 @@ pub fn string_to_int(s: &str) -> i64 {
             &['(', ')', ',', '\"', '.', ';', ':', '\'', '#', '[', ']'][..],
             "",
         );
-        if clean == "~1<<6" {
-            value = -65
-        } else {
-            value = clean
-                .parse::<i64>()
-                .unwrap_or_else(|_| panic!("integer parsing failed {:?}", clean));
-        }
+        value = clean
+            .parse::<i64>()
+            .unwrap_or_else(|_| panic!("integer parsing failed {:?}", clean));
     }
 
     value

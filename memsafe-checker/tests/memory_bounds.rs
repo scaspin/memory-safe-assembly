@@ -81,6 +81,45 @@ fn access_width_past_the_end_is_caught() {
     assert!(accepts(region, "ldrb w2,[x0,#63]", None));
 }
 
+// A bounded abstract stays symbolic through a shift, so the address it forms is a range
+// the solver can place rather than a value it has to give up on.
+fn accepts_shifted_index(region: i64, least: i64, greatest: i64, extra: i64) -> bool {
+    init();
+    let program = vec![
+        "start:".to_string(),
+        "add x3,x0,x1,lsl#4".to_string(),
+        format!("ldr x2,[x3,#{extra}]"),
+        "ret".to_string(),
+    ];
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        AbstractExpression::Immediate(region),
+    );
+    engine.add_abstract_from(1, "rounds");
+    for (op, bound) in [(">=", least), ("<=", greatest)] {
+        engine.add_invariant(AbstractComparison::new(
+            op,
+            abstract_of("rounds"),
+            AbstractExpression::Immediate(bound),
+        ));
+    }
+    engine.start("start").is_ok()
+}
+
+#[test]
+fn a_bounded_index_shifted_left_stays_a_bounded_address() {
+    // rounds in [10, 14] puts base + (rounds << 4) in [160, 224], and the eight bytes
+    // read at +8 reach 232 at worst.
+    assert!(accepts_shifted_index(244, 10, 14, 8));
+    // One more round reaches 248, past the region.
+    assert!(!accepts_shifted_index(244, 10, 15, 8));
+    // Without an upper bound there is no range to place at all.
+    assert!(!accepts_shifted_index(244, 10, i64::MAX, 8));
+}
+
 // A pair is modelled as two accesses, so its second half is checked.
 #[test]
 fn pair_access_checks_its_second_half() {

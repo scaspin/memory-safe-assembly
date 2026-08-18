@@ -314,11 +314,6 @@ struct Scope {
 
 impl ExecutionEngine {
     pub fn new<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> ExecutionEngine {
-        // let _ = env_logger::try_init();
-        // log::info!("--------");
-        // log::info!("NEW EXECUTION ENGINE");
-        // log::info!("-------");
-
         // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
         let mut code: Vec<Instruction> = Vec::new();
@@ -990,53 +985,6 @@ impl ExecutionEngine {
                     let invariants = summary.invariants.clone();
                     self.summaries.borrow_mut().push(summary);
 
-                    // for i in 0..(last_state.1.len()) {
-                    //     let last = &last_state.1[i];
-                    //     let cur = &current_state.1[i];
-                    //     let diff: [u8; 16] = match cur.kind {
-                    //         RegisterKind::RegisterBase | RegisterKind::Number => {
-                    //             if last.base == cur.base {
-                    //                 (0..16)
-                    //                     .map(|i| cur.offset[i] - last.offset[i])
-                    //                     .collect::<Vec<_>>()
-                    //                     .try_into()
-                    //                     .expect("engine9")
-                    //             } else {
-                    //                 [0; 16]
-                    //             }
-                    //         }
-                    //         RegisterKind::Immediate => (0..16)
-                    //             .map(|i| cur.offset[i] - last.offset[i])
-                    //             .collect::<Vec<_>>()
-                    //             .try_into()
-                    //             .expect("enginea"),
-                    //     };
-
-                    //     let mut new_reg = SimdRegister {
-                    //         kind: cur.kind.clone(),
-                    //         base: cur.base.clone(),
-                    //         offset: cur.offset,
-                    //     };
-
-                    //     for j in 0..16 {
-                    //         let d = diff[j];
-                    //         if d > 0 {
-                    //             let new_base = generate_expression_from_options(
-                    //                 "+",
-                    //                 cur.base[j].clone(),
-                    //                 Some(generate_expression(
-                    //                     "*",
-                    //                     AbstractExpression::Abstract(loop_var_name.clone()),
-                    //                     AbstractExpression::Immediate(d as i64),
-                    //                 )),
-                    //             );
-
-                    //             new_reg.base[j] = new_base;
-                    //         }
-                    //     }
-                    //     self.computer.simd_registers[i] = new_reg;
-                    // }
-
                     self.active_loop = Some(ActiveLoop {
                         id,
                         pc,
@@ -1129,64 +1077,6 @@ impl ExecutionEngine {
         None
     }
 }
-
-// Left from the register-only summary; the simd equivalent is still unwritten.
-/*
-                // todo!();
-                    // for i in 0..(last_state.1.len()) {
-                    //     let last = &last_state.1[i];
-                    //     let cur = &current_state.1[i];
-                    //     let diff: [u8; 16] = match cur.kind {
-                    //         RegisterKind::RegisterBase | RegisterKind::Number => {
-                    //             if last.base == cur.base {
-                    //                 (0..16)
-                    //                     .map(|i| cur.offset[i] - last.offset[i])
-                    //                     .collect::<Vec<_>>()
-                    //                     .try_into()
-                    //                     .expect("engined")
-                    //             } else {
-                    //                 [0; 16]
-                    //             }
-                    //         }
-                    //         RegisterKind::Immediate => (0..16)
-                    //             .map(|i| cur.offset[i] - last.offset[i])
-                    //             .collect::<Vec<_>>()
-                    //             .try_into()
-                    //             .expect("enginee"),
-                    //     };
-
-                    //     let base = cur.base.clone();
-
-                    //     if base
-                    //         .iter()
-                    //         .any(|s| s.is_some() && s.clone().expect("enginef").contains(&loop_var_name))
-                    //     {
-                    //         let mut new_reg = SimdRegister {
-                    //             kind: cur.kind.clone(),
-                    //             base: cur.base.clone(),
-                    //             offset: cur.offset,
-                    //         };
-
-                    //         for j in 0..16 {
-                    //             let d = diff[j];
-                    //             if d > 0 {
-                    //                 let new_base = generate_expression_from_options(
-                    //                     "+",
-                    //                     cur.base[j].clone(),
-                    //                     Some(generate_expression(
-                    //                         "*",
-                    //                         AbstractExpression::Abstract(loop_var_name.clone()),
-                    //                         AbstractExpression::Immediate(d as i64),
-                    //                     )),
-                    //                 );
-
-                    //                 new_reg.base[j] = new_base;
-                    //             }
-                    //         }
-                    //         self.computer.simd_registers[i] = new_reg;
-                    //     }
-                    // }
-*/
 
 #[cfg(test)]
 mod tests {
@@ -1392,19 +1282,15 @@ mod tests {
         assert_eq!(at_the_loop.len(), 1, "resummarized: {at_the_loop:?}");
     }
 
+    // The engine is cloned for every explored branch, so keep it off the stack in bulk.
+    // Unboxing the simd bank alone would put this back over 25KB.
     #[test]
-    fn size_probe() {
-        eprintln!("ExecutionEngine {}", size_of::<ExecutionEngine>());
-        eprintln!("ARMCORTEXA {}", size_of::<ARMCORTEXA>());
-        eprintln!("RegisterValue {}", size_of::<RegisterValue>());
-        eprintln!("SimdRegister {}", size_of::<SimdRegister>());
-        eprintln!("ComputerState {}", size_of::<ComputerState>());
-        eprintln!("BranchPoint {}", size_of::<BranchPoint>());
-        eprintln!("ExecuteReturnType {}", size_of::<ExecuteReturnType>());
-        eprintln!("Instruction {}", size_of::<Instruction>());
-        eprintln!("Summary {}", size_of::<Summary>());
-        eprintln!("JumpRecord {}", size_of::<JumpRecord>());
-        eprintln!("AbstractComparison {}", size_of::<AbstractComparison>());
+    fn engine_stays_small_enough_to_clone_per_branch() {
+        assert!(
+            size_of::<ExecutionEngine>() < 8 * 1024,
+            "{} bytes",
+            size_of::<ExecutionEngine>()
+        );
     }
 
     fn assert_ids_are_distinct(engine: &ExecutionEngine) {

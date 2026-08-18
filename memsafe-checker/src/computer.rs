@@ -32,6 +32,9 @@ pub struct ARMCORTEXA {
     pub memory_labels: HashMap<String, i64>,
     rw_queue: Vec<MemoryAccess>,
     alignment: i64,
+    // Names the next set of unknown flags. Not shared across clones: each explored branch
+    // has its own solver, so the same name in a sibling branch constrains nothing here.
+    flag_counter: usize,
     pub solver: Solver,
 }
 
@@ -151,6 +154,7 @@ impl ARMCORTEXA {
             memory_labels: HashMap::new(),
             rw_queue: Vec::new(),
             alignment: 4,
+            flag_counter: 0,
             solver,
         }
     }
@@ -172,6 +176,24 @@ impl ARMCORTEXA {
         self.neg = neg;
         self.carry = carry;
         self.overflow = overflow;
+    }
+
+    // A comparison whose operands carry no usable value leaves the flags unknown. They get
+    // a symbol each rather than None, so a later cset or branch can still split on them.
+    pub fn set_unknown_flags(&mut self) {
+        let n = self.flag_counter;
+        self.flag_counter += 1;
+        let flag = |which: &str| {
+            Some(FlagValue::Abstract(AbstractComparison::new(
+                "==",
+                AbstractExpression::Abstract(format!("{which}_flag_{n}")),
+                AbstractExpression::Immediate(1),
+            )))
+        };
+        self.neg = flag("neg");
+        self.zero = flag("zero");
+        self.carry = flag("carry");
+        self.overflow = flag("overflow");
     }
 
     // Ordered as ComputerState holds them: zero, neg, carry, overflow.
@@ -581,6 +603,59 @@ mod tests {
                 kind: RegisterKind::RegisterBase,
                 base: Some(AbstractExpression::Abstract("hello,".to_string())),
                 offset: 7,
+            }
+        );
+    }
+
+    #[test]
+    fn vector_eor_stores_its_result() {
+        let mut computer = ARMCORTEXA::new();
+        computer.simd_registers[1].offset = [0xff; 16];
+        computer.simd_registers[2].offset = [0x0f; 16];
+
+        let _ = computer.execute(
+            0,
+            &Instruction::new("eor v0.16b, v1.16b, v2.16b".to_string()),
+        );
+
+        assert_eq!(computer.simd_registers[0].offset, [0xf0; 16]);
+    }
+
+    #[test]
+    fn movk_replaces_only_the_halfword_the_shift_selects() {
+        let mut computer = ARMCORTEXA::new();
+
+        let _ = computer.execute(0, &Instruction::new("movz w28, #31129".to_string()));
+        let _ = computer.execute(0, &Instruction::new("movk w28, #23170, lsl#16".to_string()));
+
+        assert_eq!(
+            computer.get_register(&Operand::Register(RePrefix::W, 28)),
+            RegisterValue {
+                kind: RegisterKind::Immediate,
+                base: None,
+                offset: (23170 << 16) | 31129,
+            }
+        );
+    }
+
+    #[test]
+    fn movk_over_an_unknown_destination_stays_unknown() {
+        let mut computer = ARMCORTEXA::new();
+
+        computer.set_register(
+            &Operand::Register(RePrefix::X, 4),
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract("len".to_string())),
+            0,
+        );
+        let _ = computer.execute(0, &Instruction::new("movk x4, #23170, lsl#16".to_string()));
+
+        assert_eq!(
+            computer.get_register(&Operand::Register(RePrefix::X, 4)),
+            RegisterValue {
+                kind: RegisterKind::Number,
+                base: None,
+                offset: 0,
             }
         );
     }
