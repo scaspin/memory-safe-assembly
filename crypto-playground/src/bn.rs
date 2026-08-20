@@ -159,13 +159,7 @@ fn bn_cmp_words_consttime(a: &[BN_ULONG], a_len: usize, b: &[BN_ULONG], b_len: u
     //                    crypto_word_t_is_too_small)
 
     let mut ret = 0;
-    let min = {
-        if a_len < b_len {
-            a_len
-        } else {
-            b_len
-        }
-    };
+    let min = { if a_len < b_len { a_len } else { b_len } };
 
     for i in 0..min {
         let eq = constant_time_eq(a[i] as i64, b[i] as i64);

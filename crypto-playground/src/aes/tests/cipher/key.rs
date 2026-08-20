@@ -6,8 +6,8 @@ use crate::aes::tests::cipher::block::Block;
 use crate::aes::tests::cipher::chacha::ChaCha20Key;
 use aws_lc_rs::cipher::{AES_128_KEY_LEN, AES_256_KEY_LEN};
 use aws_lc_rs::error::Unspecified;
-use aws_lc_sys::{AES_set_decrypt_key, AES_set_encrypt_key, AES_KEY};
-use core::mem::{size_of, MaybeUninit};
+use aws_lc_sys::{AES_KEY, AES_set_decrypt_key, AES_set_encrypt_key};
+use core::mem::{MaybeUninit, size_of};
 use core::ptr::copy_nonoverlapping;
 // TODO: Uncomment when MSRV >= 1.64
 // use core::ffi::c_uint;

@@ -234,7 +234,7 @@ fn sha256_block_data_order_unsafe_asm(context: *mut u32, input: *const u8, input
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aws_lc_rs::digest::{digest, SHA256};
+    use aws_lc_rs::digest::{SHA256, digest};
 
     #[test]
     fn test_sha256_asm_impls() {

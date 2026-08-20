@@ -117,8 +117,8 @@ fn sha1_block_data_order(context: &mut [u32; 5], input: &[u8]);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aws_lc_rs::digest::digest;
     use aws_lc_rs::digest::SHA1_FOR_LEGACY_USE_ONLY as SHA1;
+    use aws_lc_rs::digest::digest;
 
     unsafe extern "C" {
         #[link_name = "aws_lc_0_14_1_sha1_block_data_order"]
