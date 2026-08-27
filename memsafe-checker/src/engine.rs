@@ -3,13 +3,9 @@ use std::collections::HashMap;
 use std::io::Error;
 use std::rc::Rc;
 
-// Unconditional jumps have no condition to resolve, so a cycle among them never reaches looping_too_deep.
 const MAX_UNCONDITIONAL_REVISITS: usize = 1000;
-// run recurses once per explored branch, so this bounds stack growth.
 const MAX_BRANCH_DEPTH: usize = 20;
-// Below this many branches a path is too short for a revisit count to mean anything.
 const MAX_JUMP_HISTORY: usize = 30;
-// Revisits of one branch before the loop there is called unresolvable.
 const MAX_REVISITS_PER_BRANCH: usize = 20;
 use z3::ast::Ast;
 use z3::*;
@@ -24,15 +20,12 @@ enum BranchOutcome {
     Next(usize),
 }
 
-// What one executed instruction says about where the run goes next.
 enum Step {
     Continue(usize),
-    // Both sides of a branch were explored, so this path is finished.
     Stop,
     Done,
 }
 
-// Bytes one item of a data directive occupies.
 fn item_size(directive: &str) -> Option<i64> {
     match directive {
         ".byte" => Some(1),
@@ -43,7 +36,6 @@ fn item_size(directive: &str) -> Option<i64> {
     }
 }
 
-// Register values an expression is built from.
 fn registers_in_expression(e: &AbstractExpression) -> Vec<RegisterValue> {
     fn walk(e: &AbstractExpression, found: &mut Vec<RegisterValue>) {
         match e {
@@ -60,7 +52,6 @@ fn registers_in_expression(e: &AbstractExpression) -> Vec<RegisterValue> {
     found
 }
 
-// Both branches usually fail the same way, so report one message rather than two.
 fn join_branch_errors(e1: Error, e2: Error) -> String {
     let (e1, e2) = (e1.to_string(), e2.to_string());
     if e1 == e2 { e1 } else { format!("{e1}; {e2}") }
@@ -68,13 +59,10 @@ fn join_branch_errors(e1: Error, e2: Error) -> String {
 
 #[derive(Clone)]
 struct Program {
-    // defs: Vec<String>,
     code: Vec<Instruction>,
     labels: Vec<(String, usize)>,
-    // ifdefs: Vec<((String, usize), usize)>,
 }
 
-// What the engine observes at a conditional branch.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct BranchPoint {
@@ -84,32 +72,26 @@ struct BranchPoint {
     state: ComputerState,
 }
 
-// A branch already explored, and which way it went.
 #[derive(Debug, Clone)]
 struct JumpRecord {
     point: BranchPoint,
     taken: bool,
 }
 
-// What the accelerator proposes for one loop: the registers it rewrites and the
-// facts that justify them, in the term language rather than as solver calls.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct Summary {
     id: LoopId,
     pc: usize,
-    // The enclosing label, kept only to make diagnostics readable.
     label: Option<String>,
     counter: LoopCounter,
     invariants: Vec<LoopInvariant>,
     updates: Vec<(usize, RegisterValue)>,
-    // zero, neg, carry and overflow, in the order ComputerState holds them.
     flags: [Option<FlagValue>; 4],
     facts: Vec<AbstractComparison>,
 }
 
 impl Summary {
-    // The rewritten value of a register, if the summary changed it.
     #[allow(dead_code)]
     fn register(&self, index: usize) -> Option<&RegisterValue> {
         self.updates
@@ -119,8 +101,6 @@ impl Summary {
     }
 }
 
-// A register's value at loop entry: a walking register drops the distance it has
-// already covered, since the summary counts iterations from the loop's start.
 fn anchor_of(r: &RegisterValue, walking: bool) -> AbstractExpression {
     match (&r.base, r.offset) {
         (Some(b), _) if walking => b.clone(),
@@ -130,8 +110,6 @@ fn anchor_of(r: &RegisterValue, walking: bool) -> AbstractExpression {
     }
 }
 
-// Rewrites a condition in terms of loop-entry values, so a trip count derived from
-// it counts from where the loop started rather than where it happens to be now.
 fn anchored(
     e: &AbstractExpression,
     current: &[RegisterValue],
@@ -154,8 +132,6 @@ fn anchored(
     }
 }
 
-// Builds a summary of `current` given the state one iteration earlier. Pure: no
-// solver contact, and the caller asserts the facts it returns.
 fn summarize(
     id: LoopId,
     pc: usize,
@@ -174,7 +150,6 @@ fn summarize(
         match invariant {
             LoopInvariant::Fixed => (),
             LoopInvariant::Linear(step) => {
-                // An immediate holds its whole value in the offset.
                 let anchor = cur
                     .base
                     .clone()
@@ -193,7 +168,6 @@ fn summarize(
                     },
                 ));
             }
-            // Not expressible, so widen rather than claim it is invariant.
             LoopInvariant::Unknown => {
                 updates.push((i, RegisterValue::new_empty(&format!("{name}_widened_{i}"))));
             }
@@ -207,17 +181,12 @@ fn summarize(
         widen_flag(&format!("{name}_overflow"), &previous.4, &current.4),
     ];
 
-    // The concrete prefix already covered the first few iterations.
     let mut facts = vec![AbstractComparison::new(
         ">",
         counter.expression(),
         AbstractExpression::Immediate(2),
     )];
 
-    // q+1 more steps carry the walking register from where the loop started to the
-    // value the exit compares it against, whatever each side is derived from. This
-    // holds when the counter and the walking register advance at different rates,
-    // which a single shared multiple could not express.
     let step_of = |side: &AbstractExpression| -> Option<i64> {
         registers_in_expression(side).into_iter().find_map(|r| {
             match invariants.get(current.0.iter().position(|c| *c == r)?)? {
@@ -239,8 +208,11 @@ fn summarize(
             anchored(exit, &current.0, &invariants),
             anchored(walker, &current.0, &invariants),
         );
-        let trips =
-            generate_expression("+", counter.expression(), AbstractExpression::Immediate(1));
+        let trips = if matches!(condition.op.as_str(), "<" | ">") {
+            counter.expression()
+        } else {
+            generate_expression("+", counter.expression(), AbstractExpression::Immediate(1))
+        };
         facts.push(AbstractComparison::new(
             "==",
             distance,
@@ -260,8 +232,6 @@ fn summarize(
     }
 }
 
-// What earlier attempts at one loop established, so a retry starts from their join
-// rather than from a fresh reading of two states.
 #[derive(Debug, Clone)]
 struct LoopAttempt {
     id: LoopId,
@@ -269,43 +239,33 @@ struct LoopAttempt {
     rounds: usize,
 }
 
-// A summary awaiting its inductive check, held while the loop scope is pushed.
 #[derive(Debug, Clone)]
 struct ActiveLoop {
     id: LoopId,
     pc: usize,
-    // The run invocation that opened the scope, and so the one that must close it.
     depth: usize,
-    // Which solver scope holds its facts, so closing it never depends on position.
     scope_id: usize,
     entry_decision: bool,
     invariants: Vec<LoopInvariant>,
     state: ComputerState,
-    // The state before the summary overwrote it, to fall back on if the loop never closes.
     entry_state: ComputerState,
 }
 
 #[derive(Clone)]
 pub struct ExecutionEngine {
-    program: Program,
+    program: Rc<Program>,
     computer: ARMCORTEXA,
-    // abstracts: HashMap<String, String>,
     active_loop: Option<ActiveLoop>,
-    // Per path, not shared: each explored path has to converge on its own.
     loop_attempts: HashMap<usize, LoopAttempt>,
     jump_history: Vec<JumpRecord>,
+    select_history: Vec<usize>,
     fail_fast: bool,
-    // Shared so summaries survive the clones made to explore branches.
     summaries: Rc<RefCell<Vec<Summary>>>,
-    // Shared too, so branches explored from a clone cannot reuse an id.
     next_loop_id: Rc<Cell<usize>>,
-    // Not shared: a cloned solver carries its own copy of the scope stack.
     scopes: Vec<Scope>,
     next_scope_id: usize,
 }
 
-// One open solver scope: what it asserted, under a name that survives the scopes below
-// it being removed and it being rebuilt on top of what is left.
 #[derive(Clone)]
 struct Scope {
     id: usize,
@@ -314,20 +274,16 @@ struct Scope {
 
 impl ExecutionEngine {
     pub fn new<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> ExecutionEngine {
-        // represent code this way, highly unoptimized
         let mut defs: Vec<String> = Vec::new();
         let mut code: Vec<Instruction> = Vec::new();
         let mut labels: Vec<(String, usize)> = Vec::new();
         let mut ifdefs: Vec<((String, usize), usize)> = Vec::new();
 
-        // grab lines into array
         let mut line_number = 0;
         let mut inifdef = false;
         let mut lastifdef: (String, usize) = ("Start".to_string(), 0);
 
-        // first pass, move text into array
         for line in lines {
-            // trim trailing comments and whitespace
             let line: String = line.into();
             let trimmed = line.trim();
             let text = match trimmed.split_once("//") {
@@ -340,7 +296,6 @@ impl ExecutionEngine {
             } else if text.starts_with('.') {
                 defs.push(text);
             } else {
-                // check if ifdef but keep them in the code
                 if text.starts_with('#') {
                     if inifdef {
                         ifdefs.push((lastifdef.clone(), line_number));
@@ -363,11 +318,9 @@ impl ExecutionEngine {
 
         let mut computer = ARMCORTEXA::new();
 
-        // load computer static memory
         let mut address: i64 = 0;
         for def in defs.iter() {
             let v: Vec<&str> = def.split(['\t', ',', ' ']).collect();
-            // `.align n` on AArch64 aligns to a 2^n boundary.
             if v[0] == ".align" {
                 if let Some(n) = v.get(1).and_then(|n| n.parse::<u32>().ok()) {
                     let boundary = 1i64 << n;
@@ -378,7 +331,6 @@ impl ExecutionEngine {
                     if i.is_empty() {
                         continue;
                     }
-                    // An item whose value is not a literal still occupies its space.
                     let num = match i.strip_prefix("0x") {
                         Some(hex) => u64::from_str_radix(hex, 16).ok().map(|v| v as i64),
                         None => i.parse::<i64>().ok(),
@@ -399,16 +351,14 @@ impl ExecutionEngine {
         computer.grow_memory_region("memory".to_string(), address);
 
         ExecutionEngine {
-            program: Program {
-                // defs,
+            program: Rc::new(Program {
                 code,
                 labels,
-                // ifdefs,
-            },
+            }),
             computer,
             jump_history: Vec::new(),
+            select_history: Vec::new(),
             active_loop: None,
-            // abstracts: HashMap::new(),
             fail_fast: true,
             summaries: Rc::new(RefCell::new(Vec::new())),
             next_loop_id: Rc::new(Cell::new(0)),
@@ -486,21 +436,16 @@ impl ExecutionEngine {
 
     pub fn start(&mut self, start: impl Into<String>) -> std::io::Result<()> {
         let start: String = start.into();
-        let pc = match self
-            .get_linenumber_of_label(start.trim_matches(|c| c == '_' || c == ':').to_string())
-        {
+        let pc = match self.get_linenumber_of_label(start.trim_matches(|c| c == ':').to_string()) {
             Some(n) => n,
             None => return Err(Error::other("Start label not found in program")),
         };
 
-        // run is recursive
         let res = self.run(pc, 0);
         debug_assert!(self.scopes.is_empty(), "solver scopes left open");
         res
     }
 
-    // Branch exploration and loop acceleration push onto the same solver stack, and a
-    // scope can be removed from under others, so scopes are named rather than counted.
     fn push_scope(&mut self) -> usize {
         let id = self.next_scope_id;
         self.next_scope_id += 1;
@@ -516,7 +461,6 @@ impl ExecutionEngine {
         });
     }
 
-    // Pops through the named scope, or does nothing if it is already gone.
     fn pop_scope(&mut self, id: usize) {
         if !self.scopes.iter().any(|s| s.id == id) {
             return;
@@ -529,7 +473,6 @@ impl ExecutionEngine {
         }
     }
 
-    // Recorded against the innermost scope, so rebuilding it restores what it asserted.
     fn assert_in_scope(&mut self, c: ast::Bool) {
         self.computer.solver.assert(&c);
         if let Some(scope) = self.scopes.last_mut() {
@@ -537,9 +480,6 @@ impl ExecutionEngine {
         }
     }
 
-    // A loop detected here opens a solver scope. Discharge closes it on the way out of
-    // the back edge; if control leaves without ever reaching the back edge again, this
-    // closes it instead, so the push at detection always has exactly one pop.
     fn run(&mut self, start_pc: usize, depth: usize) -> std::io::Result<()> {
         let result = self.run_from(start_pc, depth);
         if let Some(active) = self.active_loop.clone()
@@ -572,8 +512,6 @@ impl ExecutionEngine {
         Ok(())
     }
 
-    // The body of one instruction, kept out of run_from so its locals do not sit in the
-    // recursion's frame.
     fn step(
         &mut self,
         mut pc: usize,
@@ -583,9 +521,11 @@ impl ExecutionEngine {
         {
             let mut instruction = self.program.code[pc].clone();
 
-            // skip instruction if it is a label
-            if instruction.is_label() {
+            while instruction.is_label() {
                 pc += 1;
+                if pc >= self.program.code.len() {
+                    return Ok(Step::Done);
+                }
                 instruction = self.program.code[pc].clone();
             }
 
@@ -617,12 +557,7 @@ impl ExecutionEngine {
                         Ok(Step::Continue(dest))
                     }
                     ExecuteReturnType::ConditionalJumpLabel(condition, label) => {
-                        if self.looping_too_deep() {
-                            return Err(Error::other(format!(
-                                "line {pc}: loop at {label} not summarized after \
-                                 {MAX_REVISITS_PER_BRANCH} revisits"
-                            )));
-                        }
+                        self.check_not_stuck(pc, &format!("loop at {label}"))?;
                         let jump_dest = self.resolve_jump_target(&label)?;
                         Ok(
                             match self.take_conditional_branch(pc, condition, jump_dest, depth)? {
@@ -632,6 +567,7 @@ impl ExecutionEngine {
                         )
                     }
                     ExecuteReturnType::ConditionalJumpAddress(condition, address) => {
+                        self.check_not_stuck(pc, "branch")?;
                         let jump_dest = address
                             .try_into()
                             .expect("branch target must be non-negative");
@@ -642,16 +578,19 @@ impl ExecutionEngine {
                             },
                         )
                     }
-                    ExecuteReturnType::Select(condition, register, option1, option2) => Ok(
-                        match self.take_select(pc, condition, register, option1, option2, depth)? {
-                            BranchOutcome::BothExplored => Step::Stop,
-                            BranchOutcome::Next(next) => Step::Continue(next),
-                        },
-                    ),
+                    ExecuteReturnType::Select(condition, register, option1, option2) => {
+                        self.check_not_stuck(pc, "select")?;
+                        Ok(
+                            match self
+                                .take_select(pc, condition, register, option1, option2, depth)?
+                            {
+                                BranchOutcome::BothExplored => Step::Stop,
+                                BranchOutcome::Next(next) => Step::Continue(next),
+                            },
+                        )
+                    }
                 },
                 Err(err) => {
-                    // The only place a line number is still known, so it is attached here
-                    // rather than left to the log.
                     let err = format!("line {pc} ({}): {err}", instruction.opcode);
                     log::error!("{err}");
                     if self.fail_fast {
@@ -669,7 +608,6 @@ impl ExecutionEngine {
         LoopId::new(n)
     }
 
-    // The nearest label at or before `pc`, which names the block the loop sits in.
     fn enclosing_label(&self, pc: usize) -> Option<String> {
         self.program
             .labels
@@ -680,13 +618,13 @@ impl ExecutionEngine {
     }
 
     fn get_linenumber_of_label(&self, label: String) -> Option<usize> {
-        let label = label.strip_prefix("_").unwrap_or(&label);
-        for l in self.program.labels.iter() {
-            if l.0.contains(label) && label.contains(&l.0.clone()) {
-                return Some(l.1);
-            }
-        }
-        None
+        let prefixed = format!("_{label}");
+        self.program
+            .labels
+            .iter()
+            .find(|l| l.0 == label)
+            .or_else(|| self.program.labels.iter().find(|l| l.0 == prefixed))
+            .map(|l| l.1)
     }
 
     fn note_unconditional_jump(
@@ -720,7 +658,6 @@ impl ExecutionEngine {
         Ok(line + (parsed_offset / 4))
     }
 
-    // Kept out of run so its locals do not sit in that frame for the whole recursion.
     fn take_select(
         &mut self,
         pc: usize,
@@ -749,6 +686,7 @@ impl ExecutionEngine {
                 Ok(BranchOutcome::Next(pc + 1))
             }
             _ => {
+                self.select_history.push(pc);
                 let clone = &mut self.clone();
 
                 self.add_constraint(condition.clone(), true);
@@ -762,7 +700,6 @@ impl ExecutionEngine {
                 let res2 = clone.run(pc + 1, depth + 1);
                 match (res1, res2) {
                     (Ok(_), Ok(_)) => Ok(BranchOutcome::BothExplored),
-                    // Already carries its line, so it propagates rather than being re-wrapped.
                     (Err(err), Ok(_)) | (Ok(_), Err(err)) => Err(err),
                     (Err(e1), Err(e2)) => Err(Error::other(join_branch_errors(e1, e2))),
                 }
@@ -792,7 +729,11 @@ impl ExecutionEngine {
                     taken: true,
                 });
                 self.computer.clear_rw_queue();
-                log::info!("exploring jump branch starting line: {:?}", jump_dest);
+                log::info!(
+                    "exploring jump branch starting line: {:?} (from line {pc}, depth {depth}, history {})",
+                    jump_dest,
+                    self.jump_history.len()
+                );
 
                 let taken_scope = self.push_scope();
                 self.add_constraint(condition.clone(), true);
@@ -806,8 +747,6 @@ impl ExecutionEngine {
                 clone.computer.clear_rw_queue();
                 log::info!("exploring non-jump branch starting line: {:?}", pc + 1);
 
-                // The clone's solver is independent, so this scope is not needed to undo
-                // the constraint; it keeps it out of any loop scope discharge would drop.
                 let other_scope = clone.push_scope();
                 clone.add_constraint(condition, false);
                 let res2 = clone.run(pc + 1, depth + 1);
@@ -815,7 +754,6 @@ impl ExecutionEngine {
 
                 match (res1, res2) {
                     (Ok(_), Ok(_)) => Ok(BranchOutcome::BothExplored),
-                    // Already carries its line, so it propagates rather than being re-wrapped.
                     (Err(err), Ok(_)) | (Ok(_), Err(err)) => Err(err),
                     (Err(e1), Err(e2)) => Err(Error::other(join_branch_errors(e1, e2))),
                 }
@@ -855,26 +793,31 @@ impl ExecutionEngine {
         self.computer.solver.assert(&c);
     }
 
-    fn looping_too_deep(&self) -> bool {
+    fn check_not_stuck(&self, pc: usize, what: &str) -> std::io::Result<()> {
         if self.jump_history.len() > MAX_JUMP_HISTORY {
-            // Non-empty because the length was just checked against a positive bound.
-            let pc = self.jump_history.last().expect("jump history").point.pc;
+            let last = self.jump_history.last().expect("jump history").point.pc;
             let loop_count = self
                 .jump_history
                 .iter()
-                .filter(|h| h.point.pc == pc)
+                .filter(|h| h.point.pc == last)
                 .count();
             if loop_count > MAX_REVISITS_PER_BRANCH {
-                log::info!("line {pc} revisited {loop_count} times without resolving");
-                return true;
+                log::info!("line {last} revisited {loop_count} times without resolving");
+                return Err(Error::other(format!(
+                    "line {pc}: {what} not summarized after {MAX_REVISITS_PER_BRANCH} revisits"
+                )));
             }
         }
-        false
+        let selects = self.select_history.iter().filter(|p| **p == pc).count();
+        if selects > MAX_REVISITS_PER_BRANCH {
+            log::info!("line {pc} selected {selects} times without resolving");
+            return Err(Error::other(format!(
+                "line {pc}: {what} not summarized after {MAX_REVISITS_PER_BRANCH} revisits"
+            )));
+        }
+        Ok(())
     }
 
-    // if true, we jump
-    // if false, we continue
-    // if None, we explore both paths
     fn evaluate_branch_condition(
         &mut self,
         pc: usize,
@@ -885,15 +828,12 @@ impl ExecutionEngine {
         log::info!("jump condition: {}", expression.clone());
         log::info!("memory accesses: {:?}", rw_list.clone());
 
-        // An open summary is discharged before any decision is trusted, since the facts
-        // it asserted make its own exit condition provable.
         if let Some(active) = self.active_loop.clone()
             && active.pc == pc
         {
             return self.discharge_active_loop(active, expression);
         }
 
-        // check whether both branches are valid, only take valid branch
         match (
             self.computer
                 .solver
@@ -907,28 +847,20 @@ impl ExecutionEngine {
                 )]),
         ) {
             (SatResult::Sat, SatResult::Unsat) => return Some(true),
-            (SatResult::Sat, SatResult::Sat) => (), // normal! explore both!
+            (SatResult::Sat, SatResult::Sat) => (),
             (SatResult::Unsat, _) => return Some(false),
             (SatResult::Unknown, SatResult::Unsat) => return Some(true),
-            // Z3 gave up, so explore both branches rather than trust an undecided answer.
             (_, _) => (),
         }
-
-        // A condition with no symbolic part is already decided above, so there is nothing
-        // left to gate on here: detection itself decides whether this is a loop.
 
         if self.active_loop.is_none() {
             for j in self.jump_history.clone().into_iter().rev() {
                 let (previous, branch_decision) = (j.point, j.taken);
                 if previous.pc == pc && previous.accesses.len() == rw_list.len() {
-                    // JUMP TO Kth ITERATION
                     let current_state = self.computer.get_state();
 
                     let observed = invariant_of_registers(&previous.state.0, &current_state.0);
                     let attempt = match self.loop_attempts.get(&pc) {
-                        // A retry starts from the join, so each round is weaker than the
-                        // last. The lattice is flat, so a component ascends at most once
-                        // and the number of rounds is bounded by the component count.
                         Some(earlier) => {
                             let joined = join_all(&earlier.invariants, &observed);
                             if joined == earlier.invariants {
@@ -969,6 +901,9 @@ impl ExecutionEngine {
                         summary.label.as_deref().unwrap_or("?"),
                         attempt.rounds
                     );
+                    for fact in &summary.facts {
+                        log::info!("{id} fact: {fact}");
+                    }
                     self.loop_attempts.insert(pc, attempt);
 
                     let scope_id = self.push_scope();
@@ -1001,14 +936,11 @@ impl ExecutionEngine {
 
             None
 
-        // A different loop is still open, so do not start another one.
         } else {
             None
         }
     }
 
-    // Checks that one more iteration repeats the change the summary claimed. Flags need
-    // no check of their own: they are derived from the registers being checked.
     fn discharge_active_loop(
         &mut self,
         active: ActiveLoop,
@@ -1022,8 +954,6 @@ impl ExecutionEngine {
             .zip(observed.iter())
             .all(|(recorded, seen)| recorded.subsumes(seen));
 
-        // The loop leaves the other way from how it was entered, so the condition must
-        // be forced to that value. The facts that force it only exist inside the scope.
         let shown = expression.clone();
         let condition = comparison_to_ast(expression)
             .unwrap_or_else(|| panic!("untranslatable exit condition {shown}"));
@@ -1038,8 +968,6 @@ impl ExecutionEngine {
             .check_assumptions(std::slice::from_ref(&leaving))
             == SatResult::Unsat;
 
-        // Scopes a branch opened inside the body sit above the loop's, and popping through
-        // the loop takes them with it, so they are rebuilt once it is gone.
         let above: Vec<Scope> = match self.scopes.iter().position(|s| s.id == active.scope_id) {
             Some(i) => self.scopes[i + 1..].to_vec(),
             None => Vec::new(),
@@ -1047,11 +975,8 @@ impl ExecutionEngine {
         self.pop_scope(active.scope_id);
         self.active_loop = None;
 
-        // Leaving is a fact about the loop, not about the branch it was reached from, so
-        // it is asserted below the rebuilt scopes and outlives them.
         let closed = holds && exits;
         if closed {
-            // What holds on the way out is the opposite of the continue direction.
             self.computer.solver.assert(leaving.not().simplify());
         }
 
@@ -1066,14 +991,25 @@ impl ExecutionEngine {
             return Some(!active.entry_decision);
         }
 
-        // The summary's registers only mean anything alongside the facts that just went
-        // with the scope, so the path resumes from the values it had before summarizing.
         self.computer.set_state(active.entry_state);
         log::info!(
             "{} at line {} not closed: inductive={holds} exits={exits}",
             active.id,
             active.pc
         );
+        log::info!("{} exit condition checked: {shown}", active.id);
+        for (i, (recorded, seen)) in active.invariants.iter().zip(observed.iter()).enumerate() {
+            if *seen == LoopInvariant::Fixed && recorded.subsumes(seen) {
+                continue;
+            }
+            log::info!(
+                "{} x{i}: recorded={recorded:?} observed={seen:?} subsumed={} entry={:?} exit={:?}",
+                active.id,
+                recorded.subsumes(seen),
+                active.state.0[i],
+                current.0[i]
+            );
+        }
         None
     }
 }
@@ -1088,7 +1024,7 @@ mod tests {
 
         let engine = ExecutionEngine::new(asm);
 
-        let labels: Vec<(String, usize)> = engine.program.labels;
+        let labels: Vec<(String, usize)> = engine.program.labels.clone();
         assert_eq!(labels.len(), 1);
         assert_eq!(labels[0], ("start".to_string(), 0));
     }
@@ -1106,13 +1042,12 @@ mod tests {
 
         let engine = ExecutionEngine::new(asm);
 
-        let labels: Vec<(String, usize)> = engine.program.labels;
+        let labels: Vec<(String, usize)> = engine.program.labels.clone();
         assert_eq!(labels.len(), 2);
         assert_eq!(labels[0], ("start".to_string(), 0));
         assert_eq!(labels[1], ("end".to_string(), 4));
     }
 
-    // Walks x0 from base to base+length by `stride`, over a region of abstract length.
     fn summaries_of(stride: i64, body: &[&str]) -> Vec<Summary> {
         let mut program = vec!["start:", "add x1,x0,x1", "loop:", "cmp x0,x1", "b.eq end"]
             .into_iter()
@@ -1163,7 +1098,6 @@ mod tests {
         assert_eq!(summaries[0].label.as_deref(), Some("loop"));
     }
 
-    // The counter is named from the id, so pc no longer leaks into the symbol.
     #[test]
     fn counter_is_named_from_the_loop_id() {
         let summaries = summaries_of(4, &[]);
@@ -1171,7 +1105,6 @@ mod tests {
         assert_eq!(summaries[0].counter.name(), "loop0_?");
     }
 
-    // Every detection gets its own id, so two summaries never share a counter symbol.
     #[test]
     fn each_detection_gets_a_distinct_id() {
         let mut engine = ExecutionEngine::new(vec![
@@ -1199,8 +1132,6 @@ mod tests {
         assert_ids_are_distinct(&engine);
     }
 
-    // Each arm is explored from its own clone of the engine, so the allocator has to be
-    // shared for the two detections not to be handed the same id.
     #[test]
     fn detections_in_sibling_branches_get_distinct_ids() {
         let mut engine = ExecutionEngine::new(vec![
@@ -1229,8 +1160,6 @@ mod tests {
         assert_ids_are_distinct(&engine);
     }
 
-    // The body branches on an unconstrained register, splitting exploration before the
-    // loop is ever detected. Detection still happens and the scope is still closed.
     #[test]
     fn loop_with_an_unresolvable_branch_in_the_body_is_closed() {
         let mut engine = ExecutionEngine::new(vec![
@@ -1256,8 +1185,6 @@ mod tests {
         assert!(engine.active_loop.is_none());
     }
 
-    // A loop whose stride grows cannot be summarized, so discharge fails and detection
-    // runs again. The retry is the same loop, and it may not summarize a second time.
     #[test]
     fn a_loop_that_fails_to_close_is_not_summarized_again() {
         let mut engine = ExecutionEngine::new(vec![
@@ -1282,8 +1209,6 @@ mod tests {
         assert_eq!(at_the_loop.len(), 1, "resummarized: {at_the_loop:?}");
     }
 
-    // The engine is cloned for every explored branch, so keep it off the stack in bulk.
-    // Unboxing the simd bank alone would put this back over 25KB.
     #[test]
     fn engine_stays_small_enough_to_clone_per_branch() {
         assert!(
@@ -1309,7 +1234,6 @@ mod tests {
         assert_eq!(summaries[0].invariants[3], LoopInvariant::Unknown);
     }
 
-    // The register the summary cannot express must be replaced, not carried over.
     #[test]
     fn widened_register_is_a_fresh_symbol() {
         let summaries = summaries_of(4, &["mul x3,x3,x3"]);

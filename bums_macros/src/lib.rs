@@ -68,7 +68,6 @@ fn calculate_size_of(ty: String) -> usize {
     }
 }
 
-// A `_len` abstract counts elements, so scale it by the element size to get bytes.
 fn byte_length(bound: &str, element_type: Option<&String>) -> AbstractExpression {
     let elements = AbstractExpression::Abstract(bound.to_string());
     match element_type {
@@ -224,7 +223,6 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
 fn tuple_to_struct(name: String, tuple: TypeTuple) -> ItemStruct {
     let span = Span::call_site().into();
 
-    // Creating fields for the struct
     let mut fields: syn::punctuated::Punctuated<Field, token::Comma> = Punctuated::new();
     for (index, expr) in tuple.elems.iter().enumerate() {
         let field_ident = syn::Ident::new(&format!("{}_field{}", name, index), span);
@@ -236,7 +234,6 @@ fn tuple_to_struct(name: String, tuple: TypeTuple) -> ItemStruct {
     parse_quote! { #[repr(C)] struct #struct_name { #fields }}
 }
 
-// ATTRIBUTE ON EXTERN BLOCK
 #[proc_macro_attribute]
 #[proc_macro_error]
 pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -259,7 +256,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         attributes.argument_list.pop();
     }
 
-    //get args from function call to pass to invocation
     let mut arguments_to_memory_safe_regions = Vec::new();
     let mut input_sizes = HashMap::new();
     let mut pointer_sizes = HashMap::new();
@@ -267,7 +263,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_expressions = HashMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
     let mut new_structs = HashMap::new();
-    // if caller did not specify arguments in macro, grab names from function call
     if attributes.argument_list.is_empty() {
         for i in &vars.item_fn.inputs {
             arguments_to_memory_safe_regions.push(i.clone());
@@ -299,7 +294,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         for i in &vars.item_fn.inputs {
             match i {
                 FnArg::Typed(pat_type) => {
-                    // get name
                     let name = match &*pat_type.pat {
                         Pat::Ident(b) => b.ident.clone().to_string(),
                         _ => todo!("non-ident typed name in inputs"),
@@ -397,7 +391,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    // extract name of function being invoked to pass to invocation
     let mut q = Punctuated::new();
     q.push(PathSegment {
         ident: fn_name.clone(),
@@ -468,7 +461,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     "u32" => new_args.push(parse_quote! {#n: *mut u32}),
                                     "u64" => new_args.push(parse_quote! {#n: *mut u64}),
                                     "u128" => new_args.push(parse_quote! {#n: *mut u128}),
-                                    "[u64;5]" => new_args.push(parse_quote! {#n: *mut [u64;5]}), // TODO: automate
+                                    "[u64;5]" => new_args.push(parse_quote! {#n: *mut [u64;5]}),
                                     "usize" => new_args.push(parse_quote! {#n: *mut usize}),
                                     _ => todo!("ptr array size 2"),
                                 }
@@ -480,7 +473,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     };
                 }
                 Expr::Reference(_) => {
-                    // TODO include a name in var name for uniqueness
                     new_args.push(parse_quote! {_ : u32});
                 }
                 Expr::Path(ref a) => {
@@ -627,7 +619,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             #struct_decs;
 
-            // The macro crate is edition 2024, where extern blocks must be unsafe.
             unsafe extern "C" {
                 #extern_fn #output;
             }
@@ -639,8 +630,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let token_stream = quote!(#unsafe_block).into();
 
-    // compile file
-    // make this path
     let filename = attributes.filename.value();
     let assembly_file: std::path::PathBuf =
         [std::env::var("OUT_DIR").expect("OUT_DIR"), filename.clone()]
@@ -650,7 +639,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let file = match res {
         Ok(opened) => opened,
         Err(error) => {
-            // make more specific using span
             abort_call_site!(error);
         }
     };
@@ -663,13 +651,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
-    // add memory safe regions
     for (i, a) in arguments_to_memory_safe_regions.iter().enumerate() {
         let name;
 
         match a {
             FnArg::Typed(pat_type) => {
-                // get name
                 match &*pat_type.pat {
                     Pat::Ident(b) => {
                         name = b.ident.clone().to_string();
@@ -681,7 +667,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     },
                     _ => todo!("Regions pattern pattern"),
                 }
-                //get type to get size
                 match &*pat_type.ty {
                     Type::Path(_) => {
                         if let Some(binary) = input_expressions.get(&name) {
@@ -713,19 +698,15 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         );
                     }
                     Type::Ptr(a) => {
-                        // load pointer into register
                         engine.add_abstract_from(i, name.clone());
 
-                        //derive memory safe region based on length
                         let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
                         let no_range = name.strip_suffix("_end_ptr_range").unwrap_or(no_mut_name);
                         let no_suffix = no_range.strip_suffix("_as_ptr").unwrap_or(no_range);
 
                         match &*a.elem {
                             Type::Path(p) => {
-                                // if pointer to a macro-defined struct
                                 if p.path.segments[0].ident.to_string().contains("struct") {
-                                    // add the whole region covered by the tuple
                                     if let Some(bound) = input_sizes.get(no_suffix) {
                                         if a.mutability.is_some() {
                                             engine.add_region(
@@ -791,9 +772,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     continue;
                                 }
 
-                                // if pointing to end of array
                                 if name.contains("_end_ptr_range") {
-                                    // add the whole region covered by the tuple
                                     let bound = no_suffix.to_owned() + "_len";
                                     let pointer_name = no_suffix.to_owned() + "_as_ptr";
 
@@ -803,7 +782,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                         byte_length(&bound, pointer_sizes.get(no_suffix)),
                                     );
 
-                                    //overwrite
                                     engine.add_abstract_expression_from(
                                         i,
                                         generate_expression(
@@ -816,7 +794,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     continue;
                                 }
 
-                                // if pointing to an array defined as a function param, no abstract length
                                 if let Some(bound) = input_sizes.get(no_suffix) {
                                     if a.mutability.is_some() {
                                         engine.add_region(
@@ -834,7 +811,6 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     continue;
                                 }
 
-                                // `len` counts elements, and a region length is in bytes.
                                 let bound = no_suffix.to_owned() + "_len";
                                 let length = byte_length(&bound, pointer_sizes.get(no_suffix));
                                 if a.mutability.is_some() {
@@ -857,7 +833,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         engine.add_invariant(i);
     }
     let label = vars.item_fn.ident.to_string();
-    let res = engine.start(label);
+    let _ = env_logger::try_init();
+    let res = engine.start(label.clone());
 
     match res {
         Ok(_) => return token_stream,
@@ -866,7 +843,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             emit_call_site_error!(error);
 
             #[cfg(debug_assertions)]
-            emit_call_site_warning!(error);
+            eprintln!("bums: VERIFICATION FAILED in {label}: {error}");
+
             return token_stream;
         }
     };

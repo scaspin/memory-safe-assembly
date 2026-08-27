@@ -14,8 +14,6 @@ impl ARMCORTEXA {
         }
     }
 
-    // Hands the engine both results of a carry-dependent operation, to be chosen between by
-    // the comparison that says whether the carry is set.
     pub fn carry_select(
         &mut self,
         op_string: &str,
@@ -28,6 +26,10 @@ impl ARMCORTEXA {
         let set = self.arithmetic_value(op_string, with_carry, operands);
         let clear = self.arithmetic_value(op_string, without_carry, operands);
         match (set, clear) {
+            (Some(set), Some(clear)) if set == clear => {
+                self.set_register(&dest, set.kind, set.base, set.offset);
+                Ok(ExecuteReturnType::Next)
+            }
             (Some(set), Some(clear)) => Ok(ExecuteReturnType::Select(
                 condition.clone(),
                 dest,
@@ -38,8 +40,6 @@ impl ARMCORTEXA {
         }
     }
 
-    // The value the operation produces, without storing it, so a caller holding a symbolic
-    // carry can compute both candidates and let the engine choose between them.
     pub fn arithmetic_value(
         &mut self,
         op_string: &str,
@@ -67,7 +67,6 @@ impl ARMCORTEXA {
             })
         };
 
-        // Only + and - distribute over the base/offset split; the rest need the whole value.
         if !matches!(op_string, "+" | "-") && (r1.base.is_some() || r2.base.is_some()) {
             let whole = generate_expression(op_string, r1.expression(), r2.expression());
             return based(Some(whole), 0);
@@ -87,7 +86,6 @@ impl ARMCORTEXA {
                     };
                     based(base, op(r1.offset, r2.offset))
                 }
-                // abstract numbers, value doesn't matter
                 RegisterKind::Number => Some(RegisterValue {
                     kind: RegisterKind::Number,
                     base: None,
@@ -112,7 +110,6 @@ impl ARMCORTEXA {
                 offset: op(r1.offset, r2.offset),
             })
         } else if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
-            // abstract numbers, value doesn't matter
             Some(RegisterValue {
                 kind: RegisterKind::Number,
                 base: None,
@@ -132,7 +129,6 @@ impl ARMCORTEXA {
         }
     }
 
-    // `op` is the opcode, since a bare immediate carries no shift direction.
     pub fn shift_reg(&mut self, op: &str, reg1: &Operand, reg2: &Operand, reg3: &Operand) {
         let r2 = self.get_register(reg2);
 
@@ -155,7 +151,6 @@ impl ARMCORTEXA {
         if r1 == r2 && r1.kind != RegisterKind::Number {
             self.neg = Some(FlagValue::Real(false));
             self.zero = Some(FlagValue::Real(true));
-            // x - x borrows nothing, so carry is set.
             self.carry = Some(FlagValue::Real(true));
             self.overflow = Some(FlagValue::Real(false));
             return;
@@ -175,7 +170,6 @@ impl ARMCORTEXA {
                         } else {
                             Some(FlagValue::Real(false))
                         };
-                        // The shared base cancels, so the offsets decide borrow and overflow.
                         self.carry = Some(FlagValue::Real(r1.offset >= r2.offset));
                         self.overflow =
                             Some(FlagValue::Real(r1.offset.overflowing_sub(r2.offset).1));
@@ -197,7 +191,6 @@ impl ARMCORTEXA {
                             expression.clone(),
                             AbstractExpression::Immediate(0),
                         )));
-                        // Carry is the unsigned no-borrow condition, so compare the operands.
                         self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                             ">=", left, right,
                         )));
@@ -220,7 +213,6 @@ impl ARMCORTEXA {
                     } else {
                         Some(FlagValue::Real(false))
                     };
-                    // Carry is unsigned no-borrow; overflow is signed subtraction overflow.
                     self.carry = Some(FlagValue::Real((r1.offset as u64) >= (r2.offset as u64)));
                     self.overflow = Some(FlagValue::Real(r1.offset.overflowing_sub(r2.offset).1));
                 }
@@ -243,7 +235,6 @@ impl ARMCORTEXA {
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            // Carry is the unsigned no-borrow condition, so compare the operands.
             self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                 ">=", left, right,
             )));
@@ -289,7 +280,6 @@ impl ARMCORTEXA {
 
         if r1.kind == r2.kind {
             match r1.kind {
-                // Addition does not cancel a shared base, so no flag follows from the offsets.
                 RegisterKind::RegisterBase => {
                     let expression = AbstractExpression::Expression(
                         "+".to_string(),
@@ -306,7 +296,6 @@ impl ARMCORTEXA {
                         expression.clone(),
                         AbstractExpression::Immediate(0),
                     )));
-                    // i64 is the widest immediate available, so carry-out is approximated by it.
                     self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                         ">",
                         expression.clone(),
@@ -323,7 +312,6 @@ impl ARMCORTEXA {
                     let (sum, signed_overflow) = r1.offset.overflowing_add(r2.offset);
                     self.neg = Some(FlagValue::Real(sum < 0));
                     self.zero = Some(FlagValue::Real(sum == 0));
-                    // Carry is the unsigned carry-out; overflow is signed addition overflow.
                     self.carry = Some(FlagValue::Real(
                         (r1.offset as u64).overflowing_add(r2.offset as u64).1,
                     ));
@@ -346,7 +334,6 @@ impl ARMCORTEXA {
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            // i64 is the widest immediate available, so carry-out is approximated by it.
             self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
                 ">",
                 expression.clone(),
@@ -367,35 +354,19 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
             let new_offset = register.offset << shift;
             RegisterValue {
                 kind: register.kind,
-                base: Some(generate_expression(
-                    &op,
-                    register.base.unwrap_or(AbstractExpression::Empty),
-                    AbstractExpression::Immediate(shift),
-                )),
+                base: register
+                    .base
+                    .map(|b| generate_expression(&op, b, AbstractExpression::Immediate(shift))),
                 offset: new_offset,
             }
         }
-        "lsr" => {
+        "lsr" | "asr" | "ror" => {
             let new_offset = register.offset >> shift;
             RegisterValue {
                 kind: register.kind,
-                base: Some(generate_expression(
-                    &op,
-                    register.base.unwrap_or(AbstractExpression::Empty),
-                    AbstractExpression::Immediate(shift),
-                )),
-                offset: new_offset,
-            }
-        }
-        "ror" => {
-            let new_offset = register.offset >> shift;
-            RegisterValue {
-                kind: register.kind,
-                base: Some(generate_expression(
-                    &op,
-                    register.base.unwrap_or(AbstractExpression::Empty),
-                    AbstractExpression::Immediate(shift),
-                )),
+                base: register
+                    .base
+                    .map(|b| generate_expression(&op, b, AbstractExpression::Immediate(shift))),
                 offset: new_offset,
             }
         }
@@ -408,7 +379,6 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
             }
         }
         "uxtw" => {
-            // TODO
             RegisterValue {
                 kind: register.kind,
                 base: register.base,

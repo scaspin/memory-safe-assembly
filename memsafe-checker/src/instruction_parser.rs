@@ -18,6 +18,7 @@ pub enum Arrangement {
     S,
     H,
     B,
+    Q,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +33,20 @@ pub enum RePrefix {
 }
 
 impl Arrangement {
+    pub fn width(&self) -> i64 {
+        match self {
+            Arrangement::B16
+            | Arrangement::H8
+            | Arrangement::S4
+            | Arrangement::D2
+            | Arrangement::Q => 16,
+            Arrangement::B8 | Arrangement::H4 | Arrangement::S2 | Arrangement::D => 8,
+            Arrangement::S => 4,
+            Arrangement::H => 2,
+            Arrangement::B => 1,
+        }
+    }
+
     pub fn from_string(s: &str) -> Arrangement {
         match s {
             "8b" => Arrangement::B8,
@@ -45,12 +60,12 @@ impl Arrangement {
             "s" => Arrangement::S,
             "h" => Arrangement::H,
             "b" => Arrangement::B,
+            "q" | "1q" => Arrangement::Q,
             _ => panic!("Invalid arrangement string {:?}", s),
         }
     }
 }
 
-// BIG TODO: get rid of all the strings!
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operand {
     Register(RePrefix, usize),
@@ -61,14 +76,13 @@ pub enum Operand {
         Option<i64>,
         Option<Box<Operand>>,
         Option<bool>,
-    ), // like [x0, #16] // bool to represent pre/post index false = pre, true = post
-    Bitwise(String, i64), // like lsl#2, TODO: make enum for shift types
-    // the "string" param is probably always going to be "v"
+    ),
+    Bitwise(String, i64),
     VectorRegister(RePrefix, usize),
     Vector(RePrefix, usize, Arrangement),
-    VectorAccess(RePrefix, usize, Arrangement, i64), // like v1.d[1] or v2.b[3]
+    VectorAccess(RePrefix, usize, Arrangement, i64),
     Label(String),
-    Address(String, i64), // for relative addresses, i.e. LK256@PAGEOFF
+    Address(String, i64),
     Other,
 }
 pub fn register_to_tuple(r: &Operand) -> (RePrefix, usize) {
@@ -109,7 +123,6 @@ pub fn operand_from_string(a: String) -> Operand {
         }
     }
 
-    // is number
     if a.starts_with("#") {
         if let Ok(n) = a.trim_start_matches("#").parse::<i64>() {
             return Operand::Immediate(n);
@@ -126,12 +139,9 @@ pub fn operand_from_string(a: String) -> Operand {
     }
 
     if a.contains('@') {
-        // TODO: extrapolate offset based on context
         return Operand::Address(a, 0);
     }
 
-    // is a shift indicator (if it has # but is not just a number, should fall into this)
-    // FIX: potential issue with this that can be fixed by checking shift indicator matches expected ones, i.e. lsl, lsr, asr, ror
     if a.contains("#") & !a.contains("[") {
         let mut parts = a.split('#').peekable();
         if !parts
@@ -171,7 +181,6 @@ pub fn operand_from_string(a: String) -> Operand {
                         .expect("size indication required for index into vector"),
                 );
                 let index = string_to_int(parts.next().expect("index required"));
-                // TODO: maybe runtime check index is valid for arrangement?
 
                 let parts = base.split_at(1);
                 let i = parts
@@ -208,7 +217,13 @@ pub fn operand_from_string(a: String) -> Operand {
         }
     }
 
-    // equivalent to vector registers
+    if a.starts_with("Q") || a.starts_with("q") {
+        let parts = a.split_at(1);
+        if let Ok(value) = parts.1.parse::<usize>() {
+            return Operand::VectorRegister(RePrefix::V, value);
+        }
+    }
+
     if a.starts_with("D")
         || a.starts_with("S")
         || a.starts_with("H")
@@ -241,7 +256,7 @@ pub fn operand_from_string(a: String) -> Operand {
 
         if let Some(b) = parts.next() {
             if b.contains("]") && parts.peek().is_some() {
-                indexing = Some(true); // the notation for post-indexing is [address], <offset>
+                indexing = Some(true);
             }
             base = b.trim_matches(['[', ']', ',']).to_string();
         }
@@ -258,7 +273,6 @@ pub fn operand_from_string(a: String) -> Operand {
             indexing = Some(false);
         }
 
-        // FIX: is this potentially unsound with bad num?
         let mut num = 0;
 
         let prefix = {
@@ -281,22 +295,54 @@ pub fn operand_from_string(a: String) -> Operand {
             }
         };
 
-        // TODO: include shift
         return Operand::Memory(prefix, num, offset, register_offset, indexing);
     }
 
     if !a.is_empty() {
-        let stripped = a.trim_matches(|c| c == ':' || c == '_');
+        let stripped = a.trim_matches(|c| c == ':');
         return Operand::Label(stripped.to_string());
     }
 
     Operand::Other
 }
 
+fn combine_shifted_operands(parts: Vec<String>) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    let mut parts = parts.into_iter().peekable();
+
+    while let Some(part) = parts.next() {
+        let shift = matches!(
+            part.as_str(),
+            "lsl"
+                | "lsr"
+                | "asr"
+                | "ror"
+                | "uxtb"
+                | "uxth"
+                | "uxtw"
+                | "uxtx"
+                | "sxtb"
+                | "sxth"
+                | "sxtw"
+                | "sxtx"
+        );
+        if shift
+            && let Some(amount) = parts.peek()
+            && amount.starts_with('#')
+        {
+            let amount = parts.next().expect("peeked");
+            result.push(format!("{part}{amount}"));
+            continue;
+        }
+        result.push(part);
+    }
+
+    result
+}
+
 fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
     let mut result = Vec::new();
 
-    // start at 1 to ignore cases like fmov example
     let mut last_instance = parts.len() + 1;
     for (i, part) in parts.iter().enumerate().skip(1) {
         if part.contains("[") {
@@ -306,7 +352,6 @@ fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
 
     for j in 0..parts.len() {
         if j == last_instance {
-            // ignores SIMD/SVE indexing like v1.d[1]
             let rest = parts[j..].join(",");
             result.push(rest);
             break;
@@ -324,10 +369,10 @@ pub enum InstructionType {
     Memory,
     ControlFlow,
     SIMDArithmetic,
-    SIMDManagement, // loading and storing vectors
+    SIMDManagement,
     Label,
     Def,
-    Other, // catchall for now, add other subtypes like jumps, comparisons, etc... if necessary
+    Other,
 }
 
 fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType {
@@ -336,9 +381,12 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
             return InstructionType::Label;
         }
         return InstructionType::Other;
-    // considered SIMDManagement when there is a vector access or when a vector is loaded/stored from a regular register
     } else if opcode.starts_with('.') || opcode.starts_with('#') {
         return InstructionType::Def;
+    } else if matches!(opcode, "ldr" | "ldp" | "str" | "stp")
+        && operands.iter().any(|op| matches!(op, Operand::Memory(..)))
+    {
+        return InstructionType::Memory;
     } else if operands
         .iter()
         .any(|op| matches!(op, Operand::VectorAccess(..)))
@@ -382,8 +430,6 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
     InstructionType::Other
 }
 
-// Separators inside parentheses belong to the operand, so an assembled immediate such as
-// `#(1 << 3)` survives as one piece rather than three.
 fn split_operands(input: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut current = String::new();
@@ -412,8 +458,51 @@ fn split_operands(input: &str) -> Vec<String> {
     parts
 }
 
+fn split_vector_name(name: &str) -> (usize, String) {
+    let (register, arrangement) = name
+        .split_once('.')
+        .expect("vector range endpoint needs an arrangement");
+    let number = register
+        .trim_start_matches(['v', 'V'])
+        .parse::<usize>()
+        .expect("vector range endpoint needs a register number");
+    (number, arrangement.to_string())
+}
+
+fn expand_vector_ranges(input: &str) -> String {
+    let Some(open) = input.find('{') else {
+        return input.to_string();
+    };
+    let Some(close) = input[open..].find('}').map(|i| i + open) else {
+        return input.to_string();
+    };
+    let group = &input[open + 1..close];
+    if !group.contains('-') {
+        return input.to_string();
+    }
+
+    let mut ends = group.split('-');
+    let first = ends.next().expect("vector range start").trim();
+    let last = ends.next().expect("vector range end").trim();
+    let (first_num, arrangement) = split_vector_name(first);
+    let (last_num, _) = split_vector_name(last);
+
+    let count = if last_num >= first_num {
+        last_num - first_num
+    } else {
+        last_num + 32 - first_num
+    };
+    let expanded = (0..=count)
+        .map(|i| format!("v{}.{}", (first_num + i) % 32, arrangement))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!("{}{{{}}}{}", &input[..open], expanded, &input[close + 1..])
+}
+
 impl Instruction {
     pub fn new(input: String) -> Self {
+        let input = expand_vector_ranges(&input);
         let delete_curly_brackets = input
             .replace(" }", "")
             .replace("} ", "")
@@ -426,8 +515,9 @@ impl Instruction {
             .expect("Require opcode for instruction")
             .to_string();
 
-        let combine_brackets =
-            combine_addressing_modes_operands(parts.map(|s| s.to_string()).collect());
+        let combine_brackets = combine_addressing_modes_operands(combine_shifted_operands(
+            parts.map(|s| s.to_string()).collect(),
+        ));
 
         let operands: Vec<Operand> = combine_brackets
             .into_iter()
@@ -437,7 +527,7 @@ impl Instruction {
         let ty = match_instruction_type(&opcode, &operands);
 
         if ty == InstructionType::Label {
-            opcode = opcode.trim_matches(|c| c == ':' || c == '_').to_string();
+            opcode = opcode.trim_matches(|c| c == ':').to_string();
         }
 
         Instruction {
@@ -461,9 +551,8 @@ impl Instruction {
     }
 }
 
-// // FIX: try to retire this function since errors are sometimes confusing
 pub fn string_to_int(s: &str) -> i64 {
-    let mut value = 1;
+    let value: i64;
     let v = s.trim().trim_start_matches('#').trim();
     if let Some(rest) = v.strip_prefix('~') {
         return !string_to_int(rest);
@@ -474,26 +563,16 @@ pub fn string_to_int(s: &str) -> i64 {
     if let Some((base, shift)) = v.split_once("<<") {
         value = string_to_int(base) << string_to_int(shift);
     } else if v.contains('*') {
-        let parts = v.split('*');
-        for part in parts {
-            let m = string_to_int(part);
-            value *= m;
-        }
+        value = v.split('*').map(string_to_int).product();
     } else if v.contains('+') {
-        let parts = v.split('+');
-        for part in parts {
-            let m = string_to_int(part);
-            value += m;
-        }
+        value = v.split('+').map(string_to_int).sum();
     } else if v.starts_with("0x") {
-        // FIX: store as two if i128 is needed
         value = i128::from_str_radix(
             v.strip_prefix("0x").expect("radix parse strip 0x failed"),
             16,
         )
         .expect("radix parse failed") as i64;
     } else if v.starts_with("-0x") {
-        // FIX: store as two if i128 is needed
         value = -i128::from_str_radix(
             v.strip_prefix("-0x").expect("radix parse strip -0x failed"),
             16,
@@ -528,7 +607,6 @@ mod tests {
             ]),
         };
 
-        // test multiple variations of spacing around commas
         assert_eq!(Instruction::new("add x0,x0,x1".to_string()), good_result,);
         assert_eq!(
             Instruction::new("add x0 , x0 , x1".to_string()),
@@ -587,25 +665,6 @@ mod tests {
 
         assert_eq!(Instruction::new("rev w3,w3".to_string()), good_result);
     }
-
-    // #[test]
-    // fn test_parse_add_shifted_immediate_with_space() {
-    //     let good_result = Instruction {
-    //         ty: InstructionType::Arithmetic,
-    //         opcode: String::from("add"),
-    //         operands: Vec::from([
-    //             Operand::Register(RePrefix::X, 0),
-    //             Operand::Register(RePrefix::X, 0),
-    //             Operand::Register(RePrefix::X, 1),
-    //             Operand::Bitwise(String::from("lsl"), 12),
-    //         ]),
-    //     };
-
-    //     assert_eq!(
-    //         Instruction::new("add x0,x0,x1,lsl#12".to_string()),
-    //         good_result
-    //     );
-    // }
 
     #[test]
     fn test_parse_add_address() {
@@ -755,8 +814,6 @@ mod tests {
         );
     }
 
-    // TODO: copy str/stp tests for ldr/ldp
-
     #[test]
     fn test_parse_cmp_register_immediate() {
         let good_result = Instruction {
@@ -859,6 +916,22 @@ mod tests {
         assert_eq!(
             Instruction::new("cbnz w19,Loop_16_xx".to_string()),
             good_result
+        );
+    }
+
+    #[test]
+    fn test_parse_spaced_shift_matches_unspaced() {
+        assert_eq!(
+            Instruction::new("add x19, x8, x17, lsl #4".to_string()),
+            Instruction::new("add x19,x8,x17,lsl#4".to_string())
+        );
+        assert_eq!(
+            Instruction::new("and w11, w19, w22, asr #31".to_string()),
+            Instruction::new("and w11,w19,w22,asr#31".to_string())
+        );
+        assert_eq!(
+            Instruction::new("add x4, x0, x1, lsr #3".to_string()),
+            Instruction::new("add x4,x0,x1,lsr#3".to_string())
         );
     }
 
@@ -1060,7 +1133,6 @@ mod tests {
         );
     }
 
-    // this is what the SIMD used in rav1d looks like, may change with different decompilation pipeline
     #[test]
     fn test_parse_simd_st1_8h() {
         let good_result = Instruction {
@@ -1108,10 +1180,26 @@ mod tests {
     fn test_parse_label_with_underscore() {
         let good_result = Instruction {
             ty: InstructionType::Label,
-            opcode: String::from("Loop"),
+            opcode: String::from("_Loop"),
             operands: Vec::new(),
         };
         assert_eq!(Instruction::new("_Loop:".to_string()), good_result);
+    }
+
+    #[test]
+    fn test_string_to_int_sums_and_products() {
+        assert_eq!(string_to_int("2+1"), 3);
+        assert_eq!(string_to_int("8*(2+1)"), 24);
+        assert_eq!(string_to_int("8*(1+1)"), 16);
+        assert_eq!(string_to_int("8"), 8);
+        assert_eq!(string_to_int("8*4"), 32);
+    }
+
+    #[test]
+    fn test_leading_underscores_distinguish_labels() {
+        let public = Instruction::new("_ecp_nistz256_mul_mont:".to_string());
+        let internal = Instruction::new("__ecp_nistz256_mul_mont:".to_string());
+        assert_ne!(public.opcode, internal.opcode);
     }
 
     #[test]
@@ -1121,7 +1209,7 @@ mod tests {
             opcode: String::from("cset"),
             operands: Vec::from([
                 Operand::Register(RePrefix::W, 0),
-                Operand::Label("eq".to_string()), // TODO: make this condition code enum
+                Operand::Label("eq".to_string()),
             ]),
         };
         assert_eq!(Instruction::new("cset w0, eq".to_string()), good_result);
@@ -1150,7 +1238,7 @@ mod tests {
         let good_result = Instruction {
             ty: InstructionType::Def,
             opcode: String::from(".globl"),
-            operands: Vec::from([Operand::Label(String::from("sha256_block_data_order"))]),
+            operands: Vec::from([Operand::Label(String::from("_sha256_block_data_order"))]),
         };
         assert_eq!(
             Instruction::new(".globl	_sha256_block_data_order".to_string()),
@@ -1160,7 +1248,6 @@ mod tests {
 
     #[test]
     fn test_parse_rav1d_notation_st1d() {
-        //st1.d	{ v0 }[1], [x0], x4
         let good_result = Instruction {
             ty: InstructionType::SIMDManagement,
             opcode: String::from("st1.d"),

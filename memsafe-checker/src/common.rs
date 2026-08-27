@@ -6,9 +6,9 @@ use crate::instruction_parser::{self, Arrangement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RegisterKind {
-    RegisterBase, // abstract name / asbtract expression + immediate offset
-    Number,       // abstract number (from input for example), do not know this number
-    Immediate,    // immediate number
+    RegisterBase,
+    Number,
+    Immediate,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +45,6 @@ impl RegisterValue {
         self.offset = offset;
     }
 
-    // The register as a single expression, for operators that do not distribute over base+offset.
     pub fn expression(&self) -> AbstractExpression {
         match (&self.base, self.offset) {
             (Some(base), 0) => base.clone(),
@@ -57,7 +56,6 @@ impl RegisterValue {
     }
 }
 
-// TODO: add way to mark endianess if necessary
 #[derive(Debug, Clone, PartialEq)]
 pub struct SimdRegister {
     pub kind: RegisterKind,
@@ -75,13 +73,7 @@ impl Default for SimdRegister {
 
 impl SimdRegister {
     pub fn new(_name: &str) -> Self {
-        // let string_name = name.to_string();
         let bases = [BASE_INIT; 16];
-        // for i in 0..16 {
-        //     bases[i] = Some(AbstractExpression::Abstract(
-        //         string_name.clone() + "_" + &i.to_string(),
-        //     ));
-        // }
         Self {
             kind: RegisterKind::Number,
             base: bases,
@@ -89,11 +81,6 @@ impl SimdRegister {
         }
     }
 
-    //https://developer.arm.com/documentation/102474/0100/Fundamentals-of-Armv8-Neon-technology/Registers--vectors--lanes-and-elements
-    // TODO: unclear whether we need to use these getters and setters in this way when actually doing SIMD,
-    // to be fixed once implement interpreter and instructions,
-    // at least useful for setting/getting scalars from vectors if necessary
-    // i.e. V3.S[2]  -> get_word(2)
     pub fn get_byte(&self, index: usize) -> (Option<AbstractExpression>, u8) {
         assert!(index < 16);
         (self.base[index].clone(), self.offset[index])
@@ -171,14 +158,14 @@ impl SimdRegister {
     pub fn set_from_register(
         &mut self,
         arrangement: Arrangement,
+        index: usize,
         kind: RegisterKind,
         base: Option<AbstractExpression>,
         offset: u128,
     ) {
         self.kind = kind;
         match arrangement {
-            Arrangement::B16 | Arrangement::B8 => {
-                // FIX
+            Arrangement::B16 | Arrangement::B8 | Arrangement::Q => {
                 if let Some(b) = base {
                     for i in 0..15 {
                         self.base[i] = Some(AbstractExpression::Expression(
@@ -219,14 +206,20 @@ impl SimdRegister {
             Arrangement::S => {
                 let offset = offset as u32;
                 let new_bases = [BASE_INIT; 4];
-                // FIX to take in index
-                self.set_word(0, new_bases.clone(), offset.to_be_bytes());
+                self.set_word(index, new_bases.clone(), offset.to_be_bytes());
             }
             Arrangement::D => {
                 let offset = offset as u64;
                 let new_bases = [BASE_INIT; 8];
-                // FIX to take in index
-                self.set_double(0, new_bases.clone(), offset.to_be_bytes());
+                self.set_double(index, new_bases.clone(), offset.to_be_bytes());
+            }
+            Arrangement::H => {
+                let offset = offset as u16;
+                let new_bases = [BASE_INIT; 2];
+                self.set_halfword(index, new_bases.clone(), offset.to_be_bytes());
+            }
+            Arrangement::B => {
+                self.set_byte(index, BASE_INIT, offset as u8);
             }
             a => todo!("support setting from register across {:?} channels", a),
         }
@@ -340,11 +333,10 @@ pub enum AbstractExpression {
     Empty,
     Immediate(i64),
     Abstract(String),
-    Register(Box<RegisterValue>), // only use to box in expressions for compares
+    Register(Box<RegisterValue>),
     Expression(String, Box<AbstractExpression>, Box<AbstractExpression>),
 }
 
-// How tightly an operator binds, so printing can drop the parentheses it implies.
 fn binding_power(op: &str) -> u8 {
     match op {
         "|" => 1,
@@ -365,7 +357,6 @@ impl fmt::Display for AbstractExpression {
             AbstractExpression::Register(reg) => {
                 write!(f, "({:?})", reg)
             }
-            // Adding a negative immediate reads as a subtraction.
             AbstractExpression::Expression(op, left, right)
                 if op == "+" && matches!(**right, AbstractExpression::Immediate(n) if n < 0) =>
             {
@@ -376,7 +367,6 @@ impl fmt::Display for AbstractExpression {
             }
             AbstractExpression::Expression(op, left, right) => {
                 let outer = binding_power(op);
-                // The right operand of a non-associative operator still needs them.
                 let tight = matches!(op.as_str(), "-" | "/" | "%" | "<<" | ">>");
                 write!(f, "{}", Parenthesized(left, outer, false))?;
                 write!(f, " {} ", op)?;
@@ -386,7 +376,6 @@ impl fmt::Display for AbstractExpression {
     }
 }
 
-// An operand, wrapped in parentheses only where its own operator binds too loosely.
 struct Parenthesized<'a>(&'a AbstractExpression, u8, bool);
 
 impl fmt::Display for Parenthesized<'_> {
@@ -519,8 +508,6 @@ impl AbstractComparison {
     }
 }
 
-// A w register holds the low 32 bits of x, zero extended when written. Modulo
-// expresses that directly, and unlike a cast it also applies to a symbolic base.
 pub fn narrow_to_32(
     base: Option<AbstractExpression>,
     offset: i64,
@@ -528,7 +515,6 @@ pub fn narrow_to_32(
     const MODULUS: i64 = 1 << 32;
     match base {
         None => (None, offset.rem_euclid(MODULUS)),
-        // The value is base + offset, so the sum is what narrows.
         Some(b) => {
             let whole = if offset == 0 {
                 b
@@ -541,7 +527,6 @@ pub fn narrow_to_32(
     }
 }
 
-// Bytes touched by one access, from the opcode suffix and the register form.
 pub fn access_width(opcode: &str, register: &instruction_parser::Operand) -> i64 {
     if opcode.ends_with('b') {
         return 1;
@@ -561,7 +546,6 @@ pub fn access_width(opcode: &str, register: &instruction_parser::Operand) -> i64
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryAccess {
     pub kind: RegionType,
-    // Symbolic so an access inside a summarized loop stays parametric in its counter.
     pub base: AbstractExpression,
     pub offset: i64,
 }
@@ -631,12 +615,11 @@ impl fmt::Display for RegionType {
 #[derive(Debug, Clone)]
 pub struct MemorySafeRegion {
     pub kind: RegionType,
-    length: AbstractExpression, // length of region in BYTES
+    length: AbstractExpression,
     pub content: HashMap<i64, RegisterValue>,
 }
 
 impl MemorySafeRegion {
-    // `length` is in bytes; content is sparse, since get() defaults for absent addresses.
     pub fn new(length: AbstractExpression, kind: RegionType) -> Self {
         Self {
             kind,
@@ -648,7 +631,6 @@ impl MemorySafeRegion {
         self.content.insert(address, value);
     }
 
-    // Static data is laid out by writing into it, so the extent grows to match.
     pub fn grow_to(&mut self, end: i64) {
         if let AbstractExpression::Immediate(l) = self.length
             && l < end
@@ -696,7 +678,6 @@ pub fn get_register_name_string(r: String) -> String {
         .to_string()
 }
 
-// An all-ones mask 2^k - 1 keeps the low k bits, so masking by it is a modulo by 2^k.
 fn mask_modulus(expression: &AbstractExpression) -> Option<i64> {
     match expression {
         AbstractExpression::Immediate(mask) if *mask > 0 && *mask < i64::MAX => {
@@ -725,6 +706,41 @@ fn cleared_bit(expression: &AbstractExpression) -> Option<i64> {
         }
         _ => None,
     }
+}
+
+fn align_modulus(expression: &AbstractExpression) -> Option<i64> {
+    match expression {
+        AbstractExpression::Immediate(mask) if *mask < 0 => {
+            let magnitude = mask.checked_neg()?;
+            (magnitude as u64).is_power_of_two().then_some(magnitude)
+        }
+        _ => None,
+    }
+}
+
+fn flip_bit(value: &ast::Int, bit: i64) -> ast::Int {
+    let two = ast::Int::from_i64(2);
+    ast::Int::sub(&[
+        &ast::Int::add(&[value, &ast::Int::from_i64(bit)]),
+        &ast::Int::mul(&[&two, &bit_of(value, bit)]),
+    ])
+}
+
+fn flip_mask(value: &ast::Int, mask: &AbstractExpression) -> Option<ast::Int> {
+    let AbstractExpression::Immediate(mask) = mask else {
+        return None;
+    };
+    if *mask < 0 {
+        return None;
+    }
+    let mut result = value.clone();
+    let mut remaining = *mask as u64;
+    while remaining != 0 {
+        let bit = remaining & remaining.wrapping_neg();
+        result = flip_bit(&result, bit as i64);
+        remaining -= bit;
+    }
+    Some(result)
 }
 
 fn bit_of(value: &ast::Int, bit: i64) -> ast::Int {
@@ -768,7 +784,6 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     Some(new1.div(&divisor))
                 }
                 "%" => Some(new1.modulo(&new2)),
-                // A mask of all ones keeps the low bits, which is the same as a modulo.
                 "&" => {
                     if let Some(modulus) = mask_modulus(&old2) {
                         Some(new1.modulo(ast::Int::from_i64(modulus)))
@@ -782,8 +797,27 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                         Some(ast::Int::sub(&[&new1, &bit_of(&new1, bit)]))
                     } else if let Some(bit) = cleared_bit(&old1) {
                         Some(ast::Int::sub(&[&new2, &bit_of(&new2, bit)]))
+                    } else if let Some(modulus) = align_modulus(&old2) {
+                        Some(ast::Int::sub(&[
+                            &new1,
+                            &new1.modulo(ast::Int::from_i64(modulus)),
+                        ]))
+                    } else if let Some(modulus) = align_modulus(&old1) {
+                        Some(ast::Int::sub(&[
+                            &new2,
+                            &new2.modulo(ast::Int::from_i64(modulus)),
+                        ]))
                     } else {
                         todo!("no translation for bitwise and in {expression}")
+                    }
+                }
+                "^" => {
+                    if let Some(flipped) = flip_mask(&new1, &old2) {
+                        Some(flipped)
+                    } else if let Some(flipped) = flip_mask(&new2, &old1) {
+                        Some(flipped)
+                    } else {
+                        todo!("no translation for bitwise xor in {expression}")
                     }
                 }
                 _ => todo!("no translation for operator {op} in {expression}"),
@@ -834,6 +868,39 @@ mod tests {
         assert!(equals(&masked(0b1101, !8), 0b0101));
         assert!(equals(&masked(0b0101, !8), 0b0101));
         assert!(equals(&masked(200, -65), 200 & -65));
+    }
+
+    #[test]
+    fn a_negative_power_of_two_mask_aligns_down() {
+        assert!(equals(&masked(200, -64), 200 & -64));
+        assert!(equals(&masked(128, -64), 128));
+        assert!(equals(&masked(255, -128), 128));
+        assert!(equals(&masked(1000, -1), 1000));
+    }
+
+    fn xored(value: i64, bit: i64) -> ast::Int {
+        expression_to_ast(generate_expression(
+            "^",
+            AbstractExpression::Immediate(value),
+            AbstractExpression::Immediate(bit),
+        ))
+        .expect("xor is translatable")
+    }
+
+    #[test]
+    fn a_single_bit_xor_flips_only_that_bit() {
+        assert!(equals(&xored(0b1101, 8), 0b0101));
+        assert!(equals(&xored(0b0101, 8), 0b1101));
+        assert!(equals(&xored(32, 32), 0));
+        assert!(equals(&xored(0, 32), 32));
+    }
+
+    #[test]
+    fn a_multi_bit_xor_flips_every_set_bit() {
+        assert!(equals(&xored(0b1101, 48), 0b1101 ^ 48));
+        assert!(equals(&xored(200, 48), 200 ^ 48));
+        assert!(equals(&xored(0, 0), 0));
+        assert!(equals(&xored(255, 255), 0));
     }
 
     #[test]

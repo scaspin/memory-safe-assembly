@@ -9,7 +9,6 @@ mod instructions;
 mod memory;
 mod simd;
 
-// Registers plus the zero, neg, carry and overflow flags.
 pub type ComputerState = (
     [RegisterValue; 33],
     Option<FlagValue>,
@@ -21,8 +20,6 @@ pub type ComputerState = (
 #[derive(Clone)]
 pub struct ARMCORTEXA {
     pub registers: [RegisterValue; 33],
-    // Boxed: 32 x 664 bytes dominated the engine, and the engine is cloned onto the
-    // stack for every explored branch.
     pub simd_registers: Box<[SimdRegister; 32]>,
     zero: Option<FlagValue>,
     neg: Option<FlagValue>,
@@ -32,8 +29,6 @@ pub struct ARMCORTEXA {
     pub memory_labels: HashMap<String, i64>,
     rw_queue: Vec<MemoryAccess>,
     alignment: i64,
-    // Names the next set of unknown flags. Not shared across clones: each explored branch
-    // has its own solver, so the same name in a sibling branch constrains nothing here.
     flag_counter: usize,
     pub solver: Solver,
 }
@@ -83,14 +78,14 @@ impl ARMCORTEXA {
             RegisterValue::new_empty("x26"),
             RegisterValue::new_empty("x27"),
             RegisterValue::new_empty("x28"),
-            RegisterValue::new_empty("x29"), // frame pointer
+            RegisterValue::new_empty("x29"),
             RegisterValue::new(
                 RegisterKind::RegisterBase,
                 Some(AbstractExpression::Abstract("return".to_string())),
                 0,
-            ), // link
-            RegisterValue::new_empty("sp"),  // stack pointer
-            RegisterValue::new(RegisterKind::Immediate, None, 0), // 64-bit zero
+            ),
+            RegisterValue::new_empty("sp"),
+            RegisterValue::new(RegisterKind::Immediate, None, 0),
         ];
 
         let simd_registers = Box::new([
@@ -178,8 +173,6 @@ impl ARMCORTEXA {
         self.overflow = overflow;
     }
 
-    // A comparison whose operands carry no usable value leaves the flags unknown. They get
-    // a symbol each rather than None, so a later cset or branch can still split on them.
     pub fn set_unknown_flags(&mut self) {
         let n = self.flag_counter;
         self.flag_counter += 1;
@@ -196,7 +189,6 @@ impl ARMCORTEXA {
         self.overflow = flag("overflow");
     }
 
-    // Ordered as ComputerState holds them: zero, neg, carry, overflow.
     pub fn set_flags(&mut self, flags: [Option<FlagValue>; 4]) {
         let [zero, neg, carry, overflow] = flags;
         self.zero = zero;
@@ -270,6 +262,7 @@ impl ARMCORTEXA {
             Operand::VectorRegister(_, num) => {
                 self.simd_registers[*num].set_from_register(
                     Arrangement::B16,
+                    0,
                     kind,
                     base,
                     offset as u128,
@@ -278,15 +271,16 @@ impl ARMCORTEXA {
             Operand::Vector(_, num, arr) => {
                 self.simd_registers[*num].set_from_register(
                     arr.clone(),
+                    0,
                     kind,
                     base,
                     offset as u128,
                 );
             }
-            // FIX
-            Operand::VectorAccess(_, num, arr, _) => {
+            Operand::VectorAccess(_, num, arr, index) => {
                 self.simd_registers[*num].set_from_register(
                     arr.clone(),
+                    *index as usize,
                     kind,
                     base,
                     offset as u128,
@@ -341,7 +335,6 @@ impl ARMCORTEXA {
             Operand::VectorRegister(_, index) => self.simd_registers[*index].clone(),
             Operand::Vector(_, index, _) => self.simd_registers[*index].clone(),
             Operand::VectorAccess(_, index, _, _) => {
-                // FIX
                 self.simd_registers[*index].clone()
             }
             _ => panic!("cannot get register {:?} as a simd register", reg),
@@ -405,7 +398,6 @@ impl ARMCORTEXA {
     }
 
     fn label_to_memory_index(&self, _label: String) -> (String, i64) {
-        // FIX: use label
         ("memory".to_string(), 0)
     }
 
@@ -445,8 +437,6 @@ impl ARMCORTEXA {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // TODO: figure out how to refactor computer setup code w/lifetimes
 
     #[test]
     fn test_arithmetic_add_imm_registers() {
