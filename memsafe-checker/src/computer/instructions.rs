@@ -1232,8 +1232,12 @@ impl ARMCORTEXA {
                     let insert = instruction.opcode == "sli";
 
                     match arr {
-                        Arrangement::B16 | Arrangement::B8 => {
-                            let lanes = if *arr == Arrangement::B16 { 16 } else { 8 };
+                        Arrangement::B16 | Arrangement::B8 | Arrangement::B => {
+                            let lanes = match arr {
+                                Arrangement::B16 => 16,
+                                Arrangement::B8 => 8,
+                                _ => 1,
+                            };
                             for i in 0..lanes {
                                 let (base, offset) = src_reg.get_byte(i);
                                 let mut value = offset.wrapping_shl(small_shift);
@@ -1244,8 +1248,12 @@ impl ARMCORTEXA {
                                 dst_reg.set_byte(i, base, value);
                             }
                         }
-                        Arrangement::H8 | Arrangement::H4 => {
-                            let lanes = if *arr == Arrangement::H8 { 8 } else { 4 };
+                        Arrangement::H8 | Arrangement::H4 | Arrangement::H => {
+                            let lanes = match arr {
+                                Arrangement::H8 => 8,
+                                Arrangement::H4 => 4,
+                                _ => 1,
+                            };
                             for i in 0..lanes {
                                 let (bases, offsets) = src_reg.get_halfword(i);
                                 let mut value =
@@ -1258,8 +1266,12 @@ impl ARMCORTEXA {
                                 dst_reg.set_halfword(i, bases, value.to_be_bytes());
                             }
                         }
-                        Arrangement::S4 | Arrangement::S2 => {
-                            let lanes = if *arr == Arrangement::S4 { 4 } else { 2 };
+                        Arrangement::S4 | Arrangement::S2 | Arrangement::S => {
+                            let lanes = match arr {
+                                Arrangement::S4 => 4,
+                                Arrangement::S2 => 2,
+                                _ => 1,
+                            };
                             for i in 0..lanes {
                                 let (bases, offsets) = src_reg.get_word(i);
                                 let mut value =
@@ -1272,8 +1284,9 @@ impl ARMCORTEXA {
                                 dst_reg.set_word(i, bases, value.to_be_bytes());
                             }
                         }
-                        Arrangement::D2 => {
-                            for i in 0..2 {
+                        Arrangement::D2 | Arrangement::D => {
+                            let lanes = if *arr == Arrangement::D2 { 2 } else { 1 };
+                            for i in 0..lanes {
                                 let (bases, offsets) = src_reg.get_double(i);
                                 let mut value =
                                     u64::from_be_bytes(offsets).wrapping_shl(small_shift);

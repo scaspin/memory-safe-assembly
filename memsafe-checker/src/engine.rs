@@ -695,7 +695,8 @@ impl ExecutionEngine {
                 let res1 = self.run(pc + 1, depth + 1);
 
                 clone.add_constraint(condition, false);
-                self.computer
+                clone
+                    .computer
                     .set_register(&register, option2.kind, option2.base, option2.offset);
                 let res2 = clone.run(pc + 1, depth + 1);
                 match (res1, res2) {
@@ -975,7 +976,7 @@ impl ExecutionEngine {
         self.pop_scope(active.scope_id);
         self.active_loop = None;
 
-        let closed = holds && exits;
+        let closed = holds;
         if closed {
             self.computer.solver.assert(leaving.not().simplify());
         }

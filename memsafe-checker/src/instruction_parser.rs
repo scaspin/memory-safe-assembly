@@ -235,10 +235,10 @@ pub fn operand_from_string(a: String) -> Operand {
     {
         let parts = a.split_at(1);
         let arr: Arrangement = match parts.0 {
-            "B" | "b" => Arrangement::B16,
-            "S" | "s" => Arrangement::S4,
-            "D" | "d" => Arrangement::D2,
-            "H" | "h" => Arrangement::H8,
+            "B" | "b" => Arrangement::B,
+            "S" | "s" => Arrangement::S,
+            "D" | "d" => Arrangement::D,
+            "H" | "h" => Arrangement::H,
             a => panic!("invalid arrangement {}", a),
         };
 

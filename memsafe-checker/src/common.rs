@@ -536,9 +536,9 @@ pub fn access_width(opcode: &str, register: &instruction_parser::Operand) -> i64
     }
     match register {
         instruction_parser::Operand::Register(instruction_parser::RePrefix::W, _) => 4,
-        instruction_parser::Operand::VectorRegister(..)
-        | instruction_parser::Operand::Vector(..)
-        | instruction_parser::Operand::VectorAccess(..) => 16,
+        instruction_parser::Operand::Vector(_, _, arrangement)
+        | instruction_parser::Operand::VectorAccess(_, _, arrangement, _) => arrangement.width(),
+        instruction_parser::Operand::VectorRegister(..) => 16,
         _ => 8,
     }
 }

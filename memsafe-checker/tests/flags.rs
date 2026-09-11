@@ -1,4 +1,3 @@
-// Condition flags, and the instructions that read them when their value is symbolic.
 
 use bums::common::*;
 
@@ -6,7 +5,6 @@ fn init() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-// Runs a self-contained program and reports what x0 ends up holding.
 fn run_for_x0(body: &[&str]) -> (Result<(), String>, i64) {
     init();
     let program: Vec<String> = std::iter::once("start:".to_string())
@@ -19,8 +17,6 @@ fn run_for_x0(body: &[&str]) -> (Result<(), String>, i64) {
     (res, x0)
 }
 
-// Reads from an abstract region, so the loaded values carry no usable value and any
-// comparison between them leaves the flags symbolic.
 fn run_with_unknown_flags(body: &[&str]) -> Result<(), String> {
     init();
     let program: Vec<String> = ["start:", "ldr w2,[x0,#0]", "ldr w3,[x0,#8]"]
@@ -35,9 +31,7 @@ fn run_with_unknown_flags(body: &[&str]) -> Result<(), String> {
     engine.start("start").map_err(|e| e.to_string())
 }
 
-// 7 >= 3 unsigned, so the compare leaves the carry set.
 const CARRY_SET: [&str; 3] = ["add x1,#0,#7", "add x2,#0,#3", "cmp x1,x2"];
-// 3 >= 7 is false, so this one leaves it clear.
 const CARRY_CLEAR: [&str; 3] = ["add x1,#0,#3", "add x2,#0,#7", "cmp x1,x2"];
 
 fn with(prefix: [&str; 3], rest: &[&str]) -> Vec<String> {
@@ -68,7 +62,6 @@ fn cset_cc_is_the_negation_of_cs() {
     assert_eq!(x0_after(CARRY_CLEAR, &["cset x0, cc"]), 1);
 }
 
-// csel Xd, Xn, Xm, cond assigns Xn when the condition holds and Xm when it does not.
 #[test]
 fn csel_cs_takes_the_first_operand_while_the_carry_is_set() {
     let opts = ["add x5,#0,#100", "add x6,#0,#200"];
@@ -95,8 +88,6 @@ fn csel_cc_takes_the_first_operand_while_the_carry_is_clear() {
     );
 }
 
-// Comparing two values with no known content used to drop every flag, which left any
-// later read of one with nothing to go on.
 #[test]
 fn cset_after_an_unknown_comparison_is_analyzed() {
     assert_eq!(
@@ -121,7 +112,6 @@ fn add_with_carry_on_a_symbolic_carry_is_analyzed() {
     );
 }
 
-// csetm Xd, cond writes all ones rather than one, so the result can be used as a mask.
 #[test]
 fn csetm_eq_writes_all_ones_when_equal() {
     assert_eq!(
@@ -140,8 +130,6 @@ fn csetm_eq_writes_all_ones_when_equal() {
     );
 }
 
-// The operator names the expression built from the operand bases, so a subtraction that
-// borrows must still subtract them.
 #[test]
 fn subtract_with_a_clear_carry_subtracts_the_bases() {
     init();
@@ -160,8 +148,6 @@ fn subtract_with_a_clear_carry_subtracts_the_bases() {
     );
 }
 
-// tst sets zero when the selected bits are all clear, so csetm reports the opposite of
-// whether the mask matched.
 #[test]
 fn tst_sets_zero_from_the_masked_bits() {
     assert_eq!(
@@ -205,5 +191,37 @@ fn subtract_with_carry_on_a_symbolic_carry_is_analyzed() {
     assert_eq!(
         run_with_unknown_flags(&["cmp x2,x3", "sbcs x5,x2,x3"]),
         Ok(())
+    );
+}
+
+#[test]
+fn the_unselected_branch_carries_its_own_option() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "ldr w2,[x0,#0]",
+        "ldr w3,[x0,#8]",
+        "cmp w2,w3",
+        "add x1,#0,#0",
+        "add x4,#0,#0",
+        "add x5,#0,#64",
+        "csel x1,x4,x5,eq",
+        "add x0,x0,x1",
+        "ldr x6,[x0]",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(16));
+
+    let res = engine.start("start").map_err(|e| e.to_string());
+    let message = res.expect_err("the second option reads past the region");
+    assert!(
+        message.contains("not provably within region"),
+        "expected an out of bounds report, got {message}"
     );
 }
