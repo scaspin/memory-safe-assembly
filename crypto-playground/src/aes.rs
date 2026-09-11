@@ -5,7 +5,7 @@ use zeroize::Zeroize;
 #[derive(Debug)]
 #[repr(C)]
 pub struct AesKey {
-    rd_key: [u32; 4 * (14 + 1)], //14 is the MAX number of AES rounds
+    rd_key: [u32; 4 * (14 + 1)],
     rounds: u32,
 }
 
@@ -35,59 +35,146 @@ enum AesFunc {
     VpaesCtr32EncryptBlocks,
 }
 
-// available AES assembly functions
-// fn aes_hw_set_encrypt_key();
-// fn aes_hw_set_decrypt_key();
-// fn aes_hw_encrypt();
-// fn aes_hw_decrypt();
-// fn aes_hw_cbc_encrypt();
+#[bums_macros::check_mem_safe("aesv8-armx.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
+fn aes_hw_set_encrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
 
-//fn aes_hw_ctr32_encrypt_blocks();
-// fn aes_hw_xts_encrypt();
-// fn aes_hw_xts_decrypt();
+#[bums_macros::check_mem_safe("aesv8-armx.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
+fn aes_hw_set_decrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
 
-// fn aesv8_gcm_8x_enc_128();
-// fn aesv8_gcm_8x_dec_128();
-// fn aesv8_gcm_8x_enc_192();
-// fn aesv8_gcm_8x_dec_192();
-// fn aesv8_gcm_8x_enc_256();
-// fn aesv8_gcm_8x_dec_256();
+#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0])]
+fn aes_hw_encrypt(input: &[u8; 16], output: &mut [u8; 16], keys: &([u32; 60], u32));
 
-// //vpaes
-// fn vpaes_encrypt();
-// fn vpaes_decrypt();
-// fn vpaes_set_encrypt_key();
-// fn vpaes_set_decrypt_key();
-// fn vpaes_cbc_encrypt();
-//fn vpaes_ctr32_encrypt_blocks();
+#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0])]
+fn aes_hw_decrypt(input: &[u8; 16], output: &mut [u8; 16], keys: &([u32; 60], u32));
 
-// #[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 14, input.len()>64, input.len() == output.len()])]
-// fn aes_gcm_enc_kernel(
-//     input: &[u8],
-//     output: &mut [u8],
-//     xi: &mut [u8],
-//     ivec: &mut [u8; 16],
-//     keys: &([u32; 60], usize),
-//     htable: &[u128; 16],
-// );
+#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
+fn aes_hw_cbc_encrypt(
+    input: &[u8],
+    output: &mut [u8],
+    keys: &([u32; 60], u32),
+    ivec: &mut [u8; 16],
+    enc: i64,
+);
 
-// #[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 14, input.len()>64, input.len() == output.len()])]
-// fn aes_gcm_dec_kernel(
-//     input: &[u8],
-//     output: &mut [u8],
-//     xi: &mut [u8; 16],
-//     ivec: &mut [u8; 16],
-//     keys: &([u32; 60], usize),
-//     htable: &[u128; 16],
-// );
+#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len(), key1 as *const _, key2 as *const _, iv.as_ptr(), [key1.1 >= 10, key1.1 <= 14, key1.1 % 2 == 0, key2.1 >= 10, key2.1 <= 14, key2.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
+fn aes_hw_xts_encrypt(
+    input: &[u8],
+    output: &mut [u8],
+    key1: &([u32; 60], u32),
+    key2: &([u32; 60], u32),
+    iv: &[u8; 16],
+);
 
-// SHOULD REALLY HAVE (rounds == 10 or rounds == 12 or rounds == 14)
+#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len(), key1 as *const _, key2 as *const _, iv.as_ptr(), [key1.1 >= 10, key1.1 <= 14, key1.1 % 2 == 0, key2.1 >= 10, key2.1 <= 14, key2.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
+fn aes_hw_xts_decrypt(
+    input: &[u8],
+    output: &mut [u8],
+    key1: &([u32; 60], u32),
+    key2: &([u32; 60], u32),
+    iv: &[u8; 16],
+);
+
 #[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1%2==0, input.len()>=16, input.len()%16==0, input.len() == output.len()])]
 fn aes_hw_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
     keys: &([u32; 60], u32),
     ivec: &mut [u8; 16],
+);
+
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() > 64, input.len() % 16 == 0, input.len() == output.len()])]
+fn aes_gcm_enc_kernel(
+    input: &[u8],
+    output: &mut [u8],
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
+    keys: &([u32; 60], u32),
+    htable: &[u128; 16],
+);
+
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() > 64, input.len() % 16 == 0, input.len() == output.len()])]
+fn aes_gcm_dec_kernel(
+    input: &[u8],
+    output: &mut [u8],
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
+    keys: &([u32; 60], u32),
+    htable: &[u128; 16],
+);
+
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 10, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
+fn aesv8_gcm_8x_enc_128(
+    input: &[u8],
+    output: &mut [u8],
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
+    keys: &([u32; 60], u32),
+    htable: &[u128; 16],
+) -> usize;
+
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 10, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
+fn aesv8_gcm_8x_dec_128(
+    input: &[u8],
+    output: &mut [u8],
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
+    keys: &([u32; 60], u32),
+    htable: &[u128; 16],
+) -> usize;
+
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 12, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
+fn aesv8_gcm_8x_enc_192(
+    input: &[u8],
+    output: &mut [u8],
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
+    keys: &([u32; 60], u32),
+    htable: &[u128; 16],
+) -> usize;
+
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 12, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
+fn aesv8_gcm_8x_dec_192(
+    input: &[u8],
+    output: &mut [u8],
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
+    keys: &([u32; 60], u32),
+    htable: &[u128; 16],
+) -> usize;
+
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 14, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
+fn aesv8_gcm_8x_enc_256(
+    input: &[u8],
+    output: &mut [u8],
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
+    keys: &([u32; 60], u32),
+    htable: &[u128; 16],
+) -> usize;
+
+#[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 14, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
+fn aesv8_gcm_8x_dec_256(
+    input: &[u8],
+    output: &mut [u8],
+    xi: &mut [u8; 16],
+    ivec: &mut [u8; 16],
+    keys: &([u32; 60], u32),
+    htable: &[u128; 16],
+) -> usize;
+
+#[bums_macros::check_mem_safe("vpaes-armv8.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
+fn vpaes_set_encrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
+
+#[bums_macros::check_mem_safe("vpaes-armv8.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
+fn vpaes_set_decrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
+
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
+fn vpaes_cbc_encrypt(
+    input: &[u8],
+    output: &mut [u8],
+    keys: &([u32; 60], u32),
+    ivec: &mut [u8; 16],
+    enc: i64,
 );
 
 #[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1%2==0,input.len()>=16, input.len()%16==0, input.len() == output.len()])]
@@ -97,6 +184,9 @@ fn vpaes_ctr32_encrypt_blocks(
     keys: &([u32; 60], u32),
     ivec: &mut [u8; 16],
 );
+
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0])]
+fn vpaes_decrypt(input: &[u8; 16], output: &mut [u8; 16], keys: &([u32; 60], u32));
 
 #[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14,keys.1%2==0, input.len()>= 16,input.len() == output.len()])]
 fn vpaes_encrypt(input: &[u8], output: &mut [u8], keys: &([u32; 60], u32));
@@ -108,7 +198,6 @@ pub fn AES_ctr128_encrypt(
     block_buffer: &mut [u8; 16],
     in_out: &mut [u8],
 ) {
-    // from aws-lc-rs: let mut num = MaybeUninit::<u32>::new(0);
     let mut num: u32 = 0;
     let input_clone: &[u8] = &in_out.to_vec().clone();
 
@@ -163,17 +252,6 @@ fn aes_ctr128_encrypt(
             crypto_ctr128_encrypt(input, out, len, key, ivec, block_buffer, num);
         }
     } else {
-        // crypto_ctr128_encrypt_ctr32(in, out, len, key, ivec, ecount_buf, num, aes_nohw_ctr32_encrypt_blocks);
-        // crypto_ctr128_encrypt_ctr32(
-        //     input,
-        //     out,
-        //     len,
-        //     key,
-        //     ivec,
-        //     block_buffer,
-        //     num,
-        //     AesFunc::aes_nohw_ctr32_encrypt_blocks,
-        // );
         unimplemented!();
     }
 
@@ -189,8 +267,6 @@ fn crypto_ctr128_encrypt(
     block_buffer: &mut [u8; 16],
     num: &mut u32,
 ) {
-    // assert!(key && ecount_buf && num);
-    // assert!(len == 0 || (in && out));
     assert!(*num <= 16);
 
     let mut n = *num as usize;
@@ -235,7 +311,6 @@ fn crypto_ctr128_encrypt(
         }
     }
 
-    // can I do this in rust? there must be better way;
     *num = n as u32;
 }
 
@@ -249,10 +324,6 @@ fn crypto_ctr128_encrypt_ctr32(
     num: &mut u32,
     func: AesFunc,
 ) {
-    // assert!(key && block_buffer && num);
-    // assert!(len == 0 || (input && output));
-    // assert!(num < 16);
-
     let mut n = *num as usize;
     let mut len = len;
 
@@ -271,14 +342,6 @@ fn crypto_ctr128_encrypt_ctr32(
 
     while len >= 16 {
         let mut blocks = len / 16;
-
-        // (scaspin) don't think we need to translate this to rust?
-        // 1<<28 is just a not-so-small yet not-so-large number...
-        // Below condition is practically never met, but it has to
-        // be checked for code correctness.
-        // if (sizeof(size_t) > sizeof(unsigned int) && blocks > (1U << 28)) {
-        //     blocks = (1U << 28);
-        //   }
 
         ctr32 = ctr32 + (blocks as u32);
         if ctr32 < (blocks as u32) {
@@ -335,7 +398,6 @@ fn crypto_ctr128_encrypt_ctr32(
         }
     }
 
-    // (scaspin) this is a bit icky. FIX? there must be better way;
     *num = n as u32;
 }
 
@@ -508,7 +570,6 @@ mod tests {
     #[test]
     fn test_aes_against_aws_lc_low_level() {
         let key1 = &mut AesKey::new();
-        // let key2 = &mut AesKey::new();
         let key2 = AesKey::new();
         let ivec1: &mut [u8; 16] = &mut [0; 16];
         let ivec2: &mut [u8; 16] = &mut [0; 16];

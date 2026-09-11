@@ -4,9 +4,17 @@ fn gcm_init_neon(htable: &mut [u128; 16], h: &[u64; 2]);
 #[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr())]
 fn gcm_gmult_neon(context: &mut [u8; 16], h: &[u128; 16]);
 
-// length in bits, not bytes
 #[bums_macros::check_mem_safe("ghash-neon-armv8.S", context.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len(), [buf.len() >= 16, buf.len()%16==0])]
 fn gcm_ghash_neon(context: &mut [u8; 16], h: &[u128; 16], buf: &[u8]);
+
+#[bums_macros::check_mem_safe("ghashv8-armx.S", htable.as_mut_ptr(), h.as_ptr())]
+fn gcm_init_v8(htable: &mut [u128; 16], h: &[u64; 2]);
+
+#[bums_macros::check_mem_safe("ghashv8-armx.S", context.as_mut_ptr(), h.as_ptr())]
+fn gcm_gmult_v8(context: &mut [u8; 16], h: &[u128; 16]);
+
+#[bums_macros::check_mem_safe("ghashv8-armx.S", context.as_mut_ptr(), h.as_ptr(), buf.as_ptr(), buf.len(), [buf.len() >= 16, buf.len()%16==0])]
+fn gcm_ghash_v8(context: &mut [u8; 16], h: &[u128; 16], buf: &[u8]);
 
 #[cfg(test)]
 mod tests {
@@ -85,8 +93,3 @@ mod tests {
         assert!(us != [1; 16]);
     }
 }
-
-// (aws-lc-rs) aes_128_gcm_siv -> (aes-lc) EVP_aead_aes_128_gcm_siv -> aead_aes_gcm_siv_seal_scatter -> gcm_siv_polyval ->
-// CRYPTO_POLYVAL_init :
-// CRYPTO_ghash_init -> gcm_init_neon
-// CRYPTO_POLYVAL_update_blocks -> gcm_ghash_neon
