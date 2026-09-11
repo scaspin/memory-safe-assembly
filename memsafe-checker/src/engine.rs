@@ -7,6 +7,7 @@ const MAX_UNCONDITIONAL_REVISITS: usize = 1000;
 const MAX_BRANCH_DEPTH: usize = 20;
 const MAX_JUMP_HISTORY: usize = 30;
 const MAX_REVISITS_PER_BRANCH: usize = 20;
+const MAX_SPLIT_VALUES: usize = 4;
 use z3::ast::Ast;
 use z3::*;
 
@@ -89,6 +90,7 @@ struct Summary {
     updates: Vec<(usize, RegisterValue)>,
     flags: [Option<FlagValue>; 4],
     facts: Vec<AbstractComparison>,
+    exit_facts: Vec<AbstractComparison>,
 }
 
 impl Summary {
@@ -132,15 +134,42 @@ fn anchored(
     }
 }
 
+fn at_summary(
+    e: &AbstractExpression,
+    current: &[RegisterValue],
+    previous: &[RegisterValue],
+    updates: &[(usize, RegisterValue)],
+) -> AbstractExpression {
+    match e {
+        AbstractExpression::Register(r) => {
+            let index = current
+                .iter()
+                .position(|c| c == &**r)
+                .or_else(|| previous.iter().position(|p| p == &**r));
+            match index.and_then(|i| updates.iter().find(|(j, _)| *j == i)) {
+                Some((_, rewritten)) => AbstractExpression::Register(Box::new(rewritten.clone())),
+                None => e.clone(),
+            }
+        }
+        AbstractExpression::Expression(op, a, b) => generate_expression(
+            op,
+            at_summary(a, current, previous, updates),
+            at_summary(b, current, previous, updates),
+        ),
+        other => other.clone(),
+    }
+}
+
 fn summarize(
     id: LoopId,
     pc: usize,
     label: Option<String>,
     condition: &AbstractComparison,
+    continues_when: bool,
     invariants: Vec<LoopInvariant>,
-    previous: &ComputerState,
-    current: &ComputerState,
+    states: (&ComputerState, &ComputerState),
 ) -> Summary {
+    let (previous, current) = states;
     let counter = LoopCounter::for_loop(id);
     let name = counter.name().to_string();
 
@@ -159,11 +188,17 @@ fn summarize(
                 } else {
                     RegisterKind::RegisterBase
                 };
+                let advanced = advance(anchor, &step, &counter);
+                let advanced = if cur.base.as_ref().is_some_and(is_narrowed) {
+                    generate_expression("%", advanced, AbstractExpression::Immediate(1i64 << 32))
+                } else {
+                    advanced
+                };
                 updates.push((
                     i,
                     RegisterValue {
                         kind,
-                        base: Some(advance(anchor, &step, &counter)),
+                        base: Some(advanced),
                         offset: 0,
                     },
                 ));
@@ -210,23 +245,34 @@ fn summarize(
         _ => None,
     };
 
+    let mut exit_facts = Vec::new();
     if let Some((exit, walker, step)) = trip {
         let distance = generate_expression(
             "-",
             anchored(exit, &current.0, &invariants),
             anchored(walker, &current.0, &invariants),
         );
-        let trips = if matches!(condition.op.as_str(), "<" | ">") {
+        let strict = matches!(condition.op.as_str(), "<" | ">");
+        let trips = if strict {
             counter.expression()
         } else {
             generate_expression("+", counter.expression(), AbstractExpression::Immediate(1))
         };
-        facts.push(AbstractComparison::new(
-            "==",
-            distance,
-            generate_expression("*", trips, step),
-        ));
+        let trip_fact =
+            AbstractComparison::new("==", distance, generate_expression("*", trips, step));
+        if strict {
+            exit_facts.push(trip_fact);
+        } else {
+            facts.push(trip_fact);
+        }
     }
+
+    let held = AbstractComparison::new(
+        &condition.op,
+        at_summary(&condition.left, &current.0, &previous.0, &updates),
+        at_summary(&condition.right, &current.0, &previous.0, &updates),
+    );
+    facts.push(if continues_when { held } else { held.not() });
 
     Summary {
         id,
@@ -237,6 +283,7 @@ fn summarize(
         updates,
         flags,
         facts,
+        exit_facts,
     }
 }
 
@@ -245,6 +292,7 @@ struct LoopAttempt {
     id: LoopId,
     invariants: Vec<LoopInvariant>,
     rounds: usize,
+    widened: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -255,8 +303,12 @@ struct ActiveLoop {
     scope_id: usize,
     entry_decision: bool,
     invariants: Vec<LoopInvariant>,
+    exit_facts: Vec<AbstractComparison>,
     state: ComputerState,
     entry_state: ComputerState,
+    history_len: usize,
+    entry_condition: AbstractComparison,
+    entry_accesses: Vec<MemoryAccess>,
 }
 
 #[derive(Clone)]
@@ -452,6 +504,47 @@ impl ExecutionEngine {
         let res = self.run(pc, 0);
         debug_assert!(self.scopes.is_empty(), "solver scopes left open");
         res
+    }
+
+    fn concrete_split(&self, condition: &AbstractComparison) -> Option<(String, Vec<i64>)> {
+        let mut symbols = condition.get_abstracts();
+        symbols.sort();
+        symbols.dedup();
+        for symbol in symbols {
+            if let Some(values) = self.computer.finite_values(&symbol, MAX_SPLIT_VALUES)
+                && values.len() > 1
+            {
+                return Some((symbol, values));
+            }
+        }
+        None
+    }
+
+    fn split_on(
+        &mut self,
+        symbol: &str,
+        values: &[i64],
+        pc: usize,
+        depth: usize,
+    ) -> std::io::Result<BranchOutcome> {
+        log::info!("splitting {symbol} over {values:?} at line {pc}");
+        let mut failures: Vec<String> = Vec::new();
+        for value in values {
+            let mut branch = self.clone();
+            let pinned = ast::Int::new_const(symbol.to_string()).eq(ast::Int::from_i64(*value));
+            branch.computer.solver.assert(&pinned);
+            if let Err(e) = branch.run(pc, depth + 1) {
+                let text = e.to_string();
+                if !failures.contains(&text) {
+                    failures.push(text);
+                }
+            }
+        }
+        if failures.is_empty() {
+            Ok(BranchOutcome::BothExplored)
+        } else {
+            Err(Error::other(failures.join("; ")))
+        }
     }
 
     fn push_scope(&mut self) -> usize {
@@ -719,12 +812,17 @@ impl ExecutionEngine {
     fn take_conditional_branch(
         &mut self,
         pc: usize,
-        condition: AbstractComparison,
+        mut condition: AbstractComparison,
         jump_dest: usize,
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
-        let rw_list = self.computer.read_rw_queue();
-        match self.evaluate_branch_condition(pc, depth, condition.clone(), rw_list.clone()) {
+        let mut rw_list = self.computer.read_rw_queue();
+        if self.active_loop.is_none()
+            && let Some((symbol, values)) = self.concrete_split(&condition)
+        {
+            return self.split_on(&symbol, &values, pc, depth);
+        }
+        match self.evaluate_branch_condition(pc, depth, &mut condition, &mut rw_list) {
             None => {
                 let clone = &mut self.clone();
                 let here = BranchPoint {
@@ -831,8 +929,8 @@ impl ExecutionEngine {
         &mut self,
         pc: usize,
         depth: usize,
-        expression: AbstractComparison,
-        rw_list: Vec<MemoryAccess>,
+        expression: &mut AbstractComparison,
+        rw_list: &mut Vec<MemoryAccess>,
     ) -> Option<bool> {
         log::info!("jump condition: {}", expression.clone());
         log::info!("memory accesses: {:?}", rw_list.clone());
@@ -840,7 +938,22 @@ impl ExecutionEngine {
         if let Some(active) = self.active_loop.clone()
             && active.pc == pc
         {
-            return self.discharge_active_loop(active, expression);
+            let (entry_condition, entry_accesses) = (
+                active.entry_condition.clone(),
+                active.entry_accesses.clone(),
+            );
+            if let Some(decision) = self.discharge_active_loop(active, expression.clone()) {
+                return Some(decision);
+            }
+            if !self
+                .loop_attempts
+                .get(&pc)
+                .is_some_and(|attempt| attempt.widened)
+            {
+                return None;
+            }
+            *expression = entry_condition;
+            *rw_list = entry_accesses;
         }
 
         match (
@@ -870,6 +983,12 @@ impl ExecutionEngine {
 
                     let observed = invariant_of_registers(&previous.state.0, &current_state.0);
                     let attempt = match self.loop_attempts.get(&pc) {
+                        Some(earlier) if earlier.widened => LoopAttempt {
+                            id: earlier.id,
+                            invariants: earlier.invariants.clone(),
+                            rounds: earlier.rounds,
+                            widened: false,
+                        },
                         Some(earlier) => {
                             let joined = join_all(&earlier.invariants, &observed);
                             if joined == earlier.invariants {
@@ -887,12 +1006,14 @@ impl ExecutionEngine {
                                 id: earlier.id,
                                 invariants: joined,
                                 rounds: earlier.rounds + 1,
+                                widened: false,
                             }
                         }
                         None => LoopAttempt {
                             id: self.allocate_loop_id(),
                             invariants: observed,
                             rounds: 1,
+                            widened: false,
                         },
                     };
                     let id = attempt.id;
@@ -900,10 +1021,10 @@ impl ExecutionEngine {
                         id,
                         pc,
                         self.enclosing_label(pc),
-                        &expression,
+                        expression,
+                        branch_decision,
                         attempt.invariants.clone(),
-                        &previous.state,
-                        &current_state,
+                        (&previous.state, &current_state),
                     );
                     log::info!(
                         "detected {id} at line {pc} in {:?}, round {}",
@@ -915,7 +1036,11 @@ impl ExecutionEngine {
                     }
                     for (i, inv) in attempt.invariants.iter().enumerate() {
                         if !matches!(inv, LoopInvariant::Fixed) {
-                            log::info!("{id} x{i} invariant: {inv:?}");
+                            log::info!(
+                                "{id} x{i} invariant: {inv:?} prev={:?} cur={:?}",
+                                previous.state.0[i],
+                                current_state.0[i]
+                            );
                         }
                     }
                     self.loop_attempts.insert(pc, attempt);
@@ -932,6 +1057,7 @@ impl ExecutionEngine {
                     }
                     self.computer.set_flags(summary.flags.clone());
                     let invariants = summary.invariants.clone();
+                    let exit_facts = summary.exit_facts.clone();
                     self.summaries.borrow_mut().push(summary);
 
                     self.active_loop = Some(ActiveLoop {
@@ -941,8 +1067,12 @@ impl ExecutionEngine {
                         scope_id,
                         entry_decision: branch_decision,
                         invariants,
+                        exit_facts,
                         state: self.computer.get_state(),
                         entry_state: current_state,
+                        history_len: self.jump_history.len(),
+                        entry_condition: expression.clone(),
+                        entry_accesses: rw_list.clone(),
                     });
                     return Some(branch_decision);
                 }
@@ -953,6 +1083,50 @@ impl ExecutionEngine {
         } else {
             None
         }
+    }
+
+    fn carries_region(&self, register: &RegisterValue) -> bool {
+        let Some(base) = &register.base else {
+            return false;
+        };
+        base.get_abstracts().iter().any(|symbol| {
+            self.computer.memory.contains_key(symbol)
+                || self.computer.memory_labels.contains_key(symbol)
+        })
+    }
+
+    fn widen_for_retry(&mut self, active: &ActiveLoop, observed: &[LoopInvariant]) -> bool {
+        let mut joined = join_all(&active.invariants, observed);
+        for (i, inv) in joined.iter_mut().enumerate() {
+            if *inv != active.invariants[i] && self.carries_region(&active.entry_state.0[i]) {
+                *inv = active.invariants[i].clone();
+            }
+        }
+        if joined == active.invariants {
+            return false;
+        }
+        let rounds = self
+            .loop_attempts
+            .get(&active.pc)
+            .map_or(1, |earlier| earlier.rounds);
+        if rounds >= max_ascents(observed.len()) {
+            return false;
+        }
+        self.loop_attempts.insert(
+            active.pc,
+            LoopAttempt {
+                id: active.id,
+                invariants: joined,
+                rounds: rounds + 1,
+                widened: true,
+            },
+        );
+        log::info!(
+            "{} at line {} widening after a failed inductive check",
+            active.id,
+            active.pc
+        );
+        true
     }
 
     fn discharge_active_loop(
@@ -982,9 +1156,11 @@ impl ExecutionEngine {
             .check_assumptions(std::slice::from_ref(&leaving))
             == SatResult::Unsat;
 
+        let retrying = !holds && self.widen_for_retry(&active, &observed);
+
         let above: Vec<Scope> = match self.scopes.iter().position(|s| s.id == active.scope_id) {
-            Some(i) => self.scopes[i + 1..].to_vec(),
-            None => Vec::new(),
+            Some(i) if !retrying => self.scopes[i + 1..].to_vec(),
+            _ => Vec::new(),
         };
         self.pop_scope(active.scope_id);
         self.active_loop = None;
@@ -992,6 +1168,11 @@ impl ExecutionEngine {
         let closed = holds;
         if closed {
             self.computer.solver.assert(leaving.not().simplify());
+            for fact in &active.exit_facts {
+                let c = comparison_to_ast(fact.clone())
+                    .unwrap_or_else(|| panic!("untranslatable exit fact {fact}"));
+                self.computer.solver.assert(c);
+            }
         }
 
         for scope in above {
@@ -1006,6 +1187,8 @@ impl ExecutionEngine {
         }
 
         self.computer.set_state(active.entry_state);
+        self.jump_history.truncate(active.history_len);
+
         log::info!(
             "{} at line {} not closed: inductive={holds} exits={exits}",
             active.id,

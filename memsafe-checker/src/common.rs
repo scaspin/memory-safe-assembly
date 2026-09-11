@@ -508,6 +508,11 @@ impl AbstractComparison {
     }
 }
 
+pub fn is_narrowed(e: &AbstractExpression) -> bool {
+    matches!(e, AbstractExpression::Expression(op, _, right)
+        if op == "%" && **right == AbstractExpression::Immediate(1 << 32))
+}
+
 pub fn narrow_to_32(
     base: Option<AbstractExpression>,
     offset: i64,
@@ -516,6 +521,9 @@ pub fn narrow_to_32(
     match base {
         None => (None, offset.rem_euclid(MODULUS)),
         Some(b) => {
+            if offset == 0 && is_narrowed(&b) {
+                return (Some(b), 0);
+            }
             let whole = if offset == 0 {
                 b
             } else {

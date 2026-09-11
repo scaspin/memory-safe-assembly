@@ -87,6 +87,10 @@ fn symbolic_step(
     prev: &AbstractExpression,
     cur: &AbstractExpression,
 ) -> Option<AbstractExpression> {
+    let cur = match cur {
+        AbstractExpression::Expression(op, inner, _) if op == "%" && is_narrowed(cur) => &**inner,
+        other => other,
+    };
     if let AbstractExpression::Expression(op, left, right) = cur
         && **left == *prev
     {

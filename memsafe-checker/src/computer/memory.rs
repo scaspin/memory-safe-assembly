@@ -241,6 +241,60 @@ impl ARMCORTEXA {
         }
     }
 
+    pub(crate) fn finite_values(&self, symbol: &str, cap: usize) -> Option<Vec<i64>> {
+        let var = ast::Int::new_const(symbol.to_string());
+        let mut found: Vec<i64> = Vec::new();
+        loop {
+            let excluded: Vec<ast::Bool> = found
+                .iter()
+                .map(|v| var.eq(ast::Int::from_i64(*v)).not())
+                .collect();
+            match self.solver.check_assumptions(&excluded) {
+                SatResult::Unsat => return Some(found),
+                SatResult::Unknown => return None,
+                SatResult::Sat => {
+                    let value = self.solver.get_model()?.eval(&var, true)?.as_i64()?;
+                    if found.contains(&value) || found.len() >= cap {
+                        return None;
+                    }
+                    found.push(value);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn model_symbols(&self) -> Vec<String> {
+        if self.solver.check() != SatResult::Sat {
+            return Vec::new();
+        }
+        let Some(model) = self.solver.get_model() else {
+            return Vec::new();
+        };
+        model.iter().map(|decl| decl.name()).collect()
+    }
+
+    fn safe_for_every_stride(&self, l: &ast::Bool, u: &ast::Bool, symbols: &[String]) -> bool {
+        for symbol in symbols {
+            let Some(values) = self.finite_values(symbol, 8) else {
+                continue;
+            };
+            if values.is_empty() {
+                continue;
+            }
+            let var = ast::Int::new_const(symbol.to_string());
+            let settled = values.iter().all(|v| {
+                let pin = var.eq(ast::Int::from_i64(*v));
+                self.solver.check_assumptions(&[pin.clone(), l.clone()]) == SatResult::Unsat
+                    && self.solver.check_assumptions(&[pin, u.clone()]) == SatResult::Unsat
+            });
+            if settled {
+                log::info!("bounds settled by splitting {symbol} over {values:?}");
+                return true;
+            }
+        }
+        false
+    }
+
     fn mem_safe_access(
         &self,
         base_expr: AbstractExpression,
@@ -357,6 +411,20 @@ impl ARMCORTEXA {
                 )))
             }
             (a, b) => {
+                if a == SatResult::Unknown || b == SatResult::Unknown {
+                    let mut symbols = base_expr.get_abstracts();
+                    symbols.append(&mut region.get_length().get_abstracts());
+                    symbols.append(&mut self.model_symbols());
+                    symbols.sort();
+                    symbols.dedup();
+                    if self.safe_for_every_stride(&l, &u, &symbols) {
+                        log::info!(
+                            "{ty} at {} proved in bounds",
+                            format_address(&base_expr, offset)
+                        );
+                        return Ok(());
+                    }
+                }
                 log::info!(
                     "below-region is {a:?} and past-end is {b:?}, model: {:?}",
                     self.solver.get_model()
