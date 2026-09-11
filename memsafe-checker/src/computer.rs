@@ -173,6 +173,16 @@ impl ARMCORTEXA {
         self.overflow = overflow;
     }
 
+    pub fn unknown_flag(&mut self, which: &str) -> Option<FlagValue> {
+        let n = self.flag_counter;
+        self.flag_counter += 1;
+        Some(FlagValue::Abstract(AbstractComparison::new(
+            "==",
+            AbstractExpression::Abstract(format!("{which}_flag_{n}")),
+            AbstractExpression::Immediate(1),
+        )))
+    }
+
     pub fn set_unknown_flags(&mut self) {
         let n = self.flag_counter;
         self.flag_counter += 1;

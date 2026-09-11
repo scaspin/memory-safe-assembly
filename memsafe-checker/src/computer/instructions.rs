@@ -68,11 +68,11 @@ impl ARMCORTEXA {
                     self.arithmetic("!&", |x, y: i64| x & !y, instruction.operands.clone());
                 }
                 "adds" => {
-                    self.cmn(&instruction.operands[0], &instruction.operands[1]);
+                    self.cmn(&instruction.operands[1], &instruction.operands[2]);
                     self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
                 }
                 "subs" => {
-                    self.cmp(&instruction.operands[0], &instruction.operands[1]);
+                    self.cmp(&instruction.operands[1], &instruction.operands[2]);
                     self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
                 }
                 "ror" | "lsl" | "lsr" => {
@@ -85,7 +85,7 @@ impl ARMCORTEXA {
                     self.shift_reg(&instruction.opcode, reg0, reg1, reg2);
                 }
                 "ands" => {
-                    self.cmp(&instruction.operands[0], &instruction.operands[1]);
+                    self.tst(&instruction.operands[1], &instruction.operands[2]);
                     self.arithmetic("&", |x, y| x & y, instruction.operands.clone());
                 }
                 "adc" => match &self.carry {
@@ -1114,6 +1114,18 @@ impl ARMCORTEXA {
                     let dest = instruction.operands.first().expect("tbl dst");
                     self.set_simd_register(dest, SimdRegister::default());
                 }
+                "not" | "mvn" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dest = reg_iter.next().expect("not dst");
+                    let src = self.get_simd_register(reg_iter.next().expect("not src"));
+                    let lanes = vector_operand_width(dest) as usize;
+                    let mut result = SimdRegister::default();
+                    for i in 0..lanes {
+                        let (_, byte) = src.get_byte(i);
+                        result.set_byte(i, None, !byte);
+                    }
+                    self.set_simd_register(dest, result);
+                }
                 "ushr" => {
                     let mut reg_iter = instruction.operands.iter();
                     let dest = reg_iter.next().expect("ushr dst");
@@ -1412,7 +1424,7 @@ impl ARMCORTEXA {
                         panic!("str1 does not include address {:?}", instruction);
                     };
                 }
-                "movi" | "mov" | "fmov" | "aese" | "dup" | "ins" => {
+                "movi" | "mov" | "fmov" | "aese" | "dup" | "ins" | "umov" | "smov" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");

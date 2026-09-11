@@ -187,10 +187,18 @@ fn summarize(
         AbstractExpression::Immediate(2),
     )];
 
-    let step_of = |side: &AbstractExpression| -> Option<i64> {
+    let index_of = |r: &RegisterValue| -> Option<usize> {
+        current
+            .0
+            .iter()
+            .position(|c| c == r)
+            .or_else(|| previous.0.iter().position(|c| c == r))
+    };
+
+    let step_of = |side: &AbstractExpression| -> Option<AbstractExpression> {
         registers_in_expression(side).into_iter().find_map(|r| {
-            match invariants.get(current.0.iter().position(|c| *c == r)?)? {
-                LoopInvariant::Linear(AbstractExpression::Immediate(s)) => Some(*s),
+            match invariants.get(index_of(&r)?)? {
+                LoopInvariant::Linear(step) => Some(step.clone()),
                 _ => None,
             }
         })
@@ -216,7 +224,7 @@ fn summarize(
         facts.push(AbstractComparison::new(
             "==",
             distance,
-            generate_expression("*", trips, AbstractExpression::Immediate(step)),
+            generate_expression("*", trips, step),
         ));
     }
 
@@ -904,6 +912,11 @@ impl ExecutionEngine {
                     );
                     for fact in &summary.facts {
                         log::info!("{id} fact: {fact}");
+                    }
+                    for (i, inv) in attempt.invariants.iter().enumerate() {
+                        if !matches!(inv, LoopInvariant::Fixed) {
+                            log::info!("{id} x{i} invariant: {inv:?}");
+                        }
                     }
                     self.loop_attempts.insert(pc, attempt);
 

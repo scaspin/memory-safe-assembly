@@ -296,16 +296,10 @@ impl ARMCORTEXA {
                         expression.clone(),
                         AbstractExpression::Immediate(0),
                     )));
-                    self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                        ">",
-                        expression.clone(),
-                        AbstractExpression::Immediate(i64::MAX),
-                    )));
-                    self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                        ">",
-                        expression,
-                        AbstractExpression::Immediate(i64::MAX),
-                    )));
+                    let carry = self.unknown_flag("carry");
+                    let overflow = self.unknown_flag("overflow");
+                    self.carry = carry;
+                    self.overflow = overflow;
                 }
                 RegisterKind::Number => self.set_unknown_flags(),
                 RegisterKind::Immediate => {
@@ -334,16 +328,10 @@ impl ARMCORTEXA {
                 expression.clone(),
                 AbstractExpression::Immediate(0),
             )));
-            self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
-                ">",
-                expression.clone(),
-                AbstractExpression::Immediate(i64::MAX),
-            )));
-            self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                ">",
-                expression,
-                AbstractExpression::Immediate(i64::MAX),
-            )));
+            let carry = self.unknown_flag("carry");
+            let overflow = self.unknown_flag("overflow");
+            self.carry = carry;
+            self.overflow = overflow;
         }
     }
 }

@@ -1,12 +1,7 @@
-// Classifies how state components change across loop iterations, independent of
-// any acceleration strategy and without consulting the solver.
 
 use crate::common::*;
 use std::fmt;
 
-// An opaque identity handed out when detection decides something is a loop. Neither pc
-// nor a label works as the key: pc does not line up with source lines, and disassembled
-// input yields label+offset forms once non-external labels are discarded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LoopId(usize);
 
@@ -22,7 +17,6 @@ impl fmt::Display for LoopId {
     }
 }
 
-// A fresh symbol standing for how many iterations a loop has run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoopCounter {
     name: String,
@@ -46,7 +40,6 @@ impl LoopCounter {
     }
 }
 
-// What holds for one state component across iterations.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoopInvariant {
     Fixed,
@@ -55,12 +48,10 @@ pub enum LoopInvariant {
 }
 
 impl LoopInvariant {
-    // Unknown covers everything, and the precise elements only cover themselves.
     pub fn subsumes(&self, other: &LoopInvariant) -> bool {
         matches!(self, LoopInvariant::Unknown) || self == other
     }
 
-    // Least element covering both, which is Unknown unless they already agree.
     pub fn join(&self, other: &LoopInvariant) -> LoopInvariant {
         if self == other {
             self.clone()
@@ -70,7 +61,6 @@ impl LoopInvariant {
     }
 }
 
-// Recognises `cur == prev + k` for a literal k.
 fn constant_step(prev: &AbstractExpression, cur: &AbstractExpression) -> Option<i64> {
     if let AbstractExpression::Expression(op, left, right) = cur
         && op == "+"
@@ -93,9 +83,34 @@ pub fn invariant_of(prev: &AbstractExpression, cur: &AbstractExpression) -> Loop
     }
 }
 
-// A changed base is Unknown, not Fixed: only the offset delta is expressible.
+fn symbolic_step(
+    prev: &AbstractExpression,
+    cur: &AbstractExpression,
+) -> Option<AbstractExpression> {
+    if let AbstractExpression::Expression(op, left, right) = cur
+        && **left == *prev
+    {
+        return match op.as_str() {
+            "+" => Some((**right).clone()),
+            "-" => Some(generate_expression(
+                "-",
+                AbstractExpression::Immediate(0),
+                (**right).clone(),
+            )),
+            _ => None,
+        };
+    }
+    None
+}
+
 pub fn invariant_of_register(prev: &RegisterValue, cur: &RegisterValue) -> LoopInvariant {
     if prev.base != cur.base {
+        if prev.offset == cur.offset
+            && let (Some(p), Some(c)) = (&prev.base, &cur.base)
+            && let Some(step) = symbolic_step(p, c)
+        {
+            return LoopInvariant::Linear(step);
+        }
         return LoopInvariant::Unknown;
     }
     match cur.offset.checked_sub(prev.offset) {
@@ -105,13 +120,10 @@ pub fn invariant_of_register(prev: &RegisterValue, cur: &RegisterValue) -> LoopI
     }
 }
 
-// Componentwise join, so a retry can only weaken what an earlier attempt claimed.
 pub fn join_all(a: &[LoopInvariant], b: &[LoopInvariant]) -> Vec<LoopInvariant> {
     a.iter().zip(b.iter()).map(|(x, y)| x.join(y)).collect()
 }
 
-// How many times a componentwise join can strictly ascend: the lattice is flat, so each
-// component moves at most once, to Unknown.
 pub fn max_ascents(components: usize) -> usize {
     components
 }
@@ -123,9 +135,6 @@ pub fn invariant_of_registers(prev: &[RegisterValue], cur: &[RegisterValue]) -> 
         .collect()
 }
 
-// Flags are re-derived by the next comparison, so a flag that changed across the back
-// edge is widened rather than carried forward. None stays None: it is the unset error
-// state, not top, and widening it would hide an instruction that was never modelled.
 pub fn widen_flag(
     name: &str,
     prev: &Option<FlagValue>,
@@ -141,7 +150,6 @@ pub fn widen_flag(
     }
 }
 
-// Value after `counter` iterations of `step`, starting from `anchor`.
 pub fn advance(
     anchor: AbstractExpression,
     step: &AbstractExpression,
@@ -212,7 +220,25 @@ mod tests {
         );
     }
 
-    // The defect this classification exists to prevent.
+    #[test]
+    fn register_stepping_by_a_symbolic_amount_is_linear() {
+        let stride = AbstractExpression::Abstract("r".to_string());
+        let prev = RegisterValue::new(RegisterKind::RegisterBase, Some(base()), 0);
+        let cur = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression("-", base(), stride.clone())),
+            0,
+        );
+        assert_eq!(
+            invariant_of_register(&prev, &cur),
+            LoopInvariant::Linear(generate_expression(
+                "-",
+                AbstractExpression::Immediate(0),
+                stride
+            ))
+        );
+    }
+
     #[test]
     fn register_with_changed_base_is_unknown_not_fixed() {
         let prev = RegisterValue::new(RegisterKind::RegisterBase, Some(base()), 0);
@@ -224,7 +250,6 @@ mod tests {
         assert_eq!(invariant_of_register(&prev, &cur), LoopInvariant::Unknown);
     }
 
-    // An immediate counter carries its whole value in the offset.
     #[test]
     fn immediate_counter_is_linear() {
         let prev = RegisterValue::new_imm(2);
@@ -250,7 +275,6 @@ mod tests {
         assert!(LoopInvariant::Unknown.subsumes(&LoopInvariant::Unknown));
     }
 
-    // Fixed and Linear are different claims, so neither covers the other.
     #[test]
     fn precise_elements_only_subsume_themselves() {
         let four = LoopInvariant::Linear(AbstractExpression::Immediate(4));
@@ -262,7 +286,6 @@ mod tests {
         assert!(!LoopInvariant::Fixed.subsumes(&LoopInvariant::Unknown));
     }
 
-    // The lattice is flat, so any disagreement goes straight to Unknown.
     #[test]
     fn disagreement_joins_to_unknown() {
         let four = LoopInvariant::Linear(AbstractExpression::Immediate(4));
@@ -301,7 +324,6 @@ mod tests {
         );
     }
 
-    // Joining is idempotent, so a round that adds nothing leaves the vector unchanged.
     #[test]
     fn join_all_is_idempotent() {
         let a = [
@@ -311,7 +333,6 @@ mod tests {
         assert_eq!(join_all(&a, &a), a.to_vec());
     }
 
-    // Once a component is Unknown it cannot move again, which is what bounds the rounds.
     #[test]
     fn unknown_absorbs() {
         let a = [LoopInvariant::Unknown];
@@ -320,7 +341,6 @@ mod tests {
         assert_eq!(join_all(&b, &a), vec![LoopInvariant::Unknown]);
     }
 
-    // A vector can ascend at most once per component before it is all Unknown.
     #[test]
     fn ascending_every_component_takes_at_most_max_ascents_rounds() {
         let mut current = vec![LoopInvariant::Fixed; 4];
@@ -359,13 +379,11 @@ mod tests {
         assert_ne!(widened, flag("b"));
     }
 
-    // A flag first set inside the loop is not invariant just because it was unset before.
     #[test]
     fn newly_set_flag_is_widened() {
         assert_eq!(widen_flag("w", &None, &flag("a")), flag("w"));
     }
 
-    // None is the unset error state, not top, so widening must never produce or hide it.
     #[test]
     fn unset_flag_stays_unset() {
         assert_eq!(widen_flag("w", &None, &None), None);

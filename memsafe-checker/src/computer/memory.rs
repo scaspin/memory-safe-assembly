@@ -1,6 +1,5 @@
 use crate::computer::*;
 
-// Reads better than "base + -4" when the access is below its base.
 fn format_address(base: &AbstractExpression, offset: i64) -> String {
     if offset < 0 {
         format!("{base} - {}", -offset)
@@ -10,10 +9,6 @@ fn format_address(base: &AbstractExpression, offset: i64) -> String {
 }
 
 impl ARMCORTEXA {
-    /*
-     * t: register name to load into
-     * address: register with address as value
-     */
     pub fn load(
         &mut self,
         t: Operand,
@@ -130,10 +125,6 @@ impl ARMCORTEXA {
         }
     }
 
-    /*
-     * t: register to be stored
-     * address: where to store it
-     */
     pub fn store(
         &mut self,
         register: Operand,
@@ -250,7 +241,6 @@ impl ARMCORTEXA {
         }
     }
 
-    // SAFETY CHECKS
     fn mem_safe_access(
         &self,
         base_expr: AbstractExpression,
@@ -276,7 +266,10 @@ impl ARMCORTEXA {
                         ast::Int::new_const(regbase),
                     )
                 } else {
-                    todo!("no region or label declared for base {regbase}")
+                    return Err(MemorySafetyError::new(&format!(
+                        "{ty} of {width} bytes at {} has no declared region for base {regbase}",
+                        format_address(&base_expr, offset)
+                    )));
                 }
             }
             _ => {
@@ -285,7 +278,6 @@ impl ARMCORTEXA {
                 for r in self.memory.keys() {
                     if abstracts.contains(r) {
                         result = Some((
-                            // Keyed by the name just matched, so the lookup cannot miss.
                             self.memory.get(r).expect("region named by its own key"),
                             expression_to_ast(AbstractExpression::Abstract(r.to_string()))
                                 .expect("an abstract always translates"),
@@ -337,7 +329,6 @@ impl ARMCORTEXA {
             abs_offset = ast::Int::from_i64(offset.abs());
         }
         let access = ast::Int::add(&[&base_access, &abs_offset]);
-        // The access spans `width` bytes, so its last byte must also be in range.
         let last_byte = ast::Int::add(&[&access, &ast::Int::from_i64(width - 1)]);
 
         let lowerbound_value = ast::Int::from_i64(0);
@@ -346,8 +337,6 @@ impl ARMCORTEXA {
             .unwrap_or_else(|| panic!("no translation for region length {}", region.get_length()));
         let up_access = ast::Int::add(&[&base, &upperbound_value]);
         let l = access.lt(&low_access);
-        // Valid accesses lie in [base, base+length): an access landing exactly
-        // on base+length is one byte past the end of the region and unsafe.
         let u = last_byte.ge(&up_access);
 
         match (
@@ -355,7 +344,6 @@ impl ARMCORTEXA {
             self.solver.check_assumptions(std::slice::from_ref(&u)),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
-                // Both queries are vacuously unsat when the path itself has no model.
                 if self.solver.check() == SatResult::Sat {
                     log::info!(
                         "{ty} at {} proved in bounds",
