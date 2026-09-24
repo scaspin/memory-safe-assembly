@@ -2282,7 +2282,7 @@ impl ExecutionEngine {
             .ok_or_else(|| Error::other(format!("No label found: {:?}", base)))?;
         let parsed_offset = usize::from_str_radix(offset.trim_start_matches("0x"), 16)
             .expect("unable to parse label offset");
-        Ok(line + (parsed_offset / 4))
+        Ok(line + 1 + (parsed_offset / 4))
     }
 
     fn is_boolean_mask(&self, expr: &AbstractExpression) -> bool {
@@ -5160,6 +5160,14 @@ mod tests {
         let labels: Vec<(String, usize)> = engine.program.labels.clone();
         assert_eq!(labels.len(), 1);
         assert_eq!(labels[0], ("start".to_string(), 0));
+    }
+
+    #[test]
+    fn test_label_offset_counts_from_the_line_after_the_label() {
+        let asm = vec!["start:", "add x0, x1, x2", "add x0, x1, x2", "ret"];
+        let engine = ExecutionEngine::new(asm);
+        assert_eq!(engine.resolve_jump_target("start+0x0", 0).unwrap(), 1);
+        assert_eq!(engine.resolve_jump_target("start+0x4", 0).unwrap(), 2);
     }
 
     #[test]
