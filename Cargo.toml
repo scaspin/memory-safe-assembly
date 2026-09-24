@@ -3,7 +3,8 @@ members = [
   "bums_macros",
   "memsafe-checker",
   "crypto-playground",
-  "rav1d-playground"
+  "rav1d-playground",
+  "awslc-probe"
 ]
 exclude = ["scrape-asm"]
 resolver = "2"

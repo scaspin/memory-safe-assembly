@@ -1,0 +1,15 @@
+[package]
+name = "awslc-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Scratch crate used to check one `check_mem_safe` annotation at a time.
+# It never links, so the extern symbols do not need to resolve; only the
+# proc-macro's symbolic execution has to run.
+
+[dependencies]
+bums_macros = { path = "../bums_macros" }
+
+[build-dependencies]
+cc = "1.0.90"

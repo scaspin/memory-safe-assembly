@@ -106,6 +106,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "awslc-probe"
+version = "0.1.0"
+dependencies = [
+ "bums_macros",
+ "cc",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.69.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -154,6 +162,7 @@ name = "bums_macros"
 version = "0.1.0"
 dependencies = [
  "bums",
+ "env_logger",
  "proc-macro-error",
  "proc-macro2",
  "quote",
