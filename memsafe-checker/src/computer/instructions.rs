@@ -1433,11 +1433,34 @@ impl ARMCORTEXA {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
-                    if let Some(Operand::Memory(prefix, num, _, _, _)) = reg_iter.next() {
+                    if let Some(Operand::Memory(prefix, num, offset, reg_offset, index)) =
+                        reg_iter.next()
+                    {
                         let a = self.get_register(&Operand::Register(prefix.clone(), *num));
 
-                        if let Err(e) = self.load_vector(dst.clone(), a, 16) {
+                        if let Err(e) = self.load_vector(dst.clone(), a.clone(), 16) {
                             return Err(e.to_string());
+                        }
+
+                        if *index == Some(true)
+                            && let Some(off) = offset
+                        {
+                            self.set_register(
+                                &Operand::Register(prefix.clone(), *num),
+                                a.kind.clone(),
+                                a.base.clone(),
+                                a.offset + off,
+                            );
+                        }
+
+                        if let Some(step) = reg_offset {
+                            let step = self.get_register(step);
+                            self.set_register(
+                                &Operand::Register(prefix.clone(), *num),
+                                a.kind,
+                                generate_expression_from_options("+", a.base, step.base),
+                                a.offset + step.offset,
+                            );
                         }
                     }
                 }
@@ -1452,7 +1475,7 @@ impl ARMCORTEXA {
                         }
                     }
 
-                    if let Some(Operand::Memory(prefix, num, offset, _, index)) = addr {
+                    if let Some(Operand::Memory(prefix, num, offset, reg_offset, index)) = addr {
                         let a = self.get_register(&Operand::Register(prefix.clone(), *num));
                         let mut address = a.clone();
                         for d in &destinations {
@@ -1468,9 +1491,19 @@ impl ARMCORTEXA {
                         {
                             self.set_register(
                                 &Operand::Register(prefix.clone(), *num),
-                                a.kind,
-                                a.base,
+                                a.kind.clone(),
+                                a.base.clone(),
                                 a.offset + off,
+                            );
+                        }
+
+                        if let Some(step) = reg_offset {
+                            let step = self.get_register(step);
+                            self.set_register(
+                                &Operand::Register(prefix.clone(), *num),
+                                a.kind,
+                                generate_expression_from_options("+", a.base, step.base),
+                                a.offset + step.offset,
                             );
                         }
                     } else {

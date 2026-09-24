@@ -1278,7 +1278,6 @@ fn select_stride_loop(stride: i64, body: &[&str]) -> Vec<String> {
 }
 
 #[test]
-#[ignore = "the two-valued step cannot be settled, so the summary is declined and the loop unrolls; aes_hw_cbc_encrypt fails this way"]
 fn a_two_valued_select_stride_is_proved_safe() {
     assert_eq!(
         analyze_accelerated(select_stride_loop(8, &["ldr x2,[x0]"]), 8, 8),
@@ -1308,4 +1307,37 @@ fn a_two_valued_select_stride_still_catches_a_write_ahead() {
 #[test]
 fn a_two_valued_select_stride_proves_nothing_unbounded() {
     assert!(analyze(select_stride_loop(8, &["ldr x2,[x0]"])).is_err());
+}
+
+fn chained_select_stride_loop(stride: i64, body: &[&str]) -> Vec<String> {
+    let mut program = vec![
+        "start:".to_string(),
+        format!("mov x4,#{stride}"),
+        "loop:".to_string(),
+    ];
+    program.extend(body.iter().map(|s| s.to_string()));
+    program.push(format!("subs x1,x1,#{stride}"));
+    program.push("csel x4,xzr,x4,eq".to_string());
+    program.push("add x0,x0,x4".to_string());
+    program.push("b.hs loop".to_string());
+    program.push("ret".to_string());
+    program
+}
+
+#[test]
+#[ignore = "the chained select's reachable values are not recovered, so the step stays symbolic; aes_hw_cbc_encrypt fails this way"]
+fn a_chained_select_stride_is_proved_safe() {
+    assert_eq!(
+        analyze_accelerated(chained_select_stride_loop(8, &["ldr x2,[x0]"]), 8, 8),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_chained_select_stride_still_catches_a_read_ahead() {
+    assert_rejected_access(analyze_accelerated(
+        chained_select_stride_loop(8, &["ldr x2,[x0,#8]"]),
+        8,
+        8,
+    ));
 }

@@ -52,12 +52,28 @@ impl LoopCounter {
 pub enum LoopInvariant {
     Fixed,
     Linear(AbstractExpression),
+    AtMost(i64),
     Unknown,
 }
 
 impl LoopInvariant {
+    fn reach(&self) -> Option<i64> {
+        match self {
+            LoopInvariant::Fixed => Some(0),
+            LoopInvariant::Linear(AbstractExpression::Immediate(step)) => Some(*step),
+            LoopInvariant::AtMost(bound) => Some(*bound),
+            _ => None,
+        }
+    }
+
     pub fn subsumes(&self, other: &LoopInvariant) -> bool {
-        matches!(self, LoopInvariant::Unknown) || self == other
+        if matches!(self, LoopInvariant::Unknown) || self == other {
+            return true;
+        }
+        match (self, other.reach()) {
+            (LoopInvariant::AtMost(bound), Some(step)) => (0..=*bound).contains(&step),
+            _ => false,
+        }
     }
 
     pub fn join(&self, other: &LoopInvariant) -> LoopInvariant {

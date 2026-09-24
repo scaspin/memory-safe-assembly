@@ -1,10 +1,4 @@
 #![allow(dead_code, non_snake_case, unused_imports)]
 
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
-fn aes_hw_cbc_encrypt(
-    input: &[u8],
-    output: &mut [u8],
-    keys: &([u32; 60], u32),
-    ivec: &mut [u8; 16],
-    enc: i64,
-);
+#[bums_macros::check_mem_safe("sha512-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 128, [input.len() >= 128, input.len() % 128 == 0])]
+fn sha512_block_data_order(context: &mut [u64; 8], input: &[u8]);

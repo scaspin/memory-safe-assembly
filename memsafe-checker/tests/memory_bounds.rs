@@ -1,4 +1,3 @@
-// Pins the byte extent of a memory region and the width of an access.
 
 use bums::common::*;
 
@@ -6,7 +5,6 @@ fn init() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-// Single byte access, so the extent is measured without the access width.
 fn accepts_byte_at(length: AbstractExpression, offset: i64) -> bool {
     accepts(length, &format!("ldrb w2,[x0,#{offset}]"), None)
 }
@@ -46,7 +44,6 @@ fn immediate_region_length_is_in_bytes() {
     }
 }
 
-// An abstract length is used directly, so its unit really is bytes.
 #[test]
 fn abstract_region_length_is_in_bytes() {
     let length = AbstractExpression::Abstract("length".to_string());
@@ -63,7 +60,6 @@ fn negative_offset_is_rejected() {
     assert!(!accepts_byte_at(AbstractExpression::Immediate(64), -1));
 }
 
-// An access is checked across every byte it touches, not just its first.
 #[test]
 fn access_width_past_the_end_is_caught() {
     let region = AbstractExpression::Immediate(64);
@@ -73,7 +69,6 @@ fn access_width_past_the_end_is_caught() {
     assert!(!accepts(region.clone(), "ldrh w2,[x0,#63]", None));
     assert!(!accepts(region.clone(), "strh w2,[x0,#63]", None));
     assert!(accepts(region.clone(), "ldrh w2,[x0,#62]", None));
-    // The widest access that still fits, and the narrowest that does not.
     assert!(accepts(region.clone(), "ldr x2,[x0,#56]", None));
     assert!(!accepts(region.clone(), "ldr x2,[x0,#57]", None));
     assert!(accepts(region.clone(), "ldr w2,[x0,#60]", None));
@@ -81,8 +76,6 @@ fn access_width_past_the_end_is_caught() {
     assert!(accepts(region, "ldrb w2,[x0,#63]", None));
 }
 
-// A bounded abstract stays symbolic through a shift, so the address it forms is a range
-// the solver can place rather than a value it has to give up on.
 fn accepts_shifted_index(region: i64, least: i64, greatest: i64, extra: i64) -> bool {
     init();
     let program = vec![
@@ -111,16 +104,11 @@ fn accepts_shifted_index(region: i64, least: i64, greatest: i64, extra: i64) -> 
 
 #[test]
 fn a_bounded_index_shifted_left_stays_a_bounded_address() {
-    // rounds in [10, 14] puts base + (rounds << 4) in [160, 224], and the eight bytes
-    // read at +8 reach 232 at worst.
     assert!(accepts_shifted_index(244, 10, 14, 8));
-    // One more round reaches 248, past the region.
     assert!(!accepts_shifted_index(244, 10, 15, 8));
-    // Without an upper bound there is no range to place at all.
     assert!(!accepts_shifted_index(244, 10, i64::MAX, 8));
 }
 
-// A pair is modelled as two accesses, so its second half is checked.
 #[test]
 fn pair_access_checks_its_second_half() {
     assert!(!accepts(
@@ -128,4 +116,36 @@ fn pair_access_checks_its_second_half() {
         "ldp x2,x3,[x0,#56]",
         None
     ));
+}
+
+fn x0_offset_after(access: &str) -> i64 {
+    init();
+    let program = vec!["start:".to_string(), access.to_string(), "ret".to_string()];
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::RW,
+        "base".to_string(),
+        AbstractExpression::Immediate(256),
+    );
+    engine.start("start".to_string()).expect("runs");
+    engine.get_register_output(0).offset
+}
+
+#[test]
+fn ld1r_post_index_advances_the_pointer() {
+    assert_eq!(x0_offset_after("ld1r {v26.2d},[x0],#8"), 8);
+}
+
+#[test]
+fn ld4r_post_index_advances_the_pointer() {
+    assert_eq!(
+        x0_offset_after("ld4r {v0.4s,v1.4s,v2.4s,v3.4s},[x0],#16"),
+        16
+    );
+}
+
+#[test]
+fn ld1r_without_writeback_leaves_the_pointer() {
+    assert_eq!(x0_offset_after("ld1r {v26.2d},[x0]"), 0);
 }

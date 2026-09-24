@@ -9,6 +9,7 @@ const MAX_JUMP_HISTORY: usize = 30;
 const MIN_REVISITS_PER_BRANCH: usize = 20;
 const MAX_SPLIT_VALUES: usize = 4;
 const MAX_SUMMARY_TRIES: usize = 3;
+const MAX_SELECT_CHAIN: usize = 16;
 const SUMMARY_ITERATION: i64 = 3;
 use z3::ast::Ast;
 use z3::*;
@@ -492,6 +493,7 @@ fn summarize(
     let name = counter.name().to_string();
 
     let mut updates = Vec::new();
+    let mut progress_facts: Vec<AbstractComparison> = Vec::new();
 
     for (i, (invariant, cur)) in invariants.iter().cloned().zip(current.0.iter()).enumerate() {
         match invariant {
@@ -531,6 +533,33 @@ fn summarize(
                 };
                 updates.push((i, register));
             }
+            LoopInvariant::AtMost(bound) => {
+                let progress = AbstractExpression::Abstract(format!("{name}_progress_{i}"));
+                let rounds = generate_expression(
+                    "-",
+                    counter.expression(),
+                    AbstractExpression::Immediate(SUMMARY_ITERATION),
+                );
+                let span = generate_expression("*", AbstractExpression::Immediate(bound), rounds);
+                progress_facts.push(AbstractComparison::new(
+                    ">=",
+                    progress.clone(),
+                    AbstractExpression::Immediate(0),
+                ));
+                progress_facts.push(AbstractComparison::new(">=", span, progress.clone()));
+                updates.push((
+                    i,
+                    RegisterValue {
+                        kind: if cur.base.is_some() {
+                            cur.kind.clone()
+                        } else {
+                            RegisterKind::RegisterBase
+                        },
+                        base: Some(generate_expression("+", value_of(cur), progress)),
+                        offset: 0,
+                    },
+                ));
+            }
             LoopInvariant::Unknown => {
                 updates.push((i, RegisterValue::new_empty(&format!("{name}_widened_{i}"))));
             }
@@ -561,6 +590,7 @@ fn summarize(
         counter.expression(),
         AbstractExpression::Immediate(SUMMARY_ITERATION - 1),
     )];
+    facts.extend(progress_facts);
 
     let index_of = |r: &RegisterValue| -> Option<usize> {
         current
@@ -1778,6 +1808,24 @@ impl ExecutionEngine {
         (self.computer.solver.check_assumptions(&assuming) == SatResult::Unsat).then_some(value)
     }
 
+    fn select_bound(&self, name: &str, fuel: usize) -> Option<i64> {
+        let (_, taken, skipped) = self.computer.select_definitions.get(name)?;
+        let reach = |e: &AbstractExpression| match e {
+            AbstractExpression::Immediate(value) => Some(*value),
+            AbstractExpression::Abstract(inner) if fuel > 0 => self.select_bound(inner, fuel - 1),
+            _ => None,
+        };
+        let (taken, skipped) = (reach(taken)?, reach(skipped)?);
+        (taken >= 0 && skipped >= 0).then(|| taken.max(skipped))
+    }
+
+    fn bounded_step(&self, step: &AbstractExpression) -> Option<i64> {
+        let AbstractExpression::Abstract(name) = step else {
+            return None;
+        };
+        self.select_bound(name, MAX_SELECT_CHAIN).filter(|b| *b > 0)
+    }
+
     fn pin_steps(&self, invariants: &[LoopInvariant]) -> Vec<LoopInvariant> {
         invariants
             .iter()
@@ -1785,10 +1833,12 @@ impl ExecutionEngine {
                 LoopInvariant::Linear(step)
                     if !matches!(step, AbstractExpression::Immediate(_)) =>
                 {
-                    self.pinned_value(step).map_or_else(
-                        || invariant.clone(),
-                        |v| LoopInvariant::Linear(AbstractExpression::Immediate(v)),
-                    )
+                    if let Some(value) = self.pinned_value(step) {
+                        LoopInvariant::Linear(AbstractExpression::Immediate(value))
+                    } else {
+                        self.bounded_step(step)
+                            .map_or_else(|| invariant.clone(), LoopInvariant::AtMost)
+                    }
                 }
                 other => other.clone(),
             })
