@@ -1325,7 +1325,6 @@ fn chained_select_stride_loop(stride: i64, body: &[&str]) -> Vec<String> {
 }
 
 #[test]
-#[ignore = "the chained select's reachable values are not recovered, so the step stays symbolic; aes_hw_cbc_encrypt fails this way"]
 fn a_chained_select_stride_is_proved_safe() {
     assert_eq!(
         analyze_accelerated(chained_select_stride_loop(8, &["ldr x2,[x0]"]), 8, 8),
@@ -1340,4 +1339,56 @@ fn a_chained_select_stride_still_catches_a_read_ahead() {
         8,
         8,
     ));
+}
+
+fn shared_header_loop(reenter_on: &str) -> Vec<String> {
+    [
+        "start:",
+        "mov x3,#2",
+        "loop:",
+        "subs x3,x3,#1",
+        "b.gt loop",
+        "ldr x2,[x0]",
+        "add x0,x0,#8",
+        "mov x3,#2",
+        "subs x1,x1,#8",
+        "b.hi loop",
+        "cmp x1,#0",
+        reenter_on,
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+#[test]
+fn an_outer_loop_sharing_its_header_with_a_round_loop_is_proved_safe() {
+    assert_eq!(
+        analyze_accelerated(shared_header_loop("b.lt loop"), 8, 8),
+        Ok(())
+    );
+}
+
+#[test]
+fn reentering_a_shared_header_loop_past_the_end_is_rejected() {
+    assert_rejected_access(analyze_accelerated(shared_header_loop("b.eq loop"), 8, 8));
+}
+
+#[test]
+fn a_select_latch_that_grows_is_not_given_a_range() {
+    let program = [
+        "start:",
+        "mov x4,#8",
+        "loop:",
+        "ldr x2,[x0]",
+        "subs x1,x1,#8",
+        "add x5,x4,x4",
+        "csel x4,xzr,x5,eq",
+        "add x0,x0,x4",
+        "b.hs loop",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    assert!(analyze_accelerated(program, 8, 8).is_err());
 }

@@ -53,6 +53,7 @@ pub enum LoopInvariant {
     Fixed,
     Linear(AbstractExpression),
     AtMost(i64),
+    Within(i64),
     Unknown,
 }
 
@@ -70,8 +71,12 @@ impl LoopInvariant {
         if matches!(self, LoopInvariant::Unknown) || self == other {
             return true;
         }
-        match (self, other.reach()) {
-            (LoopInvariant::AtMost(bound), Some(step)) => (0..=*bound).contains(&step),
+        match (self, other) {
+            (LoopInvariant::Within(bound), LoopInvariant::Within(seen)) => seen <= bound,
+            (LoopInvariant::Within(_), LoopInvariant::Fixed) => true,
+            (LoopInvariant::AtMost(bound), _) => other
+                .reach()
+                .is_some_and(|step| (0..=*bound).contains(&step)),
             _ => false,
         }
     }

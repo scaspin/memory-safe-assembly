@@ -80,6 +80,7 @@ struct Summary {
     facts: Vec<AbstractComparison>,
     exit_facts: Vec<AbstractComparison>,
     exits: Vec<(usize, bool)>,
+    ranges: Vec<(String, i64)>,
 }
 
 impl Summary {
@@ -494,6 +495,7 @@ fn summarize(
 
     let mut updates = Vec::new();
     let mut progress_facts: Vec<AbstractComparison> = Vec::new();
+    let mut ranges = Vec::new();
 
     for (i, (invariant, cur)) in invariants.iter().cloned().zip(current.0.iter()).enumerate() {
         match invariant {
@@ -556,6 +558,29 @@ fn summarize(
                             RegisterKind::RegisterBase
                         },
                         base: Some(generate_expression("+", value_of(cur), progress)),
+                        offset: 0,
+                    },
+                ));
+            }
+            LoopInvariant::Within(bound) => {
+                let symbol = format!("{name}_within_{i}");
+                let value = AbstractExpression::Abstract(symbol.clone());
+                progress_facts.push(AbstractComparison::new(
+                    ">=",
+                    value.clone(),
+                    AbstractExpression::Immediate(0),
+                ));
+                progress_facts.push(AbstractComparison::new(
+                    "<=",
+                    value.clone(),
+                    AbstractExpression::Immediate(bound),
+                ));
+                ranges.push((symbol, bound));
+                updates.push((
+                    i,
+                    RegisterValue {
+                        kind: RegisterKind::RegisterBase,
+                        base: Some(value),
                         offset: 0,
                     },
                 ));
@@ -666,6 +691,7 @@ fn summarize(
         facts,
         exit_facts,
         exits,
+        ranges,
     }
 }
 
@@ -718,6 +744,7 @@ pub struct ExecutionEngine {
     loop_attempts: HashMap<usize, LoopAttempt>,
     jump_history: Vec<JumpRecord>,
     select_history: Vec<usize>,
+    value_ranges: HashMap<String, i64>,
     fail_fast: bool,
     summaries: Rc<RefCell<Vec<Summary>>>,
     failed_summaries: Rc<RefCell<HashMap<usize, usize>>>,
@@ -832,6 +859,7 @@ impl ExecutionEngine {
             computer,
             jump_history: Vec::new(),
             select_history: Vec::new(),
+            value_ranges: HashMap::new(),
             active_loops: Vec::new(),
             fail_fast: true,
             summaries: Rc::new(RefCell::new(Vec::new())),
@@ -1636,20 +1664,17 @@ impl ExecutionEngine {
             log::info!("loop at line {pc} failed {MAX_SUMMARY_TRIES} summaries, unrolling");
             return None;
         }
-        if let Some((source, header, _)) =
+        if let Some((source, header, walked)) =
             self.cycle_back_edge(pc, branch_decision, &history[index + 1..])
             && let Some(successors) = self.static_successors(pc)
             && let [target, fallthrough] = successors.as_slice()
-            && self.stays_in_loop(
-                if branch_decision {
-                    *fallthrough
-                } else {
-                    *target
-                },
-                header,
-                source,
-                pc != source,
-            )
+            && let other = if branch_decision {
+                *fallthrough
+            } else {
+                *target
+            }
+            && self.stays_in_loop(other, header, source, pc != source)
+            && !self.can_leave_cycle(other, &walked)
         {
             log::info!("line {pc} branches inside a loop body, not summarized there");
             return None;
@@ -1724,7 +1749,11 @@ impl ExecutionEngine {
             self.enclosing_label(pc),
             expression,
             branch_decision,
-            self.pin_steps(&attempt.invariants),
+            self.bound_values(
+                &self.pin_steps(&attempt.invariants),
+                &entry_state.0,
+                &current_state.0,
+            ),
             (
                 &entry_state,
                 &current_state,
@@ -1739,7 +1768,7 @@ impl ExecutionEngine {
         for fact in &summary.facts {
             log::info!("{id} fact: {fact}");
         }
-        for (i, inv) in attempt.invariants.iter().enumerate() {
+        for (i, inv) in summary.invariants.iter().enumerate() {
             if !matches!(inv, LoopInvariant::Fixed) {
                 log::info!(
                     "{id} x{i} invariant: {inv:?} prev={:?} cur={:?}",
@@ -1765,6 +1794,7 @@ impl ExecutionEngine {
         for (i, new_reg) in summary.updates.iter().cloned() {
             self.computer.registers[i] = new_reg;
         }
+        self.value_ranges.extend(summary.ranges.iter().cloned());
         self.computer.set_flags(summary.flags.clone());
         let invariants = summary.invariants.clone();
         let exit_facts = summary.exit_facts.clone();
@@ -1809,6 +1839,9 @@ impl ExecutionEngine {
     }
 
     fn select_bound(&self, name: &str, fuel: usize) -> Option<i64> {
+        if let Some(bound) = self.value_ranges.get(name) {
+            return Some(*bound);
+        }
         let (_, taken, skipped) = self.computer.select_definitions.get(name)?;
         let reach = |e: &AbstractExpression| match e {
             AbstractExpression::Immediate(value) => Some(*value),
@@ -1817,6 +1850,40 @@ impl ExecutionEngine {
         };
         let (taken, skipped) = (reach(taken)?, reach(skipped)?);
         (taken >= 0 && skipped >= 0).then(|| taken.max(skipped))
+    }
+
+    fn value_bound(&self, register: &RegisterValue) -> Option<i64> {
+        match value_of(register) {
+            AbstractExpression::Immediate(value) => (value >= 0).then_some(value),
+            AbstractExpression::Abstract(name) => self.select_bound(&name, MAX_SELECT_CHAIN),
+            _ => None,
+        }
+    }
+
+    fn bound_values(
+        &self,
+        invariants: &[LoopInvariant],
+        entry: &[RegisterValue],
+        current: &[RegisterValue],
+    ) -> Vec<LoopInvariant> {
+        invariants
+            .iter()
+            .zip(entry.iter().zip(current.iter()))
+            .map(|(invariant, (before, after))| match invariant {
+                LoopInvariant::Unknown
+                    if before.kind != RegisterKind::Number
+                        && after.kind != RegisterKind::Number
+                        && !self.carries_region(after) =>
+                {
+                    self.value_bound(before)
+                        .zip(self.value_bound(after))
+                        .map_or(LoopInvariant::Unknown, |(was, is)| {
+                            LoopInvariant::Within(was.max(is))
+                        })
+                }
+                other => other.clone(),
+            })
+            .collect()
     }
 
     fn bounded_step(&self, step: &AbstractExpression) -> Option<i64> {
@@ -1935,6 +2002,22 @@ impl ExecutionEngine {
                     return true;
                 }
                 pending.push(next);
+            }
+        }
+        false
+    }
+
+    fn can_leave_cycle(&self, from: usize, walked: &HashSet<usize>) -> bool {
+        let mut seen = HashSet::new();
+        let mut pending = vec![from];
+        while let Some(pc) = pending.pop() {
+            if walked.contains(&pc) || !seen.insert(pc) {
+                continue;
+            }
+            match self.static_successors(pc) {
+                Some(successors) if successors.is_empty() => return true,
+                Some(successors) => pending.extend(successors),
+                None => (),
             }
         }
         false
@@ -2427,6 +2510,7 @@ impl ExecutionEngine {
         self.assume_staying(&expression, active.entry_decision);
         self.pin_unknown_steps(&mut observed, &active.state.0, &current.0, &expression);
         self.computer.solver.pop(1);
+        let observed = self.bound_values(&observed, &active.state.0, &current.0);
         let holds = active
             .invariants
             .iter()
