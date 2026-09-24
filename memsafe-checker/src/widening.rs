@@ -2,7 +2,7 @@
 use crate::common::*;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LoopId(usize);
 
 impl LoopId {
@@ -37,6 +37,14 @@ impl LoopCounter {
 
     pub fn expression(&self) -> AbstractExpression {
         AbstractExpression::Abstract(self.name.clone())
+    }
+
+    pub fn total(&self) -> AbstractExpression {
+        AbstractExpression::Abstract(format!("{}_trips", self.name))
+    }
+
+    pub fn total_for(&self, exit: usize) -> AbstractExpression {
+        AbstractExpression::Abstract(format!("{}_trips{exit}", self.name))
     }
 }
 
@@ -104,10 +112,34 @@ fn symbolic_step(
             _ => None,
         };
     }
+    if let (
+        AbstractExpression::Expression(prev_op, prev_left, prev_right),
+        AbstractExpression::Expression(cur_op, cur_left, cur_right),
+    ) = (prev, cur)
+        && prev_op == cur_op
+    {
+        if prev_right == cur_right && (prev_op == "+" || prev_op == "-") {
+            return symbolic_step(prev_left, cur_left);
+        }
+        if prev_left == cur_left && prev_op == "+" {
+            return symbolic_step(prev_right, cur_right);
+        }
+        if prev_left == cur_left && prev_op == "-" {
+            return symbolic_step(prev_right, cur_right)
+                .map(|step| generate_expression("-", AbstractExpression::Immediate(0), step));
+        }
+    }
     None
 }
 
 pub fn invariant_of_register(prev: &RegisterValue, cur: &RegisterValue) -> LoopInvariant {
+    if prev.kind == RegisterKind::Number || cur.kind == RegisterKind::Number {
+        return if prev == cur {
+            LoopInvariant::Fixed
+        } else {
+            LoopInvariant::Unknown
+        };
+    }
     if prev.base != cur.base {
         if prev.offset == cur.offset
             && let (Some(p), Some(c)) = (&prev.base, &cur.base)
@@ -130,6 +162,31 @@ pub fn join_all(a: &[LoopInvariant], b: &[LoopInvariant]) -> Vec<LoopInvariant> 
 
 pub fn max_ascents(components: usize) -> usize {
     components
+}
+
+pub fn drift_of_registers(prev: &[RegisterValue], cur: &[RegisterValue]) -> Vec<LoopInvariant> {
+    prev.iter()
+        .zip(cur.iter())
+        .map(|(p, c)| match invariant_of_register(p, c) {
+            LoopInvariant::Unknown
+                if p.kind != RegisterKind::Number && c.kind != RegisterKind::Number =>
+            {
+                match (&p.base, &c.base) {
+                    (Some(before), Some(after)) => symbolic_step(before, after)
+                        .zip(c.offset.checked_sub(p.offset))
+                        .map_or(LoopInvariant::Unknown, |(step, moved)| {
+                            LoopInvariant::Linear(generate_expression(
+                                "+",
+                                step,
+                                AbstractExpression::Immediate(moved),
+                            ))
+                        }),
+                    _ => LoopInvariant::Unknown,
+                }
+            }
+            other => other,
+        })
+        .collect()
 }
 
 pub fn invariant_of_registers(prev: &[RegisterValue], cur: &[RegisterValue]) -> Vec<LoopInvariant> {
@@ -193,6 +250,25 @@ mod tests {
     }
 
     #[test]
+    fn a_gap_below_an_advancing_pointer_steps_backwards() {
+        let end = AbstractExpression::Abstract("end".to_string());
+        let walker = generate_expression("+", base(), AbstractExpression::Immediate(32));
+        let gap = |walked: AbstractExpression| RegisterValue {
+            kind: RegisterKind::RegisterBase,
+            base: Some(generate_expression("-", end.clone(), walked)),
+            offset: 0,
+        };
+        assert_eq!(
+            invariant_of_register(&gap(base()), &gap(walker)),
+            LoopInvariant::Linear(generate_expression(
+                "-",
+                AbstractExpression::Immediate(0),
+                AbstractExpression::Immediate(32)
+            ))
+        );
+    }
+
+    #[test]
     fn zero_step_normalises_to_fixed() {
         let cur = generate_expression("+", base(), AbstractExpression::Immediate(0));
         assert_eq!(invariant_of(&base(), &cur), LoopInvariant::Fixed);
@@ -240,6 +316,94 @@ mod tests {
                 AbstractExpression::Immediate(0),
                 stride
             ))
+        );
+    }
+
+    #[test]
+    fn a_step_absorbed_beside_the_counter_term_is_linear() {
+        let r = AbstractExpression::Abstract("r".to_string());
+        let len = AbstractExpression::Abstract("inp_len".to_string());
+        let stride = generate_expression("-", AbstractExpression::Immediate(0), r.clone());
+        let walked = generate_expression("*", counter().expression(), stride.clone());
+        let before = generate_expression("-", generate_expression("-", len, r.clone()), r.clone());
+        let after = generate_expression("-", before.clone(), r);
+        let prev = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression("+", before, walked.clone())),
+            0,
+        );
+        let cur = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression("+", after, walked)),
+            0,
+        );
+        assert_eq!(
+            invariant_of_register(&prev, &cur),
+            LoopInvariant::Linear(stride)
+        );
+    }
+
+    #[test]
+    fn a_round_moving_both_base_and_offset_drifts_linearly() {
+        let out = AbstractExpression::Abstract("out".to_string());
+        let lanes = generate_expression(
+            "*",
+            AbstractExpression::Abstract("lanes".to_string()),
+            AbstractExpression::Immediate(8),
+        );
+        let prev = RegisterValue::new(RegisterKind::RegisterBase, Some(out.clone()), 8);
+        let cur = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression("+", out, lanes.clone())),
+            -16,
+        );
+        assert_eq!(invariant_of_register(&prev, &cur), LoopInvariant::Unknown);
+        assert_eq!(
+            drift_of_registers(&[prev], &[cur]),
+            vec![LoopInvariant::Linear(generate_expression(
+                "+",
+                lanes,
+                AbstractExpression::Immediate(-24)
+            ))]
+        );
+    }
+
+    #[test]
+    fn a_different_counter_term_is_not_mistaken_for_a_step() {
+        let r = AbstractExpression::Abstract("r".to_string());
+        let len = AbstractExpression::Abstract("inp_len".to_string());
+        let prev = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression(
+                "+",
+                len.clone(),
+                generate_expression("*", counter().expression(), r.clone()),
+            )),
+            0,
+        );
+        let cur = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression(
+                "+",
+                generate_expression("-", len, r.clone()),
+                generate_expression("*", counter().expression(), base()),
+            )),
+            0,
+        );
+        assert_eq!(invariant_of_register(&prev, &cur), LoopInvariant::Unknown);
+    }
+
+    #[test]
+    fn unknown_data_never_gets_a_linear_step() {
+        let before = RegisterValue::new(RegisterKind::Number, None, 0);
+        let after = RegisterValue::new(RegisterKind::Number, None, -9223372036854742903);
+        assert_eq!(
+            invariant_of_register(&before, &after),
+            LoopInvariant::Unknown
+        );
+        assert_eq!(
+            invariant_of_register(&before, &before),
+            LoopInvariant::Fixed
         );
     }
 

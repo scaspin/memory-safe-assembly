@@ -168,7 +168,7 @@ fn vpaes_set_encrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> b
 #[bums_macros::check_mem_safe("vpaes-armv8.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
 fn vpaes_set_decrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
 fn vpaes_cbc_encrypt(
     input: &[u8],
     output: &mut [u8],
@@ -177,7 +177,7 @@ fn vpaes_cbc_encrypt(
     enc: i64,
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1%2==0,input.len()>=16, input.len()%16==0, input.len() == output.len()])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1,input.len()>=16, input.len()%16==0, input.len() == output.len()])]
 fn vpaes_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
@@ -185,10 +185,10 @@ fn vpaes_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1])]
 fn vpaes_decrypt(input: &[u8; 16], output: &mut [u8; 16], keys: &([u32; 60], u32));
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14,keys.1%2==0, input.len()>= 16,input.len() == output.len()])]
+#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len()>= 16,input.len() == output.len()])]
 fn vpaes_encrypt(input: &[u8], output: &mut [u8], keys: &([u32; 60], u32));
 
 #[allow(non_snake_case)]

@@ -304,11 +304,134 @@ pub fn abstract_of(name: impl Into<String>) -> AbstractExpression {
     AbstractExpression::Abstract(name.into())
 }
 
+const MAX_CANCELLATION_NODES: usize = 256;
+
+fn additive_terms(
+    e: AbstractExpression,
+    negated: bool,
+    out: &mut Vec<(bool, AbstractExpression)>,
+    flipped: &mut bool,
+) {
+    match e {
+        AbstractExpression::Expression(ref op, a, b) if op == "+" => {
+            additive_terms(*a, negated, out, flipped);
+            additive_terms(*b, negated, out, flipped);
+        }
+        AbstractExpression::Expression(ref op, a, b) if op == "-" => {
+            additive_terms(*a, negated, out, flipped);
+            additive_terms(*b, !negated, out, flipped);
+        }
+        leaf => {
+            let term = with_positive_factor(negated, leaf);
+            *flipped |= term.0 != negated;
+            out.push(term);
+        }
+    }
+}
+
+fn with_positive_factor(negated: bool, leaf: AbstractExpression) -> (bool, AbstractExpression) {
+    if let AbstractExpression::Expression(ref op, ref a, ref b) = leaf
+        && op == "*"
+    {
+        if let AbstractExpression::Immediate(k) = **b
+            && k < 0
+        {
+            return (
+                !negated,
+                AbstractExpression::Expression(
+                    "*".to_string(),
+                    a.clone(),
+                    Box::new(AbstractExpression::Immediate(-k)),
+                ),
+            );
+        }
+        if let AbstractExpression::Immediate(k) = **a
+            && k < 0
+        {
+            return (
+                !negated,
+                AbstractExpression::Expression(
+                    "*".to_string(),
+                    Box::new(AbstractExpression::Immediate(-k)),
+                    b.clone(),
+                ),
+            );
+        }
+    }
+    (negated, leaf)
+}
+
+fn rebuild_sum(kept: Vec<(bool, AbstractExpression)>, constant: i64) -> AbstractExpression {
+    let mut result: Option<AbstractExpression> = None;
+    for (negated, term) in kept {
+        result = Some(match result {
+            None if negated => AbstractExpression::Expression(
+                "-".to_string(),
+                Box::new(AbstractExpression::Immediate(0)),
+                Box::new(term),
+            ),
+            None => term,
+            Some(acc) => AbstractExpression::Expression(
+                if negated { "-" } else { "+" }.to_string(),
+                Box::new(acc),
+                Box::new(term),
+            ),
+        });
+    }
+    match (result, constant) {
+        (None, c) => AbstractExpression::Immediate(c),
+        (Some(e), 0) => e,
+        (Some(e), c) => AbstractExpression::Expression(
+            if c > 0 { "+" } else { "-" }.to_string(),
+            Box::new(e),
+            Box::new(AbstractExpression::Immediate(c.abs())),
+        ),
+    }
+}
+
 pub fn generate_expression(
     op: &str,
     a: AbstractExpression,
     b: AbstractExpression,
 ) -> AbstractExpression {
+    if matches!(op, "+" | "-") && b == AbstractExpression::Immediate(0) {
+        return a;
+    }
+    if op == "+" && a == AbstractExpression::Immediate(0) {
+        return b;
+    }
+    if matches!(op, "+" | "-") && a.size() + b.size() <= MAX_CANCELLATION_NODES {
+        let mut terms = Vec::new();
+        let mut flipped = false;
+        additive_terms(a.clone(), false, &mut terms, &mut flipped);
+        additive_terms(b.clone(), op == "-", &mut terms, &mut flipped);
+
+        let mut constant: i64 = 0;
+        let mut immediates = 0;
+        let mut kept: Vec<(bool, AbstractExpression)> = Vec::new();
+        let mut cancelled = false;
+        for (negated, term) in terms {
+            if let AbstractExpression::Immediate(v) = term {
+                immediates += 1;
+                constant = if negated {
+                    constant.saturating_sub(v)
+                } else {
+                    constant.saturating_add(v)
+                };
+                continue;
+            }
+            match kept.iter().position(|(n, k)| *n != negated && *k == term) {
+                Some(pos) => {
+                    kept.remove(pos);
+                    cancelled = true;
+                }
+                None => kept.push((negated, term)),
+            }
+        }
+        if cancelled || flipped || immediates > 1 {
+            return rebuild_sum(kept, constant);
+        }
+    }
     AbstractExpression::Expression(op.to_string(), Box::new(a), Box::new(b))
 }
 
@@ -399,6 +522,17 @@ impl fmt::Display for AbstractComparison {
 }
 
 impl AbstractExpression {
+    pub fn size(&self) -> usize {
+        match self {
+            AbstractExpression::Expression(_, left, right) => 1 + left.size() + right.size(),
+            AbstractExpression::Register(reg) => match &reg.base {
+                Some(base) => 1 + base.size(),
+                None => 1,
+            },
+            _ => 1,
+        }
+    }
+
     pub fn get_abstracts(&self) -> Vec<String> {
         let mut abstracts = Vec::new();
         match self {
@@ -624,6 +758,7 @@ impl fmt::Display for RegionType {
 pub struct MemorySafeRegion {
     pub kind: RegionType,
     length: AbstractExpression,
+    alignment: i64,
     pub content: HashMap<i64, RegisterValue>,
 }
 
@@ -632,9 +767,20 @@ impl MemorySafeRegion {
         Self {
             kind,
             length,
+            alignment: 1,
             content: HashMap::new(),
         }
     }
+
+    pub fn with_alignment(mut self, alignment: i64) -> Self {
+        self.alignment = alignment;
+        self
+    }
+
+    pub fn alignment(&self) -> i64 {
+        self.alignment
+    }
+
     pub fn insert(&mut self, address: i64, value: RegisterValue) {
         self.content.insert(address, value);
     }
@@ -726,6 +872,64 @@ fn align_modulus(expression: &AbstractExpression) -> Option<i64> {
     }
 }
 
+fn disjoint_bits(a: &AbstractExpression, b: &AbstractExpression) -> bool {
+    let shift = |e: &AbstractExpression, ops: &[&str]| match e {
+        AbstractExpression::Expression(op, _, amount) if ops.contains(&op.as_str()) => {
+            match **amount {
+                AbstractExpression::Immediate(n) => Some(n),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    let shifted_apart = |x: &AbstractExpression, y: &AbstractExpression| {
+        shift(x, &["lsr", ">>"])
+            .zip(shift(y, &["lsl", "<<"]))
+            .is_some_and(|(s1, s2)| s1 + s2 >= 64)
+    };
+    shifted_apart(a, b) || shifted_apart(b, a)
+}
+
+pub fn is_translatable(e: &AbstractExpression) -> bool {
+    match e {
+        AbstractExpression::Expression(op, left, right) => {
+            matches!(
+                op.as_str(),
+                "+" | "-" | "*" | "/" | "%" | "&" | "^" | "|" | "lsl" | "lsr" | ">>"
+            ) && is_translatable(left)
+                && is_translatable(right)
+        }
+        AbstractExpression::Register(reg) => match &reg.base {
+            Some(base) => is_translatable(base),
+            None => true,
+        },
+        _ => true,
+    }
+}
+
+pub fn substitute(
+    e: &AbstractExpression,
+    name: &str,
+    value: &AbstractExpression,
+) -> AbstractExpression {
+    match e {
+        AbstractExpression::Abstract(symbol) if symbol == name => value.clone(),
+        AbstractExpression::Expression(op, left, right) => generate_expression(
+            op,
+            substitute(left, name, value),
+            substitute(right, name, value),
+        ),
+        other => other.clone(),
+    }
+}
+
+fn opaque_name(kind: &str, expression: &AbstractExpression) -> String {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    expression.to_string().hash(&mut hasher);
+    format!("{kind}_{:x}", hasher.finish())
+}
+
 fn flip_bit(value: &ast::Int, bit: i64) -> ast::Int {
     let two = ast::Int::from_i64(2);
     ast::Int::sub(&[
@@ -749,6 +953,27 @@ fn flip_mask(value: &ast::Int, mask: &AbstractExpression) -> Option<ast::Int> {
         remaining -= bit;
     }
     Some(result)
+}
+
+fn masked_bits(value: &ast::Int, mask: &AbstractExpression) -> Option<ast::Int> {
+    let AbstractExpression::Immediate(mask) = mask else {
+        return None;
+    };
+    if *mask < 0 {
+        return None;
+    }
+    let mut parts = Vec::new();
+    let mut remaining = *mask as u64;
+    while remaining != 0 {
+        let bit = remaining & remaining.wrapping_neg();
+        parts.push(bit_of(value, bit as i64));
+        remaining -= bit;
+    }
+    let borrowed: Vec<&ast::Int> = parts.iter().collect();
+    match borrowed.is_empty() {
+        true => Some(ast::Int::from_i64(0)),
+        false => Some(ast::Int::add(&borrowed)),
+    }
 }
 
 fn bit_of(value: &ast::Int, bit: i64) -> ast::Int {
@@ -815,6 +1040,10 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                             &new2,
                             &new2.modulo(ast::Int::from_i64(modulus)),
                         ]))
+                    } else if let Some(masked) = masked_bits(&new1, &old2) {
+                        Some(masked)
+                    } else if let Some(masked) = masked_bits(&new2, &old1) {
+                        Some(masked)
                     } else {
                         todo!("no translation for bitwise and in {expression}")
                     }
@@ -826,6 +1055,21 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                         Some(flipped)
                     } else {
                         todo!("no translation for bitwise xor in {expression}")
+                    }
+                }
+                "|" => {
+                    if matches!(*old1, AbstractExpression::Immediate(-1))
+                        || matches!(*old2, AbstractExpression::Immediate(-1))
+                    {
+                        Some(ast::Int::from_i64(-1))
+                    } else if matches!(*old1, AbstractExpression::Immediate(0)) {
+                        Some(new2)
+                    } else if matches!(*old2, AbstractExpression::Immediate(0)) {
+                        Some(new1)
+                    } else if disjoint_bits(&old1, &old2) {
+                        Some(ast::Int::add(&[&new1, &new2]))
+                    } else {
+                        Some(ast::Int::new_const(opaque_name("or", &expression)))
                     }
                 }
                 _ => todo!("no translation for operator {op} in {expression}"),
@@ -884,6 +1128,15 @@ mod tests {
         assert!(equals(&masked(128, -64), 128));
         assert!(equals(&masked(255, -128), 128));
         assert!(equals(&masked(1000, -1), 1000));
+    }
+
+    #[test]
+    fn an_irregular_mask_keeps_each_of_its_bits() {
+        assert!(equals(&masked(0b111111, 48), 48));
+        assert!(equals(&masked(0b010000, 48), 16));
+        assert!(equals(&masked(0b001111, 48), 0));
+        assert!(equals(&masked(0xABCD, 0x0F0F), 0xABCD & 0x0F0F));
+        assert!(equals(&masked(1000, 0), 0));
     }
 
     fn xored(value: i64, bit: i64) -> ast::Int {
@@ -960,4 +1213,109 @@ pub enum ExecuteReturnType {
         RegisterValue,
         RegisterValue,
     ),
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+
+    fn sym(name: &str) -> AbstractExpression {
+        AbstractExpression::Abstract(name.to_string())
+    }
+
+    fn imm(v: i64) -> AbstractExpression {
+        AbstractExpression::Immediate(v)
+    }
+
+    fn add(a: AbstractExpression, b: AbstractExpression) -> AbstractExpression {
+        generate_expression("+", a, b)
+    }
+
+    fn sub(a: AbstractExpression, b: AbstractExpression) -> AbstractExpression {
+        generate_expression("-", a, b)
+    }
+
+    fn shown(e: AbstractExpression) -> String {
+        e.to_string()
+    }
+
+    #[test]
+    fn a_term_added_then_subtracted_cancels() {
+        assert_eq!(shown(sub(add(sym("x"), sym("y")), sym("x"))), "y");
+    }
+
+    #[test]
+    fn a_term_subtracted_then_added_cancels() {
+        assert_eq!(shown(add(sub(sym("x"), sym("y")), sym("y"))), "x");
+    }
+
+    #[test]
+    fn a_term_minus_itself_is_zero() {
+        assert_eq!(shown(sub(sym("x"), sym("x"))), "0");
+    }
+
+    #[test]
+    fn subtracting_a_sum_flips_every_term() {
+        assert_eq!(shown(sub(add(sym("p"), sym("w")), sym("p"))), "w");
+    }
+
+    #[test]
+    fn the_bn_mul_mont_address_cancels_its_pointer() {
+        let width = generate_expression("lsl", sym("rp_len"), imm(3));
+        let inner = sub(add(sym("ap"), width.clone()), sym("ap"));
+        assert_eq!(shown(inner), shown(width));
+    }
+
+    #[test]
+    fn constants_fold_through_a_chain() {
+        assert_eq!(shown(sub(add(sym("x"), imm(3)), imm(1))), "x + 2");
+    }
+
+    #[test]
+    fn unrelated_terms_are_left_alone() {
+        assert_eq!(shown(sub(add(sym("x"), sym("y")), sym("z"))), "x + y - z");
+    }
+
+    #[test]
+    fn a_repeated_term_is_not_over_cancelled() {
+        assert_eq!(shown(sub(add(sym("x"), sym("x")), sym("x"))), "x");
+    }
+
+    #[test]
+    fn a_product_cancels_as_a_whole_term() {
+        let p = generate_expression("*", sym("a"), sym("b"));
+        assert_eq!(shown(sub(add(sym("c"), p.clone()), p)), "c");
+    }
+
+    #[test]
+    fn a_negative_multiplier_becomes_a_subtraction() {
+        let stepped = generate_expression("*", sym("k"), imm(-32));
+        assert_eq!(shown(add(sym("a"), stepped)), "a - k * 32");
+    }
+
+    #[test]
+    fn the_two_spellings_of_a_countdown_agree() {
+        let down = generate_expression("*", sym("k"), imm(-32));
+        let up = generate_expression("*", sym("k"), imm(32));
+        assert_eq!(add(sym("a"), down), sub(sym("a"), up));
+    }
+
+    #[test]
+    fn a_negative_multiplier_on_the_left_also_flips() {
+        let stepped = generate_expression("*", imm(-32), sym("k"));
+        assert_eq!(shown(add(sym("a"), stepped)), "a - 32 * k");
+    }
+
+    #[test]
+    fn a_negative_step_cancels_its_positive_spelling() {
+        let down = generate_expression("*", sym("k"), imm(-32));
+        let up = generate_expression("*", sym("k"), imm(32));
+        assert_eq!(shown(add(add(sym("a"), down), up)), "a");
+    }
+
+    #[test]
+    fn cancellation_does_not_reach_across_a_multiply() {
+        let p = generate_expression("*", sub(sym("x"), sym("x")), sym("b"));
+        assert_eq!(shown(p), "0 * b");
+    }
 }

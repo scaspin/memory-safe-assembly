@@ -13,6 +13,15 @@ fn vector_operand_width(operand: &Operand) -> i64 {
     }
 }
 
+fn element_operand_width(operand: &Operand) -> i64 {
+    match operand {
+        Operand::Vector(_, _, arrangement) | Operand::VectorAccess(_, _, arrangement, _) => {
+            arrangement.element_width()
+        }
+        _ => 1,
+    }
+}
+
 fn immediate(value: i64) -> RegisterValue {
     RegisterValue {
         kind: RegisterKind::Immediate,
@@ -36,6 +45,40 @@ fn indexed_address(
 }
 
 impl ARMCORTEXA {
+    fn indexed_target(
+        &mut self,
+        base: RegisterValue,
+        offset: Option<i64>,
+        index: &Option<Box<Operand>>,
+        mode: Option<bool>,
+    ) -> (RegisterValue, Option<RegisterValue>) {
+        let Some(index) = index else {
+            return indexed_address(base, offset.unwrap_or(0), mode);
+        };
+        let Operand::Memory(w, reg_num, _, _, _) = &**index else {
+            panic!("unsupported memory index operand {index:?}");
+        };
+        assert!(
+            mode.is_none(),
+            "register index with pre/post-index writeback is not supported"
+        );
+        let idx = self.get_register(&Operand::Register(w.clone(), *reg_num));
+        let mut combined = generate_expression("+", base.expression(), idx.expression());
+        if let Some(off) = offset
+            && off != 0
+        {
+            combined = generate_expression("+", combined, AbstractExpression::Immediate(off));
+        }
+        (
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(combined),
+                offset: 0,
+            },
+            None,
+        )
+    }
+
     pub fn execute(
         &mut self,
         pc: usize,
@@ -328,6 +371,36 @@ impl ARMCORTEXA {
                         }
                     } else {
                         panic!("cbnz not invoked correctly with register and label");
+                    }
+                }
+                "tbz" | "tbnz" => {
+                    let register = self.get_register(&instruction.operands[0]);
+                    let Operand::Immediate(bit) = &instruction.operands[1] else {
+                        panic!("{} needs a bit position", instruction.opcode);
+                    };
+                    let Operand::Label(label) = &instruction.operands[2] else {
+                        panic!("{} needs a target label", instruction.opcode);
+                    };
+                    let jump_when_zero = instruction.opcode == "tbz";
+                    let mask = 1i64 << bit;
+                    if register.base.is_none() || register.base == Some(AbstractExpression::Empty) {
+                        let bit_set = register.offset & mask != 0;
+                        if bit_set != jump_when_zero {
+                            return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
+                        } else {
+                            return Ok(ExecuteReturnType::Next);
+                        }
+                    } else {
+                        let masked = AbstractExpression::Expression(
+                            "&".to_string(),
+                            Box::new(AbstractExpression::Register(Box::new(register))),
+                            Box::new(AbstractExpression::Immediate(mask)),
+                        );
+                        let op = if jump_when_zero { "==" } else { "!=" };
+                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                            AbstractComparison::new(op, masked, AbstractExpression::Immediate(0)),
+                            label.to_string(),
+                        ));
                     }
                 }
                 "b" => {
@@ -787,20 +860,22 @@ impl ARMCORTEXA {
                                 ));
                             }
                         },
-                        "eq" => {
+                        "eq" | "ne" => {
                             match self
                                 .zero
                                 .clone()
                                 .expect("reads a zero flag the program never set")
                             {
                                 FlagValue::Real(z) => {
-                                    if z {
+                                    let first = if cond == "ne" { !z } else { z };
+                                    if first {
                                         self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
                                     } else {
                                         self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
                                     }
                                 }
                                 FlagValue::Abstract(z) => {
+                                    let z = if cond == "ne" { z.not() } else { z };
                                     return Ok(ExecuteReturnType::Select(
                                         z,
                                         dest.clone(),
@@ -856,6 +931,31 @@ impl ARMCORTEXA {
                                 return Err("csel reads a flag the program never set".to_string());
                             }
                         },
+                        "le" | "ge" => match (&self.zero, &self.neg, &self.overflow) {
+                            (Some(zero), Some(neg), Some(_)) => match (zero, neg) {
+                                (FlagValue::Real(z), FlagValue::Real(n)) => {
+                                    let holds = if cond == "le" { *z || *n } else { *z || !*n };
+                                    if holds {
+                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                                    } else {
+                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                                    }
+                                }
+                                (FlagValue::Abstract(z), _) => {
+                                    let op = if cond == "le" { "<=" } else { ">=" };
+                                    return Ok(ExecuteReturnType::Select(
+                                        generate_comparison(op, *z.left.clone(), *z.right.clone()),
+                                        dest.clone(),
+                                        opt1,
+                                        opt2,
+                                    ));
+                                }
+                                (_, _) => todo!("csel {cond} needs concrete flags"),
+                            },
+                            (_, _, _) => {
+                                return Err("csel reads a flag the program never set".to_string());
+                            }
+                        },
                         a => todo!("csel with condition code not yet implemented {}", a),
                     }
                 }
@@ -868,16 +968,18 @@ impl ARMCORTEXA {
                     };
 
                     match cond.as_str() {
-                        "eq" => match self
+                        "eq" | "ne" => match self
                             .zero
                             .clone()
                             .expect("reads a zero flag the program never set")
                         {
                             FlagValue::Real(b) => {
-                                let value = if b { -1 } else { 0 };
+                                let holds = if cond == "ne" { !b } else { b };
+                                let value = if holds { -1 } else { 0 };
                                 self.set_register(dest, RegisterKind::Immediate, None, value);
                             }
                             FlagValue::Abstract(a) => {
+                                let a = if cond == "ne" { a.not() } else { a };
                                 return Ok(ExecuteReturnType::Select(
                                     a,
                                     dest.clone(),
@@ -911,12 +1013,12 @@ impl ARMCORTEXA {
                     let src_addr = reg_iter.next().expect("ldr src");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
+                        Operand::Memory(w, reg_num, offset, index, mode) => {
                             let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
                             let (address, writeback) =
-                                indexed_address(base, offset.unwrap_or(0), *mode);
+                                self.indexed_target(base, *offset, index, *mode);
 
                             let width = access_width(&instruction.opcode, dst);
                             let res = self.load(dst.clone(), address, width);
@@ -946,12 +1048,12 @@ impl ARMCORTEXA {
                     let src_addr = reg_iter.next().expect("ldr src");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
+                        Operand::Memory(w, reg_num, offset, index, mode) => {
                             let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
                             let (address, writeback) =
-                                indexed_address(base, offset.unwrap_or(0), *mode);
+                                self.indexed_target(base, *offset, index, *mode);
 
                             let width = access_width(&instruction.opcode, dst1);
                             let mut second = address.clone();
@@ -986,12 +1088,12 @@ impl ARMCORTEXA {
                     let src_addr = reg_iter.next().expect("ldr src");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
+                        Operand::Memory(w, reg_num, offset, index, mode) => {
                             let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
                             let (address, writeback) =
-                                indexed_address(base, offset.unwrap_or(0), *mode);
+                                self.indexed_target(base, *offset, index, *mode);
 
                             let width = access_width(&instruction.opcode, dst);
                             let res = self.store(dst.clone(), address, width);
@@ -1021,12 +1123,12 @@ impl ARMCORTEXA {
                     let src_addr = reg_iter.next().expect("ldr src");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
+                        Operand::Memory(w, reg_num, offset, index, mode) => {
                             let base = self
                                 .get_register(&Operand::Register(w.clone(), *reg_num))
                                 .clone();
                             let (address, writeback) =
-                                indexed_address(base, offset.unwrap_or(0), *mode);
+                                self.indexed_target(base, *offset, index, *mode);
 
                             let width = access_width(&instruction.opcode, dst1);
                             let mut second = address.clone();
@@ -1339,6 +1441,42 @@ impl ARMCORTEXA {
                         }
                     }
                 }
+                "ld4r" => {
+                    let mut destinations = Vec::new();
+                    let mut addr = None;
+                    for o in instruction.operands.iter() {
+                        match o {
+                            Operand::Vector(..) | Operand::VectorAccess(..) => destinations.push(o),
+                            Operand::Memory(..) => addr = Some(o),
+                            _ => panic!("not a valid operand for instruction ld4r"),
+                        }
+                    }
+
+                    if let Some(Operand::Memory(prefix, num, offset, _, index)) = addr {
+                        let a = self.get_register(&Operand::Register(prefix.clone(), *num));
+                        let mut address = a.clone();
+                        for d in &destinations {
+                            let elem = element_operand_width(d);
+                            if let Err(e) = self.load_vector((*d).clone(), address.clone(), elem) {
+                                return Err(e.to_string());
+                            }
+                            address.offset += elem;
+                        }
+
+                        if *index == Some(true)
+                            && let Some(off) = offset
+                        {
+                            self.set_register(
+                                &Operand::Register(prefix.clone(), *num),
+                                a.kind,
+                                a.base,
+                                a.offset + off,
+                            );
+                        }
+                    } else {
+                        panic!("ld4r does not include address {:?}", instruction)
+                    };
+                }
                 "ld1" | "ld1.16b" | "ld1.8h" => {
                     let mut destinations = Vec::new();
                     let mut addr = None;
@@ -1351,7 +1489,7 @@ impl ARMCORTEXA {
                         }
                     }
 
-                    if let Some(Operand::Memory(prefix, num, offset, _, index)) = addr {
+                    if let Some(Operand::Memory(prefix, num, offset, reg_offset, index)) = addr {
                         let a = self.get_register(&Operand::Register(prefix.clone(), *num));
                         let mut address = a.clone();
                         for d in destinations {
@@ -1367,9 +1505,19 @@ impl ARMCORTEXA {
                         {
                             self.set_register(
                                 &Operand::Register(prefix.clone(), *num),
-                                a.kind,
-                                a.base,
+                                a.kind.clone(),
+                                a.base.clone(),
                                 a.offset + off,
+                            );
+                        }
+
+                        if let Some(step) = reg_offset {
+                            let step = self.get_register(step);
+                            self.set_register(
+                                &Operand::Register(prefix.clone(), *num),
+                                a.kind,
+                                generate_expression_from_options("+", a.base, step.base),
+                                a.offset + step.offset,
                             );
                         }
                     } else {

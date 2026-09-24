@@ -47,6 +47,16 @@ impl Arrangement {
         }
     }
 
+    pub fn element_width(&self) -> i64 {
+        match self {
+            Arrangement::B8 | Arrangement::B16 | Arrangement::B => 1,
+            Arrangement::H4 | Arrangement::H8 | Arrangement::H => 2,
+            Arrangement::S2 | Arrangement::S4 | Arrangement::S => 4,
+            Arrangement::D | Arrangement::D2 => 8,
+            Arrangement::Q => 16,
+        }
+    }
+
     pub fn from_string(s: &str) -> Arrangement {
         match s {
             "8b" => Arrangement::B8,

@@ -183,6 +183,33 @@ fn tst_on_an_unknown_value_is_analyzed() {
 }
 
 #[test]
+fn a_branch_after_comparing_unknown_data_with_an_immediate_is_analyzed() {
+    assert_eq!(
+        run_with_unknown_flags(&["cmp x2,#0", "b.eq skip", "add x4,#0,#1", "skip:"]),
+        Ok(())
+    );
+    assert_eq!(
+        run_with_unknown_flags(&["cmn x2,#1", "b.eq skip", "add x4,#0,#1", "skip:"]),
+        Ok(())
+    );
+}
+
+#[test]
+fn comparing_unknown_data_does_not_reuse_earlier_flags() {
+    let result = run_with_unknown_flags(&[
+        "add x1,#0,#7",
+        "add x5,#0,#7",
+        "cmp x1,x5",
+        "cmp x2,#0",
+        "b.eq skip",
+        "ldr w6,[x0,#100]",
+        "skip:",
+    ]);
+    let err = result.expect_err("the fall-through read is out of bounds");
+    assert!(err.contains("not provably within region"), "{err}");
+}
+
+#[test]
 fn subtract_with_carry_on_a_symbolic_carry_is_analyzed() {
     assert_eq!(
         run_with_unknown_flags(&["cmp x2,x3", "sbc x5,x2,x3"]),
@@ -224,4 +251,23 @@ fn the_unselected_branch_carries_its_own_option() {
         message.contains("not provably within region"),
         "expected an out of bounds report, got {message}"
     );
+}
+
+#[test]
+fn an_immediate_minus_a_based_register_negates_the_base() {
+    init();
+    let program: Vec<String> = ["start:", "sub x4,x1,#10", "add x7,#0,#10", "subs x0,x7,x4"]
+        .iter()
+        .chain(["ret"].iter())
+        .map(|s| s.to_string())
+        .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(1, "blocks");
+    assert_eq!(engine.start("start").map_err(|e| e.to_string()), Ok(()));
+    let out = engine.get_register_output(0);
+    assert_eq!(
+        out.base.map(|b| b.to_string()),
+        Some("0 - blocks".to_string())
+    );
+    assert_eq!(out.offset, 20);
 }

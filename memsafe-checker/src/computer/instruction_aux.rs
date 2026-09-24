@@ -30,13 +30,59 @@ impl ARMCORTEXA {
                 self.set_register(&dest, set.kind, set.base, set.offset);
                 Ok(ExecuteReturnType::Next)
             }
-            (Some(set), Some(clear)) => Ok(ExecuteReturnType::Select(
-                condition.clone(),
-                dest,
-                set,
-                clear,
-            )),
+            (Some(set), Some(clear)) => {
+                match (
+                    comparison_to_ast(condition.clone()),
+                    expression_to_ast(set.expression()),
+                    expression_to_ast(clear.expression()),
+                ) {
+                    (Some(_cond), Some(set_ast), Some(clear_ast)) => {
+                        let name = format!("carry_{}", self.next_carry());
+                        let result = ast::Int::new_const(name.clone());
+                        self.solver.assert(result.ge(&clear_ast));
+                        self.solver.assert(result.le(&set_ast));
+                        self.set_register(
+                            &dest,
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(name)),
+                            0,
+                        );
+                        Ok(ExecuteReturnType::Next)
+                    }
+                    _ => Ok(ExecuteReturnType::Select(
+                        condition.clone(),
+                        dest,
+                        set,
+                        clear,
+                    )),
+                }
+            }
             _ => Err(format!("no rule for {op_string} on these operand kinds")),
+        }
+    }
+
+    fn capped(&mut self, e: AbstractExpression) -> AbstractExpression {
+        if e.size() <= MAX_EXPRESSION_NODES
+            || e.get_abstracts()
+                .iter()
+                .any(|name| self.memory.contains_key(name))
+        {
+            return e;
+        }
+        AbstractExpression::Abstract(format!("wide_{}", self.next_carry()))
+    }
+
+    fn carried_base(
+        base: Option<AbstractExpression>,
+        op_string: &str,
+    ) -> Option<AbstractExpression> {
+        match (base, op_string) {
+            (Some(b), "-") => Some(generate_expression(
+                "-",
+                AbstractExpression::Immediate(0),
+                b,
+            )),
+            (other, _) => other,
         }
     }
 
@@ -69,7 +115,7 @@ impl ARMCORTEXA {
 
         if !matches!(op_string, "+" | "-") && (r1.base.is_some() || r2.base.is_some()) {
             let whole = generate_expression(op_string, r1.expression(), r2.expression());
-            return based(Some(whole), 0);
+            return based(Some(self.capped(whole)), 0);
         }
 
         if r1.kind == r2.kind {
@@ -82,7 +128,7 @@ impl ARMCORTEXA {
                             }
                             None => Some(reg1base),
                         },
-                        None => r2.clone().base,
+                        None => Self::carried_base(r2.clone().base, op_string),
                     };
                     based(base, op(r1.offset, r2.offset))
                 }
@@ -100,7 +146,7 @@ impl ARMCORTEXA {
         } else if r1.kind == RegisterKind::Immediate {
             Some(RegisterValue {
                 kind: r2.kind.clone(),
-                base: r2.base.clone(),
+                base: Self::carried_base(r2.base.clone(), op_string),
                 offset: op(r1.offset, r2.offset),
             })
         } else if r2.kind == RegisterKind::Immediate {
@@ -243,6 +289,8 @@ impl ARMCORTEXA {
                 expression,
                 AbstractExpression::Immediate(i64::MIN),
             )));
+        } else {
+            self.set_unknown_flags();
         }
     }
 
@@ -332,6 +380,8 @@ impl ARMCORTEXA {
             let overflow = self.unknown_flag("overflow");
             self.carry = carry;
             self.overflow = overflow;
+        } else {
+            self.set_unknown_flags();
         }
     }
 }

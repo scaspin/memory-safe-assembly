@@ -295,6 +295,98 @@ impl ARMCORTEXA {
         false
     }
 
+    fn aligned_offset(&self, e: &AbstractExpression) -> Option<(String, i64)> {
+        match e {
+            AbstractExpression::Abstract(name) if self.memory.contains_key(name) => {
+                Some((name.clone(), 0))
+            }
+            AbstractExpression::Expression(op, left, right) => {
+                let (name, base) = self.aligned_offset(left)?;
+                let AbstractExpression::Immediate(k) = **right else {
+                    return None;
+                };
+                match op.as_str() {
+                    "+" => Some((name, base + k)),
+                    "&" => {
+                        let align = self.memory.get(&name)?.alignment();
+                        let clears_only_low_bits = k | (align - 1) == -1;
+                        (align > 1 && clears_only_low_bits && (0..align).contains(&base))
+                            .then_some((name, base & k))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn aligned_parts(&self, e: &AbstractExpression) -> Option<(String, AbstractExpression)> {
+        match e {
+            AbstractExpression::Abstract(name) if self.memory.contains_key(name) => {
+                Some((name.clone(), AbstractExpression::Immediate(0)))
+            }
+            AbstractExpression::Expression(op, left, right) if op == "+" => {
+                let joined = |offset, term| match offset {
+                    AbstractExpression::Immediate(0) => term,
+                    offset => generate_expression("+", offset, term),
+                };
+                if let Some((name, offset)) = self.aligned_parts(left) {
+                    return Some((name, joined(offset, (**right).clone())));
+                }
+                let (name, offset) = self.aligned_parts(right)?;
+                Some((name, joined(offset, (**left).clone())))
+            }
+            AbstractExpression::Expression(op, left, right) => {
+                let (name, offset) = self.aligned_parts(left)?;
+                let AbstractExpression::Immediate(k) = **right else {
+                    return None;
+                };
+                let align = self.memory.get(&name)?.alignment();
+                let keeps_base = match op.as_str() {
+                    "&" => align > 1 && k | (align - 1) == -1,
+                    "^" => align > 1 && (0..align).contains(&k),
+                    _ => false,
+                };
+                keeps_base.then(|| {
+                    (
+                        name,
+                        generate_expression(op, offset, AbstractExpression::Immediate(k)),
+                    )
+                })
+            }
+            _ => None,
+        }
+    }
+
+    pub fn select_assumptions(&self, e: &AbstractExpression) -> Vec<ast::Bool> {
+        let mut seen = std::collections::HashSet::new();
+        let mut pending = e.get_abstracts();
+        let mut assumptions = Vec::new();
+        while let Some(name) = pending.pop() {
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            let Some((condition, taken, skipped)) = self.select_definitions.get(&name) else {
+                continue;
+            };
+            pending.extend(taken.get_abstracts());
+            pending.extend(skipped.get_abstracts());
+            if !is_translatable(taken) || !is_translatable(skipped) {
+                continue;
+            }
+            if let (Some(condition), Some(taken), Some(skipped)) = (
+                comparison_to_ast(condition.clone()),
+                expression_to_ast(taken.clone()),
+                expression_to_ast(skipped.clone()),
+            ) {
+                let chosen = ast::Int::new_const(name);
+                assumptions.push(ast::Bool::or(&[&condition.not(), &chosen.eq(taken)]));
+                assumptions.push(ast::Bool::or(&[&condition, &chosen.eq(skipped)]));
+            }
+        }
+        assumptions
+    }
+
     fn mem_safe_access(
         &self,
         base_expr: AbstractExpression,
@@ -302,6 +394,18 @@ impl ARMCORTEXA {
         ty: RegionType,
         width: i64,
     ) -> Result<(), MemorySafetyError> {
+        let base_expr = match self.aligned_offset(&base_expr) {
+            Some((name, folded)) => {
+                offset += folded;
+                AbstractExpression::Abstract(name)
+            }
+            None => match self.aligned_parts(&base_expr) {
+                Some((name, within)) => {
+                    generate_expression("+", AbstractExpression::Abstract(name), within)
+                }
+                None => base_expr,
+            },
+        };
         let (region, base, base_access) = match base_expr.clone() {
             AbstractExpression::Abstract(regbase) => {
                 if let Some(region) = self.memory.get(&regbase.clone()) {
@@ -378,37 +482,48 @@ impl ARMCORTEXA {
             )));
         }
 
-        let mut abs_offset = ast::Int::from_i64(offset);
-        if base_expr.contains("sp") {
-            abs_offset = ast::Int::from_i64(offset.abs());
-        }
-        let access = ast::Int::add(&[&base_access, &abs_offset]);
-        let last_byte = ast::Int::add(&[&access, &ast::Int::from_i64(width - 1)]);
-
-        let lowerbound_value = ast::Int::from_i64(0);
-        let low_access = ast::Int::add(&[&base, &lowerbound_value]);
         let upperbound_value = expression_to_ast(region.get_length())
             .unwrap_or_else(|| panic!("no translation for region length {}", region.get_length()));
-        let up_access = ast::Int::add(&[&base, &upperbound_value]);
-        let l = access.lt(&low_access);
-        let u = last_byte.ge(&up_access);
+
+        let (l, u) = if base_expr.contains("sp") {
+            let displacement = ast::Int::add(&[
+                &ast::Int::sub(&[&base_access, &base]),
+                &ast::Int::from_i64(offset),
+            ]);
+            let last_byte = ast::Int::add(&[&displacement, &ast::Int::from_i64(width - 1)]);
+            let below_max = ast::Int::sub(&[&ast::Int::from_i64(0), &upperbound_value]);
+            (displacement.lt(&below_max), last_byte.ge(&upperbound_value))
+        } else {
+            let access = ast::Int::add(&[&base_access, &ast::Int::from_i64(offset)]);
+            let last_byte = ast::Int::add(&[&access, &ast::Int::from_i64(width - 1)]);
+            let low_access = ast::Int::add(&[&base, &ast::Int::from_i64(0)]);
+            let up_access = ast::Int::add(&[&base, &upperbound_value]);
+            (access.lt(&low_access), last_byte.ge(&up_access))
+        };
+
+        let selects = self.select_assumptions(&base_expr);
+        let with = |extra: &ast::Bool| {
+            let mut all = selects.clone();
+            all.push(extra.clone());
+            all
+        };
 
         match (
-            self.solver.check_assumptions(std::slice::from_ref(&l)),
-            self.solver.check_assumptions(std::slice::from_ref(&u)),
+            self.solver.check_assumptions(&with(&l)),
+            self.solver.check_assumptions(&with(&u)),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
-                if self.solver.check() == SatResult::Sat {
-                    log::info!(
-                        "{ty} at {} proved in bounds",
+                if self.solver.check_assumptions(&selects) == SatResult::Unsat {
+                    return Err(MemorySafetyError::new(&format!(
+                        "{ty} of {width} bytes at {} unprovable: path has no model",
                         format_address(&base_expr, offset)
-                    );
-                    return Ok(());
+                    )));
                 }
-                Err(MemorySafetyError::new(&format!(
-                    "{ty} of {width} bytes at {} unprovable: path has no model",
+                log::info!(
+                    "{ty} at {} proved in bounds",
                     format_address(&base_expr, offset)
-                )))
+                );
+                Ok(())
             }
             (a, b) => {
                 if a == SatResult::Unknown || b == SatResult::Unknown {

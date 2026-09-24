@@ -9,6 +9,8 @@ mod instructions;
 mod memory;
 mod simd;
 
+pub const MAX_EXPRESSION_NODES: usize = 150;
+
 pub type ComputerState = (
     [RegisterValue; 33],
     Option<FlagValue>,
@@ -27,6 +29,8 @@ pub struct ARMCORTEXA {
     overflow: Option<FlagValue>,
     pub memory: HashMap<String, MemorySafeRegion>,
     pub memory_labels: HashMap<String, i64>,
+    pub select_definitions:
+        HashMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>,
     rw_queue: Vec<MemoryAccess>,
     alignment: i64,
     flag_counter: usize,
@@ -147,11 +151,40 @@ impl ARMCORTEXA {
             overflow: None,
             memory,
             memory_labels: HashMap::new(),
+            select_definitions: HashMap::new(),
             rw_queue: Vec::new(),
             alignment: 4,
             flag_counter: 0,
             solver,
         }
+    }
+
+    fn fits_in_32(&self, base: &Option<AbstractExpression>, offset: i64) -> bool {
+        const MODULUS: i64 = 1 << 32;
+        let Some(base) = base else {
+            return (0..MODULUS).contains(&offset);
+        };
+        if base.size() > MAX_EXPRESSION_NODES {
+            return false;
+        }
+        let whole = if offset == 0 {
+            base.clone()
+        } else {
+            generate_expression("+", base.clone(), AbstractExpression::Immediate(offset))
+        };
+        if !is_translatable(&whole) {
+            return false;
+        }
+        let Some(value) = expression_to_ast(whole) else {
+            return false;
+        };
+        self.solver
+            .check_assumptions(&[value.lt(ast::Int::from_i64(0))])
+            == SatResult::Unsat
+            && self
+                .solver
+                .check_assumptions(&[value.ge(ast::Int::from_i64(MODULUS))])
+                == SatResult::Unsat
     }
 
     pub fn get_state(&self) -> ComputerState {
@@ -181,6 +214,12 @@ impl ARMCORTEXA {
             AbstractExpression::Abstract(format!("{which}_flag_{n}")),
             AbstractExpression::Immediate(1),
         )))
+    }
+
+    pub fn next_carry(&mut self) -> usize {
+        let n = self.flag_counter;
+        self.flag_counter += 1;
+        n
     }
 
     pub fn set_unknown_flags(&mut self) {
@@ -257,7 +296,11 @@ impl ARMCORTEXA {
                 RePrefix::X => self.registers[*num].set(kind, base, offset),
                 RePrefix::W => {
                     if *num < 31 {
-                        let (base, offset) = narrow_to_32(base, offset);
+                        let (base, offset) = if self.fits_in_32(&base, offset) {
+                            (base, offset)
+                        } else {
+                            narrow_to_32(base, offset)
+                        };
                         self.registers[*num].set(kind, base, offset);
                     } else {
                         log::error!("Cannot set W register for xzr or sp");
@@ -368,7 +411,8 @@ impl ARMCORTEXA {
             }
             None => {
                 let mut region_map =
-                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW);
+                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW)
+                        .with_alignment(4096);
                 region_map.insert(address, reg_value);
                 region_map.grow_to(address + width);
                 self.memory.insert(region, region_map);
@@ -389,7 +433,8 @@ impl ARMCORTEXA {
             }
             None => {
                 let mut region_map =
-                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW);
+                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW)
+                        .with_alignment(4096);
                 region_map.insert(address, reg_value);
                 self.memory.insert(region, region_map);
             }
