@@ -5541,4 +5541,39 @@ mod tests {
             }
         )
     }
+
+    #[test]
+    fn a_register_stepping_twice_by_a_symbolic_amount_is_summarized_as_linear() {
+        let mut engine = ExecutionEngine::new(vec![
+            "start:",
+            "add x1,x0,x1",
+            "loop:",
+            "cmp x0,x1",
+            "b.eq end",
+            "add x4,x4,x3",
+            "add x4,x4,x3",
+            "add x0,x0,#8",
+            "b loop",
+            "end:",
+            "ret",
+        ]);
+        engine.add_abstract_from(0, "base");
+        engine.add_region(RegionType::READ, "base", abstract_of("length"));
+        engine.add_abstract_from(1, "length");
+        engine.add_abstract_from(3, "stride");
+        engine.add_abstract_from(4, "aux");
+        let _ = engine.start("start");
+
+        let summaries = engine.summaries.borrow();
+        let summary = summaries.first().expect("the loop was summarized");
+        let LoopInvariant::Linear(step) = &summary.invariants[4] else {
+            panic!("x4 was not stepped: {:?}", summary.invariants[4]);
+        };
+        let twice = Affine::of(&generate_expression(
+            "*",
+            AbstractExpression::Immediate(2),
+            abstract_of("stride"),
+        ));
+        assert_eq!(Affine::of(step), twice);
+    }
 }

@@ -497,6 +497,7 @@ pub fn invariant_of_register(prev: &RegisterValue, cur: &RegisterValue) -> LoopI
         if prev.offset == cur.offset
             && let (Some(p), Some(c)) = (&prev.base, &cur.base)
             && let Some(step) = symbolic_step(p, c)
+            && !step.contains_expression(p)
         {
             return LoopInvariant::Linear(step);
         }
@@ -1176,5 +1177,16 @@ mod tests {
             Some((1i64 << 20) - 1)
         );
         assert_eq!(upper_bound_of(&abstract_of("x")), None);
+    }
+
+    #[test]
+    fn a_step_built_from_the_value_itself_is_unknown() {
+        let prev = RegisterValue::new(RegisterKind::RegisterBase, Some(base()), 0);
+        let cur = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression("+", base(), base())),
+            0,
+        );
+        assert_eq!(invariant_of_register(&prev, &cur), LoopInvariant::Unknown);
     }
 }
