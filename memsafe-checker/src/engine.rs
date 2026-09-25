@@ -1918,6 +1918,48 @@ impl ExecutionEngine {
         }
     }
 
+    fn split_cases(
+        &mut self,
+        pc: usize,
+        cases: Vec<AbstractComparison>,
+        depth: usize,
+    ) -> std::io::Result<()> {
+        log::info!("splitting line {pc} over {} cases", cases.len());
+        let mut failures: Vec<String> = Vec::new();
+        for case in cases {
+            let mut branch = self.fork();
+            branch.add_constraint(case, true);
+            if let Err(e) = branch.run(pc, depth + 1) {
+                let text = e.to_string();
+                if !failures.contains(&text) {
+                    failures.push(text);
+                }
+            }
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::other(failures.join("; ")))
+        }
+    }
+
+    fn resolve_indirect(&self, pc: usize, target: &RegisterValue) -> std::io::Result<usize> {
+        let Some(AbstractExpression::Abstract(symbol)) = &target.base else {
+            return Err(Error::other(format!(
+                "line {pc}: indirect branch to {}",
+                target.expression()
+            )));
+        };
+        self.address_of(symbol)
+            .and_then(|address| self.line_for_address(address + target.offset))
+            .ok_or_else(|| {
+                Error::other(format!(
+                    "line {pc}: indirect branch to {symbol} + {} is not an instruction",
+                    target.offset
+                ))
+            })
+    }
+
     fn push_scope(&mut self) -> usize {
         let id = self.next_scope_id;
         self.next_scope_id += 1;
@@ -2056,7 +2098,7 @@ impl ExecutionEngine {
             log::info!("{:?}: {:?}", pc, instruction);
 
             let mut execute_result = self.computer.execute(pc, &instruction);
-            if instruction.opcode == "bl" && execute_result.is_ok() {
+            if matches!(instruction.opcode.as_str(), "bl" | "blr") && execute_result.is_ok() {
                 self.suspend_for_call(pc);
             }
             if let Some(condition) = self.costly_concrete_latch(pc, &instruction, &execute_result)
@@ -2144,25 +2186,15 @@ impl ExecutionEngine {
                             },
                         )
                     }
-                    ExecuteReturnType::JumpIndirect(target) => match (target.base, target.offset) {
-                        (Some(AbstractExpression::Abstract(label)), 0) => {
-                            match self.get_linenumber_of_label(label.clone(), pc) {
-                                Some(n) => {
-                                    Self::note_unconditional_jump(unconditional_visits, n)?;
-                                    Ok(Step::Continue(n))
-                                }
-                                None => {
-                                    Err(Error::other(format!("line {pc}: undefined label {label}")))
-                                }
-                            }
-                        }
-                        _ => Err(Error::other(format!(
-                            "line {pc}: indirect jump through a value this engine cannot resolve to a label"
-                        ))),
-                    },
-                    ExecuteReturnType::Split(_) => Err(Error::other(format!(
-                        "line {pc}: a jump-table split is not supported by this engine"
-                    ))),
+                    ExecuteReturnType::JumpIndirect(target) => {
+                        let dest = self.resolve_indirect(pc, &target)?;
+                        Self::note_unconditional_jump(unconditional_visits, dest)?;
+                        Ok(Step::Continue(dest))
+                    }
+                    ExecuteReturnType::Split(cases) => {
+                        self.split_cases(pc, cases, depth)?;
+                        Ok(Step::Stop)
+                    }
                 },
                 Err(err) => {
                     let err = format!("line {pc} ({}): {err}", instruction.opcode);

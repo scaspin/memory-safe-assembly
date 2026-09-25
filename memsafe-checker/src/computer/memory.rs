@@ -1,5 +1,11 @@
 use crate::computer::*;
 
+pub(crate) enum TableLoad {
+    NotATable,
+    Concrete(RegisterValue),
+    Split(Vec<AbstractComparison>),
+}
+
 fn address_base(address: &RegisterValue) -> Result<AbstractExpression, MemorySafetyError> {
     address.base.clone().ok_or_else(|| {
         MemorySafetyError::new(
@@ -312,6 +318,110 @@ impl ARMCORTEXA {
         }
     }
 
+    fn data_symbol_at(&self, section: &str, offset: i64) -> Option<(String, String, i64)> {
+        self.memory_labels
+            .iter()
+            .filter(|(_, (placed_in, start))| placed_in == section && *start <= offset)
+            .max_by_key(|(name, (_, start))| (*start, *name))
+            .map(|(name, (_, start))| (name.clone(), section.to_string(), *start))
+    }
+
+    pub(crate) fn table_load(&self, address: &RegisterValue, width: i64) -> TableLoad {
+        const MAX_ENTRIES: i64 = 64;
+        const MAX_CASES: usize = 16;
+        let Some(base) = &address.base else {
+            return TableLoad::NotATable;
+        };
+        if matches!(base, AbstractExpression::Abstract(_)) {
+            return TableLoad::NotATable;
+        }
+        let Some((symbol, section, start)) = base
+            .get_abstracts()
+            .into_iter()
+            .find_map(|section| self.data_symbol_at(&section, address.offset))
+        else {
+            return TableLoad::NotATable;
+        };
+        let Some(region) = self.memory.get(&section) else {
+            return TableLoad::NotATable;
+        };
+        let AbstractExpression::Immediate(section_length) = region.get_length() else {
+            return TableLoad::NotATable;
+        };
+        if region.content.is_empty() {
+            return TableLoad::NotATable;
+        }
+        let length = self
+            .data_symbol_sizes
+            .get(&symbol)
+            .copied()
+            .unwrap_or(section_length - start);
+        if width <= 0
+            || length / width > MAX_ENTRIES
+            || self
+                .mem_safe_access(base.clone(), address.offset, RegionType::READ, width)
+                .is_err()
+        {
+            return TableLoad::NotATable;
+        }
+
+        let index = generate_expression(
+            "+",
+            generate_expression(
+                "-",
+                base.clone(),
+                AbstractExpression::Abstract(section.clone()),
+            ),
+            AbstractExpression::Immediate(address.offset - start),
+        );
+        let Some(index_ast) = expression_to_ast(index.clone()) else {
+            return TableLoad::NotATable;
+        };
+        let misaligned = index_ast
+            .modulo(ast::Int::from_i64(width))
+            .eq(ast::Int::from_i64(0))
+            .not();
+        let outside = ast::Bool::or(&[
+            &index_ast.lt(ast::Int::from_i64(0)),
+            &index_ast.gt(ast::Int::from_i64(length - width)),
+        ]);
+        if self.solver.check_assumptions(&[misaligned]) != SatResult::Unsat
+            || self.solver.check_assumptions(&[outside]) != SatResult::Unsat
+        {
+            return TableLoad::NotATable;
+        }
+        let mut entries = Vec::new();
+        for entry in (0..=length - width).step_by(width as usize) {
+            let pinned = index_ast.eq(ast::Int::from_i64(entry));
+            if self.solver.check_assumptions(&[pinned]) == SatResult::Sat {
+                if entries.len() == MAX_CASES {
+                    return TableLoad::NotATable;
+                }
+                entries.push(entry);
+            }
+        }
+        match entries.as_slice() {
+            [] => TableLoad::NotATable,
+            [entry] => TableLoad::Concrete(RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(section)),
+                start + entry,
+            )),
+            _ => TableLoad::Split(
+                entries
+                    .iter()
+                    .map(|entry| {
+                        AbstractComparison::new(
+                            "==",
+                            index.clone(),
+                            AbstractExpression::Immediate(*entry),
+                        )
+                    })
+                    .collect(),
+            ),
+        }
+    }
+
     pub(crate) fn finite_values(&self, symbol: &str, cap: usize) -> Option<Vec<i64>> {
         let var = ast::Int::new_const(symbol.to_string());
         let mut found: Vec<i64> = Vec::new();
@@ -590,8 +700,12 @@ impl ARMCORTEXA {
                     "below-region is {a:?} and past-end is {b:?}, model: {:?}",
                     self.solver.get_model()
                 );
+                let holding = self
+                    .data_symbol_at(&region_name, offset)
+                    .map(|(symbol, ..)| format!(" holding {symbol}"))
+                    .unwrap_or_default();
                 Err(MemorySafetyError::new(&format!(
-                    "{ty} of {width} bytes at {} not provably within {extent}",
+                    "{ty} of {width} bytes at {} not provably within {extent}{holding}",
                     format_address(&base_expr, offset),
                 )))
             }
