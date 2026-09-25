@@ -58,20 +58,63 @@ impl Arrangement {
     }
 
     pub fn from_string(s: &str) -> Arrangement {
+        Arrangement::from_str(s).unwrap_or_else(|| panic!("Invalid arrangement string {:?}", s))
+    }
+
+    pub fn from_str(s: &str) -> Option<Arrangement> {
         match s.to_ascii_lowercase().as_str() {
-            "8b" => Arrangement::B8,
-            "16b" => Arrangement::B16,
-            "4h" => Arrangement::H4,
-            "8h" => Arrangement::H8,
-            "2s" => Arrangement::S2,
-            "4s" => Arrangement::S4,
-            "2d" => Arrangement::D2,
-            "d" | "1d" => Arrangement::D,
-            "s" => Arrangement::S,
-            "h" => Arrangement::H,
-            "b" => Arrangement::B,
-            "q" | "1q" => Arrangement::Q,
-            _ => panic!("Invalid arrangement string {:?}", s),
+            "8b" => Some(Arrangement::B8),
+            "16b" => Some(Arrangement::B16),
+            "4h" => Some(Arrangement::H4),
+            "8h" => Some(Arrangement::H8),
+            "2s" => Some(Arrangement::S2),
+            "4s" => Some(Arrangement::S4),
+            "2d" => Some(Arrangement::D2),
+            "d" | "1d" => Some(Arrangement::D),
+            "s" => Some(Arrangement::S),
+            "4b" | "2h" => Some(Arrangement::S),
+            "h" => Some(Arrangement::H),
+            "b" => Some(Arrangement::B),
+            "q" | "1q" => Some(Arrangement::Q),
+            _ => None,
+        }
+    }
+
+    pub fn lane_bytes(&self) -> usize {
+        match self {
+            Arrangement::B8 | Arrangement::B16 | Arrangement::B => 1,
+            Arrangement::H4 | Arrangement::H8 | Arrangement::H => 2,
+            Arrangement::S2 | Arrangement::S4 | Arrangement::S => 4,
+            Arrangement::D2 | Arrangement::D => 8,
+            Arrangement::Q => 16,
+        }
+    }
+
+    pub fn lanes(&self) -> usize {
+        match self {
+            Arrangement::B16 => 16,
+            Arrangement::B8 | Arrangement::H8 => 8,
+            Arrangement::H4 | Arrangement::S4 => 4,
+            Arrangement::S2 | Arrangement::D2 => 2,
+            Arrangement::B
+            | Arrangement::H
+            | Arrangement::S
+            | Arrangement::D
+            | Arrangement::Q => 1,
+        }
+    }
+
+    pub fn bytes(&self) -> usize {
+        self.lane_bytes() * self.lanes()
+    }
+
+    pub fn element(&self) -> Arrangement {
+        match self {
+            Arrangement::B8 | Arrangement::B16 | Arrangement::B => Arrangement::B,
+            Arrangement::H4 | Arrangement::H8 | Arrangement::H => Arrangement::H,
+            Arrangement::S2 | Arrangement::S4 | Arrangement::S => Arrangement::S,
+            Arrangement::D2 | Arrangement::D => Arrangement::D,
+            Arrangement::Q => Arrangement::Q,
         }
     }
 }
@@ -88,6 +131,7 @@ pub enum Operand {
         Option<bool>,
     ),
     Bitwise(String, i64),
+    ShiftedRegister(Box<Operand>, String, i64),
     VectorRegister(RePrefix, usize),
     Vector(RePrefix, usize, Arrangement),
     VectorAccess(RePrefix, usize, Arrangement, i64),
@@ -277,24 +321,15 @@ pub fn operand_from_string(a: String) -> Operand {
         if let Some(o) = parts.next() {
             let o = o.trim();
             if o.starts_with("x") || o.starts_with("w") {
-                let index = operand_from_string(o.trim_matches(']').to_string());
-                let scale = match parts.next().map(|s| s.trim().trim_matches(']')) {
-                    None => 0,
-                    Some(extension) => {
-                        let (kind, amount) = extension
-                            .split_once('#')
-                            .map_or((extension, "0"), |(k, a)| (k.trim(), a));
-                        match kind {
-                            "lsl" | "uxtw" | "uxtx" => string_to_int(amount),
-                            _ => panic!("unsupported index extension {extension}"),
-                        }
+                let register = operand_from_string(o.trim_matches(&[']', '!']).to_string());
+                register_offset = Some(Box::new(match parts.next() {
+                    Some(extend) => {
+                        let mut pieces = extend.trim_matches(&[']', '!']).split('#');
+                        let op = pieces.next().unwrap_or("").to_string();
+                        let amount = pieces.next().map(string_to_int).unwrap_or(0);
+                        Operand::ShiftedRegister(Box::new(register), op, amount)
                     }
-                };
-                register_offset = Some(Box::new(match index {
-                    Operand::Register(prefix, n) if scale != 0 => {
-                        Operand::Memory(prefix, n, Some(scale), None, None)
-                    }
-                    other => other,
+                    None => register,
                 }));
             } else {
                 offset = Some(string_to_int(o.trim_matches(['[', ']', ',', '#', '!'])));
@@ -315,7 +350,7 @@ pub fn operand_from_string(a: String) -> Operand {
                 "sp" => RePrefix::Sp,
                 "fp" => RePrefix::Fp,
                 "ra" => RePrefix::Ra,
-                "xzr" | "ze" => RePrefix::Ze,
+                "xzr" | "wzr" | "ze" => RePrefix::Ze,
                 _ => {
                     let reg = base.split_at(1);
                     if let Ok(n) = reg.1.parse::<usize>() {
@@ -375,7 +410,36 @@ fn combine_shifted_operands(parts: Vec<String>) -> Vec<String> {
     result
 }
 
+const SHIFT_MNEMONICS: [&str; 13] = [
+    "lsl", "lsr", "asr", "ror", "msl", "uxtw", "uxtb", "uxth", "uxtx", "sxtw", "sxth", "sxtb",
+    "sxtx",
+];
+
+fn combine_shift_operands(parts: Vec<String>) -> Vec<String> {
+    let mut result: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < parts.len() {
+        let is_shift = SHIFT_MNEMONICS.contains(&parts[i].to_lowercase().as_str());
+        let is_extend = {
+            let p = parts[i].to_lowercase();
+            p.starts_with("uxt") || p.starts_with("sxt")
+        };
+        if is_shift && i + 1 < parts.len() && parts[i + 1].starts_with('#') {
+            result.push(format!("{}{}", parts[i], parts[i + 1]));
+            i += 2;
+        } else if is_shift && is_extend && i > 0 {
+            result.push(format!("{}#0", parts[i]));
+            i += 1;
+        } else {
+            result.push(parts[i].clone());
+            i += 1;
+        }
+    }
+    result
+}
+
 fn combine_addressing_modes_operands(parts: Vec<String>) -> Vec<String> {
+    let parts = combine_shift_operands(parts);
     let mut result = Vec::new();
 
     let mut last_instance = parts.len() + 1;
@@ -408,6 +472,31 @@ pub enum InstructionType {
     Label,
     Def,
     Other,
+}
+
+fn normalize_arrangement_suffix(opcode: &mut String, operands: &mut [Operand]) {
+    if opcode.starts_with('.') {
+        return;
+    }
+    let Some((base, suffix)) = opcode.rsplit_once('.') else {
+        return;
+    };
+    let Some(arrangement) = Arrangement::from_str(suffix) else {
+        return;
+    };
+
+    *opcode = base.to_string();
+    for operand in operands.iter_mut() {
+        match operand {
+            Operand::VectorRegister(prefix, num) => {
+                *operand = Operand::Vector(prefix.clone(), *num, arrangement.clone());
+            }
+            Operand::VectorAccess(_, _, element, _) => {
+                *element = arrangement.element();
+            }
+            _ => (),
+        }
+    }
 }
 
 fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType {
@@ -459,7 +548,6 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
         || opcode.starts_with("j")
         || opcode.contains("adr")
         || opcode.starts_with("adrp")
-        || opcode == "ret"
         || operands.iter().any(|op| matches!(op, Operand::Label(..)))
     {
         return InstructionType::ControlFlow;
@@ -552,6 +640,9 @@ impl Instruction {
     pub fn new(input: String) -> Self {
         let input = expand_vector_ranges(&input);
         let delete_curly_brackets = input
+            .split(';')
+            .next()
+            .unwrap_or("")
             .replace(" }", "")
             .replace("} ", "")
             .replace("{", " ")
@@ -572,10 +663,12 @@ impl Instruction {
             parts.map(|s| s.to_string()).collect(),
         ));
 
-        let operands: Vec<Operand> = combine_brackets
+        let mut operands: Vec<Operand> = combine_brackets
             .into_iter()
             .map(|s| operand_from_string(s.to_string()))
             .collect();
+
+        normalize_arrangement_suffix(&mut opcode, &mut operands);
 
         let ty = match_instruction_type(&opcode, &operands);
 
@@ -751,7 +844,11 @@ mod tests {
         };
         assert_eq!(
             **index,
-            Operand::Memory(RePrefix::X, 12, Some(4), None, None)
+            Operand::ShiftedRegister(
+                Box::new(Operand::Register(RePrefix::X, 12)),
+                "lsl".to_string(),
+                4
+            )
         );
     }
 
@@ -1113,6 +1210,73 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_ret_register() {
+        let good_result = Instruction {
+            ty: InstructionType::Other,
+            opcode: String::from("ret"),
+            operands: vec![Operand::Register(RePrefix::X, 15)],
+        };
+        assert_eq!(Instruction::new("ret x15".to_string()), good_result);
+    }
+
+    #[test]
+    fn test_parse_ignores_objdump_comment() {
+        let good_result = Instruction {
+            ty: InstructionType::Arithmetic,
+            opcode: String::from("sub"),
+            operands: vec![
+                Operand::Register(RePrefix::Sp, 0),
+                Operand::Register(RePrefix::Sp, 0),
+                Operand::Immediate(1),
+                Operand::Bitwise("lsl".to_string(), 12),
+            ],
+        };
+        assert_eq!(
+            Instruction::new("sub\tsp, sp, #1, lsl #12          ; =0x1000".to_string()),
+            good_result
+        );
+        assert_eq!(
+            Instruction::new("mov\tw15, #0x40              ; =64".to_string()).operands,
+            vec![Operand::Register(RePrefix::W, 15), Operand::Immediate(64)]
+        );
+    }
+
+    #[test]
+    fn test_parse_extended_register_offset() {
+        let shifted = |amount| {
+            Operand::Memory(
+                RePrefix::X,
+                2,
+                None,
+                Some(Box::new(Operand::ShiftedRegister(
+                    Box::new(Operand::Register(RePrefix::W, 8)),
+                    "uxtw".to_string(),
+                    amount,
+                ))),
+                None,
+            )
+        };
+        assert_eq!(
+            Instruction::new("ldr q0, [x2, w8, uxtw #1]".to_string()).operands[1],
+            shifted(1)
+        );
+        assert_eq!(
+            Instruction::new("ldr d0, [x2, w8, uxtw]".to_string()).operands[1],
+            shifted(0)
+        );
+        assert_eq!(
+            Instruction::new("ldr x0, [x2, x8]".to_string()).operands[1],
+            Operand::Memory(
+                RePrefix::X,
+                2,
+                None,
+                Some(Box::new(Operand::Register(RePrefix::X, 8))),
+                None
+            )
+        );
+    }
+
+    #[test]
     fn test_parse_simd_ld1() {
         let good_result = Instruction {
             ty: InstructionType::SIMDManagement,
@@ -1304,10 +1468,10 @@ mod tests {
     fn test_parse_simd_st1_8h() {
         let good_result = Instruction {
             ty: InstructionType::SIMDManagement,
-            opcode: String::from("st1.8h"),
+            opcode: String::from("st1"),
             operands: Vec::from([
-                Operand::VectorRegister(RePrefix::V, 30),
-                Operand::VectorRegister(RePrefix::V, 31),
+                Operand::Vector(RePrefix::V, 30, Arrangement::H8),
+                Operand::Vector(RePrefix::V, 31, Arrangement::H8),
                 Operand::Memory(RePrefix::X, 0, Some(32), None, Some(true)),
             ]),
         };
@@ -1320,10 +1484,10 @@ mod tests {
     fn test_parse_simd_ushll() {
         let good_result = Instruction {
             ty: InstructionType::SIMDArithmetic,
-            opcode: String::from("ushll.8h"),
+            opcode: String::from("ushll"),
             operands: Vec::from([
-                Operand::VectorRegister(RePrefix::V, 2),
-                Operand::VectorRegister(RePrefix::V, 2),
+                Operand::Vector(RePrefix::V, 2, Arrangement::H8),
+                Operand::Vector(RePrefix::V, 2, Arrangement::H8),
                 Operand::Immediate(0),
             ]),
         };
@@ -1437,9 +1601,9 @@ mod tests {
     fn test_parse_rav1d_notation_st1d() {
         let good_result = Instruction {
             ty: InstructionType::SIMDManagement,
-            opcode: String::from("st1.d"),
+            opcode: String::from("st1"),
             operands: Vec::from([
-                Operand::VectorAccess(RePrefix::V, 0, Arrangement::S, 1),
+                Operand::VectorAccess(RePrefix::V, 0, Arrangement::D, 1),
                 Operand::Memory(
                     RePrefix::X,
                     0,

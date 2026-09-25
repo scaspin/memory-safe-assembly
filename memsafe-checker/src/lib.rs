@@ -2,6 +2,7 @@ pub mod common;
 pub mod computer;
 pub mod engine;
 pub mod instruction_parser;
+pub mod loader;
 pub mod widening;
 
 #[macro_export]
