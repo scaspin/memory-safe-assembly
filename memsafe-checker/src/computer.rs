@@ -1380,6 +1380,39 @@ mod tests {
     }
 
     #[test]
+    fn test_a_store_is_read_back_and_replaces_what_it_overlaps() {
+        let mut computer = with_region("buf", 64);
+        set_imm(&mut computer, 1, 7);
+        set_imm(&mut computer, 2, 9);
+        run(&mut computer, "str x1, [x0, #8]");
+        run(&mut computer, "ldr x3, [x0, #8]");
+        assert_eq!(x(&mut computer, 3).offset, 7);
+        run(&mut computer, "str w2, [x0, #12]");
+        run(&mut computer, "ldr x4, [x0, #8]");
+        assert_ne!(x(&mut computer, 4).kind, RegisterKind::Immediate);
+    }
+
+    #[test]
+    fn test_a_store_at_a_symbolic_address_forgets_the_region() {
+        let mut computer = with_region("buf", 64);
+        set_imm(&mut computer, 1, 7);
+        run(&mut computer, "str x1, [x0, #8]");
+        run(&mut computer, "ldr x5, [x0, #24]");
+        set_symbolic(&mut computer, 2, "i", 0);
+        computer
+            .solver
+            .assert(ast::Int::new_const("i").ge(ast::Int::from_i64(0)));
+        computer
+            .solver
+            .assert(ast::Int::new_const("i").le(ast::Int::from_i64(7)));
+        run(&mut computer, "str x1, [x0, x2, lsl #3]");
+        run(&mut computer, "ldr x3, [x0, #8]");
+        run(&mut computer, "ldr x4, [x0, #24]");
+        assert_ne!(x(&mut computer, 3).kind, RegisterKind::Immediate);
+        assert_ne!(x(&mut computer, 4), x(&mut computer, 5));
+    }
+
+    #[test]
     fn test_a_wide_load_assembles_the_bytes_it_covers() {
         let mut computer = with_region("tbl", 8);
         for (at, byte) in [(0, 0x00), (1, 0x04), (2, 0x2c), (3, 0x01)] {
