@@ -400,10 +400,11 @@ fn accelerated_walking_write_is_proved_safe() {
 
 #[test]
 fn read_one_element_ahead_is_rejected() {
-    assert_out_of_bounds(
-        analyze_accelerated(walking_loop(4, &["ldr w2,[x0,#4]"]), 4, 16),
+    assert_rejected_access(analyze_accelerated(
+        walking_loop(4, &["ldr w2,[x0,#4]"]),
+        4,
         16,
-    );
+    ));
 }
 
 #[test]
@@ -440,23 +441,21 @@ fn read_of_the_last_element_after_the_loop_is_proved_safe() {
 
 #[test]
 fn write_one_element_ahead_is_rejected() {
-    assert_out_of_bounds(
-        analyze_region_accelerated(
-            walking_loop(4, &["str w2,[x0,#4]"]),
-            RegionType::WRITE,
-            4,
-            16,
-        ),
+    assert_rejected_access(analyze_region_accelerated(
+        walking_loop(4, &["str w2,[x0,#4]"]),
+        RegionType::WRITE,
+        4,
         16,
-    );
+    ));
 }
 
 #[test]
 fn load_wider_than_the_stride_is_rejected_at_the_end() {
-    assert_out_of_bounds(
-        analyze_accelerated(walking_loop(4, &["ldr x2,[x0,#0]"]), 4, 16),
-        12,
-    );
+    assert_rejected_access(analyze_accelerated(
+        walking_loop(4, &["ldr x2,[x0,#0]"]),
+        4,
+        16,
+    ));
 }
 
 #[test]
@@ -711,7 +710,7 @@ fn loop_reached_only_through_a_branch_is_accelerated() {
 
 #[test]
 fn loop_reached_only_through_a_branch_still_catches_out_of_bounds() {
-    assert_out_of_bounds(analyze_guarded(guarded_loop(&["ldr w2,[x0,#4]"]), 16), 16);
+    assert_rejected_access(analyze_guarded(guarded_loop(&["ldr w2,[x0,#4]"]), 16));
 }
 
 #[test]
@@ -1372,6 +1371,90 @@ fn an_outer_loop_sharing_its_header_with_a_round_loop_is_proved_safe() {
 #[test]
 fn reentering_a_shared_header_loop_past_the_end_is_rejected() {
     assert_rejected_access(analyze_accelerated(shared_header_loop("b.eq loop"), 8, 8));
+}
+
+fn clobbered_guard_loop(read: &str) -> Vec<String> {
+    [
+        "start:",
+        "add x5,x0,x1",
+        "loop:",
+        read,
+        "add x0,x0,#8",
+        "sub x3,x5,x0",
+        "cmp x3,#0",
+        "mov x3,#0",
+        "b.ne loop",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+#[test]
+fn a_guard_on_a_clobbered_register_is_proved_safe() {
+    assert_eq!(
+        analyze_accelerated(clobbered_guard_loop("ldr x2,[x0]"), 8, 8),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_guard_on_a_clobbered_register_still_catches_a_read_ahead() {
+    assert_rejected_access(analyze_accelerated(
+        clobbered_guard_loop("ldr x2,[x0,#8]"),
+        8,
+        8,
+    ));
+}
+
+fn analyze_long_decided_walk(read: &str) -> Result<(), String> {
+    init();
+    let program = [
+        "start:",
+        "add x5,x0,x1",
+        "loop:",
+        read,
+        "add x0,x0,#8",
+        "cmp x0,x5",
+        "b.ne loop",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("length"));
+    engine.add_abstract_from(1, "length");
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        AbstractExpression::Expression(
+            "%".to_string(),
+            Box::new(abstract_of("length")),
+            Box::new(AbstractExpression::Immediate(8)),
+        ),
+        AbstractExpression::Immediate(0),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("length"),
+        AbstractExpression::Immediate(4096),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "<=",
+        abstract_of("length"),
+        AbstractExpression::Immediate(8192),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_guard_decided_for_hundreds_of_iterations_is_summarized() {
+    assert_eq!(analyze_long_decided_walk("ldr x2,[x0]"), Ok(()));
+}
+
+#[test]
+fn a_guard_decided_for_hundreds_of_iterations_still_catches_a_read_ahead() {
+    assert_rejected_access(analyze_long_decided_walk("ldr x2,[x0,#8]"));
 }
 
 #[test]

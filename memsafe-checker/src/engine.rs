@@ -11,6 +11,7 @@ const MAX_SPLIT_VALUES: usize = 4;
 const MAX_SUMMARY_TRIES: usize = 3;
 const MAX_SELECT_CHAIN: usize = 16;
 const SUMMARY_ITERATION: i64 = 3;
+const DECIDED_REPEATS_BEFORE_SUMMARY: usize = 3;
 use z3::ast::Ast;
 use z3::*;
 
@@ -81,6 +82,7 @@ struct Summary {
     exit_facts: Vec<AbstractComparison>,
     exits: Vec<(usize, bool)>,
     ranges: Vec<(String, i64)>,
+    ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
 }
 
 impl Summary {
@@ -117,6 +119,7 @@ fn anchored(
     current: &[RegisterValue],
     previous: &[RegisterValue],
     invariants: &[LoopInvariant],
+    ghosts: &[Ghost],
 ) -> AbstractExpression {
     match e {
         AbstractExpression::Register(r) => {
@@ -129,13 +132,21 @@ fn anchored(
                 Some((LoopInvariant::Linear(step), behind)) => {
                     rewind(value_of(r), SUMMARY_ITERATION - behind, step)
                 }
+                None => match ghost_step(ghosts, r) {
+                    Some(step) => rewind(
+                        value_of(r),
+                        SUMMARY_ITERATION,
+                        &AbstractExpression::Immediate(step),
+                    ),
+                    None => value_of(r),
+                },
                 _ => value_of(r),
             }
         }
         AbstractExpression::Expression(op, a, b) => generate_expression(
             op,
-            anchored(a, current, previous, invariants),
-            anchored(b, current, previous, invariants),
+            anchored(a, current, previous, invariants, ghosts),
+            anchored(b, current, previous, invariants, ghosts),
         ),
         other => other.clone(),
     }
@@ -333,6 +344,147 @@ fn anchored_at_exit(
     }
 }
 
+#[derive(Debug, Clone)]
+struct Ghost {
+    path: Vec<bool>,
+    value: RegisterValue,
+    step: i64,
+}
+
+fn ghost_leaves<F>(
+    before: &AbstractExpression,
+    after: &AbstractExpression,
+    path: &mut Vec<bool>,
+    live: &dyn Fn(&RegisterValue) -> bool,
+    pin: &F,
+    found: &mut Vec<Ghost>,
+) where
+    F: Fn(&AbstractExpression) -> Option<i64>,
+{
+    match (before, after) {
+        (AbstractExpression::Register(before), AbstractExpression::Register(after))
+            if !live(after) =>
+        {
+            let step = match invariant_of_register(before, after) {
+                LoopInvariant::Linear(AbstractExpression::Immediate(step)) => Some(step),
+                LoopInvariant::Unknown => {
+                    pin(&generate_expression("-", value_of(after), value_of(before)))
+                }
+                _ => None,
+            };
+            if let Some(step) = step.filter(|step| *step != 0) {
+                found.push(Ghost {
+                    path: path.clone(),
+                    value: (**after).clone(),
+                    step,
+                });
+            }
+        }
+        (
+            AbstractExpression::Expression(op_before, left_before, right_before),
+            AbstractExpression::Expression(op_after, left_after, right_after),
+        ) if op_before == op_after => {
+            for (side, b, a) in [
+                (true, left_before, left_after),
+                (false, right_before, right_after),
+            ] {
+                path.push(side);
+                ghost_leaves(b, a, path, live, pin, found);
+                path.pop();
+            }
+        }
+        _ => (),
+    }
+}
+
+fn ghost_operands<F>(
+    previous: &AbstractComparison,
+    current: &AbstractComparison,
+    entry: &[RegisterValue],
+    now: &[RegisterValue],
+    pin: F,
+) -> Vec<Ghost>
+where
+    F: Fn(&AbstractExpression) -> Option<i64>,
+{
+    let mut found = Vec::new();
+    if previous.op != current.op {
+        return found;
+    }
+    let live = |r: &RegisterValue| now.contains(r) || entry.contains(r);
+    for (side, before, after) in [
+        (true, &previous.left, &current.left),
+        (false, &previous.right, &current.right),
+    ] {
+        ghost_leaves(before, after, &mut vec![side], &live, &pin, &mut found);
+    }
+    found
+}
+
+fn leaf_at<'a>(e: &'a AbstractExpression, path: &[bool]) -> Option<&'a AbstractExpression> {
+    match (path.split_first(), e) {
+        (None, _) => Some(e),
+        (Some((left, rest)), AbstractExpression::Expression(_, a, b)) => {
+            leaf_at(if *left { a } else { b }, rest)
+        }
+        _ => None,
+    }
+}
+
+fn replaced_at(
+    e: &AbstractExpression,
+    path: &[bool],
+    with: &AbstractExpression,
+) -> AbstractExpression {
+    match (path.split_first(), e) {
+        (None, _) => with.clone(),
+        (Some((left, rest)), AbstractExpression::Expression(op, a, b)) => {
+            if *left {
+                generate_expression(op, replaced_at(a, rest, with), (**b).clone())
+            } else {
+                generate_expression(op, (**a).clone(), replaced_at(b, rest, with))
+            }
+        }
+        _ => e.clone(),
+    }
+}
+
+fn condition_side<'a>(
+    condition: &'a AbstractComparison,
+    path: &[bool],
+) -> Option<&'a AbstractExpression> {
+    let (left, rest) = path.split_first()?;
+    leaf_at(
+        if *left {
+            &condition.left
+        } else {
+            &condition.right
+        },
+        rest,
+    )
+}
+
+fn ghost_step(ghosts: &[Ghost], r: &RegisterValue) -> Option<i64> {
+    ghosts.iter().find(|g| g.value == *r).map(|g| g.step)
+}
+
+fn ghost_at_summary(
+    ghost: &Ghost,
+    counter: &LoopCounter,
+    iterations_ahead: i64,
+) -> AbstractExpression {
+    let step = AbstractExpression::Immediate(ghost.step);
+    advance(
+        rewind(
+            value_of(&ghost.value),
+            SUMMARY_ITERATION - iterations_ahead,
+            &step,
+        ),
+        &step,
+        counter,
+    )
+}
+
 fn is_conditional_branch(opcode: &str) -> bool {
     matches!(
         opcode,
@@ -484,11 +636,12 @@ fn summarize(
     id: LoopId,
     pc: usize,
     label: Option<String>,
-    condition: &AbstractComparison,
+    guard: (&AbstractComparison, &[Ghost]),
     continues_when: bool,
     invariants: Vec<LoopInvariant>,
     states: (&ComputerState, &ComputerState, &[JumpRecord]),
 ) -> Summary {
+    let (condition, ghosts) = guard;
     let (previous, current, cycle) = states;
     let counter = LoopCounter::for_loop(id);
     let name = counter.name().to_string();
@@ -625,7 +778,10 @@ fn summarize(
             .or_else(|| previous.0.iter().position(|c| c == r))
     };
 
-    let register_step = |r: &RegisterValue| step_at(index_of(r), &invariants);
+    let register_step = |r: &RegisterValue| match index_of(r) {
+        Some(i) => step_at(Some(i), &invariants),
+        None => AbstractExpression::Immediate(ghost_step(ghosts, r).unwrap_or(0)),
+    };
     let trip = trip_of(condition, &register_step);
 
     let mut exit_facts = Vec::new();
@@ -636,8 +792,8 @@ fn summarize(
     if let Some((exit, walker, step)) = trip {
         let distance = generate_expression(
             "-",
-            anchored(exit, &current.0, &previous.0, &invariants),
-            anchored(walker, &current.0, &previous.0, &invariants),
+            anchored(exit, &current.0, &previous.0, &invariants, ghosts),
+            anchored(walker, &current.0, &previous.0, &invariants, ghosts),
         );
         let totals = trip_facts(
             &condition.op,
@@ -673,12 +829,25 @@ fn summarize(
         facts.extend(facts_for_exit(record, &counter, &invariants, bounded));
     }
 
+    let side_at_summary = |on_left: bool, side: &AbstractExpression| {
+        let substituted = ghosts
+            .iter()
+            .filter(|g| g.path[0] == on_left)
+            .fold(side.clone(), |e, ghost| {
+                replaced_at(&e, &ghost.path[1..], &ghost_at_summary(ghost, &counter, 0))
+            });
+        at_summary(&substituted, &current.0, &previous.0, &updates)
+    };
     let held = AbstractComparison::new(
         &condition.op,
-        at_summary(&condition.left, &current.0, &previous.0, &updates),
-        at_summary(&condition.right, &current.0, &previous.0, &updates),
+        side_at_summary(true, &condition.left),
+        side_at_summary(false, &condition.right),
     );
     facts.push(if continues_when { held } else { held.not() });
+    let ghost_checks = ghosts
+        .iter()
+        .map(|ghost| (ghost.path.clone(), ghost_at_summary(ghost, &counter, 1)))
+        .collect();
 
     Summary {
         id,
@@ -692,6 +861,7 @@ fn summarize(
         exit_facts,
         exits,
         ranges,
+        ghost_checks,
     }
 }
 
@@ -720,6 +890,8 @@ struct ActiveLoop {
     facts: Vec<AbstractComparison>,
     exits: Vec<(usize, bool)>,
     round: usize,
+    nested_facts: Vec<ast::Bool>,
+    ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
 }
 
 #[derive(Clone)]
@@ -1541,9 +1713,32 @@ impl ExecutionEngine {
                 self.path_ends = true;
                 None
             }
+            Decision::Take(taken) if self.repeats_unboundedly(pc, taken, expression) => self
+                .try_summarize(pc, depth, expression, rw_list)
+                .or(Some(taken)),
             Decision::Take(taken) => Some(taken),
             Decision::Explore => self.try_summarize(pc, depth, expression, rw_list),
         }
+    }
+
+    fn repeats_unboundedly(&self, pc: usize, taken: bool, expression: &AbstractComparison) -> bool {
+        if expression.get_abstracts().is_empty()
+            || self.active_loops.iter().any(|open| open.pc == pc)
+        {
+            return false;
+        }
+        let mut visits = self
+            .jump_history
+            .iter()
+            .rev()
+            .filter(|record| record.point.pc == pc && !record.resolved)
+            .take_while(|record| record.taken == taken);
+        let progresses = visits
+            .next()
+            .is_some_and(|last| last.point.condition != *expression);
+        progresses
+            && 1 + visits.count() >= DECIDED_REPEATS_BEFORE_SUMMARY
+            && self.bounded_guard(pc).is_none()
     }
 
     fn select_definitions_in(&self, condition: &AbstractComparison) -> Vec<ast::Bool> {
@@ -1743,11 +1938,22 @@ impl ExecutionEngine {
         }
 
         let id = attempt.id;
+        let ghosts = ghost_operands(
+            &previous.condition,
+            expression,
+            &entry_state.0,
+            &current_state.0,
+            |step| {
+                (is_translatable(step) && step.size() <= MAX_EXPRESSION_NODES)
+                    .then(|| self.pinned_value(step))
+                    .flatten()
+            },
+        );
         let summary = summarize(
             id,
             pc,
             self.enclosing_label(pc),
-            expression,
+            (expression, &ghosts),
             branch_decision,
             self.bound_values(
                 &self.pin_steps(&attempt.invariants),
@@ -1800,6 +2006,7 @@ impl ExecutionEngine {
         let exit_facts = summary.exit_facts.clone();
         let facts = summary.facts.clone();
         let exits = summary.exits.clone();
+        let ghost_checks = summary.ghost_checks.clone();
         self.summaries.borrow_mut().push(summary);
 
         self.active_loops.push(ActiveLoop {
@@ -1818,6 +2025,8 @@ impl ExecutionEngine {
             facts,
             exits,
             round,
+            nested_facts: Vec::new(),
+            ghost_checks,
         });
         Some(branch_decision)
     }
@@ -2155,12 +2364,21 @@ impl ExecutionEngine {
     fn release_loop(&mut self, active: &ActiveLoop) {
         let above = self.scopes_above(active.scope_id);
         self.pop_scope(active.scope_id);
-        for fact in &active.facts {
-            self.computer.solver.assert(summary_fact_to_ast(fact));
-        }
+        let mut kept: Vec<ast::Bool> = active.facts.iter().map(summary_fact_to_ast).collect();
+        kept.extend(active.nested_facts.iter().cloned());
+        self.keep_facts(kept);
         self.rebuild_scopes(above);
         self.jump_history.truncate(active.history_len);
         self.loop_attempts.remove(&active.pc);
+    }
+
+    fn keep_facts(&mut self, facts: Vec<ast::Bool>) {
+        for fact in &facts {
+            self.computer.solver.assert(fact);
+        }
+        if let Some(enclosing) = self.active_loops.last_mut() {
+            enclosing.nested_facts.extend(facts);
+        }
     }
 
     fn suspend_for_call(&mut self, pc: usize) {
@@ -2511,11 +2729,24 @@ impl ExecutionEngine {
         self.pin_unknown_steps(&mut observed, &active.state.0, &current.0, &expression);
         self.computer.solver.pop(1);
         let observed = self.bound_values(&observed, &active.state.0, &current.0);
-        let holds = active
-            .invariants
-            .iter()
-            .zip(observed.iter())
-            .all(|(recorded, seen)| recorded.subsumes(seen));
+        let ghosts_repeat =
+            active.ghost_checks.iter().all(|(path, expected)| {
+                match condition_side(&expression, path) {
+                    Some(AbstractExpression::Register(now)) => self.proves(
+                        AbstractComparison::new("==", value_of(now), expected.clone()),
+                    ),
+                    _ => false,
+                }
+            });
+        if !ghosts_repeat {
+            log::info!("{} guard operand did not repeat its step", active.id);
+        }
+        let holds = ghosts_repeat
+            && active
+                .invariants
+                .iter()
+                .zip(observed.iter())
+                .all(|(recorded, seen)| recorded.subsumes(seen));
 
         let shown = expression.clone();
         let condition = comparison_to_ast(expression)
@@ -2554,6 +2785,7 @@ impl ExecutionEngine {
             .map(|(i, _)| i)
             .collect();
         let force_close = !holds
+            && ghosts_repeat
             && !retrying
             && unstable.iter().all(|&i| {
                 !self.carries_region(&active.entry_state.0[i])
@@ -2582,10 +2814,16 @@ impl ExecutionEngine {
                     active.pc
                 );
             }
-            self.computer.solver.assert(leaving.not().simplify());
-            for fact in active.facts.iter().chain(&active.exit_facts) {
-                self.computer.solver.assert(summary_fact_to_ast(fact));
-            }
+            let mut kept = vec![leaving.not().simplify()];
+            kept.extend(
+                active
+                    .facts
+                    .iter()
+                    .chain(&active.exit_facts)
+                    .map(summary_fact_to_ast),
+            );
+            kept.extend(active.nested_facts.iter().cloned());
+            self.keep_facts(kept);
             self.jump_history.truncate(active.history_len);
             for record in &mut self.jump_history {
                 record.resolved |= record.point.pc == active.pc;
