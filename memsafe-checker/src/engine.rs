@@ -14,6 +14,18 @@ const SUMMARY_ITERATION: i64 = 3;
 const DECIDED_REPEATS_BEFORE_SUMMARY: usize = 3;
 const UNROLLING_INSTRUCTION_BUDGET: i64 = 200_000;
 const MAX_MERGED_BLOCK: usize = 16;
+const MAX_STEPS: usize = 200_000;
+
+fn limit_from_env(variable: &str, default: usize) -> usize {
+    std::env::var(variable)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+
+fn max_branch_depth() -> usize {
+    limit_from_env("BUMS_MAX_BRANCH_DEPTH", MAX_BRANCH_DEPTH)
+}
 use z3::ast::Ast;
 use z3::*;
 
@@ -1627,6 +1639,7 @@ pub struct ExecutionEngine {
     refuted_select_steps: Rc<RefCell<HashSet<usize>>>,
     counted_failures: Rc<RefCell<HashSet<(usize, LoopId, usize)>>>,
     next_loop_id: Rc<Cell<usize>>,
+    steps_left: Rc<Cell<usize>>,
     scopes: Vec<Scope>,
     next_scope_id: usize,
     round_entries: HashMap<usize, RoundEntry>,
@@ -1803,6 +1816,7 @@ impl ExecutionEngine {
             refuted_select_steps: Rc::new(RefCell::new(HashSet::new())),
             counted_failures: Rc::new(RefCell::new(HashSet::new())),
             next_loop_id: Rc::new(Cell::new(0)),
+            steps_left: Rc::new(Cell::new(limit_from_env("BUMS_MAX_STEPS", MAX_STEPS))),
             loop_attempts: HashMap::new(),
             scopes: Vec::new(),
             next_scope_id: 0,
@@ -1896,6 +1910,10 @@ impl ExecutionEngine {
 
     pub fn get_register_output(&self, register: usize) -> RegisterValue {
         self.computer.registers[register].clone()
+    }
+
+    pub fn set_step_budget(&mut self, steps: usize) {
+        self.steps_left.set(steps);
     }
 
     pub fn dont_fail_fast(&mut self) {
@@ -2046,9 +2064,10 @@ impl ExecutionEngine {
     }
 
     fn run_from(&mut self, start_pc: usize, depth: usize) -> std::io::Result<()> {
-        if depth > MAX_BRANCH_DEPTH {
+        if depth > max_branch_depth() {
             return Err(Error::other(format!(
-                "line {start_pc}: branch depth exceeded {MAX_BRANCH_DEPTH}"
+                "line {start_pc}: branch depth exceeded {}",
+                max_branch_depth()
             )));
         }
         let mut pc = start_pc;
@@ -2071,6 +2090,12 @@ impl ExecutionEngine {
         depth: usize,
         unconditional_visits: &mut HashMap<usize, usize>,
     ) -> std::io::Result<Step> {
+        let Some(steps_left) = self.steps_left.get().checked_sub(1) else {
+            return Err(Error::other(format!(
+                "line {pc}: exploration limit reached"
+            )));
+        };
+        self.steps_left.set(steps_left);
         self.instructions_run += 1;
         if let Some(&end) = self.program.loop_ends.get(&pc)
             && let Some((written, exits)) = self.memory_free_loop(pc, end)
@@ -5160,6 +5185,28 @@ mod tests {
         let labels: Vec<(String, usize)> = engine.program.labels.clone();
         assert_eq!(labels.len(), 1);
         assert_eq!(labels[0], ("start".to_string(), 0));
+    }
+
+    #[test]
+    fn test_branch_fan_out_hits_exploration_limit() {
+        let mut asm = vec!["start:".to_string()];
+        for i in 0..29 {
+            asm.push(format!("cmp x{i}, #0"));
+            asm.push(format!("b.eq next_{i}"));
+            asm.push("nop".to_string());
+            asm.push(format!("next_{i}:"));
+        }
+        asm.push("ret".to_string());
+
+        let mut engine = ExecutionEngine::new(asm);
+        engine.dont_fail_fast();
+        engine.set_step_budget(150);
+
+        let err = engine.start("start").unwrap_err();
+        assert!(
+            err.to_string().contains("exploration limit reached"),
+            "{err}"
+        );
     }
 
     #[test]
