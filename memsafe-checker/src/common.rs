@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::str::FromStr;
 use z3::*;
 
 use crate::instruction_parser::{self, Arrangement};
@@ -71,6 +72,7 @@ pub struct SimdRegister {
     pub kind: RegisterKind,
     pub base: [Option<AbstractExpression>; 16],
     pub offset: [u8; 16],
+    pub lane_range: Option<(i64, i64)>,
 }
 
 pub const BASE_INIT: Option<AbstractExpression> = None;
@@ -88,6 +90,7 @@ impl SimdRegister {
             kind: RegisterKind::Number,
             base: bases,
             offset: [0; 16],
+            lane_range: None,
         }
     }
 
@@ -126,6 +129,7 @@ impl SimdRegister {
 
     pub fn set_byte(&mut self, index: usize, base: Option<AbstractExpression>, offset: u8) {
         assert!(index < 16);
+        self.lane_range = None;
         self.base[index] = base;
         self.offset[index] = offset;
     }
@@ -136,6 +140,7 @@ impl SimdRegister {
         offset: [u8; 2],
     ) {
         assert!(index <= 8);
+        self.lane_range = None;
         let index = index * 2;
         self.base[index..index + 2].clone_from_slice(&base);
         self.offset[index..index + 2].copy_from_slice(&offset);
@@ -148,6 +153,7 @@ impl SimdRegister {
         offset: [u8; 4],
     ) {
         assert!(index < 4);
+        self.lane_range = None;
         let index = index * 4;
         self.base[index..index + 4].clone_from_slice(&base);
         self.offset[index..index + 4].copy_from_slice(&offset);
@@ -160,9 +166,53 @@ impl SimdRegister {
         offset: [u8; 8],
     ) {
         assert!(index < 2);
+        self.lane_range = None;
         let index = index * 8;
         self.base[index..index + 8].clone_from_slice(&base);
         self.offset[index..index + 8].copy_from_slice(&offset);
+    }
+
+    pub fn get_lane(
+        &self,
+        arrangement: &Arrangement,
+        index: usize,
+    ) -> (Vec<Option<AbstractExpression>>, u128) {
+        let width = arrangement.lane_bytes();
+        let start = index * width;
+        assert!(start + width <= 16, "lane {} out of range", index);
+
+        let bases = self.base[start..start + width].to_vec();
+        let mut value: u128 = 0;
+        for byte in &self.offset[start..start + width] {
+            value = (value << 8) | (*byte as u128);
+        }
+        (bases, value)
+    }
+
+    pub fn set_lane(
+        &mut self,
+        arrangement: &Arrangement,
+        index: usize,
+        bases: Vec<Option<AbstractExpression>>,
+        value: u128,
+    ) {
+        let width = arrangement.lane_bytes();
+        let start = index * width;
+        assert!(start + width <= 16, "lane {} out of range", index);
+
+        self.lane_range = None;
+
+        for i in 0..width {
+            self.base[start + i] = bases.get(i).cloned().flatten();
+            self.offset[start + i] = (value >> (8 * (width - 1 - i))) as u8;
+        }
+    }
+
+    pub fn set_unknown(&mut self) {
+        self.kind = RegisterKind::Number;
+        self.base = [BASE_INIT; 16];
+        self.offset = [0; 16];
+        self.lane_range = None;
     }
 
     pub fn set_from_register(
@@ -174,75 +224,24 @@ impl SimdRegister {
         offset: u128,
     ) {
         self.kind = kind;
-        match arrangement {
-            Arrangement::B16 | Arrangement::B8 | Arrangement::Q => {
-                if let Some(b) = base {
-                    for i in 0..15 {
-                        self.base[i] = Some(AbstractExpression::Expression(
-                            "&".to_string(),
-                            Box::new(AbstractExpression::Abstract(format!(
-                                "{:?}{}",
-                                arrangement, i
-                            ))),
-                            Box::new(b.clone()),
-                        ));
-                    }
-                } else {
-                    self.base = [BASE_INIT; 16];
-                }
-                self.offset = [offset as u8; 16];
-            }
-            Arrangement::H8 => {
-                let offset = offset as u16;
-                let new_bases = [BASE_INIT; 2];
-                for i in 0..8 {
-                    self.set_halfword(i, new_bases.clone(), offset.to_be_bytes());
-                }
-            }
-            Arrangement::S4 => {
-                let offset = offset as u32;
-                let new_bases = [BASE_INIT; 4];
-                for i in 0..4 {
-                    self.set_word(i, new_bases.clone(), offset.to_be_bytes());
-                }
-            }
-            Arrangement::D2 => {
-                let offset = offset as u64;
-                let new_bases = [BASE_INIT; 8];
-                for i in 0..2 {
-                    self.set_double(i, new_bases.clone(), offset.to_be_bytes());
-                }
-            }
-            Arrangement::S => {
-                let offset = offset as u32;
-                let new_bases = [BASE_INIT; 4];
-                self.set_word(index, new_bases.clone(), offset.to_be_bytes());
-            }
-            Arrangement::D => {
-                let offset = offset as u64;
-                let new_bases = [BASE_INIT; 8];
-                self.set_double(index, new_bases.clone(), offset.to_be_bytes());
-            }
-            Arrangement::H => {
-                let offset = offset as u16;
-                let new_bases = [BASE_INIT; 2];
-                self.set_halfword(index, new_bases.clone(), offset.to_be_bytes());
-            }
-            Arrangement::B => {
-                self.set_byte(index, BASE_INIT, offset as u8);
-            }
-            Arrangement::S2 => {
-                let offset = offset as u32;
-                for i in 0..2 {
-                    self.set_word(i, [BASE_INIT; 4], offset.to_be_bytes());
-                }
-            }
-            Arrangement::H4 => {
-                let offset = offset as u16;
-                for i in 0..4 {
-                    self.set_halfword(i, [BASE_INIT; 2], offset.to_be_bytes());
-                }
-            }
+        self.lane_range = None;
+        let lane_bytes = arrangement.lane_bytes();
+        let value = if lane_bytes >= 16 {
+            offset
+        } else {
+            offset & ((1u128 << (8 * lane_bytes)) - 1)
+        };
+        let bases = vec![base; lane_bytes];
+
+        if arrangement.lanes() == 1 {
+            self.set_lane(&arrangement, index, bases, value);
+            return;
+        }
+
+        self.base = [BASE_INIT; 16];
+        self.offset = [0; 16];
+        for lane in 0..arrangement.lanes() {
+            self.set_lane(&arrangement, lane, bases.clone(), value);
         }
     }
 
@@ -415,6 +414,15 @@ pub fn generate_expression(
     a: AbstractExpression,
     b: AbstractExpression,
 ) -> AbstractExpression {
+    if let AbstractExpression::Expression(inner, x, t) = &a {
+        let undone = match (op, inner.as_str()) {
+            ("asr", "lsl") | ("-", "+") | ("+", "-") => **t == b,
+            _ => false,
+        };
+        if undone {
+            return (**x).clone();
+        }
+    }
     if matches!(op, "+" | "-") && b == AbstractExpression::Immediate(0) {
         return a;
     }
@@ -508,6 +516,9 @@ impl fmt::Display for AbstractExpression {
                     unreachable!()
                 };
                 write!(f, "{} - {}", Parenthesized(left, 5, false), -n)
+            }
+            AbstractExpression::Expression(op, value, width) if op == "clz" => {
+                write!(f, "clz{width}({value})")
             }
             AbstractExpression::Expression(op, left, right) => {
                 let outer = binding_power(op);
@@ -668,6 +679,15 @@ pub fn is_narrowed(e: &AbstractExpression) -> bool {
         if op == "%" && **right == AbstractExpression::Immediate(1 << 32))
 }
 
+pub fn peel_narrowing(e: &AbstractExpression) -> AbstractExpression {
+    match e {
+        AbstractExpression::Expression(op, inner, _) if op == "%" && is_narrowed(e) => {
+            (**inner).clone()
+        }
+        other => other.clone(),
+    }
+}
+
 pub fn narrow_to_32(
     base: Option<AbstractExpression>,
     offset: i64,
@@ -679,10 +699,18 @@ pub fn narrow_to_32(
             if offset == 0 && is_narrowed(&b) {
                 return (Some(b), 0);
             }
+            let inner = match &b {
+                AbstractExpression::Expression(op, x, m)
+                    if op == "%" && **m == AbstractExpression::Immediate(MODULUS) =>
+                {
+                    (**x).clone()
+                }
+                _ => b,
+            };
             let whole = if offset == 0 {
-                b
+                inner
             } else {
-                generate_expression("+", b, AbstractExpression::Immediate(offset))
+                generate_expression("+", inner, AbstractExpression::Immediate(offset))
             };
             let narrowed = generate_expression("%", whole, AbstractExpression::Immediate(MODULUS));
             (Some(narrowed), 0)
@@ -691,6 +719,9 @@ pub fn narrow_to_32(
 }
 
 pub fn access_width(opcode: &str, register: &instruction_parser::Operand) -> i64 {
+    if opcode.ends_with("sw") {
+        return 4;
+    }
     if opcode.ends_with('b') {
         return 1;
     }
@@ -781,6 +812,9 @@ pub struct MemorySafeRegion {
     length: AbstractExpression,
     alignment: i64,
     pub content: HashMap<i64, RegisterValue>,
+    widths: HashMap<i64, i64>,
+    written: Vec<(i64, i64)>,
+    pub epoch: usize,
 }
 
 impl MemorySafeRegion {
@@ -790,6 +824,9 @@ impl MemorySafeRegion {
             length,
             alignment: 1,
             content: HashMap::new(),
+            widths: HashMap::new(),
+            written: Vec::new(),
+            epoch: 0,
         }
     }
 
@@ -800,6 +837,90 @@ impl MemorySafeRegion {
 
     pub fn alignment(&self) -> i64 {
         self.alignment
+    }
+
+    pub fn write(&mut self, address: i64, width: i64, value: Option<RegisterValue>) {
+        let widths = &self.widths;
+        let overlapped: Vec<i64> = self
+            .content
+            .keys()
+            .copied()
+            .filter(|k| *k < address + width && k + widths.get(k).copied().unwrap_or(8) > address)
+            .collect();
+        for k in overlapped {
+            self.content.remove(&k);
+            self.widths.remove(&k);
+        }
+        if let Some(value) = value {
+            self.content.insert(address, value);
+            self.widths.insert(address, width);
+        }
+        self.written.push((address, address + width));
+    }
+
+    pub fn overwritten(&self, address: i64, width: i64) -> bool {
+        self.written
+            .iter()
+            .any(|&(start, end)| start < address + width && address < end)
+    }
+
+    pub fn read(&self, address: i64, width: i64) -> Option<RegisterValue> {
+        if let Some(v) = self.content.get(&address) {
+            let stored = self.widths.get(&address).copied().unwrap_or(8);
+            if stored == width {
+                return Some(v.clone());
+            }
+            if width < stored
+                && (1..=4).contains(&width)
+                && v.kind == RegisterKind::RegisterBase
+                && let Some(base) = &v.base
+            {
+                let whole = if v.offset == 0 {
+                    base.clone()
+                } else {
+                    generate_expression("+", base.clone(), AbstractExpression::Immediate(v.offset))
+                };
+                return Some(RegisterValue::new(
+                    RegisterKind::RegisterBase,
+                    Some(generate_expression(
+                        "%",
+                        whole,
+                        AbstractExpression::Immediate(1i64 << (8 * width)),
+                    )),
+                    0,
+                ));
+            }
+        }
+        if !(1..=8).contains(&width) {
+            return None;
+        }
+        let mut value: u64 = 0;
+        for byte in 0..width {
+            let at = address + byte;
+            let (start, stored) = (0..16).find_map(|back| {
+                let k = at - back;
+                let v = self.content.get(&k)?;
+                (at < k + self.widths.get(&k).copied().unwrap_or(8)).then_some((k, v))
+            })?;
+            if stored.kind != RegisterKind::Immediate {
+                return None;
+            }
+            let b = ((stored.offset as u64) >> (8 * (at - start))) & 0xff;
+            value |= b << (8 * byte);
+        }
+        Some(RegisterValue::new_imm(value as i64))
+    }
+
+    pub fn insert_sized(&mut self, address: i64, value: RegisterValue, width: i64) {
+        self.content.insert(address, value);
+        self.widths.insert(address, width);
+    }
+
+    pub fn clobber(&mut self) {
+        self.content.clear();
+        self.widths.clear();
+        self.written.clear();
+        self.epoch += 1;
     }
 
     pub fn insert(&mut self, address: i64, value: RegisterValue) {
@@ -888,6 +1009,32 @@ fn align_modulus(expression: &AbstractExpression) -> Option<i64> {
         AbstractExpression::Immediate(mask) if *mask < 0 => {
             let magnitude = mask.checked_neg()?;
             (magnitude as u64).is_power_of_two().then_some(magnitude)
+        }
+        _ => None,
+    }
+}
+
+fn field_mask(expression: &AbstractExpression) -> Option<(i64, i64)> {
+    let AbstractExpression::Immediate(mask) = expression else {
+        return None;
+    };
+    if *mask <= 0 {
+        return None;
+    }
+    let low = mask.trailing_zeros();
+    let run = (*mask as u64) >> low;
+    if run & (run + 1) != 0 || low + (64 - run.leading_zeros()) > 62 {
+        return None;
+    }
+    let high = low + (64 - run.leading_zeros());
+    Some((1i64 << low, 1i64 << high))
+}
+
+fn align32_modulus(expression: &AbstractExpression) -> Option<i64> {
+    match expression {
+        AbstractExpression::Immediate(mask) if (1..1 << 32).contains(mask) => {
+            let cleared = (1i64 << 32) - mask;
+            (cleared as u64).is_power_of_two().then_some(cleared)
         }
         _ => None,
     }
@@ -1014,8 +1161,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
         AbstractExpression::Abstract(a) => Some(ast::Int::new_const(a)),
         AbstractExpression::Register(reg) => {
             if let Some(base) = reg.base.clone() {
-                let base = expression_to_ast(base.clone())
-                    .unwrap_or_else(|| panic!("no translation for register base {base}"));
+                let base = expression_to_ast(base.clone())?;
                 let offset = ast::Int::from_i64(reg.offset);
                 Some(ast::Int::add(&[&base, &offset]))
             } else if reg.kind == RegisterKind::Number {
@@ -1025,11 +1171,86 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
             }
         }
         AbstractExpression::Expression(op, old1, old2) => {
-            let new1 = expression_to_ast(*old1.clone())
-                .unwrap_or_else(|| panic!("no translation for left operand of {op}: {old1}"));
-            let new2 = expression_to_ast(*old2.clone())
-                .unwrap_or_else(|| panic!("no translation for right operand of {op}: {old2}"));
+            if op == "!&"
+                && let AbstractExpression::Expression(inner, shifted, amount) = old2.as_ref()
+                && inner == "asr"
+                && shifted.as_ref() == old1.as_ref()
+                && **amount == AbstractExpression::Immediate(63)
+            {
+                let value = expression_to_ast(*old1.clone())?;
+                let zero = ast::Int::from_i64(0);
+                return Some(value.ge(&zero).ite(&value, &zero));
+            }
+            let constant_shift = match old2.as_ref() {
+                AbstractExpression::Immediate(k) if *k >= 0 => Some(*k),
+                _ => None,
+            };
+            let new1 = expression_to_ast(*old1.clone())?;
+            let new2 = expression_to_ast(*old2.clone())?;
             match op.as_str() {
+                "asr" if constant_shift.is_some() => {
+                    let shift = constant_shift.unwrap();
+                    let zero = ast::Int::from_i64(0);
+                    if shift >= 63 {
+                        let minus_one = ast::Int::from_i64(-1);
+                        return Some(new1.ge(&zero).ite(&zero, &minus_one));
+                    }
+                    Some(new1.div(ast::Int::from_i64(1i64 << shift)))
+                }
+                "lsr" | ">>" if constant_shift.is_some() => {
+                    let shift = constant_shift.unwrap();
+                    let zero = ast::Int::from_i64(0);
+                    if shift >= 64 {
+                        return Some(zero);
+                    }
+                    let modulus = ast::Int::from_str(&(1u128 << 64).to_string()).expect("modulus");
+                    let divisor =
+                        ast::Int::from_str(&(1u128 << shift).to_string()).expect("divisor");
+                    let wrapped = ast::Int::add(&[&new1, &modulus]);
+                    let unsigned = new1.ge(&zero).ite(&new1, &wrapped);
+                    Some(unsigned.div(&divisor))
+                }
+                "clz" if matches!(constant_shift, Some(32 | 64)) => {
+                    let width = constant_shift.unwrap() as u32;
+                    let zero = ast::Int::from_i64(0);
+                    let modulus =
+                        ast::Int::from_str(&(1u128 << width).to_string()).expect("modulus");
+                    let unsigned = if width == 32 {
+                        new1.modulo(&modulus)
+                    } else {
+                        new1.ge(&zero)
+                            .ite(&new1, &ast::Int::add(&[&new1, &modulus]))
+                    };
+                    let mut count = ast::Int::from_i64(width as i64);
+                    for k in (0..width).rev() {
+                        let threshold = ast::Int::from_str(&(1u128 << (width - 1 - k)).to_string())
+                            .expect("threshold");
+                        count = unsigned
+                            .ge(&threshold)
+                            .ite(&ast::Int::from_i64(k as i64), &count);
+                    }
+                    Some(count)
+                }
+                "zext" if constant_shift == Some(64) => {
+                    let zero = ast::Int::from_i64(0);
+                    let modulus = ast::Int::from_str(&(1u128 << 64).to_string()).expect("modulus");
+                    let wrapped = ast::Int::add(&[&new1, &modulus]);
+                    Some(new1.ge(&zero).ite(&new1, &wrapped))
+                }
+                "zext" | "sext" if matches!(constant_shift, Some(1..=64)) => {
+                    let width = constant_shift.unwrap();
+                    let modulus =
+                        ast::Int::from_str(&(1u128 << width).to_string()).expect("modulus");
+                    if op == "zext" {
+                        return Some(new1.modulo(&modulus));
+                    }
+                    let half =
+                        ast::Int::from_str(&(1u128 << (width - 1)).to_string()).expect("half");
+                    let shifted = ast::Int::add(&[&new1, &half]).modulo(&modulus);
+                    Some(ast::Int::sub(&[&shifted, &half]))
+                }
+                "atleast" => Some(new1.lt(&new2).ite(&new2, &new1)),
+                "atmost" => Some(new1.gt(&new2).ite(&new2, &new1)),
                 "+" => Some(ast::Int::add(&[&new1, &new2])),
                 "-" => Some(ast::Int::sub(&[&new1, &new2])),
                 "*" => Some(ast::Int::mul(&[&new1, &new2])),
@@ -1083,6 +1304,28 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                         Some(masked)
                     } else if let Some(masked) = masked_bits(&new2, &old1) {
                         Some(masked)
+                    } else if let Some(modulus) = align32_modulus(&old2) {
+                        let low = new1.modulo(ast::Int::from_i64(1 << 32));
+                        Some(ast::Int::sub(&[
+                            &low,
+                            &low.modulo(ast::Int::from_i64(modulus)),
+                        ]))
+                    } else if let Some(modulus) = align32_modulus(&old1) {
+                        let low = new2.modulo(ast::Int::from_i64(1 << 32));
+                        Some(ast::Int::sub(&[
+                            &low,
+                            &low.modulo(ast::Int::from_i64(modulus)),
+                        ]))
+                    } else if let Some((low, high)) = field_mask(&old2) {
+                        Some(ast::Int::sub(&[
+                            &new1.modulo(ast::Int::from_i64(high)),
+                            &new1.modulo(ast::Int::from_i64(low)),
+                        ]))
+                    } else if let Some((low, high)) = field_mask(&old1) {
+                        Some(ast::Int::sub(&[
+                            &new2.modulo(ast::Int::from_i64(high)),
+                            &new2.modulo(ast::Int::from_i64(low)),
+                        ]))
                     } else {
                         Some(ast::Int::new_const(opaque_name("and", &expression)))
                     }
@@ -1095,7 +1338,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     } else if let Some(flipped) = flip_mask(&new2, &old1) {
                         Some(flipped)
                     } else {
-                        Some(ast::Int::new_const(opaque_name("xor", &expression)))
+                        None
                     }
                 }
                 "|" => {
@@ -1173,6 +1416,44 @@ mod tests {
     }
 
     #[test]
+    fn a_word_align_down_mask_keeps_the_high_bits_of_the_low_word() {
+        assert_eq!(
+            align32_modulus(&AbstractExpression::Immediate(0xffff_fffc)),
+            Some(4)
+        );
+        assert_eq!(
+            align32_modulus(&AbstractExpression::Immediate(0xffff_fff0)),
+            Some(16)
+        );
+        assert_eq!(
+            align32_modulus(&AbstractExpression::Immediate(0xffff_fff5)),
+            None
+        );
+        assert!(equals(&masked(203, 0xffff_fffc), 200));
+        assert!(equals(&masked(-1, 0xffff_fffc), 0xffff_fffc));
+        assert!(equals(&masked(0x1_0000_0007, 0xffff_fffc), 4));
+    }
+
+    #[test]
+    fn a_run_of_bits_mask_keeps_that_field() {
+        assert_eq!(
+            field_mask(&AbstractExpression::Immediate(0x1fc000)),
+            Some((1 << 14, 1 << 21))
+        );
+        assert_eq!(
+            field_mask(&AbstractExpression::Immediate(0x30)),
+            Some((16, 64))
+        );
+        assert_eq!(field_mask(&AbstractExpression::Immediate(0x1f4000)), None);
+        for value in [0, 0x1fc000, 0x3fffff, 0x12345678, 123456789, -5] {
+            assert!(
+                equals(&masked(value, 0x1fc000), value & 0x1fc000),
+                "{value:#x}"
+            );
+        }
+    }
+
+    #[test]
     fn a_negative_power_of_two_mask_aligns_down() {
         assert!(equals(&masked(200, -64), 200 & -64));
         assert!(equals(&masked(128, -64), 128));
@@ -1231,14 +1512,20 @@ mod tests {
             SatResult::Unsat
         );
     }
+    #[test]
+    fn narrowing_does_not_nest_modulos() {
+        let mut value = (Some(abstract_of("w")), 0i64);
+        for step in [2i64, -8, -8, -8] {
+            value = narrow_to_32(value.0, step);
+        }
+        let shown = value.0.expect("a base").to_string();
+        assert_eq!(shown.matches('%').count(), 1, "{shown}");
+    }
 }
 
 pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
-    let (l, r) = (expression.left.clone(), expression.right.clone());
-    let left = expression_to_ast(*expression.left)
-        .unwrap_or_else(|| panic!("no translation for left side of comparison: {l}"));
-    let right = expression_to_ast(*expression.right)
-        .unwrap_or_else(|| panic!("no translation for right side of comparison: {r}"));
+    let left = expression_to_ast(*expression.left)?;
+    let right = expression_to_ast(*expression.right)?;
     match expression.op.as_str() {
         "<" => Some(left.lt(&right)),
         ">" => Some(left.gt(&right)),
@@ -1253,6 +1540,8 @@ pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExecuteReturnType {
     Next,
+    Split(Vec<AbstractComparison>),
+    JumpIndirect(RegisterValue),
     JumpLabel(String),
     JumpAddress(u128),
     ConditionalJumpLabel(AbstractComparison, String),

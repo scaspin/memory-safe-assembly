@@ -1,5 +1,33 @@
 use crate::computer::*;
 
+fn address_base(address: &RegisterValue) -> Result<AbstractExpression, MemorySafetyError> {
+    address.base.clone().ok_or_else(|| {
+        MemorySafetyError::new(
+            "Cannot prove access safe: address is an unknown value, \
+             derived from an instruction the engine does not model",
+        )
+    })
+}
+
+fn untranslatable(base: &AbstractExpression, ty: RegionType, width: i64) -> MemorySafetyError {
+    MemorySafetyError::new(&format!(
+        "{ty} of {width} bytes at {base} uses an operation the engine does not model"
+    ))
+}
+
+fn content_symbol(region: &str, offset: i64, width: i64, epoch: usize) -> RegisterValue {
+    let name = if epoch == 0 {
+        format!("{region}[{offset}:{width}]")
+    } else {
+        format!("{region}[{offset}:{width}]#{epoch}")
+    };
+    RegisterValue {
+        kind: RegisterKind::RegisterBase,
+        base: Some(AbstractExpression::Abstract(name)),
+        offset: 0,
+    }
+}
+
 fn format_address(base: &AbstractExpression, offset: i64) -> String {
     if offset < 0 {
         format!("{base} - {}", -offset)
@@ -42,7 +70,17 @@ impl ARMCORTEXA {
                     .memory
                     .get(&region_name)
                     .unwrap_or_else(|| panic!("Need memory region to load from {:?}", region_name));
-                match region.get(offset) {
+                let value = match region.read(offset, width) {
+                    Some(v) => {
+                        self.note_element_read(&region_name, offset);
+                        Some(v)
+                    }
+                    None if region.overwritten(offset, width) => {
+                        Some(RegisterValue::new(RegisterKind::Number, None, 0))
+                    }
+                    None => Some(content_symbol(&region_name, offset, width, region.epoch)),
+                };
+                match value {
                     Some(v) => {
                         self.set_register(&t, v.kind.clone(), v.base.clone(), v.offset);
                         self.rw_queue.push(MemoryAccess {
@@ -457,9 +495,8 @@ impl ARMCORTEXA {
                             self.memory.get(r).expect("region named by its own key"),
                             expression_to_ast(AbstractExpression::Abstract(r.to_string()))
                                 .expect("an abstract always translates"),
-                            expression_to_ast(base_expr.clone()).unwrap_or_else(|| {
-                                panic!("no translation for access base {base_expr}")
-                            }),
+                            expression_to_ast(base_expr.clone())
+                                .ok_or_else(|| untranslatable(&base_expr, ty, width))?,
                         ));
                         break;
                     }
@@ -474,9 +511,8 @@ impl ARMCORTEXA {
                                     .expect("labelled data lives in the memory region"),
                                 expression_to_ast(AbstractExpression::Abstract(r.0.to_string()))
                                     .expect("an abstract always translates"),
-                                expression_to_ast(base_expr.clone()).unwrap_or_else(|| {
-                                    panic!("no translation for access base {base_expr}")
-                                }),
+                                expression_to_ast(base_expr.clone())
+                                    .ok_or_else(|| untranslatable(&base_expr, ty, width))?,
                             ));
                             break;
                         }
@@ -569,5 +605,14 @@ impl ARMCORTEXA {
                 )))
             }
         }
+    }
+
+    pub fn mem_safe_vector_access(
+        &self,
+        address: &RegisterValue,
+        width: i64,
+        ty: RegionType,
+    ) -> Result<(), MemorySafetyError> {
+        self.mem_safe_access(address_base(address)?, address.offset, ty, width)
     }
 }
