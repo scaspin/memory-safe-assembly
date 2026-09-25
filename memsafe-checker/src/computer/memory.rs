@@ -298,18 +298,17 @@ impl ARMCORTEXA {
             return Some((region.clone(), region.clone(), 0));
         }
         abstracts.into_iter().find_map(|label| {
-            let address = *self.memory_labels.get(&label)?;
-            Some(("memory".to_string(), label, address))
+            let (section, address) = self.memory_labels.get(&label)?.clone();
+            Some((section, label, address))
         })
     }
 
     fn get_memory_pointer(&self, base: String, offset: i64) -> (String, i64) {
-        if self.memory.contains_key(&base) {
-            (base, offset)
-        } else if let Some(address) = self.memory_labels.get(&base) {
-            ("memory".to_string(), address + offset)
-        } else {
-            ("memory".to_string(), offset)
+        match self.memory_labels.get(&base) {
+            Some((section, address)) if !self.memory.contains_key(&base) => {
+                (section.clone(), address + offset)
+            }
+            _ => (base, offset),
         }
     }
 

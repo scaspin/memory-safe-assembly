@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::instruction_parser::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
 use z3::*;
@@ -35,7 +35,9 @@ pub struct ARMCORTEXA {
     pub carry: Option<FlagValue>,
     overflow: Option<FlagValue>,
     pub memory: HashMap<String, MemorySafeRegion>,
-    pub memory_labels: HashMap<String, i64>,
+    pub memory_labels: HashMap<String, (String, i64)>,
+    pub data_symbol_sizes: HashMap<String, i64>,
+    pub code_labels: Rc<HashSet<String>>,
     pub select_definitions:
         HashMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>,
     pub symbols_bounding_counter: HashMap<String, Vec<String>>,
@@ -196,6 +198,8 @@ impl ARMCORTEXA {
             overflow: None,
             memory,
             memory_labels: HashMap::new(),
+            data_symbol_sizes: HashMap::new(),
+            code_labels: Rc::default(),
             select_definitions: HashMap::new(),
             symbols_bounding_counter: HashMap::new(),
             rw_queue: Vec::new(),
@@ -308,8 +312,11 @@ impl ARMCORTEXA {
             .keys()
             .filter(|name| {
                 named.contains(name)
-                    || (*name == "memory"
-                        && named.iter().any(|n| self.memory_labels.contains_key(n)))
+                    || named.iter().any(|n| {
+                        self.memory_labels
+                            .get(n)
+                            .is_some_and(|(section, _)| section == *name)
+                    })
             })
             .cloned()
             .collect();
@@ -711,6 +718,44 @@ impl ARMCORTEXA {
         }
     }
 
+    pub fn add_data_section(&mut self, name: &str, ty: RegionType, size: i64, alignment: i64) {
+        let region = MemorySafeRegion::new(AbstractExpression::Immediate(size), ty)
+            .with_alignment(alignment);
+        self.memory.insert(name.to_string(), region);
+        if alignment > 1 {
+            self.solver.assert(
+                ast::Int::new_const(name)
+                    .modulo(ast::Int::from_i64(alignment))
+                    .eq(ast::Int::from_i64(0)),
+            );
+        }
+    }
+
+    pub fn add_memory_pointer(
+        &mut self,
+        region: &str,
+        at: i64,
+        pointer: RegisterValue,
+        width: i64,
+    ) {
+        if let Some(r) = self.memory.get_mut(region) {
+            r.insert_sized(at, pointer, width);
+        }
+    }
+
+    pub fn symbol_address(&self, symbol: &str) -> Option<(String, i64)> {
+        let name = symbol.split('@').next().unwrap_or(symbol).trim();
+        [name, name.trim_start_matches('_')]
+            .into_iter()
+            .find_map(|name| match self.memory_labels.get(name) {
+                Some(placed) => Some(placed.clone()),
+                None => self
+                    .code_labels
+                    .contains(name)
+                    .then(|| (name.to_string(), 0)),
+            })
+    }
+
     pub fn add_memory_region(&mut self, name: String, ty: RegionType, length: AbstractExpression) {
         let new_region = MemorySafeRegion::new(length, ty);
         self.memory.insert(name, new_region);
@@ -725,13 +770,8 @@ impl ARMCORTEXA {
             Some((symbol, addend)) => (symbol, addend.trim().parse::<i64>().unwrap_or(0)),
             None => (label, 0),
         };
-        let name = symbol.split('@').next().unwrap_or(symbol).trim();
-        let offset = self
-            .memory_labels
-            .get(name)
-            .or_else(|| self.memory_labels.get(name.trim_start_matches('_')))
-            .copied()?;
-        Some(("memory".to_string(), offset + addend))
+        let (base, offset) = self.symbol_address(symbol)?;
+        Some((base, offset + addend))
     }
 
     pub fn check_stack_pointer_restored(&self) {

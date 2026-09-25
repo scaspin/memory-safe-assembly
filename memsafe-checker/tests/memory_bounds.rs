@@ -1,4 +1,3 @@
-
 use bums::common::*;
 
 fn init() {
@@ -281,4 +280,68 @@ fn a_walk_ending_on_an_aligned_address_is_bounded_by_the_layout() {
     assert!(accepts_walk_to_the_next_boundary(4, ".align 6"));
     assert!(!accepts_walk_to_the_next_boundary(3, ".align 6"));
     assert!(!accepts_walk_to_the_next_boundary(4, ".align 3"));
+}
+
+fn accepts_static_data_access(program: &[&str]) -> bool {
+    init();
+    bums::engine::ExecutionEngine::new(program.iter().copied())
+        .start("start".to_string())
+        .is_ok()
+}
+
+#[test]
+fn a_read_stays_inside_its_own_section() {
+    let reading_at = |offset: i64| {
+        let access = format!("ldr x2,[x1,#{offset}]");
+        accepts_static_data_access(&[
+            "start:",
+            "adr x1,first",
+            &access,
+            "ret",
+            ".section .rodata",
+            "first:",
+            ".quad 1",
+            ".data",
+            "second:",
+            ".quad 2",
+        ])
+    };
+    assert!(reading_at(0));
+    assert!(!reading_at(8));
+}
+
+#[test]
+fn data_on_either_side_of_code_is_bounded_apart() {
+    let reading_at = |offset: i64| {
+        let access = format!("ldr x2,[x1,#{offset}]");
+        accepts_static_data_access(&[
+            "first:",
+            ".quad 1",
+            "start:",
+            "adr x1,first",
+            &access,
+            "ret",
+            "second:",
+            ".quad 2",
+        ])
+    };
+    assert!(reading_at(0));
+    assert!(!reading_at(8));
+}
+
+#[test]
+fn read_only_data_is_not_written() {
+    let writing = |section: &str| {
+        accepts_static_data_access(&[
+            "start:",
+            "adr x1,table",
+            "str x2,[x1]",
+            "ret",
+            section,
+            "table:",
+            ".quad 1",
+        ])
+    };
+    assert!(!writing(".section .rodata"));
+    assert!(writing(".data"));
 }

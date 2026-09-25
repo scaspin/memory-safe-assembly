@@ -32,6 +32,7 @@ use z3::*;
 use crate::common::*;
 use crate::computer::*;
 use crate::instruction_parser::*;
+use crate::loader::{DataItem, DataValue, Listing};
 use crate::widening::*;
 
 enum BranchOutcome {
@@ -45,16 +46,6 @@ enum Step {
     Done,
 }
 
-fn item_size(directive: &str) -> Option<i64> {
-    match directive {
-        ".byte" => Some(1),
-        ".hword" | ".short" => Some(2),
-        ".word" | ".long" => Some(4),
-        ".quad" | ".xword" | ".dword" => Some(8),
-        _ => None,
-    }
-}
-
 fn join_branch_errors(e1: Error, e2: Error) -> String {
     let (e1, e2) = (e1.to_string(), e2.to_string());
     if e1 == e2 { e1 } else { format!("{e1}; {e2}") }
@@ -65,6 +56,27 @@ struct Program {
     code: Vec<Instruction>,
     labels: Vec<(String, usize)>,
     loop_ends: HashMap<usize, usize>,
+    line_at: HashMap<i64, usize>,
+    addresses: HashMap<String, i64>,
+}
+
+fn store_data_item(computer: &mut ARMCORTEXA, section: &str, item: &DataItem) {
+    match &item.value {
+        DataValue::Literal(value) | DataValue::LabelDifference { value, .. } => {
+            computer.add_memory_value(section.to_string(), item.offset, *value, item.width)
+        }
+        DataValue::Pointer(symbol, addend) => {
+            if let Some((base, offset)) = computer.symbol_address(symbol) {
+                let pointer = RegisterValue::new(
+                    RegisterKind::RegisterBase,
+                    Some(AbstractExpression::Abstract(base)),
+                    offset + addend,
+                );
+                computer.add_memory_pointer(section, item.offset, pointer, item.width);
+            }
+        }
+        DataValue::Unknown => (),
+    }
 }
 
 fn branch_label(instruction: &Instruction) -> Option<&str> {
@@ -1664,137 +1676,57 @@ struct Scope {
 
 impl ExecutionEngine {
     pub fn new<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> ExecutionEngine {
-        let mut defs: Vec<String> = Vec::new();
-        let mut code: Vec<Instruction> = Vec::new();
-        let mut labels: Vec<(String, usize)> = Vec::new();
-        let mut ifdefs: Vec<((String, usize), usize)> = Vec::new();
-        let mut defs_before_label: Vec<(String, usize, usize)> = Vec::new();
-        let mut instructions_before_def: Vec<usize> = Vec::new();
-        let mut instructions_seen = 0usize;
-
-        let mut line_number = 0;
-        let mut inifdef = false;
-        let mut lastifdef: (String, usize) = ("Start".to_string(), 0);
-
-        let statements = lines.into_iter().flat_map(|line| {
-            let line: String = line.into();
-            let code = line.split_once("//").map_or(line.as_str(), |(c, _)| c);
-            let code = code.split_once(';').map_or(code, |(c, _)| c);
-            code.split("%%").map(str::to_string).collect::<Vec<_>>()
-        });
-        for line in statements {
-            let text = line.trim().to_string();
-
-            if text.is_empty() || text.starts_with("#") {
-                continue;
-            } else if text.starts_with('.') && !text.ends_with(':') {
-                defs.push(text);
-                instructions_before_def.push(instructions_seen);
-            } else {
-                if text.starts_with('#') {
-                    if inifdef {
-                        ifdefs.push((lastifdef.clone(), line_number));
-                        inifdef = false;
-                    } else {
-                        inifdef = true;
-                        lastifdef = (text.clone(), line_number);
-                    }
-                }
-
-                let i = Instruction::new(text.clone());
-                if i.ty == InstructionType::Label {
-                    defs_before_label.push((i.opcode.clone(), defs.len(), instructions_seen));
-                    labels.push((i.opcode, line_number));
-                } else {
-                    instructions_seen += 1;
-                }
-                code.push(Instruction::new(text));
-
-                line_number += 1;
-            }
-        }
-
+        let listing = Listing::parse(lines);
         let mut computer = ARMCORTEXA::new();
 
-        let mut address: i64 = 0;
-        let mut data_blocks: Vec<usize> = Vec::new();
-        let mut boundaries: Vec<(usize, i64)> = Vec::new();
-        for (position, def) in defs.iter().enumerate() {
-            for (label, _, _) in defs_before_label
-                .iter()
-                .filter(|(_, at, _)| *at == position)
-            {
-                computer.memory_labels.insert(label.clone(), address);
-            }
-            let v: Vec<&str> = def.split(['\t', ',', ' ']).collect();
-            if v[0] == ".align" {
-                if let Some(n) = v.get(1).and_then(|n| n.parse::<u32>().ok()) {
-                    let boundary = 1i64 << n;
-                    address = (address + boundary - 1) & !(boundary - 1);
-                    boundaries.push((instructions_before_def[position], boundary));
-                }
-            } else if let Some(item) = item_size(v[0]) {
-                if !data_blocks.contains(&instructions_before_def[position]) {
-                    data_blocks.push(instructions_before_def[position]);
-                }
-                for i in v.iter().skip(1) {
-                    if i.is_empty() {
-                        continue;
-                    }
-                    let num = match i.strip_prefix("0x") {
-                        Some(hex) => u64::from_str_radix(hex, 16).ok().map(|v| v as i64),
-                        None => i.parse::<i64>().ok(),
-                    };
-                    if let Some(num) = num {
-                        computer.add_memory_value("memory".to_string(), address, num, item);
-                    }
-                    address += item;
-                }
-            } else if v[0] == ".globl" || v[0] == ".private_extern" {
-                computer.memory_labels.insert(v[1].to_string(), address);
-            } else if def.contains(":") {
-                computer
-                    .memory_labels
-                    .insert(def.strip_suffix(":").unwrap_or(def).to_string(), address);
+        let mut addresses: HashMap<String, i64> = HashMap::new();
+        for section in &listing.data {
+            let ty = if section.writable {
+                RegionType::RW
+            } else {
+                RegionType::READ
+            };
+            computer.add_data_section(&section.name, ty, section.size, section.alignment);
+            addresses.insert(section.name.clone(), section.address);
+        }
+        for (name, symbol) in &listing.data_symbols {
+            computer
+                .memory_labels
+                .insert(name.clone(), (symbol.section.clone(), symbol.offset));
+            if let Some(size) = symbol.size.filter(|s| *s > 0) {
+                computer.data_symbol_sizes.insert(name.clone(), size);
             }
         }
-        for (label, _, _) in defs_before_label
+        computer.code_labels = Rc::new(listing.labels.iter().map(|(n, _)| n.clone()).collect());
+        for section in &listing.data {
+            for item in &section.items {
+                store_data_item(&mut computer, &section.name, item);
+            }
+        }
+        for name in listing
+            .labels
             .iter()
-            .filter(|(_, at, _)| *at == defs.len())
+            .map(|(n, _)| n)
+            .chain(listing.data_symbols.keys())
         {
-            computer.memory_labels.insert(label.clone(), address);
-        }
-        computer.grow_memory_region("memory".to_string(), address);
-        let holds_data =
-            |def: &String| item_size(def.split(['\t', ',', ' ']).next().unwrap_or("")).is_some();
-        let a_later_block_is_labelled = defs_before_label.iter().any(|(_, at, placed)| {
-            defs.get(*at).is_some_and(holds_data)
-                && instructions_before_def.get(*at) == Some(placed)
-                && data_blocks.first() != Some(placed)
-        });
-        if let Some(first_block) = data_blocks.first()
-            && !a_later_block_is_labelled
-        {
-            let start_boundary = boundaries
-                .iter()
-                .filter(|(block, _)| block == first_block)
-                .map(|(_, boundary)| *boundary)
-                .max()
-                .unwrap_or(1);
-            if start_boundary > 1 {
-                computer.solver.assert(
-                    ast::Int::new_const("memory")
-                        .modulo(ast::Int::from_i64(start_boundary))
-                        .eq(ast::Int::from_i64(0)),
-                );
+            if let Some(address) = listing.address_of(name) {
+                addresses.insert(name.clone(), address);
             }
         }
+        let Listing {
+            code,
+            labels,
+            line_at,
+            ..
+        } = listing;
 
         ExecutionEngine {
             program: Rc::new(Program {
                 loop_ends: loop_ends_of(&code, &labels),
                 code,
                 labels,
+                line_at,
+                addresses,
             }),
             computer,
             jump_history: Vec::new(),
@@ -1910,6 +1842,14 @@ impl ExecutionEngine {
 
     pub fn get_register_output(&self, register: usize) -> RegisterValue {
         self.computer.registers[register].clone()
+    }
+
+    pub fn address_of(&self, name: &str) -> Option<i64> {
+        self.program.addresses.get(name).copied()
+    }
+
+    pub fn line_for_address(&self, address: i64) -> Option<usize> {
+        self.program.line_at.get(&address).copied()
     }
 
     pub fn set_step_budget(&mut self, steps: usize) {

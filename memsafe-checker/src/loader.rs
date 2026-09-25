@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 
 use crate::instruction_parser::{Instruction, InstructionType};
@@ -31,6 +30,7 @@ pub struct DataSection {
     pub writable: bool,
     pub address: i64,
     pub size: i64,
+    pub alignment: i64,
     pub items: Vec<DataItem>,
 }
 
@@ -49,6 +49,8 @@ pub struct Listing {
     pub line_at: HashMap<i64, usize>,
     pub data: Vec<DataSection>,
     pub data_symbols: HashMap<String, DataSymbol>,
+    text_block: Option<usize>,
+    held_alignment: Vec<(String, String)>,
 }
 
 impl Listing {
@@ -91,11 +93,18 @@ fn parse_integer(text: &str) -> Option<i64> {
         Some(rest) => (true, rest),
         None => (false, text),
     };
-    let value = match digits.strip_prefix("0x").or_else(|| digits.strip_prefix("0X")) {
+    let value = match digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
         Some(hex) => u64::from_str_radix(hex, 16).ok()? as i64,
         None => digits.parse::<i64>().ok()?,
     };
-    Some(if negative { value.wrapping_neg() } else { value })
+    Some(if negative {
+        value.wrapping_neg()
+    } else {
+        value
+    })
 }
 
 fn section_name(rest: &str) -> String {
@@ -124,12 +133,15 @@ impl Listing {
         let mut waiting: Vec<String> = Vec::new();
         let mut run: Option<TextRun> = None;
 
-        for line in lines {
+        let statements = lines.into_iter().flat_map(|line| {
             let line: String = line.into();
-            let text = match line.trim().split_once("//") {
-                Some((before, _)) => before.trim().to_string(),
-                None => line.trim().to_string(),
-            };
+            let code = line.split_once("//").map_or(line.as_str(), |(c, _)| c);
+            let code = code.split_once(';').map_or(code, |(c, _)| c);
+            code.split("%%")
+                .map(|statement| statement.trim().to_string())
+                .collect::<Vec<_>>()
+        });
+        for text in statements {
             if text.is_empty() || text.starts_with('#') {
                 continue;
             }
@@ -171,16 +183,15 @@ impl Listing {
                         }
                         Section::Text => {
                             let aligns = matches!(directive, ".align" | ".p2align" | ".balign");
-                            if item_width(directive).is_some() || (aligns && run.is_some()) {
+                            if item_width(directive).is_some()
+                                || (aligns && (run.is_some() || waiting.is_empty()))
+                            {
                                 run.get_or_insert_with(|| TextRun {
                                     labels: std::mem::take(&mut waiting),
                                     directives: Vec::new(),
                                 })
                                 .directives
                                 .push((directive.to_string(), rest.to_string()));
-                            } else if aligns && waiting.is_empty() {
-                                let index = listing.data_section(TEXT_DATA);
-                                listing.data_directive(index, directive, rest, &mut pending);
                             }
                         }
                     },
@@ -227,7 +238,14 @@ impl Listing {
         let Some(run) = run else {
             return;
         };
-        let index = self.data_section(TEXT_DATA);
+        if run.labels.is_empty() && run.directives.iter().all(|(d, _)| item_width(d).is_none()) {
+            self.held_alignment.extend(run.directives);
+            return;
+        }
+        let index = self.text_block();
+        for (directive, rest) in std::mem::take(&mut self.held_alignment) {
+            self.data_directive(index, &directive, &rest, pending);
+        }
         for label in run.labels {
             self.add_data_symbol(index, label.trim_end_matches(':').to_string());
         }
@@ -238,9 +256,31 @@ impl Listing {
 
     fn push_code(&mut self, instruction: Instruction) {
         if instruction.ty == InstructionType::Label {
-            self.labels.push((instruction.opcode.clone(), self.code.len()));
+            self.labels
+                .push((instruction.opcode.clone(), self.code.len()));
+        } else {
+            self.text_block = None;
+            self.held_alignment.clear();
         }
         self.code.push(instruction);
+    }
+
+    fn text_block(&mut self) -> usize {
+        if let Some(index) = self.text_block {
+            return index;
+        }
+        let name = match self
+            .data
+            .iter()
+            .filter(|s| s.name.starts_with(TEXT_DATA))
+            .count()
+        {
+            0 => TEXT_DATA.to_string(),
+            n => format!("{TEXT_DATA}.{n}"),
+        };
+        let index = self.data_section(&name);
+        self.text_block = Some(index);
+        index
     }
 
     fn add_data_symbol(&mut self, index: usize, name: String) {
@@ -264,6 +304,7 @@ impl Listing {
             writable: is_writable_section(name),
             address: 0,
             size: 0,
+            alignment: 1,
             items: Vec::new(),
         });
         self.data.len() - 1
@@ -280,6 +321,7 @@ impl Listing {
         let align_to = |data: &mut DataSection, boundary: i64| {
             if boundary > 1 {
                 data.size = (data.size + boundary - 1) / boundary * boundary;
+                data.alignment = data.alignment.max(boundary);
             }
         };
         let argument = || parse_integer(rest.split(',').next().unwrap_or("").trim());
@@ -299,8 +341,8 @@ impl Listing {
                     data.size += n;
                 }
             }
-            ".globl" | ".global" | ".private_extern" | ".hidden" | ".type" | ".local"
-            | ".weak" => (),
+            ".globl" | ".global" | ".private_extern" | ".hidden" | ".type" | ".local" | ".weak" => {
+            }
             _ => {
                 let Some(width) = item_width(directive) else {
                     log::warn!("data directive {directive} not modelled");
@@ -436,6 +478,29 @@ mod tests {
         assert_eq!(l.data_symbols["iotas"].section, TEXT_DATA);
         assert_eq!(l.data_symbols["iotas"].offset, 16);
         assert_eq!(l.address_of("f"), Some(0));
+    }
+
+    #[test]
+    fn data_on_either_side_of_code_is_two_blocks() {
+        let l = listing(&[
+            ".align 4",
+            "first:",
+            ".quad 1",
+            "f:",
+            "ret",
+            ".p2align 3",
+            "g:",
+            "ret",
+            "second:",
+            ".quad 2",
+        ]);
+        assert_eq!(l.data.len(), 2);
+        assert_eq!(l.data_symbols["first"].section, TEXT_DATA);
+        assert_eq!(l.data_symbols["second"].offset, 0);
+        assert_ne!(l.data_symbols["second"].section, TEXT_DATA);
+        assert_eq!(l.data[0].alignment, 16);
+        assert_eq!(l.data[1].alignment, 1);
+        assert!(l.labels.iter().any(|(n, _)| n == "g"));
     }
 
     #[test]
