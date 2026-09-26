@@ -1180,6 +1180,34 @@ mod tests {
     }
 
     #[test]
+    fn a_step_form_is_the_normalized_difference() {
+        let s = abstract_of("s");
+        let prev = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression("+", base(), s.clone())),
+            8,
+        );
+        let cur = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression(
+                "+",
+                generate_expression("lsl", s.clone(), AbstractExpression::Immediate(1)),
+                base(),
+            )),
+            24,
+        );
+        assert_eq!(
+            step_form(&prev, &cur),
+            linear_form(&generate_expression(
+                "+",
+                s,
+                AbstractExpression::Immediate(16)
+            ))
+        );
+        assert_eq!(step_form(&prev, &prev), Some(LinearForm::constant(0)));
+    }
+
+    #[test]
     fn a_step_built_from_the_value_itself_is_unknown() {
         let prev = RegisterValue::new(RegisterKind::RegisterBase, Some(base()), 0);
         let cur = RegisterValue::new(
