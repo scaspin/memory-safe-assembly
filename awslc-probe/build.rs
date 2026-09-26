@@ -60,5 +60,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
         }
     }
+    let bignum = format!("../bignum-playground/asm/{}", arch);
+    for area in std::fs::read_dir(&bignum).into_iter().flatten().flatten() {
+        for entry in std::fs::read_dir(area.path())?.flatten() {
+            println!("cargo::rerun-if-changed={}", entry.path().display());
+            if !seen.insert(entry.file_name()) {
+                continue;
+            }
+            let mut processed_path = out_dir.clone();
+            processed_path.push(entry.file_name());
+            File::create(processed_path)?.write_all(
+                &cc::Build::new()
+                    .include("../bignum-playground/asm/include")
+                    .include("../crypto-playground/include")
+                    .define("S2N_BN_HIDE_SYMBOLS", "1")
+                    .file(entry.path())
+                    .expand(),
+            )?;
+        }
+    }
     Ok(())
 }

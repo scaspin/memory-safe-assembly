@@ -1,4 +1,4 @@
 #![allow(dead_code, non_snake_case, unused_imports)]
 
-#[bums_macros::check_mem_safe("sha512-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 128, [input.len() >= 128, input.len() % 128 == 0])]
-fn sha512_block_data_order(context: &mut [u64; 8], input: &[u8]);
+#[bums_macros::check_mem_safe("p521_jscalarmul_alt.S", res.as_mut_ptr(), scalar.as_ptr(), point.as_ptr())]
+fn p521_jscalarmul_alt(res: &mut [u64; 27], scalar: &[u64; 9], point: &[u64; 27]);
