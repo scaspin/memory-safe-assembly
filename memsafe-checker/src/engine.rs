@@ -3193,6 +3193,10 @@ impl ExecutionEngine {
             .rev()
             .find(|(_, record)| record.point.pc == pc)?;
         let (previous, branch_decision) = (record.point.clone(), record.taken);
+        if self.reads_a_changing_load(expression, &previous.state) {
+            log::info!("line {pc} tests a load that changed since the last visit, unrolling");
+            return None;
+        }
         let failures = self.failed_summaries.borrow().get(&pc).copied();
         if failures.is_some_and(|n| n >= MAX_SUMMARY_TRIES) {
             log::info!("loop at line {pc} failed {MAX_SUMMARY_TRIES} summaries, unrolling");
@@ -3494,6 +3498,24 @@ impl ExecutionEngine {
             continuing: continuing_at_summary,
         });
         Some(branch_decision)
+    }
+
+    fn reads_a_changing_load(
+        &self,
+        condition: &AbstractComparison,
+        previous: &ComputerState,
+    ) -> bool {
+        let tested = registers_in(condition);
+        self.computer
+            .registers
+            .iter()
+            .zip(previous.0.iter())
+            .zip(self.computer.loaded.iter())
+            .any(|((now, before), loaded)| {
+                *loaded
+                    && tested.contains(now)
+                    && (now != before || (now.kind == RegisterKind::Number && now.base.is_none()))
+            })
     }
 
     fn proven_upper_bound(&self, register: &RegisterValue) -> Option<i64> {

@@ -89,6 +89,7 @@ impl ARMCORTEXA {
                 match value {
                     Some(v) => {
                         self.set_register(&t, v.kind.clone(), v.base.clone(), v.offset);
+                        self.mark_loaded(&t);
                         self.rw_queue.push(MemoryAccess {
                             kind: RegionType::READ,
                             base: AbstractExpression::Abstract(base.clone()),
@@ -117,10 +118,17 @@ impl ARMCORTEXA {
                     offset: address.offset,
                 });
                 self.set_register(&t, RegisterKind::Number, None, 0);
+                self.mark_loaded(&t);
                 Ok(())
             }
         } else {
             res
+        }
+    }
+
+    fn mark_loaded(&mut self, register: &Operand) {
+        if let Operand::Register(RePrefix::X | RePrefix::W, n) = register {
+            self.loaded[*n] = true;
         }
     }
 
