@@ -35,6 +35,22 @@ pub struct ARMCORTEXA {
     alignment: i64,
     flag_counter: usize,
     pub solver: Solver,
+    pub lane_bounds: Box<LaneBounds>,
+}
+
+#[derive(Clone)]
+pub struct LaneBounds {
+    pub bytes: [[u8; 16]; 32],
+    pub scalar: [Option<u64>; 32],
+}
+
+impl Default for LaneBounds {
+    fn default() -> Self {
+        Self {
+            bytes: [[u8::MAX; 16]; 32],
+            scalar: [None; 32],
+        }
+    }
 }
 
 impl fmt::Debug for ARMCORTEXA {
@@ -155,6 +171,7 @@ impl ARMCORTEXA {
             rw_queue: Vec::new(),
             alignment: 4,
             flag_counter: 0,
+            lane_bounds: Box::default(),
             solver,
         }
     }

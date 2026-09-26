@@ -1,7 +1,6 @@
 use crate::computer::*;
 
 impl ARMCORTEXA {
-    //TODO: generics instead
     pub fn vector_arithmetic(
         &mut self,
         op_string: &str,
@@ -151,5 +150,185 @@ impl ARMCORTEXA {
         }
 
         self.set_simd_register(reg0, result);
+    }
+}
+
+pub enum LaneEffect {
+    Vectors(Vec<(usize, [u8; 16], Option<u64>)>),
+    General(Operand, u64),
+    Nothing,
+}
+
+fn vector_index(operand: &Operand) -> Option<usize> {
+    match operand {
+        Operand::Vector(_, n, _)
+        | Operand::VectorRegister(_, n)
+        | Operand::VectorAccess(_, n, _, _) => Some(*n),
+        _ => None,
+    }
+}
+
+fn lane_max(bytes: &[u8; 16], lane: usize, width: usize) -> u64 {
+    (0..width).fold(0u64, |value, k| {
+        value | (u64::from(bytes[lane * width + k]) << (8 * k))
+    })
+}
+
+fn truncated(value: i64, width: usize) -> [u8; 16] {
+    let mut bytes = [0u8; 16];
+    let le = value.to_le_bytes();
+    let kept = width.min(8);
+    bytes[..kept].copy_from_slice(&le[..kept]);
+    bytes
+}
+
+impl ARMCORTEXA {
+    fn immediate_of(&mut self, operand: &Operand) -> Option<i64> {
+        let value = self.get_register(operand);
+        (value.kind == RegisterKind::Immediate && value.base.is_none()).then_some(value.offset)
+    }
+
+    pub fn plan_lane_effect(&mut self, instruction: &Instruction) -> LaneEffect {
+        let operands = &instruction.operands;
+        let opcode = instruction.opcode.as_str();
+        let bounds = (*self.lane_bounds).clone();
+        if opcode.starts_with("st") {
+            return LaneEffect::Nothing;
+        }
+        if opcode.starts_with("ld") {
+            let written = operands
+                .iter()
+                .filter(|op| !matches!(op, Operand::Memory(..)))
+                .filter_map(vector_index)
+                .map(|n| (n, [u8::MAX; 16], None))
+                .collect();
+            return LaneEffect::Vectors(written);
+        }
+        let Some(first) = operands.first() else {
+            return LaneEffect::Nothing;
+        };
+        if let Some(source) = operands.get(1).and_then(vector_index)
+            && matches!(opcode, "fmov" | "umov" | "mov")
+            && matches!(first, Operand::Register(..))
+        {
+            let bound = match operands.get(1) {
+                Some(Operand::VectorAccess(_, _, arrangement, lane)) => {
+                    let width = arrangement.element_width() as usize;
+                    Some(lane_max(&bounds.bytes[source], *lane as usize, width))
+                }
+                _ => bounds.scalar[source],
+            };
+            return match bound {
+                Some(bound) => LaneEffect::General(first.clone(), bound),
+                None => LaneEffect::Nothing,
+            };
+        }
+        let Some(dst) = vector_index(first) else {
+            return LaneEffect::Nothing;
+        };
+        let unknown = LaneEffect::Vectors(vec![(dst, [u8::MAX; 16], None)]);
+        match (opcode, operands.as_slice()) {
+            (
+                "mov" | "ins",
+                [
+                    Operand::VectorAccess(_, _, arrangement, lane),
+                    source @ Operand::Register(..),
+                ],
+            ) => {
+                let width = arrangement.element_width() as usize;
+                let mut bytes = bounds.bytes[dst];
+                let value = self
+                    .immediate_of(source)
+                    .map_or([u8::MAX; 16], |v| truncated(v, width));
+                let start = *lane as usize * width;
+                bytes[start..start + width].copy_from_slice(&value[..width]);
+                LaneEffect::Vectors(vec![(dst, bytes, None)])
+            }
+            (
+                "dup",
+                [
+                    Operand::Vector(_, _, arrangement),
+                    source @ Operand::Register(..),
+                ],
+            ) => {
+                let width = arrangement.element_width() as usize;
+                match self.immediate_of(source) {
+                    Some(v) => {
+                        let lane = truncated(v, width);
+                        let mut bytes = [0u8; 16];
+                        for (k, byte) in bytes
+                            .iter_mut()
+                            .enumerate()
+                            .take(arrangement.width() as usize)
+                        {
+                            *byte = lane[k % width];
+                        }
+                        LaneEffect::Vectors(vec![(dst, bytes, None)])
+                    }
+                    None => unknown,
+                }
+            }
+            ("eor", [_, Operand::Vector(_, a, _), Operand::Vector(_, b, _)]) if a == b => {
+                LaneEffect::Vectors(vec![(dst, [0u8; 16], None)])
+            }
+            (
+                "and",
+                [
+                    Operand::Vector(_, _, arrangement),
+                    Operand::Vector(_, a, _),
+                    Operand::Vector(_, b, _),
+                ],
+            ) => {
+                let mut bytes = [0u8; 16];
+                for (k, byte) in bytes
+                    .iter_mut()
+                    .enumerate()
+                    .take(arrangement.width() as usize)
+                {
+                    *byte = bounds.bytes[*a][k].min(bounds.bytes[*b][k]);
+                }
+                LaneEffect::Vectors(vec![(dst, bytes, None)])
+            }
+            ("cnt", [Operand::Vector(_, _, arrangement), Operand::Vector(..)]) => {
+                let mut bytes = [0u8; 16];
+                for byte in bytes.iter_mut().take(arrangement.width() as usize) {
+                    *byte = 8;
+                }
+                LaneEffect::Vectors(vec![(dst, bytes, None)])
+            }
+            ("uaddlv", [_, Operand::Vector(_, source, arrangement)]) => {
+                let width = arrangement.element_width() as usize;
+                let lanes = arrangement.width() as usize / width;
+                let sum = (0..lanes)
+                    .map(|lane| lane_max(&bounds.bytes[*source], lane, width))
+                    .sum();
+                LaneEffect::Vectors(vec![(dst, [u8::MAX; 16], Some(sum))])
+            }
+            _ => unknown,
+        }
+    }
+
+    pub fn apply_lane_effect(&mut self, effect: LaneEffect) {
+        match effect {
+            LaneEffect::Vectors(written) => {
+                for (n, bytes, scalar) in written {
+                    self.lane_bounds.bytes[n] = bytes;
+                    self.lane_bounds.scalar[n] = scalar;
+                }
+            }
+            LaneEffect::General(register, bound) => {
+                let name = format!("lane_value_{}", self.next_carry());
+                let value = ast::Int::new_const(name.clone());
+                self.solver.assert(value.ge(ast::Int::from_i64(0)));
+                self.solver.assert(value.le(ast::Int::from_u64(bound)));
+                self.set_register(
+                    &register,
+                    RegisterKind::RegisterBase,
+                    Some(AbstractExpression::Abstract(name)),
+                    0,
+                );
+            }
+            LaneEffect::Nothing => {}
+        }
     }
 }

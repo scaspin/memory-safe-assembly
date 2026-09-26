@@ -271,3 +271,117 @@ fn an_immediate_minus_a_based_register_negates_the_base() {
     );
     assert_eq!(out.offset, 20);
 }
+
+fn run_branch_on_system_register(
+    branch: &str,
+    taken: &[&str],
+    fallthrough: &[&str],
+) -> Result<(), String> {
+    init();
+    let program: Vec<String> = ["start:", "mrs x2, s3_3_c2_c4_0", branch]
+        .iter()
+        .chain(fallthrough.iter())
+        .chain(["ret", "far:"].iter())
+        .chain(taken.iter())
+        .chain(["ret"].iter())
+        .map(|s| s.to_string())
+        .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(64));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+const OUT_OF_BOUNDS: [&str; 1] = ["ldr x3,[x0,#64]"];
+const IN_BOUNDS: [&str; 1] = ["ldr x3,[x0,#0]"];
+
+#[test]
+fn a_branch_on_an_unknown_value_explores_both_sides() {
+    for branch in [
+        "cbz x2, far",
+        "cbnz x2, far",
+        "tbz x2, #3, far",
+        "tbnz x2, #3, far",
+    ] {
+        let taken = run_branch_on_system_register(branch, &OUT_OF_BOUNDS, &IN_BOUNDS);
+        assert!(
+            taken.is_err(),
+            "{branch}: the taken side was never explored"
+        );
+        let fallthrough = run_branch_on_system_register(branch, &IN_BOUNDS, &OUT_OF_BOUNDS);
+        assert!(
+            fallthrough.is_err(),
+            "{branch}: the fall-through side was never explored"
+        );
+        assert_eq!(
+            run_branch_on_system_register(branch, &IN_BOUNDS, &IN_BOUNDS),
+            Ok(()),
+            "{branch}"
+        );
+    }
+}
+
+fn run_after_memory_free_loop(body: &str) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "sub x6,x6,x6",
+        "mrs x7, s3_3_c2_c4_0",
+        "loop:",
+        body,
+        "tbnz x7, #1, next",
+        "eor x9,x9,x7",
+        "next:",
+        "subs x7,x7,#1",
+        "b.ne loop",
+        "ldr x3,[x0,x6]",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(64));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_memory_free_loop_forgets_only_what_it_writes() {
+    assert_eq!(run_after_memory_free_loop("eor x8,x8,x7"), Ok(()));
+    assert!(
+        run_after_memory_free_loop("add x6,x6,#8").is_err(),
+        "the loop moved the index, so the read after it cannot be proved"
+    );
+}
+
+fn run_skippable_block(block: &str) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "mrs x2, s3_3_c2_c4_0",
+        "sub x6,x6,x6",
+        "tbz x2, #0, skip",
+        block,
+        "skip:",
+        "ldr x3,[x0,x6]",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(64));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_merged_data_block_still_reaches_the_access_it_feeds() {
+    assert_eq!(run_skippable_block("add x6,x6,#56"), Ok(()));
+    let unsafe_when_run = run_skippable_block("add x6,x6,#64");
+    assert!(
+        unsafe_when_run.is_err(),
+        "the block's effect on the index was lost in the merge"
+    );
+}

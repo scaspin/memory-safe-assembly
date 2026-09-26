@@ -47,6 +47,7 @@ impl RegisterValue {
 
     pub fn expression(&self) -> AbstractExpression {
         match (&self.base, self.offset) {
+            (None, _) if self.kind == RegisterKind::Number => fresh_unknown(),
             (Some(base), 0) => base.clone(),
             (Some(base), offset) => {
                 generate_expression("+", base.clone(), AbstractExpression::Immediate(offset))
@@ -54,6 +55,15 @@ impl RegisterValue {
             (None, offset) => AbstractExpression::Immediate(offset),
         }
     }
+}
+
+pub fn fresh_unknown() -> AbstractExpression {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    AbstractExpression::Abstract(format!(
+        "unknown_value_{}",
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -992,6 +1002,8 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     .unwrap_or_else(|| panic!("no translation for register base {base}"));
                 let offset = ast::Int::from_i64(reg.offset);
                 Some(ast::Int::add(&[&base, &offset]))
+            } else if reg.kind == RegisterKind::Number {
+                expression_to_ast(fresh_unknown())
             } else {
                 Some(ast::Int::from_i64(reg.offset))
             }
@@ -1045,16 +1057,18 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     } else if let Some(masked) = masked_bits(&new2, &old1) {
                         Some(masked)
                     } else {
-                        todo!("no translation for bitwise and in {expression}")
+                        Some(ast::Int::new_const(opaque_name("and", &expression)))
                     }
                 }
                 "^" => {
-                    if let Some(flipped) = flip_mask(&new1, &old2) {
+                    if old1 == old2 {
+                        Some(ast::Int::from_i64(0))
+                    } else if let Some(flipped) = flip_mask(&new1, &old2) {
                         Some(flipped)
                     } else if let Some(flipped) = flip_mask(&new2, &old1) {
                         Some(flipped)
                     } else {
-                        todo!("no translation for bitwise xor in {expression}")
+                        Some(ast::Int::new_const(opaque_name("xor", &expression)))
                     }
                 }
                 "|" => {

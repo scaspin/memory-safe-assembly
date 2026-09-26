@@ -8,6 +8,19 @@ fn format_address(base: &AbstractExpression, offset: i64) -> String {
     }
 }
 
+fn region_base(
+    address: &RegisterValue,
+    ty: RegionType,
+    width: i64,
+) -> Result<AbstractExpression, MemorySafetyError> {
+    address.base.clone().ok_or_else(|| {
+        MemorySafetyError::new(&format!(
+            "{ty} of {width} bytes through an address with no known region ({})",
+            address.offset
+        ))
+    })
+}
+
 impl ARMCORTEXA {
     pub fn load(
         &mut self,
@@ -16,7 +29,7 @@ impl ARMCORTEXA {
         width: i64,
     ) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
-            address.base.clone().expect("Need a name for region"),
+            region_base(&address, RegionType::READ, width)?,
             address.offset,
             RegionType::READ,
             width,
@@ -74,7 +87,7 @@ impl ARMCORTEXA {
         width: i64,
     ) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
-            address.base.clone().expect("Need a name for region"),
+            region_base(&address, RegionType::READ, width)?,
             address.offset,
             RegionType::READ,
             width,
@@ -133,7 +146,7 @@ impl ARMCORTEXA {
     ) -> Result<(), MemorySafetyError> {
         let region = address.base.clone();
         let res = self.mem_safe_access(
-            region.clone().expect("Need region base"),
+            region_base(&address, RegionType::WRITE, width)?,
             address.offset,
             RegionType::WRITE,
             width,
@@ -186,7 +199,7 @@ impl ARMCORTEXA {
     ) -> Result<(), MemorySafetyError> {
         let region = address.base.clone();
         let res = self.mem_safe_access(
-            region.clone().expect("Need region base"),
+            region_base(&address, RegionType::WRITE, width)?,
             address.offset,
             RegionType::WRITE,
             width,

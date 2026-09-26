@@ -12,6 +12,7 @@ const MAX_SUMMARY_TRIES: usize = 3;
 const MAX_SELECT_CHAIN: usize = 16;
 const SUMMARY_ITERATION: i64 = 3;
 const DECIDED_REPEATS_BEFORE_SUMMARY: usize = 3;
+const MAX_MERGED_BLOCK: usize = 16;
 use z3::ast::Ast;
 use z3::*;
 
@@ -50,6 +51,66 @@ fn join_branch_errors(e1: Error, e2: Error) -> String {
 struct Program {
     code: Vec<Instruction>,
     labels: Vec<(String, usize)>,
+    loop_ends: HashMap<usize, usize>,
+}
+
+fn branch_label(instruction: &Instruction) -> Option<&str> {
+    let is_branch = instruction.ty == InstructionType::ControlFlow
+        && (instruction.opcode == "b" || is_conditional_branch(&instruction.opcode));
+    if !is_branch {
+        return None;
+    }
+    instruction.operands.iter().rev().find_map(|op| match op {
+        Operand::Label(label) => Some(label.as_str()),
+        _ => None,
+    })
+}
+
+fn label_line(labels: &[(String, usize)], label: &str) -> Option<usize> {
+    let prefixed = format!("_{label}");
+    labels
+        .iter()
+        .find(|l| l.0 == label || l.0 == prefixed)
+        .map(|l| l.1)
+}
+
+fn loop_ends_of(code: &[Instruction], labels: &[(String, usize)]) -> HashMap<usize, usize> {
+    let mut ends: HashMap<usize, usize> = HashMap::new();
+    for (pc, instruction) in code.iter().enumerate() {
+        if let Some(target) = branch_label(instruction).and_then(|l| label_line(labels, l))
+            && target <= pc
+        {
+            let end = ends.entry(target).or_insert(pc);
+            *end = (*end).max(pc);
+        }
+    }
+    ends
+}
+
+fn register_destination(instruction: &Instruction) -> Option<Option<Operand>> {
+    let destination = || match instruction.operands.first() {
+        Some(Operand::Register(prefix, n)) if *prefix != RePrefix::Sp => {
+            Some(Some(Operand::Register(prefix.clone(), *n)))
+        }
+        _ => None,
+    };
+    match instruction.ty {
+        InstructionType::Label => Some(None),
+        InstructionType::Arithmetic => destination(),
+        InstructionType::Other => match instruction.opcode.as_str() {
+            "nop" | "cmp" | "cmn" | "tst" => Some(None),
+            "mov" | "movz" | "movk" | "mvn" | "neg" | "negs" | "ngc" | "ngcs" | "rbit" | "rev"
+            | "clz" | "cls" => destination(),
+            _ => None,
+        },
+        InstructionType::ControlFlow => match instruction.opcode.as_str() {
+            "csel" | "csinc" | "csinv" | "csneg" | "cset" | "csetm" | "cinc" | "cinv" | "cneg"
+            | "mrs" => destination(),
+            _ if branch_label(instruction).is_some() => Some(None),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -485,6 +546,23 @@ fn ghost_at_summary(
     )
 }
 
+fn registers_in(condition: &AbstractComparison) -> Vec<RegisterValue> {
+    fn collect(e: &AbstractExpression, found: &mut Vec<RegisterValue>) {
+        match e {
+            AbstractExpression::Register(r) => found.push((**r).clone()),
+            AbstractExpression::Expression(_, a, b) => {
+                collect(a, found);
+                collect(b, found);
+            }
+            _ => (),
+        }
+    }
+    let mut found = Vec::new();
+    collect(&condition.left, &mut found);
+    collect(&condition.right, &mut found);
+    found
+}
+
 fn is_conditional_branch(opcode: &str) -> bool {
     matches!(
         opcode,
@@ -741,7 +819,52 @@ fn summarize(
             LoopInvariant::Unknown => {
                 updates.push((i, RegisterValue::new_empty(&format!("{name}_widened_{i}"))));
             }
+            LoopInvariant::Tracks(..) => {}
+            LoopInvariant::NonDecreasing | LoopInvariant::NonIncreasing => {
+                let progress = AbstractExpression::Abstract(format!("{name}_progress_{i}"));
+                progress_facts.push(AbstractComparison::new(
+                    ">=",
+                    progress.clone(),
+                    AbstractExpression::Immediate(0),
+                ));
+                let direction = if invariant == LoopInvariant::NonDecreasing {
+                    "+"
+                } else {
+                    "-"
+                };
+                updates.push((
+                    i,
+                    RegisterValue {
+                        kind: RegisterKind::RegisterBase,
+                        base: Some(generate_expression(direction, value_of(cur), progress)),
+                        offset: 0,
+                    },
+                ));
+            }
         }
+    }
+    for (i, invariant) in invariants.iter().enumerate() {
+        let LoopInvariant::Tracks(j, k) = invariant else {
+            continue;
+        };
+        let leader_now = value_of(&current.0[*j]);
+        let leader_then = updates
+            .iter()
+            .find(|(index, _)| index == j)
+            .map_or_else(|| leader_now.clone(), |(_, value)| value_of(value));
+        let moved = generate_expression(
+            "*",
+            AbstractExpression::Immediate(*k),
+            generate_expression("-", leader_then, leader_now),
+        );
+        updates.push((
+            i,
+            RegisterValue {
+                kind: current.0[i].kind.clone(),
+                base: Some(generate_expression("+", value_of(&current.0[i]), moved)),
+                offset: 0,
+            },
+        ));
     }
 
     let flag = |label: &str, prev: &Option<FlagValue>, cur: &Option<FlagValue>| match cur {
@@ -1025,6 +1148,7 @@ impl ExecutionEngine {
 
         ExecutionEngine {
             program: Rc::new(Program {
+                loop_ends: loop_ends_of(&code, &labels),
                 code,
                 labels,
             }),
@@ -1279,6 +1403,11 @@ impl ExecutionEngine {
         depth: usize,
         unconditional_visits: &mut HashMap<usize, usize>,
     ) -> std::io::Result<Step> {
+        if let Some(&end) = self.program.loop_ends.get(&pc)
+            && let Some((written, exits)) = self.memory_free_loop(pc, end)
+        {
+            return self.havoc_memory_free_loop(pc, written, exits, depth);
+        }
         {
             let mut instruction = self.program.code[pc].clone();
 
@@ -1458,6 +1587,31 @@ impl ExecutionEngine {
                 Ok(BranchOutcome::Next(pc + 1))
             }
             _ => {
+                if let Some(base) = option1.base.clone()
+                    && option1.base == option2.base
+                    && option1.kind == option2.kind
+                {
+                    let name = format!("select_{}", self.computer.next_carry());
+                    self.computer.select_definitions.insert(
+                        name.clone(),
+                        (
+                            condition.clone(),
+                            AbstractExpression::Immediate(option1.offset),
+                            AbstractExpression::Immediate(option2.offset),
+                        ),
+                    );
+                    self.computer.set_register(
+                        &register,
+                        option1.kind,
+                        Some(generate_expression(
+                            "+",
+                            base,
+                            AbstractExpression::Abstract(name),
+                        )),
+                        0,
+                    );
+                    return Ok(BranchOutcome::Next(pc + 1));
+                }
                 if !self.carries_region(&option1) && !self.carries_region(&option2) {
                     let name = format!("select_{}", self.computer.next_carry());
                     self.computer.select_definitions.insert(
@@ -1514,6 +1668,11 @@ impl ExecutionEngine {
         let decision = self.evaluate_branch_condition(pc, depth, &mut condition, &mut rw_list);
         if std::mem::take(&mut self.path_ends) {
             return Ok(BranchOutcome::BothExplored);
+        }
+        if decision.is_none()
+            && let Some(join) = self.merge_branch_arms(pc, &condition, jump_dest, &rw_list)
+        {
+            return Ok(BranchOutcome::Next(join));
         }
         match decision {
             None => {
@@ -1580,6 +1739,188 @@ impl ExecutionEngine {
                 Ok(BranchOutcome::Next(next))
             }
         }
+    }
+
+    fn memory_free_loop(
+        &mut self,
+        header: usize,
+        end: usize,
+    ) -> Option<(Vec<Operand>, Vec<usize>)> {
+        let mut written = Vec::new();
+        let mut exits = Vec::new();
+        let mut conditional_branches = 0;
+        let program = Rc::clone(&self.program);
+        for pc in header..=end {
+            let instruction = program.code.get(pc)?;
+            if let Some(destination) = register_destination(instruction)? {
+                let current = self.computer.get_register(&destination);
+                if self.carries_region(&current) {
+                    return None;
+                }
+                if !written.contains(&destination) {
+                    written.push(destination);
+                }
+            }
+            if is_conditional_branch(&instruction.opcode) {
+                conditional_branches += 1;
+            }
+            if let Some(label) = branch_label(instruction) {
+                let target = self.resolve_jump_target(label).ok()?;
+                if (target < header || target > end) && !exits.contains(&target) {
+                    exits.push(target);
+                }
+            }
+        }
+        if conditional_branches < 2 {
+            return None;
+        }
+        if self.program.code[end].opcode != "b" && !exits.contains(&(end + 1)) {
+            exits.push(end + 1);
+        }
+        Some((written, exits))
+    }
+
+    fn havoc_memory_free_loop(
+        &mut self,
+        header: usize,
+        written: Vec<Operand>,
+        exits: Vec<usize>,
+        depth: usize,
+    ) -> std::io::Result<Step> {
+        for register in &written {
+            self.computer.set_register(
+                register,
+                RegisterKind::RegisterBase,
+                Some(fresh_unknown()),
+                0,
+            );
+        }
+        self.computer.set_unknown_flags();
+        log::info!(
+            "line {header} starts a memory-free loop; {} registers havocked, exits {exits:?}",
+            written.len()
+        );
+        let Some((&first, rest)) = exits.split_first() else {
+            return Ok(Step::Stop);
+        };
+        for &exit in rest {
+            let mut other = self.fork();
+            other.run(exit, depth + 1)?;
+        }
+        Ok(Step::Continue(first))
+    }
+
+    fn run_data_arm(&mut self, start: usize, stop_at: Option<usize>) -> Option<usize> {
+        let mut pc = start;
+        for _ in 0..MAX_MERGED_BLOCK {
+            if Some(pc) == stop_at {
+                return Some(pc);
+            }
+            let instruction = self.program.code.get(pc)?.clone();
+            match instruction.ty {
+                InstructionType::Label => {}
+                InstructionType::Arithmetic => {}
+                InstructionType::Other if matches!(instruction.opcode.as_str(), "mov") => {}
+                InstructionType::ControlFlow if instruction.opcode == "b" => {
+                    let Some(Operand::Label(label)) = instruction.operands.first() else {
+                        return None;
+                    };
+                    return self.resolve_jump_target(label).ok();
+                }
+                _ => return None,
+            }
+            if !instruction.is_label()
+                && !matches!(
+                    self.computer.execute(pc, &instruction),
+                    Ok(ExecuteReturnType::Next)
+                )
+            {
+                return None;
+            }
+            pc += 1;
+        }
+        None
+    }
+
+    fn merge_branch_arms(
+        &mut self,
+        pc: usize,
+        condition: &AbstractComparison,
+        jump_dest: usize,
+        rw_list: &[MemoryAccess],
+    ) -> Option<usize> {
+        if self.active_loops.iter().any(|open| open.pc == pc)
+            || comparison_to_ast(condition.clone()).is_none()
+        {
+            return None;
+        }
+        let entry = self.computer.get_state();
+        let stop_at = (jump_dest > pc).then_some(jump_dest);
+        let Some(fall_end) = self.run_data_arm(pc + 1, stop_at) else {
+            self.computer.set_state(entry);
+            return None;
+        };
+        let fallen = self.computer.get_state();
+        self.computer.set_state(entry.clone());
+        let (taken, join) = if fall_end == jump_dest {
+            (entry.clone(), jump_dest)
+        } else {
+            match self.run_data_arm(jump_dest, None) {
+                Some(end) if end == fall_end => (self.computer.get_state(), end),
+                _ => {
+                    self.computer.set_state(entry);
+                    return None;
+                }
+            }
+        };
+        let pointer_moved = taken
+            .0
+            .iter()
+            .zip(fallen.0.iter())
+            .any(|(a, b)| a != b && (self.carries_region(a) || self.carries_region(b)));
+        if pointer_moved {
+            self.computer.set_state(entry);
+            return None;
+        }
+        let mut merged = fallen.clone();
+        for (i, (if_taken, if_fallen)) in taken.0.iter().zip(fallen.0.iter()).enumerate() {
+            if if_taken == if_fallen {
+                continue;
+            }
+            let name = format!("select_{}", self.computer.next_carry());
+            self.computer.select_definitions.insert(
+                name.clone(),
+                (
+                    condition.clone(),
+                    if_taken.expression(),
+                    if_fallen.expression(),
+                ),
+            );
+            merged.0[i] = RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(name)),
+                0,
+            );
+        }
+        let flags_agree = (&taken.1, &taken.2, &taken.3, &taken.4)
+            == (&fallen.1, &fallen.2, &fallen.3, &fallen.4);
+        self.computer.set_state(merged);
+        if !flags_agree {
+            self.computer.set_unknown_flags();
+        }
+        self.jump_history.push(JumpRecord {
+            point: BranchPoint {
+                pc,
+                condition: condition.clone(),
+                accesses: rw_list.to_vec(),
+                state: entry,
+            },
+            taken: true,
+            resolved: true,
+        });
+        self.computer.clear_rw_queue();
+        log::info!("line {pc} merged its data-only arms, rejoining at line {join}");
+        Some(join)
     }
 
     fn add_constraint(&mut self, constraint: AbstractComparison, decision: bool) {
@@ -1833,6 +2174,68 @@ impl ExecutionEngine {
             if let Some(value) = self.pinned_value(&step) {
                 log::info!("x{i} step pinned to {value} by the path");
                 *invariant = LoopInvariant::Linear(AbstractExpression::Immediate(value));
+            }
+        }
+        let registers = observed.len().min(entry.len()).min(current.len());
+        let guarded = registers_in(guard);
+        let mut at_entry: Vec<String> = entry
+            .iter()
+            .filter_map(|r| r.base.as_ref())
+            .flat_map(|b| b.get_abstracts())
+            .collect();
+        at_entry.sort();
+        at_entry.dedup();
+        let fresh_data_step = |j: usize, invariant: &LoopInvariant| {
+            if !matches!(invariant, LoopInvariant::Unknown | LoopInvariant::Linear(_)) {
+                return None;
+            }
+            let step = step_form(&entry[j], &current[j])?;
+            let fresh = !step.terms.is_empty()
+                && step
+                    .terms
+                    .keys()
+                    .all(|name| at_entry.binary_search(name).is_err() && !name.contains("_?"));
+            fresh.then_some(step)
+        };
+        for i in 0..registers {
+            if !(self.carries_region(&entry[i]) || self.carries_region(&current[i])) {
+                continue;
+            }
+            let Some(follower) = fresh_data_step(i, &observed[i]) else {
+                continue;
+            };
+            let leader = (0..registers).find_map(|j| {
+                if j == i
+                    || self.carries_region(&entry[j])
+                    || self.carries_region(&current[j])
+                    || !guarded.contains(&current[j])
+                {
+                    return None;
+                }
+                let leader = step_form(&entry[j], &current[j])?;
+                proportion(&follower, &leader).map(|k| (j, k))
+            });
+            if let Some((j, k)) = leader {
+                log::info!("x{i} moves by {k} times x{j} each iteration");
+                observed[i] = LoopInvariant::Tracks(j, k);
+                if fresh_data_step(j, &observed[j]).is_some() {
+                    let step =
+                        generate_expression("-", current[j].expression(), entry[j].expression());
+                    let signed = |op: &str| {
+                        self.proves(AbstractComparison::new(
+                            op,
+                            step.clone(),
+                            AbstractExpression::Immediate(0),
+                        ))
+                    };
+                    observed[j] = if signed(">=") {
+                        LoopInvariant::NonDecreasing
+                    } else if signed("<=") {
+                        LoopInvariant::NonIncreasing
+                    } else {
+                        LoopInvariant::Unknown
+                    };
+                }
             }
         }
     }
@@ -2724,11 +3127,16 @@ impl ExecutionEngine {
         }
 
         let current = self.computer.get_state();
-        let mut observed = self.pin_steps(&invariant_of_registers(&active.state.0, &current.0));
+        let (mut before, mut after) = (active.state.clone(), current.clone());
         self.assume_staying(&expression, active.entry_decision);
-        self.pin_unknown_steps(&mut observed, &active.state.0, &current.0, &expression);
+        self.resolve_selects(&mut before);
+        self.resolve_selects(&mut after);
         self.computer.solver.pop(1);
-        let observed = self.bound_values(&observed, &active.state.0, &current.0);
+        let mut observed = self.pin_steps(&invariant_of_registers(&before.0, &after.0));
+        self.assume_staying(&expression, active.entry_decision);
+        self.pin_unknown_steps(&mut observed, &before.0, &after.0, &expression);
+        self.computer.solver.pop(1);
+        let observed = self.bound_values(&observed, &before.0, &after.0);
         let ghosts_repeat =
             active.ghost_checks.iter().all(|(path, expected)| {
                 match condition_side(&expression, path) {
@@ -2748,6 +3156,7 @@ impl ExecutionEngine {
                 .zip(observed.iter())
                 .all(|(recorded, seen)| recorded.subsumes(seen));
 
+        let read_by_guard = registers_in(&expression);
         let shown = expression.clone();
         let condition = comparison_to_ast(expression)
             .unwrap_or_else(|| panic!("untranslatable exit condition {shown}"));
@@ -2762,7 +3171,22 @@ impl ExecutionEngine {
             .check_assumptions(std::slice::from_ref(&leaving))
             == SatResult::Unsat;
 
+        let unstable: Vec<usize> = active
+            .invariants
+            .iter()
+            .zip(observed.iter())
+            .enumerate()
+            .filter(|(_, (recorded, seen))| !recorded.subsumes(seen))
+            .map(|(i, _)| i)
+            .collect();
+        let only_data_moved = ghosts_repeat
+            && unstable.iter().all(|&i| {
+                [&active.entry_state.0[i], &active.state.0[i], &current.0[i]]
+                    .into_iter()
+                    .all(|r| !self.carries_region(r) && !read_by_guard.contains(r))
+            });
         if !holds
+            && !only_data_moved
             && self
                 .counted_failures
                 .borrow_mut()
@@ -2774,16 +3198,7 @@ impl ExecutionEngine {
                 .entry(active.pc)
                 .or_insert(0) += 1;
         }
-        let retrying = !holds && self.widen_for_retry(&active, &observed);
-
-        let unstable: Vec<usize> = active
-            .invariants
-            .iter()
-            .zip(observed.iter())
-            .enumerate()
-            .filter(|(_, (recorded, seen))| !recorded.subsumes(seen))
-            .map(|(i, _)| i)
-            .collect();
+        let retrying = !holds && !only_data_moved && self.widen_for_retry(&active, &observed);
         let force_close = !holds
             && ghosts_repeat
             && !retrying

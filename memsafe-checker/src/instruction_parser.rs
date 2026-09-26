@@ -272,8 +272,27 @@ pub fn operand_from_string(a: String) -> Operand {
         }
 
         if let Some(o) = parts.next() {
+            let o = o.trim();
             if o.starts_with("x") || o.starts_with("w") {
-                register_offset = Some(Box::new(operand_from_string(o.to_string())));
+                let index = operand_from_string(o.trim_matches(']').to_string());
+                let scale = match parts.next().map(|s| s.trim().trim_matches(']')) {
+                    None => 0,
+                    Some(extension) => {
+                        let (kind, amount) = extension
+                            .split_once('#')
+                            .map_or((extension, "0"), |(k, a)| (k.trim(), a));
+                        match kind {
+                            "lsl" | "uxtw" | "uxtx" => string_to_int(amount),
+                            _ => panic!("unsupported index extension {extension}"),
+                        }
+                    }
+                };
+                register_offset = Some(Box::new(match index {
+                    Operand::Register(prefix, n) if scale != 0 => {
+                        Operand::Memory(prefix, n, Some(scale), None, None)
+                    }
+                    other => other,
+                }));
             } else {
                 offset = Some(string_to_int(o.trim_matches(['[', ']', ',', '#', '!'])));
             }
@@ -393,8 +412,10 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
         return InstructionType::Other;
     } else if opcode.starts_with('.') || opcode.starts_with('#') {
         return InstructionType::Def;
-    } else if matches!(opcode, "ldr" | "ldp" | "str" | "stp")
-        && operands.iter().any(|op| matches!(op, Operand::Memory(..)))
+    } else if matches!(
+        opcode,
+        "ldr" | "ldp" | "str" | "stp" | "ldur" | "ldurb" | "ldurh" | "stur" | "sturb" | "sturh"
+    ) && operands.iter().any(|op| matches!(op, Operand::Memory(..)))
     {
         return InstructionType::Memory;
     } else if operands
@@ -415,7 +436,7 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
     } else if operands.iter().any(|op| matches!(op, Operand::Address(..))) {
         return InstructionType::ControlFlow;
     } else if !matches!(opcode, "mov" | "movz" | "movk")
-        && operands.len() > 2
+        && (operands.len() > 2 || opcode == "clz")
         && operands.iter().all(|op| {
             matches!(op, Operand::Register(..))
                 || matches!(op, Operand::Immediate(_))
@@ -561,9 +582,92 @@ impl Instruction {
     }
 }
 
+struct ConstantExpression<'a> {
+    rest: &'a str,
+}
+
+impl ConstantExpression<'_> {
+    fn eat(&mut self, token: &str) -> bool {
+        self.rest = self.rest.trim_start();
+        match self.rest.strip_prefix(token) {
+            Some(after) => {
+                self.rest = after;
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn sum(&mut self) -> Option<i64> {
+        let mut value = self.product()?;
+        loop {
+            if self.eat("+") {
+                value = value.wrapping_add(self.product()?);
+            } else if self.eat("-") {
+                value = value.wrapping_sub(self.product()?);
+            } else {
+                return Some(value);
+            }
+        }
+    }
+
+    fn product(&mut self) -> Option<i64> {
+        let mut value = self.unary()?;
+        loop {
+            if self.eat("*") {
+                value = value.wrapping_mul(self.unary()?);
+            } else if self.eat("/") {
+                value = value.checked_div(self.unary()?)?;
+            } else if self.eat("<<") {
+                value = value.checked_shl(u32::try_from(self.unary()?).ok()?)?;
+            } else if self.eat(">>") {
+                value = value.checked_shr(u32::try_from(self.unary()?).ok()?)?;
+            } else {
+                return Some(value);
+            }
+        }
+    }
+
+    fn unary(&mut self) -> Option<i64> {
+        if self.eat("-") {
+            return self.unary().map(i64::wrapping_neg);
+        }
+        if self.eat("~") {
+            return self.unary().map(|v| !v);
+        }
+        if self.eat("(") {
+            let value = self.sum()?;
+            return self.eat(")").then_some(value);
+        }
+        self.rest = self.rest.trim_start();
+        let (digits, radix) = match self.rest.strip_prefix("0x") {
+            Some(hex) => (hex, 16),
+            None => (self.rest, 10),
+        };
+        let end = digits
+            .find(|c: char| !c.is_digit(radix))
+            .unwrap_or(digits.len());
+        if end == 0 {
+            return None;
+        }
+        let value = u64::from_str_radix(&digits[..end], radix).ok()? as i64;
+        self.rest = &digits[end..];
+        Some(value)
+    }
+}
+
+fn constant_expression(s: &str) -> Option<i64> {
+    let mut parser = ConstantExpression { rest: s };
+    let value = parser.sum()?;
+    parser.rest.trim().is_empty().then_some(value)
+}
+
 pub fn string_to_int(s: &str) -> i64 {
     let value: i64;
     let v = s.trim().trim_start_matches('#').trim();
+    if let Some(value) = constant_expression(v) {
+        return value;
+    }
     if let Some(rest) = v.strip_prefix('~') {
         return !string_to_int(rest);
     }
@@ -604,6 +708,37 @@ pub fn string_to_int(s: &str) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn immediates_evaluate_with_assembler_precedence() {
+        assert_eq!(string_to_int("#64*4-16"), 240);
+        assert_eq!(string_to_int("#32*(12-4)"), 256);
+        assert_eq!(string_to_int("#8*(10+2)"), 96);
+        assert_eq!(string_to_int("#2+3*4"), 14);
+        assert_eq!(string_to_int("#-8*8"), -64);
+        assert_eq!(string_to_int("#1<<12"), 4096);
+        assert_eq!(string_to_int("#0x10+1"), 17);
+        assert_eq!(string_to_int("#~0"), -1);
+    }
+
+    #[test]
+    fn a_shifted_register_index_keeps_its_shift() {
+        let instruction = Instruction::new("ldr q24, [x3, x12, lsl #4]".to_string());
+        let Operand::Memory(_, 3, None, Some(index), None) = &instruction.operands[1] else {
+            panic!("{:?}", instruction.operands[1]);
+        };
+        assert_eq!(
+            **index,
+            Operand::Memory(RePrefix::X, 12, Some(4), None, None)
+        );
+    }
+
+    #[test]
+    fn mrs_reads_a_system_register_into_a_general_one() {
+        let instruction = Instruction::new("mrs x2, s3_3_c2_c4_0".to_string());
+        assert_eq!(instruction.opcode, "mrs");
+        assert_eq!(instruction.operands[0], Operand::Register(RePrefix::X, 2));
+    }
 
     #[test]
     fn test_parse_add_register() {

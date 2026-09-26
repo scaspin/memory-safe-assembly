@@ -1,6 +1,102 @@
 
 use crate::common::*;
+use std::collections::BTreeMap;
 use std::fmt;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearForm {
+    pub constant: i64,
+    pub terms: BTreeMap<String, i64>,
+}
+
+impl LinearForm {
+    fn constant(value: i64) -> Self {
+        Self {
+            constant: value,
+            terms: BTreeMap::new(),
+        }
+    }
+
+    fn symbol(name: &str) -> Self {
+        Self {
+            constant: 0,
+            terms: BTreeMap::from([(name.to_string(), 1)]),
+        }
+    }
+
+    fn combine(&self, other: &LinearForm, sign: i64) -> Option<LinearForm> {
+        let mut terms = self.terms.clone();
+        for (name, coefficient) in &other.terms {
+            let entry = terms.entry(name.clone()).or_insert(0);
+            *entry = entry.checked_add(coefficient.checked_mul(sign)?)?;
+        }
+        terms.retain(|_, c| *c != 0);
+        Some(LinearForm {
+            constant: self
+                .constant
+                .checked_add(other.constant.checked_mul(sign)?)?,
+            terms,
+        })
+    }
+
+    fn scaled(&self, factor: i64) -> Option<LinearForm> {
+        let mut terms = BTreeMap::new();
+        for (name, coefficient) in &self.terms {
+            let scaled = coefficient.checked_mul(factor)?;
+            if scaled != 0 {
+                terms.insert(name.clone(), scaled);
+            }
+        }
+        Some(LinearForm {
+            constant: self.constant.checked_mul(factor)?,
+            terms,
+        })
+    }
+}
+
+pub fn linear_form(e: &AbstractExpression) -> Option<LinearForm> {
+    match e {
+        AbstractExpression::Immediate(value) => Some(LinearForm::constant(*value)),
+        AbstractExpression::Abstract(name) => Some(LinearForm::symbol(name)),
+        AbstractExpression::Register(register) => register_form(register),
+        AbstractExpression::Expression(op, a, b) => {
+            let (left, right) = (linear_form(a)?, linear_form(b)?);
+            match op.as_str() {
+                "+" => left.combine(&right, 1),
+                "-" => left.combine(&right, -1),
+                "*" if right.terms.is_empty() => left.scaled(right.constant),
+                "*" if left.terms.is_empty() => right.scaled(left.constant),
+                "lsl" if right.terms.is_empty() && (0..62).contains(&right.constant) => {
+                    left.scaled(1i64 << right.constant)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn register_form(register: &RegisterValue) -> Option<LinearForm> {
+    match &register.base {
+        None if register.kind == RegisterKind::Number => None,
+        None => Some(LinearForm::constant(register.offset)),
+        Some(base) => linear_form(base)?.combine(&LinearForm::constant(register.offset), 1),
+    }
+}
+
+pub fn step_form(prev: &RegisterValue, cur: &RegisterValue) -> Option<LinearForm> {
+    register_form(cur)?.combine(&register_form(prev)?, -1)
+}
+
+pub fn proportion(follower: &LinearForm, leader: &LinearForm) -> Option<i64> {
+    let (name, &unit) = leader.terms.iter().next()?;
+    let &moved = follower.terms.get(name)?;
+    if moved % unit != 0 {
+        return None;
+    }
+    let k = moved / unit;
+    (k != 0 && leader.scaled(k)? == *follower).then_some(k)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LoopId(usize);
@@ -54,6 +150,9 @@ pub enum LoopInvariant {
     Linear(AbstractExpression),
     AtMost(i64),
     Within(i64),
+    Tracks(usize, i64),
+    NonDecreasing,
+    NonIncreasing,
     Unknown,
 }
 
@@ -77,6 +176,9 @@ impl LoopInvariant {
             (LoopInvariant::AtMost(bound), _) => other
                 .reach()
                 .is_some_and(|step| (0..=*bound).contains(&step)),
+            (LoopInvariant::NonDecreasing, LoopInvariant::AtMost(_)) => true,
+            (LoopInvariant::NonDecreasing, _) => other.reach().is_some_and(|step| step >= 0),
+            (LoopInvariant::NonIncreasing, _) => other.reach().is_some_and(|step| step <= 0),
             _ => false,
         }
     }
@@ -499,6 +601,54 @@ mod tests {
                 )
             )
         );
+    }
+
+    fn form_of(e: &AbstractExpression) -> LinearForm {
+        linear_form(e).expect("linear")
+    }
+
+    #[test]
+    fn a_doubled_sum_is_twice_the_sum() {
+        let (a, b) = (abstract_of("a"), abstract_of("b"));
+        let doubled = generate_expression(
+            "+",
+            generate_expression("lsl", a.clone(), AbstractExpression::Immediate(1)),
+            generate_expression("lsl", b.clone(), AbstractExpression::Immediate(1)),
+        );
+        let sum = generate_expression("+", a, b);
+        assert_eq!(proportion(&form_of(&doubled), &form_of(&sum)), Some(2));
+    }
+
+    #[test]
+    fn unequal_coefficients_or_constants_are_not_proportional() {
+        let (a, b) = (abstract_of("a"), abstract_of("b"));
+        let sum = form_of(&generate_expression("+", a.clone(), b.clone()));
+        let lopsided = generate_expression(
+            "+",
+            generate_expression("*", a.clone(), AbstractExpression::Immediate(2)),
+            generate_expression("*", b.clone(), AbstractExpression::Immediate(3)),
+        );
+        assert_eq!(proportion(&form_of(&lopsided), &sum), None);
+        let shifted = generate_expression(
+            "+",
+            generate_expression(
+                "*",
+                generate_expression("+", a.clone(), b.clone()),
+                AbstractExpression::Immediate(2),
+            ),
+            AbstractExpression::Immediate(1),
+        );
+        assert_eq!(proportion(&form_of(&shifted), &sum), None);
+    }
+
+    #[test]
+    fn a_narrowed_value_has_no_linear_form() {
+        let narrowed = generate_expression(
+            "%",
+            abstract_of("a"),
+            AbstractExpression::Immediate(1 << 32),
+        );
+        assert_eq!(linear_form(&narrowed), None);
     }
 
     #[test]

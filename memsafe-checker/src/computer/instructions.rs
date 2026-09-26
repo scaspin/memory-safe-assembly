@@ -44,7 +44,24 @@ fn indexed_address(
     }
 }
 
+enum Tested {
+    Known(i64),
+    Symbolic(AbstractExpression),
+}
+
 impl ARMCORTEXA {
+    fn tested_value(&mut self, register: RegisterValue) -> Tested {
+        let no_base = register.base.is_none() || register.base == Some(AbstractExpression::Empty);
+        match (no_base, register.kind == RegisterKind::Number) {
+            (true, false) => Tested::Known(register.offset),
+            (true, true) => Tested::Symbolic(AbstractExpression::Abstract(format!(
+                "unknown_{}",
+                self.next_carry()
+            ))),
+            (false, _) => Tested::Symbolic(AbstractExpression::Register(Box::new(register))),
+        }
+    }
+
     fn indexed_target(
         &mut self,
         base: RegisterValue,
@@ -55,15 +72,25 @@ impl ARMCORTEXA {
         let Some(index) = index else {
             return indexed_address(base, offset.unwrap_or(0), mode);
         };
-        let Operand::Memory(w, reg_num, _, _, _) = &**index else {
-            panic!("unsupported memory index operand {index:?}");
+        let (w, reg_num, scale) = match &**index {
+            Operand::Memory(w, reg_num, scale, _, _) => (w, reg_num, scale.unwrap_or(0)),
+            Operand::Register(w, reg_num) => (w, reg_num, 0),
+            _ => panic!("unsupported memory index operand {index:?}"),
         };
         assert!(
             mode.is_none(),
             "register index with pre/post-index writeback is not supported"
         );
         let idx = self.get_register(&Operand::Register(w.clone(), *reg_num));
-        let mut combined = generate_expression("+", base.expression(), idx.expression());
+        let scaled = match scale {
+            0 => idx.expression(),
+            k => generate_expression(
+                "*",
+                idx.expression(),
+                AbstractExpression::Immediate(1i64 << k),
+            ),
+        };
+        let mut combined = generate_expression("+", base.expression(), scaled);
         if let Some(off) = offset
             && off != 0
         {
@@ -80,6 +107,19 @@ impl ARMCORTEXA {
     }
 
     pub fn execute(
+        &mut self,
+        pc: usize,
+        instruction: &Instruction,
+    ) -> Result<ExecuteReturnType, String> {
+        let effect = self.plan_lane_effect(instruction);
+        let result = self.execute_instruction(pc, instruction);
+        if result.is_ok() {
+            self.apply_lane_effect(effect);
+        }
+        result
+    }
+
+    fn execute_instruction(
         &mut self,
         pc: usize,
         instruction: &Instruction,
@@ -247,12 +287,13 @@ impl ARMCORTEXA {
                     let r1 = self.get_register(reg1);
                     match r1.kind {
                         RegisterKind::Immediate => {
-                            self.set_register(
-                                reg0,
-                                RegisterKind::Number,
-                                None,
-                                r1.offset.leading_zeros() as i64,
-                            );
+                            let zeros = match reg1 {
+                                Operand::Register(RePrefix::W, _) => {
+                                    (r1.offset as u32).leading_zeros()
+                                }
+                                _ => r1.offset.leading_zeros(),
+                            };
+                            self.set_register(reg0, RegisterKind::Immediate, None, zeros as i64);
                         }
                         _ => {
                             self.set_register(reg0, RegisterKind::Number, None, 0);
@@ -327,51 +368,31 @@ impl ARMCORTEXA {
                 }
                 "cbz" => {
                     let register = self.get_register(&instruction.operands[0]);
-                    if let Operand::Label(label) = &instruction.operands[1] {
-                        if (register.base.is_none()
-                            || register.base == Some(AbstractExpression::Empty))
-                            && register.offset == 0
-                        {
-                            return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
-                        } else if register.kind == RegisterKind::RegisterBase {
-                            return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                AbstractComparison::new(
-                                    "==",
-                                    AbstractExpression::Immediate(0),
-                                    AbstractExpression::Register(Box::new(register)),
-                                ),
-                                label.to_string(),
-                            ));
-                        } else {
-                            return Ok(ExecuteReturnType::Next);
-                        }
-                    } else {
+                    let Operand::Label(label) = &instruction.operands[1] else {
                         panic!("cbz not invoked correctly with register and label");
-                    }
+                    };
+                    return Ok(match self.tested_value(register) {
+                        Tested::Known(0) => ExecuteReturnType::JumpLabel(label.to_string()),
+                        Tested::Known(_) => ExecuteReturnType::Next,
+                        Tested::Symbolic(value) => ExecuteReturnType::ConditionalJumpLabel(
+                            AbstractComparison::new("==", AbstractExpression::Immediate(0), value),
+                            label.to_string(),
+                        ),
+                    });
                 }
                 "cbnz" => {
                     let register = self.get_register(&instruction.operands[0]);
-                    if let Operand::Label(label) = &instruction.operands[1] {
-                        if (register.base.is_none()
-                            || register.base == Some(AbstractExpression::Empty))
-                            && register.offset == 0
-                        {
-                            return Ok(ExecuteReturnType::Next);
-                        } else if register.kind == RegisterKind::RegisterBase {
-                            return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                AbstractComparison::new(
-                                    "!=",
-                                    AbstractExpression::Immediate(0),
-                                    AbstractExpression::Register(Box::new(register)),
-                                ),
-                                label.to_string(),
-                            ));
-                        } else {
-                            return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
-                        }
-                    } else {
+                    let Operand::Label(label) = &instruction.operands[1] else {
                         panic!("cbnz not invoked correctly with register and label");
-                    }
+                    };
+                    return Ok(match self.tested_value(register) {
+                        Tested::Known(0) => ExecuteReturnType::Next,
+                        Tested::Known(_) => ExecuteReturnType::JumpLabel(label.to_string()),
+                        Tested::Symbolic(value) => ExecuteReturnType::ConditionalJumpLabel(
+                            AbstractComparison::new("!=", AbstractExpression::Immediate(0), value),
+                            label.to_string(),
+                        ),
+                    });
                 }
                 "tbz" | "tbnz" => {
                     let register = self.get_register(&instruction.operands[0]);
@@ -383,24 +404,31 @@ impl ARMCORTEXA {
                     };
                     let jump_when_zero = instruction.opcode == "tbz";
                     let mask = 1i64 << bit;
-                    if register.base.is_none() || register.base == Some(AbstractExpression::Empty) {
-                        let bit_set = register.offset & mask != 0;
-                        if bit_set != jump_when_zero {
-                            return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
-                        } else {
-                            return Ok(ExecuteReturnType::Next);
+                    match self.tested_value(register) {
+                        Tested::Known(value) => {
+                            let bit_set = value & mask != 0;
+                            if bit_set != jump_when_zero {
+                                return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
+                            } else {
+                                return Ok(ExecuteReturnType::Next);
+                            }
                         }
-                    } else {
-                        let masked = AbstractExpression::Expression(
-                            "&".to_string(),
-                            Box::new(AbstractExpression::Register(Box::new(register))),
-                            Box::new(AbstractExpression::Immediate(mask)),
-                        );
-                        let op = if jump_when_zero { "==" } else { "!=" };
-                        return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                            AbstractComparison::new(op, masked, AbstractExpression::Immediate(0)),
-                            label.to_string(),
-                        ));
+                        Tested::Symbolic(value) => {
+                            let masked = AbstractExpression::Expression(
+                                "&".to_string(),
+                                Box::new(value),
+                                Box::new(AbstractExpression::Immediate(mask)),
+                            );
+                            let op = if jump_when_zero { "==" } else { "!=" };
+                            return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                                AbstractComparison::new(
+                                    op,
+                                    masked,
+                                    AbstractExpression::Immediate(0),
+                                ),
+                                label.to_string(),
+                            ));
+                        }
                     }
                 }
                 "b" => {
@@ -1000,13 +1028,20 @@ impl ARMCORTEXA {
 
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);
                 }
+                "mrs" => {
+                    let dest = instruction
+                        .operands
+                        .first()
+                        .expect("mrs needs a destination register");
+                    self.set_register(dest, RegisterKind::Number, None, 0);
+                }
                 _ => todo!(
                     "control flow instruction not yet implemented {:?}",
                     instruction
                 ),
             },
             InstructionType::Memory => match instruction.opcode.as_str() {
-                "ldr" | "ldrb" | "ldrh" => {
+                "ldr" | "ldrb" | "ldrh" | "ldur" | "ldurb" | "ldurh" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("ldr dst");
@@ -1081,7 +1116,7 @@ impl ARMCORTEXA {
                         }
                     }
                 }
-                "str" | "strb" | "strh" => {
+                "str" | "strb" | "strh" | "stur" | "sturb" | "sturh" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("ldr dst");
@@ -1158,6 +1193,20 @@ impl ARMCORTEXA {
                 }
                 _ => todo!("memory instruction not supported yet {:?}", instruction),
             },
+            InstructionType::SIMDArithmetic
+                if matches!(instruction.opcode.as_str(), "orr" | "bic" | "and" | "eor")
+                    && instruction
+                        .operands
+                        .iter()
+                        .skip(1)
+                        .any(|op| matches!(op, Operand::Immediate(_))) =>
+            {
+                let dst = instruction
+                    .operands
+                    .first()
+                    .expect("Need destination register");
+                self.set_register(dst, RegisterKind::Number, None, 0);
+            }
             InstructionType::SIMDArithmetic => match instruction.opcode.as_str() {
                 "rev64" | "rev64.16b" | "rev64.8h" => {
                     let mut reg_iter = instruction.operands.iter();
@@ -1420,7 +1469,11 @@ impl ARMCORTEXA {
                 "aese" | "aesmc" | "aesd" | "aesimc" | "movi" | "dup" | "sshr" | "pmull"
                 | "pmull2" | "zip1" | "zip2" | "trn1" | "trn2" | "bit" | "bif" | "uaddl"
                 | "uaddl2" | "sqrshrun" | "sqrshrun2" | "umull" | "umull2" | "umlal" | "umlal2"
-                | "rshrn" | "rshrn2" | "rev32" => {
+                | "rshrn" | "rshrn2" | "rev32" | "mls" | "mla" | "sqrdmulh" | "sqdmulh"
+                | "smlal" | "smlal2" | "smlsl" | "smlsl2" | "smull" | "smull2" | "uzp1"
+                | "uzp2" | "srshr" | "uaddlv" | "umaxv" | "cmgt" | "cmge" | "cmle" | "cmhi"
+                | "cnt" | "xtn" | "shrn" | "ushl" | "ushll" | "ushll2" | "sshll" | "sshll2"
+                | "abs" | "umin" | "bic" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
@@ -1510,7 +1563,7 @@ impl ARMCORTEXA {
                         panic!("ld4r does not include address {:?}", instruction)
                     };
                 }
-                "ld1" | "ld1.16b" | "ld1.8h" => {
+                "ld1" | "ld1.16b" | "ld1.8h" | "ld2" | "ld3" | "ld4" => {
                     let mut destinations = Vec::new();
                     let mut addr = None;
                     for o in instruction.operands.iter() {
@@ -1531,6 +1584,13 @@ impl ARMCORTEXA {
                                 return Err(e.to_string());
                             }
                             address.offset += width;
+                        }
+                        if matches!(instruction.opcode.as_str(), "ld2" | "ld3" | "ld4") {
+                            for d in instruction.operands.iter().filter(|o| {
+                                matches!(o, Operand::Vector(..) | Operand::VectorAccess(..))
+                            }) {
+                                self.set_register(d, RegisterKind::Number, None, 0);
+                            }
                         }
 
                         if *index == Some(true)
@@ -1557,7 +1617,7 @@ impl ARMCORTEXA {
                         panic!("ld1 does not include address {:?}", instruction)
                     };
                 }
-                "st1" | "st1.d" => {
+                "st1" | "st1.d" | "st2" | "st3" | "st4" => {
                     let mut sources = Vec::new();
                     let mut addr = None;
                     for o in instruction.operands.iter() {
@@ -1593,12 +1653,12 @@ impl ARMCORTEXA {
                         };
 
                         if let Some(reg) = reg_offset {
-                            let reg = self.get_register(reg);
+                            let step = self.get_register(reg);
                             self.set_register(
                                 &Operand::Register(prefix.clone(), *num),
                                 a.kind,
-                                a.base,
-                                a.offset + reg.offset,
+                                generate_expression_from_options("+", a.base, step.base),
+                                a.offset + step.offset,
                             );
                         };
                     } else {
@@ -1609,6 +1669,14 @@ impl ARMCORTEXA {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
+                    self.set_register(dst, RegisterKind::Number, None, 0);
+                }
+                "mul" | "mla" | "mls" | "sqrdmulh" | "sqdmulh" | "smull" | "smull2" | "smlal"
+                | "smlal2" | "smlsl" | "smlsl2" | "umull" | "umull2" | "umlal" | "umlal2" => {
+                    let dst = instruction
+                        .operands
+                        .first()
+                        .expect("Need destination register");
                     self.set_register(dst, RegisterKind::Number, None, 0);
                 }
                 a => todo!("simd instruction {} not supported yet", a),

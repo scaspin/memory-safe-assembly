@@ -149,3 +149,28 @@ fn ld4r_post_index_advances_the_pointer() {
 fn ld1r_without_writeback_leaves_the_pointer() {
     assert_eq!(x0_offset_after("ld1r {v26.2d},[x0]"), 0);
 }
+
+fn accepts_scaled_index(index: i64) -> bool {
+    init();
+    let program: Vec<String> = [
+        "start:".to_string(),
+        format!("mov x1, #{index}"),
+        "ldr x2,[x0,x1,lsl #3]".to_string(),
+        "ret".to_string(),
+    ]
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::RW,
+        "base".to_string(),
+        AbstractExpression::Immediate(64),
+    );
+    engine.start("start".to_string()).is_ok()
+}
+
+#[test]
+fn a_shifted_register_index_is_scaled() {
+    assert!(accepts_scaled_index(7));
+    assert!(!accepts_scaled_index(8));
+}

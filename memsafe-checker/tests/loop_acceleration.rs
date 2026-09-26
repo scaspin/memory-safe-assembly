@@ -1457,6 +1457,86 @@ fn a_guard_decided_for_hundreds_of_iterations_still_catches_a_read_ahead() {
     assert_rejected_access(analyze_long_decided_walk("ldr x2,[x0,#8]"));
 }
 
+fn rewinding_last_block_loop(adjust: &str) -> Vec<String> {
+    [
+        "start:",
+        "ldr x5,[x0]",
+        "add x0,x0,#8",
+        "loop:",
+        "subs x1,x1,#8",
+        adjust,
+        "csel x0,x0,x4,ne",
+        "ldr x5,[x0],#8",
+        "cbnz x1,loop",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+#[test]
+fn rewinding_the_pointer_on_the_last_block_is_proved_safe() {
+    assert_eq!(
+        analyze_accelerated(rewinding_last_block_loop("sub x4,x0,#8"), 8, 8),
+        Ok(())
+    );
+}
+
+#[test]
+fn skipping_ahead_on_the_last_block_is_rejected() {
+    assert_rejected_access(analyze_accelerated(
+        rewinding_last_block_loop("add x4,x0,#8"),
+        8,
+        8,
+    ));
+}
+
+fn analyze_counted_staging(store: &str) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "mov w6, #1",
+        "dup v31.8h, w6",
+        "mov x9, #0",
+        "add x7, x0, #0",
+        "loop:",
+        "cmp x9, #24",
+        "b.hs done",
+        "ld1 {v5.16b}, [x2]",
+        "and v4.16b, v5.16b, v31.16b",
+        "uaddlv s20, v4.8h",
+        "fmov w12, s20",
+        store,
+        "add x7, x7, x12, lsl #1",
+        "add x9, x9, x12",
+        "b loop",
+        "done:",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "staging");
+    engine.add_region(RegionType::RW, "staging", AbstractExpression::Immediate(64));
+    engine.add_abstract_from(2, "source");
+    engine.add_region(
+        RegionType::READ,
+        "source",
+        AbstractExpression::Immediate(16),
+    );
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_pointer_that_moves_twice_as_far_as_a_count_is_bounded_by_the_count() {
+    assert_eq!(analyze_counted_staging("str x5, [x7]"), Ok(()));
+}
+
+#[test]
+fn a_pointer_tracking_a_count_still_catches_a_store_past_the_end() {
+    assert_rejected_access(analyze_counted_staging("str x5, [x7, #16]"));
+}
+
 #[test]
 fn a_select_latch_that_grows_is_not_given_a_range() {
     let program = [
