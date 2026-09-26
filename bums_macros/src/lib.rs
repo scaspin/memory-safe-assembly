@@ -127,6 +127,32 @@ fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
     }
 }
 
+fn field_layout(ty: &Type) -> (usize, usize) {
+    match ty {
+        Type::Path(p) => {
+            let size = calculate_size_of(p.path.segments[0].ident.to_string());
+            (size, size)
+        }
+        Type::Ptr(_) => (std::mem::size_of::<usize>(), std::mem::align_of::<usize>()),
+        Type::Array(a) => (calculate_size_of_array(a), field_layout(&a.elem).1),
+        _ => todo!("layout of tuple field {:?}", ty),
+    }
+}
+
+fn tuple_layout<'a>(fields: impl Iterator<Item = &'a Type>) -> (Vec<usize>, usize) {
+    let mut offsets = Vec::new();
+    let mut end: usize = 0;
+    let mut widest: usize = 1;
+    for ty in fields {
+        let (size, align) = field_layout(ty);
+        let start = end.next_multiple_of(align);
+        offsets.push(start);
+        end = start + size;
+        widest = widest.max(align);
+    }
+    (offsets, end.next_multiple_of(widest))
+}
+
 fn calculate_hash<T: Hash>(t: &T) -> u64 {
     let mut s = DefaultHasher::new();
     t.hash(&mut s);
@@ -263,6 +289,8 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input_expressions = HashMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
     let mut new_structs = HashMap::new();
+    let mut before_call = quote! {};
+    let mut after_call = quote! {};
     if attributes.argument_list.is_empty() {
         for i in &vars.item_fn.inputs {
             arguments_to_memory_safe_regions.push(i.clone());
@@ -319,30 +347,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 pointer_sizes.insert(name, ty);
                             }
                             Type::Tuple(t) => {
-                                let mut size = 0;
                                 new_structs
                                     .insert(name.clone(), tuple_to_struct(name.clone(), t.clone()));
-                                for e in &t.elems {
-                                    match e {
-                                        Type::Array(a) => {
-                                            size += calculate_size_of_array(a);
-                                        }
-                                        Type::Path(p) => {
-                                            for i in &p.path.segments {
-                                                match i.ident.to_string().as_str() {
-                                                    "usize" => {
-                                                        size += std::mem::size_of::<usize>();
-                                                    }
-                                                    "u32" => {
-                                                        size += std::mem::size_of::<u32>();
-                                                    }
-                                                    _ => todo!("path size"),
-                                                }
-                                            }
-                                        }
-                                        _ => todo!("element list type"),
-                                    }
-                                }
+                                let (_, size) = tuple_layout(t.elems.iter());
                                 input_sizes.insert(name.clone(), size);
                             }
                             _ => todo!("Input Reference Type"),
@@ -368,7 +375,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
 
                 let mut fields = quote! {};
+                let mut copied_back = quote! {};
                 let struct_ident = Ident::new(&struct_name, proc_macro2::Span::call_site());
+                let scratch = Ident::new(
+                    &(struct_name.clone() + "_scratch"),
+                    proc_macro2::Span::call_site(),
+                );
                 for (i, f) in new_structs
                     .get(&struct_name)
                     .expect("Need established struct")
@@ -379,12 +391,24 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     let fieldname = f.ident.clone().expect("Need field name");
                     let lit: Lit = Lit::new(proc_macro2::Literal::usize_unsuffixed(i));
                     fields = quote! { #fields #fieldname: #struct_ident.#lit, };
+                    copied_back = quote! { #copied_back #struct_ident.#lit = #scratch.#fieldname; };
                 }
 
                 let real_struct_name =
                     Ident::new(&(struct_name + "_struct"), proc_macro2::Span::call_site());
-                arguments_to_pass
-                    .push(parse_quote! {&#real_struct_name { #fields } as *const #real_struct_name})
+                let mutable = matches!(&*c.ty, Type::Ptr(p) if p.mutability.is_some());
+                if mutable {
+                    before_call = quote! {
+                        #before_call
+                        let mut #scratch = #real_struct_name { #fields };
+                    };
+                    after_call = quote! { #after_call #copied_back };
+                    arguments_to_pass
+                        .push(parse_quote! {&mut #scratch as *mut #real_struct_name})
+                } else {
+                    arguments_to_pass
+                        .push(parse_quote! {&#real_struct_name { #fields } as *const #real_struct_name})
+                }
             } else {
                 arguments_to_pass.push(i.clone());
             }
@@ -438,16 +462,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         "as_ptr" => {
                             let n = Ident::new(&(var_name.clone() + "_as_ptr"), span);
                             if let Some(size) = pointer_sizes.get(&var_name) {
-                                match size.as_str() {
-                                    "u8" => new_args.push(parse_quote! {#n: *const u8}),
-                                    "u16" => new_args.push(parse_quote! {#n: *const u16}),
-                                    "i16" => new_args.push(parse_quote! {#n: *const i16}),
-                                    "u32" => new_args.push(parse_quote! {#n: *const u32}),
-                                    "u64" => new_args.push(parse_quote! {#n: *const u64}),
-                                    "u128" => new_args.push(parse_quote! {#n: *const u128}),
-                                    "usize" => new_args.push(parse_quote! {#n: *const usize}),
-                                    _ => todo!("ptr array size 1"),
-                                }
+                                let element: Type =
+                                    syn::parse_str(size).expect("pointer element type");
+                                new_args.push(parse_quote! {#n: *const #element});
                             } else {
                                 new_args.push(parse_quote! {#n: *const usize});
                             }
@@ -455,16 +472,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         "as_mut_ptr" => {
                             let n = Ident::new(&(var_name.clone() + "_as_mut_ptr"), span);
                             if let Some(size) = pointer_sizes.get(&var_name) {
-                                match size.as_str() {
-                                    "u8" => new_args.push(parse_quote! {#n: *mut u8}),
-                                    "u16" => new_args.push(parse_quote! {#n: *mut u16}),
-                                    "u32" => new_args.push(parse_quote! {#n: *mut u32}),
-                                    "u64" => new_args.push(parse_quote! {#n: *mut u64}),
-                                    "u128" => new_args.push(parse_quote! {#n: *mut u128}),
-                                    "[u64;5]" => new_args.push(parse_quote! {#n: *mut [u64;5]}),
-                                    "usize" => new_args.push(parse_quote! {#n: *mut usize}),
-                                    _ => todo!("ptr array size 2"),
-                                }
+                                let element: Type =
+                                    syn::parse_str(size).expect("pointer element type");
+                                new_args.push(parse_quote! {#n: *mut #element});
                             } else {
                                 new_args.push(parse_quote! {#n: *mut usize});
                             }
@@ -522,7 +532,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     if let Type::Ptr(p) = *ty.clone() {
                         if let Type::Infer(_) = *p.elem {
                             let struct_name = Ident::new(&(var_name.clone() + "_struct"), span);
-                            new_args.push(parse_quote! {#n : *const #struct_name});
+                            if p.mutability.is_some() {
+                                new_args.push(parse_quote! {#n : *mut #struct_name});
+                            } else {
+                                new_args.push(parse_quote! {#n : *const #struct_name});
+                            }
                         } else {
                             new_args.push(parse_quote! {#n : #ty});
                         }
@@ -623,7 +637,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #extern_fn #output;
             }
             unsafe {
-                return #invocation;
+                #before_call
+                let result = #invocation;
+                #after_call
+                return result;
             }
         }
     };
@@ -726,47 +743,55 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     let s = new_structs
                                         .get(no_suffix)
                                         .expect("Need well defined struct");
-                                    let mut index = 0;
-                                    for e in &s.fields {
-                                        match e.ty.clone() {
-                                            Type::Path(p) => {
-                                                if p.path.segments.len() == 1 {
-                                                    let abs = p.path.segments[0].ident.to_string();
-                                                    match abs.as_str() {
-                                                        "usize" => {
-                                                            let new_name = e.ident.clone().expect(
-                                                                "need name of variable to input",
-                                                            );
-                                                            engine.add_abstract_to_memory(
-                                                                name.clone(),
-                                                                index,
-                                                                AbstractExpression::Abstract(
-                                                                    new_name.to_string(),
-                                                                ),
-                                                            );
-                                                        }
-                                                        "u32" => {
-                                                            let new_name = e.ident.clone().expect(
-                                                                "need name of variable to input",
-                                                            );
-                                                            engine.add_abstract_to_memory(
-                                                                name.clone(),
-                                                                index,
-                                                                AbstractExpression::Abstract(
-                                                                    new_name.to_string(),
-                                                                ),
-                                                            );
-                                                        }
-                                                        _ => todo!("tuple abstracts"),
+                                    let fields: Vec<&Field> = s.fields.iter().collect();
+                                    let (offsets, _) = tuple_layout(fields.iter().map(|f| &f.ty));
+                                    let field_name = |f: &Field| {
+                                        f.ident.clone().expect("tuple fields are named").to_string()
+                                    };
+                                    for (k, (field, offset)) in
+                                        fields.iter().zip(offsets.iter()).enumerate()
+                                    {
+                                        let value = AbstractExpression::Abstract(field_name(field));
+                                        match &field.ty {
+                                            Type::Path(_) => {
+                                                engine.add_abstract_to_memory(
+                                                    name.clone(),
+                                                    *offset as i64,
+                                                    value,
+                                                );
+                                            }
+                                            Type::Ptr(pointer) => {
+                                                let Some(length_field) = fields.get(k + 1) else {
+                                                    abort_call_site!(
+                                                        "a pointer field must be followed by its usize length"
+                                                    );
+                                                };
+                                                let element = match &*pointer.elem {
+                                                    Type::Path(p) => {
+                                                        p.path.segments[0].ident.to_string()
                                                     }
-                                                }
+                                                    _ => todo!("pointer field to {:?}", pointer.elem),
+                                                };
+                                                engine.add_abstract_to_memory(
+                                                    name.clone(),
+                                                    *offset as i64,
+                                                    value,
+                                                );
+                                                engine.add_region(
+                                                    if pointer.mutability.is_some() {
+                                                        RegionType::WRITE
+                                                    } else {
+                                                        RegionType::READ
+                                                    },
+                                                    field_name(field),
+                                                    byte_length(
+                                                        &field_name(length_field),
+                                                        Some(&element),
+                                                    ),
+                                                );
                                             }
-                                            Type::Array(a) => {
-                                                if input_sizes.contains_key(no_suffix) {
-                                                    index += (calculate_size_of_array(&a)) as i64;
-                                                }
-                                            }
-                                            _ => todo!("unsupported tuple type {:?}", e),
+                                            Type::Array(_) => {}
+                                            _ => todo!("unsupported tuple type {:?}", field),
                                         }
                                     }
                                     continue;

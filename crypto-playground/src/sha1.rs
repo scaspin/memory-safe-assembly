@@ -25,7 +25,6 @@ impl Sha1Context {
     }
 }
 
-// from aws-lc-rs: https://github.com/aws/aws-lc-rs/blob/671415fa90145746e4424275806ae0946504d044/aws-lc-rs/src/digest/sha.rs#L200
 pub fn sha1_digest(msg: &[u8], output: &mut [u8]) {
     sha1(msg, msg.len(), output);
 }
@@ -38,7 +37,6 @@ fn sha1(data: &[u8], len: usize, out: &mut [u8]) {
 }
 
 fn sha1_update(ctx: &mut Sha1Context, msg: &[u8], len: usize) -> Result<(), ()> {
-    //call to crypt_md32_update
     let mut len = len;
     let mut msg = msg;
 
@@ -87,7 +85,6 @@ fn sha1_update(ctx: &mut Sha1Context, msg: &[u8], len: usize) -> Result<(), ()> 
 }
 
 fn sha1_final(out: &mut [u8], ctx: &mut Sha1Context) -> Result<(), ()> {
-    // call to crypto_md32_final
     let mut n = ctx.num as usize;
     assert!(n < SHA1_CBLOCK);
     ctx.data[n] = 0x80;
@@ -99,8 +96,6 @@ fn sha1_final(out: &mut [u8], ctx: &mut Sha1Context) -> Result<(), ()> {
         sha1_block_data_order(&mut ctx.h, &ctx.data[0..64]);
     }
     ms_memset(&mut ctx.data[n..], 0, SHA1_CBLOCK - 8 - n);
-    // Append a 64-bit length to the block and process it.
-    // is big endian = true
     byteorder::BE::write_u32(&mut ctx.data[(SHA1_CBLOCK - 8)..], ctx.nh);
     byteorder::BE::write_u32(&mut ctx.data[(SHA1_CBLOCK - 4)..], ctx.nl);
 
@@ -112,7 +107,18 @@ fn sha1_final(out: &mut [u8], ctx: &mut Sha1Context) -> Result<(), ()> {
 }
 
 #[bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
-fn sha1_block_data_order(context: &mut [u32; 5], input: &[u8]);
+fn sha1_block_data_order_hw(context: &mut [u32; 5], input: &[u8]);
+
+#[bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+fn sha1_block_data_order_nohw(context: &mut [u32; 5], input: &[u8]);
+
+fn sha1_block_data_order(context: &mut [u32; 5], input: &[u8]) {
+    if std::arch::is_aarch64_feature_detected!("sha2") {
+        sha1_block_data_order_hw(context, input)
+    } else {
+        sha1_block_data_order_nohw(context, input)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -121,7 +127,7 @@ mod tests {
     use aws_lc_rs::digest::digest;
 
     unsafe extern "C" {
-        #[link_name = "aws_lc_0_14_1_sha1_block_data_order"]
+        #[link_name = "aws_lc_0_44_0_sha1_block_data_order_nohw"]
         fn aws_sha1_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
     }
 

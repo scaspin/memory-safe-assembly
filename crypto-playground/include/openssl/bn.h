@@ -1,124 +1,12 @@
-/* Copyright (C) 1995-1997 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.]
- */
-/* ====================================================================
- * Copyright (c) 1998-2006 The OpenSSL Project.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit. (http://www.openssl.org/)"
- *
- * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    openssl-core@openssl.org.
- *
- * 5. Products derived from this software may not be called "OpenSSL"
- *    nor may "OpenSSL" appear in their names without prior written
- *    permission of the OpenSSL Project.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit (http://www.openssl.org/)"
- *
- * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This product includes cryptographic software written by Eric Young
- * (eay@cryptsoft.com).  This product includes software written by Tim
- * Hudson (tjh@cryptsoft.com).
- *
- */
-/* ====================================================================
- * Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
- *
- * Portions of the attached software ("Contribution") are developed by
- * SUN MICROSYSTEMS, INC., and are contributed to the OpenSSL project.
- *
- * The Contribution is licensed pursuant to the Eric Young open source
- * license provided above.
- *
- * The binary polynomial arithmetic software is originally written by
- * Sheueling Chang Shantz and Douglas Stebila of Sun Microsystems
- * Laboratories. */
+// Copyright (C) 1995-1997 Eric Young (eay@cryptsoft.com)
+// Copyright (c) 1998-2006 The OpenSSL Project.  All rights reserved.
+// Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
+//
+// The binary polynomial arithmetic software is originally written by
+// Sheueling Chang Shantz and Douglas Stebila of Sun Microsystems
+// Laboratories.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef OPENSSL_HEADER_BN_H
 #define OPENSSL_HEADER_BN_H
@@ -221,6 +109,10 @@ OPENSSL_EXPORT unsigned BN_num_bits(const BIGNUM *bn);
 // |BIGNUM|s are bounded such that this value, and its corresponding bit count,
 // will always fit in |int|.
 OPENSSL_EXPORT unsigned BN_num_bytes(const BIGNUM *bn);
+
+// BN_get_minimal_width returns the minimal number of words needed to represent
+// |bn|. This function can leak the size of the value encoded in |BN|.
+OPENSSL_EXPORT int BN_get_minimal_width(const BIGNUM *bn);
 
 // BN_zero sets |bn| to zero.
 OPENSSL_EXPORT void BN_zero(BIGNUM *bn);
@@ -336,6 +228,11 @@ OPENSSL_EXPORT BN_ULONG BN_get_word(const BIGNUM *bn);
 // returns zero.
 OPENSSL_EXPORT int BN_get_u64(const BIGNUM *bn, uint64_t *out);
 
+// BN_get_flags interprets |flags| as a bitmask and returns the flags for |bn|.
+// The returned value is a set of bitmask of |BN_FLG_*| values, ORed together,
+// or 0 if none of the given flags are set.
+OPENSSL_EXPORT int BN_get_flags(const BIGNUM *bn, int flags);
+
 
 // ASN.1 functions.
 
@@ -389,41 +286,50 @@ OPENSSL_EXPORT void BN_CTX_end(BN_CTX *ctx);
 
 // BN_add sets |r| = |a| + |b|, where |r| may be the same pointer as either |a|
 // or |b|. It returns one on success and zero on allocation failure.
+// The size of |a| and |b| are assumed to be public.
 OPENSSL_EXPORT int BN_add(BIGNUM *r, const BIGNUM *a, const BIGNUM *b);
 
 // BN_uadd sets |r| = |a| + |b|, where |a| and |b| are non-negative and |r| may
 // be the same pointer as either |a| or |b|. It returns one on success and zero
 // on allocation failure.
+// The size of |a| and |b| are assumed to be public.
 OPENSSL_EXPORT int BN_uadd(BIGNUM *r, const BIGNUM *a, const BIGNUM *b);
 
 // BN_add_word adds |w| to |a|. It returns one on success and zero otherwise.
+// The size of |a| and |w| are assumed to be public.
 OPENSSL_EXPORT int BN_add_word(BIGNUM *a, BN_ULONG w);
 
 // BN_sub sets |r| = |a| - |b|, where |r| may be the same pointer as either |a|
 // or |b|. It returns one on success and zero on allocation failure.
+// The size of |a| and |b| are assumed to be public.
 OPENSSL_EXPORT int BN_sub(BIGNUM *r, const BIGNUM *a, const BIGNUM *b);
 
 // BN_usub sets |r| = |a| - |b|, where |a| and |b| are non-negative integers,
 // |b| < |a| and |r| may be the same pointer as either |a| or |b|. It returns
 // one on success and zero on allocation failure.
+// The size of |a| and |b| are assumed to be public.
 OPENSSL_EXPORT int BN_usub(BIGNUM *r, const BIGNUM *a, const BIGNUM *b);
 
 // BN_sub_word subtracts |w| from |a|. It returns one on success and zero on
 // allocation failure.
+// The size of |a| and |w| are assumed to be public.
 OPENSSL_EXPORT int BN_sub_word(BIGNUM *a, BN_ULONG w);
 
 // BN_mul sets |r| = |a| * |b|, where |r| may be the same pointer as |a| or
 // |b|. Returns one on success and zero otherwise.
+// The size of |a| and |b| are assumed to be public.
 OPENSSL_EXPORT int BN_mul(BIGNUM *r, const BIGNUM *a, const BIGNUM *b,
                           BN_CTX *ctx);
 
 // BN_mul_word sets |bn| = |bn| * |w|. It returns one on success or zero on
 // allocation failure.
+// The size of |bn| and |w| are assumed to be public.
 OPENSSL_EXPORT int BN_mul_word(BIGNUM *bn, BN_ULONG w);
 
 // BN_sqr sets |r| = |a|^2 (i.e. squares), where |r| may be the same pointer as
 // |a|. Returns one on success and zero otherwise. This is more efficient than
 // BN_mul(r, a, a, ctx).
+// The size of |a| is assumed to be public.
 OPENSSL_EXPORT int BN_sqr(BIGNUM *r, const BIGNUM *a, BN_CTX *ctx);
 
 // BN_div divides |numerator| by |divisor| and places the result in |quotient|
@@ -431,18 +337,21 @@ OPENSSL_EXPORT int BN_sqr(BIGNUM *r, const BIGNUM *a, BN_CTX *ctx);
 // which case the respective value is not returned. The result is rounded
 // towards zero; thus if |numerator| is negative, the remainder will be zero or
 // negative. It returns one on success or zero on error.
+// The size of arguments are assumed to be public.
 OPENSSL_EXPORT int BN_div(BIGNUM *quotient, BIGNUM *rem,
                           const BIGNUM *numerator, const BIGNUM *divisor,
                           BN_CTX *ctx);
 
 // BN_div_word sets |numerator| = |numerator|/|divisor| and returns the
 // remainder or (BN_ULONG)-1 on error.
+// The size of arguments are assumed to be public.
 OPENSSL_EXPORT BN_ULONG BN_div_word(BIGNUM *numerator, BN_ULONG divisor);
 
 // BN_sqrt sets |*out_sqrt| (which may be the same |BIGNUM| as |in|) to the
 // square root of |in|, using |ctx|. It returns one on success or zero on
 // error. Negative numbers and non-square numbers will result in an error with
 // appropriate errors on the error queue.
+// the size of |in| is assumed public.
 OPENSSL_EXPORT int BN_sqrt(BIGNUM *out_sqrt, const BIGNUM *in, BN_CTX *ctx);
 
 
@@ -670,11 +579,11 @@ OPENSSL_EXPORT int BN_pseudo_rand_range(BIGNUM *rnd, const BIGNUM *range);
 // The callback receives the address of that |BN_GENCB| structure as its last
 // argument and the user is free to put an arbitrary pointer in |arg|. The other
 // arguments are set as follows:
-//   event=BN_GENCB_GENERATED, n=i:   after generating the i'th possible prime
+// - event=BN_GENCB_GENERATED, n=i:   after generating the i'th possible prime
 //                                    number.
-//   event=BN_GENCB_PRIME_TEST, n=-1: when finished trial division primality
+// - event=BN_GENCB_PRIME_TEST, n=-1: when finished trial division primality
 //                                    checks.
-//   event=BN_GENCB_PRIME_TEST, n=i:  when the i'th primality test has finished.
+// - event=BN_GENCB_PRIME_TEST, n=i:  when the i'th primality test has finished.
 //
 // The callback can return zero to abort the generation progress or one to
 // allow it to continue.
@@ -752,7 +661,7 @@ OPENSSL_EXPORT int BN_generate_prime_ex(BIGNUM *ret, int bits, int safe,
 enum bn_primality_result_t {
   bn_probably_prime,
   bn_composite,
-  bn_non_prime_power_composite,
+  bn_non_prime_power_composite
 };
 
 // BN_enhanced_miller_rabin_primality_test tests whether |w| is probably a prime
@@ -1006,6 +915,21 @@ OPENSSL_EXPORT BIGNUM *BN_secure_new(void);
 // BN_CTX_secure_new calls |BN_CTX_new|.
 OPENSSL_EXPORT BN_CTX *BN_CTX_secure_new(void);
 
+// BN_mod_exp_mont_consttime_x2 performs two montgomery
+// multiplications at once using AVX-512 SIMD. If AVX-512 is not
+// available, it falls back to two calls of
+// `BN_mod_exp_mont_consttime`.
+OPENSSL_EXPORT int BN_mod_exp_mont_consttime_x2(BIGNUM *rr1, const BIGNUM *a1, const BIGNUM *p1,
+                                                const BIGNUM *m1, const BN_MONT_CTX *in_mont1,
+                                                BIGNUM *rr2, const BIGNUM *a2, const BIGNUM *p2,
+                                                const BIGNUM *m2, const BN_MONT_CTX *in_mont2,
+                                                BN_CTX *ctx);
+
+// BN_set_flags does nothing. See comments regarding |BN_FLG_CONSTTIME| being
+// intentionally omitted for more details.
+OPENSSL_DEPRECATED OPENSSL_EXPORT void BN_set_flags(BIGNUM *b, int n);
+
+
 // Private functions
 
 struct bignum_st {
@@ -1050,16 +974,10 @@ OPENSSL_EXPORT unsigned BN_num_bits_word(BN_ULONG l);
 #define BN_FLG_MALLOCED 0x01
 #define BN_FLG_STATIC_DATA 0x02
 
-#ifdef AWS_LC_INTERNAL_IGNORE_BN_SET_FLAGS
-#define BN_set_flags(x, y) /* Ignored */
-#define BN_FLG_CONSTTIME 0x04
-#endif /* AWS_LC_INTERNAL_IGNORE_BN_SET_FLAGS */
-
 // |BN_FLG_CONSTTIME| has been removed and intentionally omitted so code relying
-// on it will not compile unless the flag above is set. Consumers should use the
-// higher-level cryptographic algorithms exposed by other modules. Consumers
-// within the library should call the appropriate timing-sensitive algorithm
-// directly.
+// on it will not compile. External consumers should use the higher-level
+// cryptographic algorithms exposed by other modules. Consumers within the
+// library should call the appropriate timing-sensitive algorithm directly.
 
 
 #if defined(__cplusplus)

@@ -1,57 +1,6 @@
-/* Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL
- * project 1999.
- */
-/* ====================================================================
- * Copyright (c) 1999 The OpenSSL Project.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit. (http://www.OpenSSL.org/)"
- *
- * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    licensing@OpenSSL.org.
- *
- * 5. Products derived from this software may not be called "OpenSSL"
- *    nor may "OpenSSL" appear in their names without prior written
- *    permission of the OpenSSL Project.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit (http://www.OpenSSL.org/)"
- *
- * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This product includes cryptographic software written by Eric Young
- * (eay@cryptsoft.com).  This product includes software written by Tim
- * Hudson (tjh@cryptsoft.com). */
+// Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project 1999.
+// Copyright (c) 1999 The OpenSSL Project.  All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 
 #ifndef OPENSSL_HEADER_PKCS8_H
@@ -66,6 +15,9 @@ extern "C" {
 #endif
 
 
+// PKCS#8 private key encryption and decryption.
+
+
 // PKCS8_encrypt serializes and encrypts a PKCS8_PRIV_KEY_INFO with PBES1 or
 // PBES2 as defined in PKCS #5. Only pbeWithSHAAnd128BitRC4,
 // pbeWithSHAAnd3-KeyTripleDES-CBC and pbeWithSHA1And40BitRC2, defined in PKCS
@@ -74,8 +26,11 @@ extern "C" {
 //
 // |pass| is used as the password. If a PBES1 scheme from PKCS #12 is used, this
 // will be converted to a raw byte string as specified in B.1 of PKCS #12. If
-// |pass| is NULL, it will be encoded as the empty byte string rather than two
-// zero bytes, the PKCS #12 encoding of the empty string.
+// |pass| is NULL, it is treated as an empty password and |pass_len| is ignored.
+// This will be encoded as the empty byte string rather than two zero bytes, the
+// PKCS #12 encoding of the empty string. If |pass| is non-NULL and |pass_len|
+// is negative, |strlen(pass)| is used. If |pass| is non-NULL and |pass_len| is
+// non-negative, |pass_len| bytes are used as the password.
 //
 // If |salt| is NULL, a random salt of |salt_len| bytes is generated. If
 // |salt_len| is zero, a default salt length is used instead.
@@ -104,7 +59,8 @@ OPENSSL_EXPORT int PKCS8_marshal_encrypted_private_key(
 // |pass| is used as the password. If a PBES1 scheme from PKCS #12 is used, this
 // will be converted to a raw byte string as specified in B.1 of PKCS #12. If
 // |pass| is NULL, it will be encoded as the empty byte string rather than two
-// zero bytes, the PKCS #12 encoding of the empty string.
+// zero bytes, the PKCS #12 encoding of the empty string. If |pass_len| is
+// negative and |pass| is non-NULL, |strlen(pass)| is used.
 //
 // The resulting structure must be freed by the caller.
 OPENSSL_EXPORT PKCS8_PRIV_KEY_INFO *PKCS8_decrypt(X509_SIG *pkcs8,
@@ -125,8 +81,8 @@ OPENSSL_EXPORT EVP_PKEY *PKCS8_parse_encrypted_private_key(CBS *cbs,
 // Any friendlyName attributes (RFC 2985) in the PKCS#12 structure will be
 // returned on the |X509| objects as aliases. See also |X509_alias_get0|.
 OPENSSL_EXPORT int PKCS12_get_key_and_certs(EVP_PKEY **out_key,
-                                            STACK_OF(X509) *out_certs,
-                                            CBS *in, const char *password);
+                                            STACK_OF(X509) *out_certs, CBS *in,
+                                            const char *password);
 
 
 // Deprecated functions.
@@ -149,10 +105,10 @@ OPENSSL_EXPORT PKCS12 *d2i_PKCS12(PKCS12 **out_p12, const uint8_t **ber_bytes,
                                   size_t ber_len);
 
 // d2i_PKCS12_bio acts like |d2i_PKCS12| but reads from a |BIO|.
-OPENSSL_EXPORT PKCS12* d2i_PKCS12_bio(BIO *bio, PKCS12 **out_p12);
+OPENSSL_EXPORT PKCS12 *d2i_PKCS12_bio(BIO *bio, PKCS12 **out_p12);
 
 // d2i_PKCS12_fp acts like |d2i_PKCS12| but reads from a |FILE|.
-OPENSSL_EXPORT PKCS12* d2i_PKCS12_fp(FILE *fp, PKCS12 **out_p12);
+OPENSSL_EXPORT PKCS12 *d2i_PKCS12_fp(FILE *fp, PKCS12 **out_p12);
 
 // i2d_PKCS12 is a dummy function which copies the contents of |p12|. If |out|
 // is not NULL then the result is written to |*out| and |*out| is advanced just
@@ -188,12 +144,31 @@ OPENSSL_EXPORT int PKCS12_parse(const PKCS12 *p12, const char *password,
                                 EVP_PKEY **out_pkey, X509 **out_cert,
                                 STACK_OF(X509) **out_ca_certs);
 
+// PKCS12_set_mac generates the MAC for |p12| with the designated |password|,
+// |salt|, |mac_iterations|, and |md| specified. |password| MUST be the same
+// password originally used to encrypt |p12|. Although OpenSSL will allow an
+// invalid state with a different |password|, AWS-LC will throw an error and
+// return 0.
+//
+// If |salt| is NULL, a random salt of |salt_len| bytes is generated. If
+// |salt_len| is zero, a default salt length is used instead.
+// If |md| is NULL, the default is use SHA1 to align with OpenSSL.
+//
+// TODO (CryptoAlg-2897): Update the default |md| to SHA-256 to align with
+//                        OpenSSL 3.x.
+OPENSSL_EXPORT int PKCS12_set_mac(PKCS12 *p12, const char *password,
+                                  int password_len, unsigned char *salt,
+                                  int salt_len, int mac_iterations,
+                                  const EVP_MD *md);
+
 // PKCS12_verify_mac returns one if |password| is a valid password for |p12|
 // and zero otherwise. Since |PKCS12_parse| doesn't take a length parameter,
 // it's not actually possible to use a non-NUL-terminated password to actually
 // get anything from a |PKCS12|. Thus |password| and |password_len| may be
-// |NULL| and zero, respectively, or else |password_len| may be -1, or else
-// |password[password_len]| must be zero and no other NUL bytes may appear in
+// |NULL| and zero, respectively, or else |password_len| may be -1 to indicate
+// that |password| is a NUL-terminated C string whose length is determined via
+// |strlen|, or else |password_len| must be non-negative,
+// |password[password_len]| must be zero, and no other NUL bytes may appear in
 // |password|. If the |password_len| checks fail, zero is returned
 // immediately.
 OPENSSL_EXPORT int PKCS12_verify_mac(const PKCS12 *p12, const char *password,
@@ -231,6 +206,9 @@ OPENSSL_EXPORT PKCS12 *PKCS12_create(const char *password, const char *name,
                                      const STACK_OF(X509) *chain, int key_nid,
                                      int cert_nid, int iterations,
                                      int mac_iterations, int key_type);
+
+// PKCS12_new returns a newly-allocated |PKCS12| object.
+OPENSSL_EXPORT PKCS12 *PKCS12_new(void);
 
 // PKCS12_free frees |p12| and its contents.
 OPENSSL_EXPORT void PKCS12_free(PKCS12 *p12);
@@ -286,5 +264,10 @@ BSSL_NAMESPACE_END
 #define PKCS8_R_INVALID_CHARACTERS 131
 #define PKCS8_R_UNSUPPORTED_OPTIONS 132
 #define PKCS8_R_AMBIGUOUS_FRIENDLY_NAME 133
+
+// PKCS12_R_MAC_VERIFY_FAILURE is an error code defined for
+// compatability. It points to our equivalent for this OpenSSL error,
+// |PKCS8_R_INCORRECT_PASSWORD|
+#define PKCS12_R_MAC_VERIFY_FAILURE PKCS8_R_INCORRECT_PASSWORD
 
 #endif  // OPENSSL_HEADER_PKCS8_H

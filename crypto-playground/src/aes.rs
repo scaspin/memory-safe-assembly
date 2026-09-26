@@ -56,24 +56,6 @@ fn aes_hw_cbc_encrypt(
     enc: i64,
 );
 
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len(), key1 as *const _, key2 as *const _, iv.as_ptr(), [key1.1 >= 10, key1.1 <= 14, key1.1 % 2 == 0, key2.1 >= 10, key2.1 <= 14, key2.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
-fn aes_hw_xts_encrypt(
-    input: &[u8],
-    output: &mut [u8],
-    key1: &([u32; 60], u32),
-    key2: &([u32; 60], u32),
-    iv: &[u8; 16],
-);
-
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len(), key1 as *const _, key2 as *const _, iv.as_ptr(), [key1.1 >= 10, key1.1 <= 14, key1.1 % 2 == 0, key2.1 >= 10, key2.1 <= 14, key2.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
-fn aes_hw_xts_decrypt(
-    input: &[u8],
-    output: &mut [u8],
-    key1: &([u32; 60], u32),
-    key2: &([u32; 60], u32),
-    iv: &[u8; 16],
-);
-
 #[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1%2==0, input.len()>=16, input.len()%16==0, input.len() == output.len()])]
 fn aes_hw_ctr32_encrypt_blocks(
     input: &[u8],
@@ -427,7 +409,7 @@ mod tests {
     mod cipher;
 
     unsafe extern "C" {
-        #[link_name = "aws_lc_0_14_1_aes_hw_ctr32_encrypt_blocks"]
+        #[link_name = "aws_lc_0_44_0_aes_hw_ctr32_encrypt_blocks"]
         fn aws_aes_hw_ctr32_encrypt_blocks(
             input_as_ptr: *const u8,
             output_as_mut_ptr: *mut u8,
@@ -436,7 +418,7 @@ mod tests {
             ivec_as_mut_ptr: *mut u8,
         );
 
-        #[link_name = "aws_lc_0_14_1_vpaes_ctr32_encrypt_blocks"]
+        #[link_name = "aws_lc_0_44_0_vpaes_ctr32_encrypt_blocks"]
         fn aws_vpaes_ctr32_encrypt_blocks(
             input_as_ptr: *const u8,
             output_as_mut_ptr: *mut u8,
@@ -445,14 +427,14 @@ mod tests {
             ivec_as_mut_ptr: *mut u8,
         );
 
-        #[link_name = "aws_lc_0_14_1_vpaes_encrypt"]
+        #[link_name = "aws_lc_0_44_0_vpaes_encrypt"]
         fn aws_vpaes_encrypt(
             input_as_ptr: *const u8,
             output_as_mut_ptr: *mut u8,
             keys_as_mut_ptr: *const AesKey,
         );
 
-        #[link_name = "aws_lc_0_14_1_AES_encrypt"]
+        #[link_name = "aws_lc_0_44_0_AES_encrypt"]
         fn aws_AES_ctr128_encrypt(
             input_as_ptr: *const u8,
             output_as_mut_ptr: *mut u8,

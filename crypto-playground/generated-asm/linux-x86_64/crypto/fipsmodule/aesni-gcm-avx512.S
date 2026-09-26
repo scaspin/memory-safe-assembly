@@ -5,6 +5,7 @@
 
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_X86_64) && defined(__ELF__)
 .text	
+#ifndef MY_ASSEMBLER_IS_TOO_OLD_FOR_512AVX
 .globl	gcm_init_avx512
 .hidden gcm_init_avx512
 .hidden	gcm_init_avx512
@@ -136463,4 +136464,5 @@ byte64_len_to_mask_table:
 .quad	0x3fffffffffffffff, 0x7fffffffffffffff
 .quad	0xffffffffffffffff
 .text	
+#endif
 #endif

@@ -35,8 +35,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             processed_path.push(entry.file_name());
             File::create(processed_path)?.write_all(
                 &cc::Build::new()
-                    .define("__KERNEL__", "1")
                     .include("../crypto-playground/include")
+                    .file(entry.path())
+                    .expand(),
+            )?;
+        }
+    }
+    let native = format!("../crypto-playground/native-asm/{}", arch);
+    if let Ok(entries) = std::fs::read_dir(&native) {
+        for entry in entries.flatten() {
+            println!("cargo::rerun-if-changed={}", entry.path().display());
+            if !seen.insert(entry.file_name()) {
+                continue;
+            }
+            let mut processed_path = out_dir.clone();
+            processed_path.push(entry.file_name());
+            File::create(processed_path)?.write_all(
+                &cc::Build::new()
+                    .include("../crypto-playground/include")
+                    .include("../crypto-playground/native-asm/include")
+                    .define("S2N_BN_HIDE_SYMBOLS", "1")
                     .file(entry.path())
                     .expand(),
             )?;

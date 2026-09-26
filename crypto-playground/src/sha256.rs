@@ -34,7 +34,6 @@ impl Sha256StateSt {
 }
 
 fn sha256_update(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Result<(), ()> {
-    //call to crypt_md32_update
     let mut len = len;
     let mut msg = msg;
 
@@ -83,7 +82,6 @@ fn sha256_update(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Result<(), ()>
 }
 
 fn sha256_final(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), ()> {
-    // call to crypto_md32_final
     let mut n = ctx.num as usize;
     assert!(n < SHA256_CBLOCK);
     ctx.data[n] = 0x80;
@@ -95,8 +93,6 @@ fn sha256_final(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), ()> {
         sha256_block_data_order(&mut ctx.h, &ctx.data[0..64]);
     }
     ms_memset(&mut ctx.data[n..], 0, SHA256_CBLOCK - 8 - n);
-    // Append a 64-bit length to the block and process it.
-    // is big endian = true
     byteorder::BE::write_u32(&mut ctx.data[(SHA256_CBLOCK - 8)..], ctx.nh);
     byteorder::BE::write_u32(&mut ctx.data[(SHA256_CBLOCK - 4)..], ctx.nl);
 
@@ -119,7 +115,6 @@ fn sha256(data: &[u8], len: usize, out: &mut [u8]) {
 }
 
 fn sha256_update_unsafe_asm(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Result<(), ()> {
-    //call to crypt_md32_update
     let mut len = len;
     let mut msg = msg;
 
@@ -172,7 +167,6 @@ fn sha256_update_unsafe_asm(ctx: &mut SHA256_CTX, msg: &[u8], len: usize) -> Res
 }
 
 fn sha256_final_unsafe_asm(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), ()> {
-    // call to crypto_md32_final
     let mut n = ctx.num as usize;
     assert!(n < SHA256_CBLOCK);
     ctx.data[n] = 0x80;
@@ -184,8 +178,6 @@ fn sha256_final_unsafe_asm(out: &mut [u8], ctx: &mut SHA256_CTX) -> Result<(), (
         sha256_block_data_order_unsafe_asm(ctx.h.as_mut_ptr(), ctx.data.as_ptr(), 64);
     }
     ms_memset(&mut ctx.data[n..], 0, SHA256_CBLOCK - 8 - n);
-    // Append a 64-bit length to the block and process it.
-    // is big endian = true
     byteorder::BE::write_u32(&mut ctx.data[(SHA256_CBLOCK - 8)..], ctx.nh);
     byteorder::BE::write_u32(&mut ctx.data[(SHA256_CBLOCK - 4)..], ctx.nl);
 
@@ -211,17 +203,26 @@ pub fn sha256_digest_unsafe(msg: &[u8], output: &mut [u8]) {
     sha256_unsafe_asm(msg, msg.len(), output);
 }
 
-// straight out of aws-cl-rs
-// https://github.com/aws/aws-lc-rs/blob/0d8ef6cf53429cfabadbde73a986bd3528054178/aws-lc-rs/src/digest/sha.rs#L212
 pub fn sha256_digest(msg: &[u8], output: &mut [u8]) {
     sha256(msg, msg.len(), output);
 }
 
 #[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
-fn sha256_block_data_order(context: &mut [u32; 8], input: &[u8]);
+fn sha256_block_data_order_hw(context: &mut [u32; 8], input: &[u8]);
+
+#[bums_macros::check_mem_safe("sha256-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+fn sha256_block_data_order_nohw(context: &mut [u32; 8], input: &[u8]);
+
+fn sha256_block_data_order(context: &mut [u32; 8], input: &[u8]) {
+    if std::arch::is_aarch64_feature_detected!("sha2") {
+        sha256_block_data_order_hw(context, input)
+    } else {
+        sha256_block_data_order_nohw(context, input)
+    }
+}
 
 unsafe extern "C" {
-    #[link_name = "aws_lc_0_14_1_sha256_block_data_order"]
+    #[link_name = "aws_lc_0_44_0_sha256_block_data_order_nohw"]
     fn aws_sha256_block_data_order(context: *mut u32, input: *const u8, input_len: usize);
 }
 

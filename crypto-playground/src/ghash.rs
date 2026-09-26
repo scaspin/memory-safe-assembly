@@ -22,13 +22,13 @@ mod tests {
 
     #[allow(improper_ctypes)]
     unsafe extern "C" {
-        #[link_name = "aws_lc_0_14_1_gcm_init_neon"]
+        #[link_name = "aws_lc_0_44_0_gcm_init_neon"]
         fn aws_gcm_init_neon(context: *mut u128, input: *const u64);
 
-        #[link_name = "aws_lc_0_14_1_gcm_gmult_neon"]
+        #[link_name = "aws_lc_0_44_0_gcm_gmult_neon"]
         fn aws_gcm_gmult_neon(context: *mut u8, input: *const u128);
 
-        #[link_name = "aws_lc_0_14_1_gcm_ghash_neon"]
+        #[link_name = "aws_lc_0_44_0_gcm_ghash_neon"]
         fn aws_gcm_ghash_neon(context: *mut u8, h: *const u128, buf: *const u8, len: usize);
     }
 

@@ -37,7 +37,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     processed_path.push(entry.file_name());
                     File::create(processed_path.clone())?.write_all(
                         &cc::Build::new()
-                            .define("__KERNEL__", "1")
                             .include("include")
                             .file(entry.path())
                             .expand(),
@@ -46,6 +45,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Err(e) => println!("cargo::warning:{}", e),
             }
+        }
+    }
+
+    if let Ok(entries) = std::fs::read_dir(format!("native-asm/{}", arch)) {
+        for entry in entries.flatten() {
+            println!("cargo::rerun-if-changed={}", entry.path().display());
+            if !seen.insert(entry.file_name()) {
+                continue;
+            }
+            let mut processed_path = std::env::var_os("OUT_DIR")
+                .map(std::path::PathBuf::from)
+                .ok_or(std::io::Error::last_os_error())?;
+            processed_path.push(entry.file_name());
+            File::create(processed_path.clone())?.write_all(
+                &cc::Build::new()
+                    .include("include")
+                    .include("native-asm/include")
+                    .define("S2N_BN_HIDE_SYMBOLS", "1")
+                    .file(entry.path())
+                    .expand(),
+            )?;
+            build.file(processed_path);
         }
     }
 

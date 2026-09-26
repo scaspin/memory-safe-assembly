@@ -1,58 +1,5 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.] */
+// Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com) All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef OPENSSL_HEADER_DIGEST_H
 #define OPENSSL_HEADER_DIGEST_H
@@ -154,6 +101,8 @@ OPENSSL_EXPORT int EVP_MD_CTX_reset(EVP_MD_CTX *ctx);
 // EVP_DigestInit_ex configures |ctx|, which must already have been
 // initialised, for a fresh hashing operation using |type|. It returns one on
 // success and zero on allocation failure.
+//
+// On failure, |ctx| must be released with |EVP_MD_CTX_[cleanup,free]|.
 OPENSSL_EXPORT int EVP_DigestInit_ex(EVP_MD_CTX *ctx, const EVP_MD *type,
                                      ENGINE *engine);
 
@@ -171,9 +120,17 @@ OPENSSL_EXPORT int EVP_DigestUpdate(EVP_MD_CTX *ctx, const void *data,
 // at least this much space.
 #define EVP_MAX_MD_SIZE 64  // SHA-512 is the longest so far.
 
+// EVP_MAX_MD_CHAINING_LENGTH is the largest chaining length supported, in
+// bytes. This constant is only for Merkle-Damgard-based hashed functions
+// like SHA-1, SHA-2, and MD5. The chaining length is defined as the output
+// length of the hash in bytes, before any truncation (e.g., 32 for SHA-224 and
+// SHA-256, 64 for SHA-384 and SHA-512).
+// This constant is only used internally by HMAC.
+#define EVP_MAX_MD_CHAINING_LENGTH 64  // SHA-512 has the longest chaining length so far
+
 // EVP_MAX_MD_BLOCK_SIZE is the largest digest block size supported, in
 // bytes.
-#define EVP_MAX_MD_BLOCK_SIZE 128  // SHA-512 is the longest so far.
+#define EVP_MAX_MD_BLOCK_SIZE 144      // SHA3-224 has the largest block size so far
 
 // EVP_DigestFinal_ex finishes the digest in |ctx| and writes the output to
 // |md_out|. |EVP_MD_CTX_size| bytes are written, which is at most
@@ -267,20 +224,9 @@ OPENSSL_EXPORT int EVP_marshal_digest_algorithm(CBB *cbb, const EVP_MD *md);
 
 // Deprecated functions.
 
-
-// EVP_MD_unstable_sha3_enable is a no-op as SHA3 is always enabled.
-OPENSSL_EXPORT void EVP_MD_unstable_sha3_enable(bool enable);
-
-// EVP_MD_unstable_sha3_is_enabled always returns true as SHA3 is always enabled.
-OPENSSL_EXPORT bool EVP_MD_unstable_sha3_is_enabled(void);
-
 // EVP_MD_CTX_copy sets |out|, which must /not/ be initialised, to be a copy of
 // |in|. It returns one on success and zero on error.
 OPENSSL_EXPORT int EVP_MD_CTX_copy(EVP_MD_CTX *out, const EVP_MD_CTX *in);
-
-// EVP_add_digest does nothing and returns one. It exists only for
-// compatibility with OpenSSL.
-OPENSSL_EXPORT int EVP_add_digest(const EVP_MD *digest);
 
 // EVP_get_digestbyname returns an |EVP_MD| given a human readable name in
 // |name|, or NULL if the name is unknown.
@@ -297,17 +243,15 @@ OPENSSL_EXPORT void EVP_MD_CTX_destroy(EVP_MD_CTX *ctx);
 OPENSSL_EXPORT int EVP_DigestFinalXOF(EVP_MD_CTX *ctx, uint8_t *out,
                                       size_t len);
 
+// EVP_DigestSqueeze provides byte-wise streaming XOF output generation for
+// XOF digests, writing |len| bytes of extended output to |out|. It can be
+// called multiple times with arbitrary length |len| output requests.
+// It returns one on success and zero on error.
+OPENSSL_EXPORT int EVP_DigestSqueeze(EVP_MD_CTX *ctx, uint8_t *out,
+                                      size_t len);
+
 // EVP_MD_meth_get_flags calls |EVP_MD_flags|.
 OPENSSL_EXPORT uint32_t EVP_MD_meth_get_flags(const EVP_MD *md);
-
-// EVP_MD_CTX_set_flags does nothing.
-OPENSSL_EXPORT void EVP_MD_CTX_set_flags(EVP_MD_CTX *ctx, int flags);
-
-// EVP_MD_CTX_FLAG_NON_FIPS_ALLOW is meaningless. In OpenSSL it permits non-FIPS
-// algorithms in FIPS mode. But BoringSSL FIPS mode doesn't prohibit algorithms
-// (it's up the the caller to use the FIPS module in a fashion compliant with
-// their needs). Thus this exists only to allow code to compile.
-#define EVP_MD_CTX_FLAG_NON_FIPS_ALLOW 0
 
 // EVP_MD_nid calls |EVP_MD_type|.
 OPENSSL_EXPORT int EVP_MD_nid(const EVP_MD *md);
@@ -325,12 +269,22 @@ OPENSSL_EXPORT int EVP_MD_nid(const EVP_MD *md);
 // associated.
 //
 // |EVP_MD_CTX_set_pkey_ctx| will overwrite any |EVP_PKEY_CTX| object associated
-// to |ctx|. If it was not associated through a previous |EVP_MD_CTX_set_pkey_ctx|
-// call, it will be freed first.
-OPENSSL_EXPORT void EVP_MD_CTX_set_pkey_ctx(EVP_MD_CTX *ctx, EVP_PKEY_CTX *pctx);
+// to |ctx|. If it was not associated through a previous
+// |EVP_MD_CTX_set_pkey_ctx| call, it will be freed first.
+OPENSSL_EXPORT void EVP_MD_CTX_set_pkey_ctx(EVP_MD_CTX *ctx,
+                                            EVP_PKEY_CTX *pctx);
+
+// EVP_MD_CTX_get_pkey_ctx returns the pointer of |ctx|'s |EVP_PKEY_CTX|.
+OPENSSL_EXPORT EVP_PKEY_CTX *EVP_MD_CTX_get_pkey_ctx(const EVP_MD_CTX *ctx);
+
+// EVP_MD_CTX_pkey_ctx is a legacy alias of |EVP_MD_CTX_get_pkey_ctx|.
+OPENSSL_EXPORT EVP_PKEY_CTX *EVP_MD_CTX_pkey_ctx(const EVP_MD_CTX *ctx);
 
 struct evp_md_pctx_ops;
 
+// env_md_ctx_st is typoed ("evp" -> "env"), but the typo comes from OpenSSL
+// and some consumers forward-declare these structures so we're leaving it
+// alone.
 struct env_md_ctx_st {
   // digest is the underlying digest function, or NULL if not set.
   const EVP_MD *digest;
@@ -344,7 +298,7 @@ struct env_md_ctx_st {
   // |digest->update|. |digest->update| operates against |md_data| above, but
   // |HMAC_CTX| maintains its own data state in |HMAC_CTX->md_ctx|.
   // |HMAC_Update| also has an additional state transition to handle.
-  void (*update)(EVP_MD_CTX *ctx, const void *data, size_t count);
+  int (*update)(EVP_MD_CTX *ctx, const void *data, size_t count);
 
   // pctx is an opaque (at this layer) pointer to additional context that
   // EVP_PKEY functions may store in this object.
@@ -361,6 +315,36 @@ struct env_md_ctx_st {
   // 2. Set flag |EVP_MD_CTX_HMAC| for |EVP_PKEY_HMAC|.
   unsigned long flags;
 } /* EVP_MD_CTX */;
+
+
+// General No-op Functions [Deprecated].
+
+// EVP_MD_unstable_sha3_enable is a no-op as SHA3 is always enabled.
+OPENSSL_EXPORT OPENSSL_DEPRECATED void EVP_MD_unstable_sha3_enable(bool enable);
+
+// EVP_MD_unstable_sha3_is_enabled always returns true as SHA3 is always
+// enabled.
+OPENSSL_EXPORT OPENSSL_DEPRECATED bool EVP_MD_unstable_sha3_is_enabled(void);
+
+// EVP_MD_CTX_set_flags does nothing. We strongly discourage doing any
+// additional configurations when consuming |EVP_MD_CTX|.
+OPENSSL_EXPORT OPENSSL_DEPRECATED void EVP_MD_CTX_set_flags(EVP_MD_CTX *ctx,
+                                                            int flags);
+
+// EVP_MD_CTX_FLAG_NON_FIPS_ALLOW is meaningless. In OpenSSL it permits non-FIPS
+// algorithms in FIPS mode. But BoringSSL FIPS mode doesn't prohibit algorithms
+// (it's up the the caller to use the FIPS module in a fashion compliant with
+// their needs). Thus this exists only to allow code to compile.
+#define EVP_MD_CTX_FLAG_NON_FIPS_ALLOW 0
+
+// EVP_add_digest does nothing and returns one. It exists only for
+// compatibility with OpenSSL, which requires manually loading supported digests
+// when certain options are turned on.
+OPENSSL_EXPORT OPENSSL_DEPRECATED int EVP_add_digest(const EVP_MD *digest);
+
+// EVP_md_null is a "null" message digest that does nothing: i.e. the hash it
+// returns is of zero length. Included for OpenSSL compatibility
+OPENSSL_EXPORT OPENSSL_DEPRECATED const EVP_MD *EVP_md_null(void);
 
 
 #if defined(__cplusplus)
