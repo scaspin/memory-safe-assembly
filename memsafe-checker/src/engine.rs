@@ -1824,8 +1824,11 @@ impl ExecutionEngine {
             let temp = ast::Int::new_const(a);
             self.computer.solver.assert(temp.ge(&zero));
         }
-
-        self.computer.add_memory_region(base.into(), ty, length);
+        let base = base.into();
+        self.computer
+            .solver
+            .assert(ast::Int::new_const(base.clone()).ge(&zero));
+        self.computer.add_memory_region(base, ty, length);
     }
 
     pub fn add_immediate(&mut self, register: impl Into<String>, value: usize) {

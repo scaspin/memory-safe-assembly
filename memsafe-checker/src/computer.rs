@@ -15,6 +15,7 @@ pub(crate) use simd::{
 };
 
 pub const MAX_EXPRESSION_NODES: usize = 150;
+const WORD_FIT_RESOURCE_LIMIT: u32 = 5_000_000;
 
 pub type ComputerState = (
     [RegisterValue; 33],
@@ -231,13 +232,18 @@ impl ARMCORTEXA {
         let Some(value) = expression_to_ast(whole) else {
             return false;
         };
-        self.solver
-            .check_assumptions(&[value.lt(ast::Int::from_i64(0))])
-            == SatResult::Unsat
-            && self
-                .solver
-                .check_assumptions(&[value.ge(ast::Int::from_i64(MODULUS))])
-                == SatResult::Unsat
+        let unsat_within_budget = |outside: ast::Bool| {
+            let mut bounded = Params::new();
+            bounded.set_u32("rlimit", WORD_FIT_RESOURCE_LIMIT);
+            self.solver.set_params(&bounded);
+            let result = self.solver.check_assumptions(&[outside]);
+            let mut unbounded = Params::new();
+            unbounded.set_u32("rlimit", 0);
+            self.solver.set_params(&unbounded);
+            result == SatResult::Unsat
+        };
+        unsat_within_budget(value.lt(ast::Int::from_i64(0)))
+            && unsat_within_budget(value.ge(ast::Int::from_i64(MODULUS)))
     }
 
     pub fn write_cell(&mut self, cell: &MemoryCell, value: RegisterValue) {
@@ -646,9 +652,7 @@ impl ARMCORTEXA {
         match reg {
             Operand::VectorRegister(_, index) => self.simd_registers[*index].clone(),
             Operand::Vector(_, index, _) => self.simd_registers[*index].clone(),
-            Operand::VectorAccess(_, index, _, _) => {
-                self.simd_registers[*index].clone()
-            }
+            Operand::VectorAccess(_, index, _, _) => self.simd_registers[*index].clone(),
             _ => panic!("cannot get register {:?} as a simd register", reg),
         }
     }
