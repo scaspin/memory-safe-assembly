@@ -144,7 +144,10 @@ impl ARMCORTEXA {
                         r0.set_byte(i, new_base, offset);
                     }
                 }
-                _ => todo!("unsupported vector arithmetic access"),
+                _ => {
+                    self.set_register(reg0, RegisterKind::Number, None, 0);
+                    return;
+                }
             },
             (_, _, _) => todo!("more simd arithmetic support"),
         }

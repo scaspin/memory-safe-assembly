@@ -156,12 +156,8 @@ impl ARMCORTEXA {
             if let Some(AbstractExpression::Abstract(base)) = region.clone() {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
-                let register = &self.get_register(&register);
-                let region = self
-                    .memory
-                    .get_mut(&region)
-                    .expect("region named by get_memory_pointer");
-                region.insert(offset, register.clone());
+                let register = self.get_register(&register);
+                self.write_cell(&MemoryCell { region, offset }, register);
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -179,9 +175,14 @@ impl ARMCORTEXA {
                     "Storing from an abstract but safe region of memory {:?}",
                     address
                 );
+                let base = address.base.expect("Need base");
+                if base.contains("sp") {
+                    self.blind_stack_writes
+                        .push((base.clone(), address.offset, width));
+                }
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base: address.base.expect("Need base"),
+                    base,
                     offset: address.offset,
                 });
                 Ok(())
@@ -210,11 +211,7 @@ impl ARMCORTEXA {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let register = self.get_register(&register);
-                let region = self
-                    .memory
-                    .get_mut(&region)
-                    .expect("region named by get_memory_pointer");
-                region.insert(offset, register.clone());
+                self.write_cell(&MemoryCell { region, offset }, register);
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -232,9 +229,14 @@ impl ARMCORTEXA {
                     "Storing from an abstract but safe region of memory {:?}",
                     address
                 );
+                let base = address.base.expect("Need base");
+                if base.contains("sp") {
+                    self.blind_stack_writes
+                        .push((base.clone(), address.offset, width));
+                }
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base: address.base.expect("Need base"),
+                    base,
                     offset: address.offset,
                 });
                 Ok(())

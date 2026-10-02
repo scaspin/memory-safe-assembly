@@ -36,6 +36,20 @@ pub struct ARMCORTEXA {
     flag_counter: usize,
     pub solver: Solver,
     pub lane_bounds: Box<LaneBounds>,
+    pub write_journal: Vec<CellWrite>,
+    pub blind_stack_writes: Vec<(AbstractExpression, i64, i64)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MemoryCell {
+    pub region: String,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CellWrite {
+    pub cell: MemoryCell,
+    pub previous: Option<RegisterValue>,
 }
 
 #[derive(Clone)]
@@ -172,6 +186,8 @@ impl ARMCORTEXA {
             alignment: 4,
             flag_counter: 0,
             lane_bounds: Box::default(),
+            write_journal: Vec::new(),
+            blind_stack_writes: Vec::new(),
             solver,
         }
     }
@@ -202,6 +218,44 @@ impl ARMCORTEXA {
                 .solver
                 .check_assumptions(&[value.ge(ast::Int::from_i64(MODULUS))])
                 == SatResult::Unsat
+    }
+
+    pub fn write_cell(&mut self, cell: &MemoryCell, value: RegisterValue) {
+        let Some(region) = self.memory.get_mut(&cell.region) else {
+            return;
+        };
+        let previous = region.content.get(&cell.offset).cloned();
+        region.insert(cell.offset, value);
+        self.write_journal.push(CellWrite {
+            cell: cell.clone(),
+            previous,
+        });
+    }
+
+    pub fn cell_content(&self, cell: &MemoryCell) -> RegisterValue {
+        self.memory
+            .get(&cell.region)
+            .and_then(|region| region.content.get(&cell.offset).cloned())
+            .unwrap_or_else(|| RegisterValue::new(RegisterKind::Number, None, 0))
+    }
+
+    pub fn undo_writes_since(&mut self, journal_len: usize) {
+        while self.write_journal.len() > journal_len {
+            let Some(write) = self.write_journal.pop() else {
+                break;
+            };
+            let Some(region) = self.memory.get_mut(&write.cell.region) else {
+                continue;
+            };
+            match write.previous {
+                Some(value) => {
+                    region.content.insert(write.cell.offset, value);
+                }
+                None => {
+                    region.content.remove(&write.cell.offset);
+                }
+            }
+        }
     }
 
     pub fn get_state(&self) -> ComputerState {
@@ -326,7 +380,7 @@ impl ARMCORTEXA {
                 RePrefix::Fp => self.registers[29].set(kind, base, offset),
                 RePrefix::Ra => self.registers[30].set(kind, base, offset),
                 RePrefix::Sp => self.registers[31].set(kind, base, offset),
-                RePrefix::Ze => self.registers[32].set(kind, base, offset),
+                RePrefix::Ze => (),
                 RePrefix::V => unreachable!(),
             },
             Operand::VectorRegister(_, num) => {
@@ -469,8 +523,19 @@ impl ARMCORTEXA {
         self.memory.insert(name, new_region);
     }
 
-    fn label_to_memory_index(&self, _label: String) -> (String, i64) {
-        ("memory".to_string(), 0)
+    fn label_to_memory_index(&self, label: String) -> (String, i64) {
+        let (symbol, addend) = match label.rsplit_once('+') {
+            Some((symbol, addend)) => (symbol, addend.trim().parse::<i64>().unwrap_or(0)),
+            None => (label.as_str(), 0),
+        };
+        let name = symbol.split('@').next().unwrap_or(symbol).trim();
+        let offset = self
+            .memory_labels
+            .get(name)
+            .or_else(|| self.memory_labels.get(name.trim_start_matches('_')))
+            .copied()
+            .unwrap_or(0);
+        ("memory".to_string(), offset + addend)
     }
 
     pub fn check_stack_pointer_restored(&self) {

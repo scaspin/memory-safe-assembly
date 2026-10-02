@@ -231,7 +231,18 @@ impl SimdRegister {
             Arrangement::B => {
                 self.set_byte(index, BASE_INIT, offset as u8);
             }
-            a => todo!("support setting from register across {:?} channels", a),
+            Arrangement::S2 => {
+                let offset = offset as u32;
+                for i in 0..2 {
+                    self.set_word(i, [BASE_INIT; 4], offset.to_be_bytes());
+                }
+            }
+            Arrangement::H4 => {
+                let offset = offset as u16;
+                for i in 0..4 {
+                    self.set_halfword(i, [BASE_INIT; 2], offset.to_be_bytes());
+                }
+            }
         }
     }
 
@@ -1029,6 +1040,17 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     Some(new1.div(&divisor))
                 }
                 "%" => Some(new1.modulo(&new2)),
+                "umulh" => match *old2 {
+                    AbstractExpression::Immediate(factor) => {
+                        let half_word = ast::Int::from_u64(1 << 32);
+                        let word = ast::Int::mul(&[&half_word, &half_word]);
+                        let unsigned = new1.modulo(&word);
+                        let product =
+                            ast::Int::mul(&[&unsigned, &ast::Int::from_u64(factor as u64)]);
+                        Some(product.div(&word))
+                    }
+                    _ => Some(ast::Int::new_const(opaque_name("umulh", &expression))),
+                },
                 "&" => {
                     if let Some(modulus) = mask_modulus(&old2) {
                         Some(new1.modulo(ast::Int::from_i64(modulus)))
@@ -1086,7 +1108,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                         Some(ast::Int::new_const(opaque_name("or", &expression)))
                     }
                 }
-                _ => todo!("no translation for operator {op} in {expression}"),
+                _ => Some(ast::Int::new_const(opaque_name("opaque", &expression))),
             }
         }
         _ => Some(ast::Int::from_i64(0)),

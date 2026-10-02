@@ -50,6 +50,62 @@ enum Tested {
 }
 
 impl ARMCORTEXA {
+    fn condition_holds(&self, condition: &str) -> Option<Result<bool, AbstractComparison>> {
+        let single = |flag: &Option<FlagValue>, negated: bool| match flag.as_ref()? {
+            FlagValue::Real(set) => Some(Ok(*set != negated)),
+            FlagValue::Abstract(holds) => Some(Err(if negated {
+                holds.clone().not()
+            } else {
+                holds.clone()
+            })),
+        };
+        let real = |flag: &Option<FlagValue>| match flag {
+            Some(FlagValue::Real(set)) => Some(*set),
+            _ => None,
+        };
+        match condition {
+            "eq" => single(&self.zero, false),
+            "ne" => single(&self.zero, true),
+            "cs" | "hs" => single(&self.carry, false),
+            "cc" | "lo" => single(&self.carry, true),
+            "mi" | "lt" => single(&self.neg, false),
+            "pl" | "ge" => single(&self.neg, true),
+            "vs" => single(&self.overflow, false),
+            "vc" => single(&self.overflow, true),
+            "hi" => Some(Ok(real(&self.carry)? && !real(&self.zero)?)),
+            "ls" => Some(Ok(!real(&self.carry)? || real(&self.zero)?)),
+            "gt" => Some(Ok(!real(&self.zero)? && !real(&self.neg)?)),
+            "le" => Some(Ok(real(&self.zero)? || real(&self.neg)?)),
+            _ => None,
+        }
+    }
+
+    fn set_on_condition(
+        &mut self,
+        dest: &Operand,
+        condition: &str,
+        value: i64,
+    ) -> ExecuteReturnType {
+        match self.condition_holds(condition) {
+            Some(Ok(holds)) => {
+                self.set_register(
+                    dest,
+                    RegisterKind::Immediate,
+                    None,
+                    if holds { value } else { 0 },
+                );
+                ExecuteReturnType::Next
+            }
+            Some(Err(holds)) => {
+                ExecuteReturnType::Select(holds, dest.clone(), immediate(value), immediate(0))
+            }
+            None => {
+                self.set_register(dest, RegisterKind::Number, None, 0);
+                ExecuteReturnType::Next
+            }
+        }
+    }
+
     fn tested_value(&mut self, register: RegisterValue) -> Tested {
         let no_base = register.base.is_none() || register.base == Some(AbstractExpression::Empty);
         match (no_base, register.kind == RegisterKind::Number) {
@@ -132,7 +188,7 @@ impl ARMCORTEXA {
                 "sub" => {
                     self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
                 }
-                "mul" | "umulh" => {
+                "mul" => {
                     self.arithmetic("*", |x, y| x * y, instruction.operands.clone());
                 }
                 "and" => {
@@ -328,6 +384,66 @@ impl ARMCORTEXA {
                         self.set_register(reg0, RegisterKind::Number, None, 0);
                     }
                 }
+                "umulh" => {
+                    let dest = &instruction.operands[0];
+                    let left = self.get_register(&instruction.operands[1]);
+                    let right = self.get_register(&instruction.operands[2]);
+                    let constant = |value: &RegisterValue| {
+                        (value.kind == RegisterKind::Immediate && value.base.is_none())
+                            .then_some(value.offset)
+                    };
+                    let region_length_symbols: Vec<String> = self
+                        .memory
+                        .values()
+                        .flat_map(|region| region.get_length().get_abstracts())
+                        .collect();
+                    let symbolic = |value: &RegisterValue| {
+                        let base = value.base.as_ref()?;
+                        let symbols = base.get_abstracts();
+                        let built_from_region_lengths = !symbols.is_empty()
+                            && symbols.iter().all(|s| region_length_symbols.contains(s));
+                        (value.kind != RegisterKind::Number && built_from_region_lengths)
+                            .then(|| value.expression())
+                    };
+                    let high_half = |a: i64, b: i64| {
+                        (((a as u64 as u128) * (b as u64 as u128)) >> 64) as u64 as i64
+                    };
+                    match (constant(&left), constant(&right)) {
+                        (Some(a), Some(b)) => {
+                            self.set_register(dest, RegisterKind::Immediate, None, high_half(a, b));
+                        }
+                        (Some(factor), None) | (None, Some(factor)) => {
+                            let other = if constant(&left).is_some() {
+                                &right
+                            } else {
+                                &left
+                            };
+                            match symbolic(other) {
+                                Some(value) => self.set_register(
+                                    dest,
+                                    RegisterKind::RegisterBase,
+                                    Some(generate_expression(
+                                        "umulh",
+                                        value,
+                                        AbstractExpression::Immediate(factor),
+                                    )),
+                                    0,
+                                ),
+                                None => self.set_register(dest, RegisterKind::Number, None, 0),
+                            }
+                        }
+                        (None, None) => self.set_register(dest, RegisterKind::Number, None, 0),
+                    }
+                }
+                "umull" | "smull" | "umaddl" | "smaddl" | "umsubl" | "smsubl" | "umnegl"
+                | "smnegl" | "smulh" | "udiv" | "sdiv" | "madd" | "msub" | "mneg" | "asr"
+                | "ubfx" | "sbfx" | "ubfiz" | "sbfiz" | "bfi" | "bfxil" | "ubfm" | "sbfm" => {
+                    let dest = instruction
+                        .operands
+                        .first()
+                        .expect("Need destination register");
+                    self.set_register(dest, RegisterKind::Number, None, 0);
+                }
                 _ => todo!("Unsupported arithmetic instruction: {:?}", instruction),
             },
             InstructionType::ControlFlow => match instruction.opcode.as_str() {
@@ -360,7 +476,7 @@ impl ARMCORTEXA {
                             &instruction.operands[0],
                             RegisterKind::RegisterBase,
                             Some(AbstractExpression::Abstract(region)),
-                            index << 12,
+                            index,
                         );
                     } else {
                         panic!("adrp not invoked correctly with register and label")
@@ -827,7 +943,7 @@ impl ARMCORTEXA {
                                 }
                             }
                         }
-                        a => todo!("unimplemented condition code for set {}", a),
+                        other => return Ok(self.set_on_condition(dest, other, 1)),
                     }
                 }
                 "csel" => {
@@ -984,7 +1100,25 @@ impl ARMCORTEXA {
                                 return Err("csel reads a flag the program never set".to_string());
                             }
                         },
-                        a => todo!("csel with condition code not yet implemented {}", a),
+                        other => match self.condition_holds(other) {
+                            Some(Ok(true)) => {
+                                self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                            }
+                            Some(Ok(false)) => {
+                                self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                            }
+                            Some(Err(holds)) => {
+                                return Ok(ExecuteReturnType::Select(
+                                    holds,
+                                    dest.clone(),
+                                    opt1,
+                                    opt2,
+                                ));
+                            }
+                            None => {
+                                self.set_register(dest, RegisterKind::Number, None, 0);
+                            }
+                        },
                     }
                 }
                 "csetm" => {
@@ -1016,7 +1150,7 @@ impl ARMCORTEXA {
                                 ));
                             }
                         },
-                        _ => todo!("unsupported condition code for csetm {:?}", cond),
+                        other => return Ok(self.set_on_condition(dest, other, -1)),
                     }
                 }
                 "mov" | "movz" | "movk" => {
@@ -1035,6 +1169,34 @@ impl ARMCORTEXA {
                         .expect("mrs needs a destination register");
                     self.set_register(dest, RegisterKind::Number, None, 0);
                 }
+                op if op.starts_with("b.") => {
+                    let Some(Operand::Label(label)) = instruction.operands.first() else {
+                        panic!("{op} needs a target label");
+                    };
+                    return Ok(match self.condition_holds(&op[2..]) {
+                        Some(Ok(true)) => ExecuteReturnType::JumpLabel(label.clone()),
+                        Some(Ok(false)) => ExecuteReturnType::Next,
+                        Some(Err(condition)) => {
+                            ExecuteReturnType::ConditionalJumpLabel(condition, label.clone())
+                        }
+                        None => ExecuteReturnType::ConditionalJumpLabel(
+                            AbstractComparison::new(
+                                "==",
+                                fresh_unknown(),
+                                AbstractExpression::Immediate(0),
+                            ),
+                            label.clone(),
+                        ),
+                    });
+                }
+                "cinv" | "cinc" | "cneg" | "csinv" | "csinc" | "csneg" => {
+                    let dest = instruction
+                        .operands
+                        .first()
+                        .expect("conditional operation needs a destination");
+                    self.set_register(dest, RegisterKind::Number, None, 0);
+                }
+                "ccmp" | "ccmn" => self.set_unknown_flags(),
                 _ => todo!(
                     "control flow instruction not yet implemented {:?}",
                     instruction
@@ -1230,7 +1392,7 @@ impl ARMCORTEXA {
                                     dest.set_byte(i, base, offset);
                                 }
                             }
-                            _ => todo!("rev64 support more arrangement modes"),
+                            _ => *dest = SimdRegister::default(),
                         },
                         Operand::VectorRegister(_, _) => {
                             let arr = instruction.opcode.split(".").collect::<Vec<&str>>()[1];
@@ -1473,7 +1635,8 @@ impl ARMCORTEXA {
                 | "smlal" | "smlal2" | "smlsl" | "smlsl2" | "smull" | "smull2" | "uzp1"
                 | "uzp2" | "srshr" | "uaddlv" | "umaxv" | "cmgt" | "cmge" | "cmle" | "cmhi"
                 | "cnt" | "xtn" | "shrn" | "ushl" | "ushll" | "ushll2" | "sshll" | "sshll2"
-                | "abs" | "umin" | "bic" => {
+                | "abs" | "umin" | "bic" | "eor3" | "bcax" | "rax1" | "xar" | "sri" | "usra"
+                | "fcsel" | "ssra" | "uaddlp" | "saddlp" | "uadalp" | "sadalp" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
@@ -1491,7 +1654,8 @@ impl ARMCORTEXA {
                     {
                         let a = self.get_register(&Operand::Register(prefix.clone(), *num));
 
-                        if let Err(e) = self.load_vector(dst.clone(), a.clone(), 16) {
+                        let element = element_operand_width(dst);
+                        if let Err(e) = self.load_vector(dst.clone(), a.clone(), element) {
                             return Err(e.to_string());
                         }
 
@@ -1795,6 +1959,16 @@ impl ARMCORTEXA {
                         r1.offset.wrapping_neg()
                     };
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);
+                }
+                "ngc" | "ngcs" | "negs" => {
+                    let dest = instruction
+                        .operands
+                        .first()
+                        .expect("Need destination register");
+                    self.set_register(dest, RegisterKind::Number, None, 0);
+                    if instruction.opcode.ends_with('s') {
+                        self.set_unknown_flags();
+                    }
                 }
                 _ => todo!("other instruction not implemented yet {:?}", instruction),
             },

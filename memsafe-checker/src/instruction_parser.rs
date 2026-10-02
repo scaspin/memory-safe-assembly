@@ -58,7 +58,7 @@ impl Arrangement {
     }
 
     pub fn from_string(s: &str) -> Arrangement {
-        match s {
+        match s.to_ascii_lowercase().as_str() {
             "8b" => Arrangement::B8,
             "16b" => Arrangement::B16,
             "4h" => Arrangement::H4,
@@ -115,7 +115,7 @@ pub fn operand_from_string(a: String) -> Operand {
             "sp" => return Operand::Register(RePrefix::Sp, 0),
             "fp" => return Operand::Register(RePrefix::Fp, 0),
             "ra" => return Operand::Register(RePrefix::Ra, 0),
-            "xzr" | "ze" => return Operand::Register(RePrefix::Ze, 0),
+            "xzr" | "wzr" | "ze" => return Operand::Register(RePrefix::Ze, 0),
             _ => {
                 let parts = a.split_at(1);
                 let prefix = parts.0;
@@ -141,10 +141,13 @@ pub fn operand_from_string(a: String) -> Operand {
         }
     }
 
-    if a.starts_with("0x")
-        && let Ok(n) =
-            i64::from_str_radix(a.strip_prefix("0x").expect("error converting from hex"), 16)
+    if let Some(hex) = a.strip_prefix("0x")
+        && let Ok(n) = u64::from_str_radix(hex, 16)
     {
+        return Operand::Immediate(n as i64);
+    }
+
+    if let Ok(n) = a.parse::<i64>() {
         return Operand::Immediate(n);
     }
 
@@ -166,7 +169,7 @@ pub fn operand_from_string(a: String) -> Operand {
                     .to_string(),
                 parts
                     .next()
-                    .and_then(|s| s.parse::<i64>().ok())
+                    .and_then(|s| constant_expression(s.trim()))
                     .expect("need part after # in shift parsing"),
             );
         }
@@ -295,6 +298,9 @@ pub fn operand_from_string(a: String) -> Operand {
                 }));
             } else {
                 offset = Some(string_to_int(o.trim_matches(['[', ']', ',', '#', '!'])));
+                if let Some(unparsed) = parts.next() {
+                    panic!("memory operand {a} has an unparsed tail {unparsed}");
+                }
             }
         }
 
@@ -461,11 +467,22 @@ fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType
     InstructionType::Other
 }
 
+const CONDITION_CODES: [&str; 16] = [
+    "eq", "ne", "cs", "hs", "cc", "lo", "mi", "pl", "vs", "vc", "hi", "ls", "ge", "lt", "gt", "le",
+];
+
 fn split_operands(input: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut current = String::new();
     let mut depth = 0usize;
-    for c in input.chars() {
+    for (at, c) in input.char_indices() {
+        let continues_immediate = (c == ' ' || c == '\t')
+            && current.contains('#')
+            && (current.ends_with(['+', '-', '*'])
+                || input[at..].trim_start().starts_with(['+', '-', '*']));
+        if continues_immediate {
+            continue;
+        }
         match c {
             '(' => {
                 depth += 1;
@@ -545,6 +562,11 @@ impl Instruction {
             .next()
             .expect("Require opcode for instruction")
             .to_string();
+        if let Some(condition) = opcode.strip_prefix('b')
+            && CONDITION_CODES.contains(&condition)
+        {
+            opcode = format!("b.{condition}");
+        }
 
         let combine_brackets = combine_addressing_modes_operands(combine_shifted_operands(
             parts.map(|s| s.to_string()).collect(),
@@ -1387,6 +1409,26 @@ mod tests {
         };
         assert_eq!(
             Instruction::new(".globl	_sha256_block_data_order".to_string()),
+            good_result
+        );
+    }
+
+    #[test]
+    fn spaced_offset_sum_keeps_every_term() {
+        let good_result = Instruction {
+            ty: InstructionType::Memory,
+            opcode: String::from("strb"),
+            operands: Vec::from([
+                Operand::Register(RePrefix::W, 13),
+                Operand::Memory(RePrefix::X, 23, Some(31), None, None),
+            ]),
+        };
+        assert_eq!(
+            Instruction::new("strb w13, [x23, #0 +31]".to_string()),
+            good_result
+        );
+        assert_eq!(
+            Instruction::new("strb w13, [x23, #0 + 31]".to_string()),
             good_result
         );
     }

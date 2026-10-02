@@ -39,8 +39,11 @@ impl ARMCORTEXA {
                     (Some(_cond), Some(set_ast), Some(clear_ast)) => {
                         let name = format!("carry_{}", self.next_carry());
                         let result = ast::Int::new_const(name.clone());
-                        self.solver.assert(result.ge(&clear_ast));
-                        self.solver.assert(result.le(&set_ast));
+                        let constants_did_not_wrap = clear.offset <= set.offset;
+                        if constants_did_not_wrap {
+                            self.solver.assert(result.ge(&clear_ast));
+                            self.solver.assert(result.le(&set_ast));
+                        }
                         self.set_register(
                             &dest,
                             RegisterKind::RegisterBase,
@@ -178,11 +181,23 @@ impl ARMCORTEXA {
     pub fn shift_reg(&mut self, op: &str, reg1: &Operand, reg2: &Operand, reg3: &Operand) {
         let r2 = self.get_register(reg2);
 
+        let rotates_a_32_bit_constant = op == "ror"
+            && matches!(reg2, Operand::Register(RePrefix::W, _))
+            && r2.kind == RegisterKind::Immediate
+            && r2.base.is_none();
+        if rotates_a_32_bit_constant
+            && let Operand::Bitwise(_, amount) | Operand::Immediate(amount) = reg3
+        {
+            let rotated = (r2.offset as u32).rotate_right(*amount as u32);
+            self.set_register(reg1, RegisterKind::Immediate, None, rotated as i64);
+            return;
+        }
+
         let shifted_reg = match reg3 {
             Operand::Bitwise(op, shift) => shift_imm(op.to_string(), r2, *shift),
             Operand::Immediate(shift) => shift_imm(op.to_string(), r2, *shift),
             _ => {
-                log::error!("Cannot shift with this operand: {:?}", reg3);
+                self.set_register(reg1, RegisterKind::Number, None, 0);
                 return;
             }
         };
@@ -398,16 +413,33 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
                 offset: new_offset,
             }
         }
-        "lsr" | "asr" | "ror" => {
-            let new_offset = register.offset >> shift;
-            RegisterValue {
-                kind: register.kind,
-                base: register
-                    .base
-                    .map(|b| generate_expression(&op, b, AbstractExpression::Immediate(shift))),
-                offset: new_offset,
+        "lsr" | "asr" | "ror" => match register.base {
+            None => {
+                let amount = shift as u32;
+                let shifted = match op.as_str() {
+                    "lsr" => ((register.offset as u64) >> amount) as i64,
+                    "asr" => register.offset >> amount,
+                    _ => register.offset.rotate_right(amount),
+                };
+                RegisterValue {
+                    kind: register.kind,
+                    base: None,
+                    offset: shifted,
+                }
             }
-        }
+            Some(_) => {
+                let whole_value = register.expression();
+                RegisterValue {
+                    kind: register.kind,
+                    base: Some(generate_expression(
+                        &op,
+                        whole_value,
+                        AbstractExpression::Immediate(shift),
+                    )),
+                    offset: 0,
+                }
+            }
+        },
         "" => {
             let new_offset = register.offset + shift;
             RegisterValue {
@@ -424,5 +456,40 @@ pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterVal
             }
         }
         _ => todo!("unsupported extend or shift operator {op}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn logical_shift_of_a_negative_constant_fills_with_zeros() {
+        let shifted = shift_imm("lsr".to_string(), RegisterValue::new_imm(-1), 60);
+        assert_eq!(shifted.offset, 15);
+        assert_eq!(shifted.base, None);
+    }
+
+    #[test]
+    fn arithmetic_shift_of_a_negative_constant_keeps_the_sign() {
+        let shifted = shift_imm("asr".to_string(), RegisterValue::new_imm(-16), 2);
+        assert_eq!(shifted.offset, -4);
+    }
+
+    #[test]
+    fn right_shift_applies_to_base_and_offset_together() {
+        let mut value = RegisterValue::new_empty("n");
+        value.offset = 7;
+        let whole = value.expression();
+        let shifted = shift_imm("lsr".to_string(), value, 3);
+        assert_eq!(shifted.offset, 0);
+        assert_eq!(
+            shifted.base,
+            Some(generate_expression(
+                "lsr",
+                whole,
+                AbstractExpression::Immediate(3)
+            ))
+        );
     }
 }

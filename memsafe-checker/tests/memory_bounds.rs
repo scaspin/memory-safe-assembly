@@ -169,6 +169,33 @@ fn accepts_scaled_index(index: i64) -> bool {
     engine.start("start".to_string()).is_ok()
 }
 
+fn accepts_after_writing_the_zero_register(written: i64, added: i64) -> bool {
+    init();
+    let program: Vec<String> = [
+        "start:".to_string(),
+        format!("mov x1, #{written}"),
+        "adds xzr, x1, #0".to_string(),
+        format!("add x3, xzr, #{added}"),
+        "ldrb w2,[x0,x3]".to_string(),
+        "ret".to_string(),
+    ]
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::RW,
+        "base".to_string(),
+        AbstractExpression::Immediate(16),
+    );
+    engine.start("start".to_string()).is_ok()
+}
+
+#[test]
+fn a_write_to_the_zero_register_is_discarded() {
+    assert!(accepts_after_writing_the_zero_register(96, 0));
+    assert!(!accepts_after_writing_the_zero_register(-100, 100));
+}
+
 #[test]
 fn a_shifted_register_index_is_scaled() {
     assert!(accepts_scaled_index(7));
