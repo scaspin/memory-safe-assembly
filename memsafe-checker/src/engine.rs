@@ -5543,6 +5543,31 @@ mod tests {
     }
 
     #[test]
+    fn a_loop_that_fails_to_close_is_not_summarized_again() {
+        let mut engine = ExecutionEngine::new(vec![
+            "start:",
+            "add x1,x0,x1",
+            "loop:",
+            "cmp x0,x1",
+            "b.eq end",
+            "add x3,x3,#4",
+            "add x2,x2,x3",
+            "add x0,x0,#8",
+            "b loop",
+            "end:",
+            "ret",
+        ]);
+        engine.add_abstract_from(0, "base");
+        engine.add_region(RegionType::READ, "base", abstract_of("length"));
+        engine.add_abstract_from(1, "length");
+        let _ = engine.start("start");
+
+        let summaries = engine.summaries.borrow();
+        let at_the_loop: Vec<&Summary> = summaries.iter().filter(|s| s.pc == 4).collect();
+        assert_eq!(at_the_loop.len(), 1, "resummarized: {at_the_loop:?}");
+    }
+
+    #[test]
     fn a_register_stepping_twice_by_a_symbolic_amount_is_summarized_as_linear() {
         let mut engine = ExecutionEngine::new(vec![
             "start:",
