@@ -1,0 +1,550 @@
+module	function	status	category	detail
+cdef	cdef_filter4_16bpc_neon	fail	memory safety violation reported	line 828 (ldrb): read of 1 bytes at directions4 + (dir % 4294967296 lsl 1) + 68 
+cdef	cdef_filter4_8bpc_neon	fail	memory safety violation reported	line 1986 (ldrb): read of 1 bytes at directions4 + (dir % 4294967296 lsl 1) + 68
+cdef	cdef_filter8_16bpc_neon	fail	memory safety violation reported	line 529 (ldrb): read of 1 bytes at directions8 + (dir % 4294967296 lsl 1) + 40 
+cdef	cdef_filter8_8bpc_neon	fail	memory safety violation reported	line 1643 (ldrb): read of 1 bytes at directions8 + (dir % 4294967296 lsl 1) + 40
+cdef	cdef_find_dir_16bpc_neon	verified		
+cdef	cdef_find_dir_8bpc_neon	verified		
+cdef	cdef_padding4_16bpc_neon	fail	memory safety violation reported	line 287 (ld1): read of 8 bytes at src_as_ptr + src_stride + src_stride + src_st
+cdef	cdef_padding4_8bpc_neon	fail	memory safety violation reported	line 475 (ldr): read of 2 bytes at src_as_ptr + src_stride + src_stride + src_st
+cdef	cdef_padding4_edged_8bpc_neon	fail	memory safety violation reported	line 475 (ldr): read of 2 bytes at src_as_ptr + src_stride + src_stride + src_st
+cdef	cdef_padding8_16bpc_neon	fail	memory safety violation reported	line 109 (ld1): read of 16 bytes at src_as_ptr + src_stride + src_stride + src_s
+cdef	cdef_padding8_8bpc_neon	fail	memory safety violation reported	line 448 (ldr): read of 2 bytes at src_as_ptr + src_stride + src_stride + src_st
+cdef	cdef_padding8_edged_8bpc_neon	fail	memory safety violation reported	line 448 (ldr): read of 2 bytes at src_as_ptr + src_stride + src_stride + src_st
+filmgrain	fguv_32x32_420_16bpc_neon	fail	memory safety violation reported	line 2348 (ldrsw): read of 4 bytes at fguv_loop_sx1_tbl + (sp[32:4] % 4294967296
+filmgrain	fguv_32x32_420_8bpc_neon	fail	memory safety violation reported	line 2874 (ldrsw): read of 4 bytes at fguv_loop_sx1_tbl + (sp[32:4] % 4294967296
+filmgrain	fguv_32x32_422_16bpc_neon	fail	memory safety violation reported	line 2438 (ldrsw): read of 4 bytes at fguv_loop_sx1_tbl + (sp[32:4] % 4294967296
+filmgrain	fguv_32x32_422_8bpc_neon	fail	memory safety violation reported	line 2949 (ldrsw): read of 4 bytes at fguv_loop_sx1_tbl + (sp[32:4] % 4294967296
+filmgrain	fguv_32x32_444_16bpc_neon	fail	memory safety violation reported	line 2531 (ldrsw): read of 4 bytes at fguv_loop_sx0_tbl + (sp[32:4] % 4294967296
+filmgrain	fguv_32x32_444_8bpc_neon	fail	memory safety violation reported	line 3027 (ldrsw): read of 4 bytes at fguv_loop_sx0_tbl + (sp[32:4] % 4294967296
+filmgrain	fgy_32x32_16bpc_neon	fail	memory safety violation reported	line 1998 (ldrsw): read of 4 bytes at fgy_loop_tbl + (sp[8:4] % 4294967296 lsl 2
+filmgrain	fgy_32x32_8bpc_neon	fail	memory safety violation reported	line 2606 (ldrsw): read of 4 bytes at fgy_loop_tbl + (sp[8:4] % 4294967296 lsl 2
+filmgrain	generate_grain_uv_420_16bpc_neon	fail	memory safety violation reported	line 1498 (ldrsw): read of 4 bytes at gen_grain_uv_420_tbl + (data_as_ptr[92:4] 
+filmgrain	generate_grain_uv_420_8bpc_neon	fail	memory safety violation reported	line 2116 (ldrsw): read of 4 bytes at gen_grain_uv_420_tbl + (data_as_ptr[92:4] 
+filmgrain	generate_grain_uv_422_16bpc_neon	fail	memory safety violation reported	line 1649 (ldrsw): read of 4 bytes at gen_grain_uv_422_tbl + (data_as_ptr[92:4] 
+filmgrain	generate_grain_uv_422_8bpc_neon	fail	memory safety violation reported	line 2268 (ldrsw): read of 4 bytes at gen_grain_uv_422_tbl + (data_as_ptr[92:4] 
+filmgrain	generate_grain_uv_444_16bpc_neon	fail	memory safety violation reported	line 1324 (ldrsw): read of 4 bytes at gen_grain_uv_444_tbl + (data_as_ptr[92:4] 
+filmgrain	generate_grain_uv_444_8bpc_neon	fail	memory safety violation reported	line 1932 (ldrsw): read of 4 bytes at gen_grain_uv_444_tbl + (data_as_ptr[92:4] 
+filmgrain	generate_grain_y_16bpc_neon	fail	memory safety violation reported	line 1193 (ldrsw): read of 4 bytes at gen_grain_y_tbl + (data_as_ptr[92:4] % 429
+filmgrain	generate_grain_y_8bpc_neon	fail	memory safety violation reported	line 1798 (ldrsw): read of 4 bytes at gen_grain_y_tbl + (data_as_ptr[92:4] % 429
+ipred	ipred_cfl_128_16bpc_neon	fail	memory safety violation reported	line 3714 (ld1): read of 16 bytes at ac_as_ptr + (width % 4294967296 lsl 1) + (w
+ipred	ipred_cfl_128_8bpc_neon	fail	memory safety violation reported	line 3243 (ld1): read of 16 bytes at ac_as_ptr + (width % 4294967296 lsl 1) + (w
+ipred	ipred_cfl_16bpc_neon	fail	memory safety violation reported	line 3958 (ld1): read of 16 bytes at topleft_as_ptr - (height % 4294967296 lsl 1
+ipred	ipred_cfl_8bpc_neon	fail	memory safety violation reported	line 3455 (ld1): read of 16 bytes at topleft_as_ptr - height % 4294967296 + 0 no
+ipred	ipred_cfl_ac_420_16bpc_neon	fail	memory safety violation reported	line 4117 (ldrsw): read of 4 bytes at ipred_cfl_ac_420_w16_tbl + (w_pad % 429496
+ipred	ipred_cfl_ac_420_8bpc_neon	fail	memory safety violation reported	line 3617 (ldrsw): read of 4 bytes at ipred_cfl_ac_420_w16_tbl + (w_pad % 429496
+ipred	ipred_cfl_ac_422_16bpc_neon	fail	memory safety violation reported	line 4384 (ldrsw): read of 4 bytes at ipred_cfl_ac_422_w16_tbl + (w_pad % 429496
+ipred	ipred_cfl_ac_422_8bpc_neon	fail	memory safety violation reported	line 3854 (ldrsw): read of 4 bytes at ipred_cfl_ac_422_w16_tbl + (w_pad % 429496
+ipred	ipred_cfl_ac_444_16bpc_neon	fail	memory safety violation reported	line 4602 (ldrsw): read of 4 bytes at ipred_cfl_ac_444_w32_tbl + ((w_pad % 42949
+ipred	ipred_cfl_ac_444_8bpc_neon	fail	memory safety violation reported	line 4068 (ldrsw): read of 4 bytes at ipred_cfl_ac_444_w32_tbl + ((w_pad % 42949
+ipred	ipred_cfl_left_16bpc_neon	fail	memory safety violation reported	line 3853 (ld1): read of 16 bytes at topleft_as_ptr - (height % 4294967296 lsl 1
+ipred	ipred_cfl_left_8bpc_neon	fail	memory safety violation reported	line 3356 (ld1): read of 16 bytes at topleft_as_ptr - height % 4294967296 + 0 no
+ipred	ipred_cfl_top_16bpc_neon	fail	memory safety violation reported	line 3713 (ld1): read of 16 bytes at ac_as_ptr + (width % 4294967296 lsl 1) + (w
+ipred	ipred_cfl_top_8bpc_neon	fail	memory safety violation reported	line 3244 (ld1): read of 16 bytes at ac_as_ptr + (width % 4294967296 lsl 1) + (w
+ipred	ipred_dc_128_16bpc_neon	verified		
+ipred	ipred_dc_128_8bpc_neon	verified		
+ipred	ipred_dc_16bpc_neon	fail	memory safety violation reported	line 589 (ld1): read of 16 bytes at topleft_as_ptr - (height % 4294967296 lsl 1)
+ipred	ipred_dc_8bpc_neon	fail	memory safety violation reported	line 520 (ld1): read of 16 bytes at topleft_as_ptr - height % 4294967296 + 0 not
+ipred	ipred_dc_left_16bpc_neon	fail	memory safety violation reported	line 404 (ld1): read of 16 bytes at topleft_as_ptr - (height % 4294967296 lsl 1)
+ipred	ipred_dc_left_8bpc_neon	fail	memory safety violation reported	line 351 (ld1): read of 16 bytes at topleft_as_ptr - height % 4294967296 + 0 not
+ipred	ipred_dc_top_16bpc_neon	verified		
+ipred	ipred_dc_top_8bpc_neon	verified		
+ipred	ipred_filter_16bpc_neon	fail	memory safety violation reported	line 3093 (ld1): read of 8 bytes at filter_intra_taps + ((angle % 4294967296 & 5
+ipred	ipred_filter_8bpc_neon	fail	memory safety violation reported	line 2908 (ld1): read of 8 bytes at filter_intra_taps + ((angle % 4294967296 & 5
+ipred	ipred_h_16bpc_neon	fail	memory safety violation reported	line 196 (ld4r): read of 2 bytes at topleft_as_ptr - 8 not provably within regio
+ipred	ipred_h_8bpc_neon	fail	memory safety violation reported	line 171 (ld4r): read of 1 bytes at topleft_as_ptr - 4 not provably within regio
+ipred	ipred_paeth_16bpc_neon	fail	memory safety violation reported	line 696 (ld4r): read of 2 bytes at topleft_as_ptr - 8 not provably within regio
+ipred	ipred_paeth_8bpc_neon	fail	memory safety violation reported	line 649 (ld4r): read of 1 bytes at topleft_as_ptr - 4 not provably within regio
+ipred	ipred_pixel_set_16bpc_neon	fail	memory safety violation reported	line 1390 (st1): write of 16 bytes at out_as_mut_ptr + loop0_? * 16 + 0 not prov
+ipred	ipred_pixel_set_8bpc_neon	fail	memory safety violation reported	line 1324 (st1): write of 16 bytes at out_as_mut_ptr + loop0_? * 16 + 0 not prov
+ipred	ipred_reverse_16bpc_neon	fail	memory safety violation reported	line 1665 (ld1): read of 16 bytes at src_as_ptr + src_len * 2 + loop0_? * -16 + 
+ipred	ipred_reverse_8bpc_neon	fail	memory safety violation reported	line 1563 (ld1): read of 16 bytes at src_as_ptr + src_len * 1 + loop0_? * -16 + 
+ipred	ipred_smooth_16bpc_neon	fail	memory safety violation reported	line 767 (ld1r): read of 2 bytes at topleft_as_ptr - (height % 4294967296 lsl 1)
+ipred	ipred_smooth_8bpc_neon	fail	memory safety violation reported	line 733 (ld1r): read of 1 bytes at topleft_as_ptr - height % 4294967296 + 0 not
+ipred	ipred_smooth_h_16bpc_neon	fail	memory safety violation reported	line 1124 (ld4r): read of 2 bytes at topleft_as_ptr - 8 not provably within regi
+ipred	ipred_smooth_h_8bpc_neon	fail	memory safety violation reported	line 1087 (ld4r): read of 1 bytes at topleft_as_ptr - 4 not provably within regi
+ipred	ipred_smooth_v_16bpc_neon	fail	memory safety violation reported	line 953 (ld1r): read of 2 bytes at topleft_as_ptr - (height % 4294967296 lsl 1)
+ipred	ipred_smooth_v_8bpc_neon	fail	memory safety violation reported	line 896 (ld1r): read of 1 bytes at topleft_as_ptr - height % 4294967296 + 0 not
+ipred	ipred_v_16bpc_neon	verified		
+ipred	ipred_v_8bpc_neon	verified		
+ipred	ipred_z1_fill1_16bpc_neon	fail	memory safety violation reported	line 1559 (st1): no region declared for write at loop0_?_widened_0 + (stride lsl
+ipred	ipred_z1_fill1_8bpc_neon	fail	memory safety violation reported	line 1467 (st1): no region declared for write at loop0_?_widened_0 + (stride lsl
+ipred	ipred_z1_fill2_16bpc_neon	verified		
+ipred	ipred_z1_fill2_8bpc_neon	verified		
+ipred	ipred_z1_filter_edge_16bpc_neon	fail	memory safety violation reported	line 1246 (ld1): read of 16 bytes at in_0_as_ptr + 0 not provably within region 
+ipred	ipred_z1_filter_edge_8bpc_neon	fail	memory safety violation reported	line 1195 (ld1): read of 16 bytes at in_0_as_ptr + 0 not provably within region 
+ipred	ipred_z1_upsample_edge_16bpc_neon	fail	memory safety violation reported	line 1170 (ld1): read of 16 bytes at in_0_as_ptr + 0 not provably within region 
+ipred	ipred_z1_upsample_edge_8bpc_neon	fail	memory safety violation reported	line 1140 (ld1): read of 16 bytes at in_0_as_ptr + 0 not provably within region 
+ipred	ipred_z2_fill1_16bpc_neon	fail	memory safety violation reported	line 1911 (ld1): read of 16 bytes at left_as_ptr + 18 not provably within region
+ipred	ipred_z2_fill1_8bpc_neon	fail	memory safety violation reported	line 1896 (ld1): read of 16 bytes at left_as_ptr + 1 not provably within region 
+ipred	ipred_z2_fill2_16bpc_neon	fail	memory safety violation reported	line 2369 (ld1): read of 16 bytes at left_as_ptr + 16 not provably within region
+ipred	ipred_z2_fill2_8bpc_neon	fail	memory safety violation reported	line 2179 (ld1): read of 16 bytes at left_as_ptr + 0 not provably within region 
+ipred	ipred_z2_fill3_16bpc_neon	fail	memory safety violation reported	line 2590 (ld1): read of 16 bytes at left_as_ptr + 16 not provably within region
+ipred	ipred_z2_fill3_8bpc_neon	fail	memory safety violation reported	line 2348 (ld1): read of 16 bytes at left_as_ptr + 0 not provably within region 
+ipred	ipred_z2_upsample_edge_16bpc_neon	fail	memory safety violation reported	line 1212 (ld1): read of 16 bytes at in_0_as_ptr + 0 not provably within region 
+ipred	ipred_z2_upsample_edge_8bpc_neon	fail	memory safety violation reported	line 1167 (ld1): read of 16 bytes at in_0_as_ptr + 0 not provably within region 
+ipred	ipred_z3_fill1_16bpc_neon	fail	unresolved loop	line 2974 (st1): write of 16 bytes at dst_as_mut_ptr + loop0_? * 16 + 0 not prov
+ipred	ipred_z3_fill1_8bpc_neon	fail	memory safety violation reported	line 2807 (st1): write of 16 bytes at dst_as_mut_ptr + (stride lsl 1 lsr 1) - wi
+ipred	ipred_z3_fill2_16bpc_neon	verified		
+ipred	ipred_z3_fill2_8bpc_neon	verified		
+ipred	pal_pred_16bpc_neon	fail	memory safety violation reported	line 3592 (ld1): read of 16 bytes at idx_as_ptr + loop0_? * 32 + 0 not provably 
+ipred	pal_pred_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_adst_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_dct_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_flipadst_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_adst_identity_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_adst_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x32_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x32_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x64_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x64_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_32x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_32x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_32x32_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_32x32_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_32x64_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_32x64_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_32x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_32x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_64x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_64x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_64x32_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_64x32_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_64x64_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_64x64_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_8x32_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_8x32_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_dct_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_flipadst_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_dct_identity_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_adst_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_dct_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_flipadst_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_flipadst_identity_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_adst_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_dct_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_flipadst_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_16x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_16x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_16x32_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_16x32_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_16x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_16x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_16x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_16x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_32x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_32x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_32x32_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_32x32_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_32x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_32x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_4x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_4x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_4x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_4x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_4x8_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_8x16_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_8x16_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_8x32_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_8x32_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_8x4_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_8x4_8bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_8x8_16bpc_neon	verified		
+itx	inv_txfm_add_identity_identity_8x8_8bpc_neon	verified		
+itx	inv_txfm_add_wht_wht_4x4_16bpc_neon	verified		
+itx	inv_txfm_add_wht_wht_4x4_8bpc_neon	verified		
+loopfilter	lpf_h_sb_uv_16bpc_neon	fail	memory safety violation reported	line 1386 (ld2): read of 4 bytes at lvl_as_ptr - 4 not provably within region of
+loopfilter	lpf_h_sb_uv_8bpc_neon	fail	memory safety violation reported	line 1577 (ld2): read of 4 bytes at lvl_as_ptr - 4 not provably within region of
+loopfilter	lpf_h_sb_y_16bpc_neon	fail	memory safety violation reported	line 1222 (ld2): read of 4 bytes at lvl_as_ptr - 4 not provably within region of
+loopfilter	lpf_h_sb_y_8bpc_neon	fail	memory safety violation reported	line 1436 (ld2): read of 4 bytes at lvl_as_ptr - 4 not provably within region of
+loopfilter	lpf_v_sb_uv_16bpc_neon	fail	memory safety violation reported	line 1309 (ld1): read of 8 bytes at lvl_as_ptr - (b4_stride lsl 2) + 0 not prova
+loopfilter	lpf_v_sb_uv_8bpc_neon	fail	memory safety violation reported	line 1512 (ld1): read of 16 bytes at lvl_as_ptr - (b4_stride lsl 2) + 0 not prov
+loopfilter	lpf_v_sb_y_16bpc_neon	fail	memory safety violation reported	line 1134 (ld1): read of 8 bytes at lvl_as_ptr - (b4_stride lsl 2) + 0 not prova
+loopfilter	lpf_v_sb_y_8bpc_neon	fail	memory safety violation reported	line 1361 (ld1): read of 16 bytes at lvl_as_ptr - (b4_stride lsl 2) + 0 not prov
+looprestoration	sgr_box35_row_h_16bpc_neon	fail	memory safety violation reported	line 976 (st1): write of 16 bytes at sum3_as_mut_ptr + loop1_? * 16 + 16 not pro
+looprestoration	sgr_box35_row_h_8bpc_neon	fail	memory safety violation reported	line 874 (st1): write of 16 bytes at sum3_as_mut_ptr + loop1_? * 16 + 16 not pro
+looprestoration	sgr_box3_row_h_16bpc_neon	fail	memory safety violation reported	line 849 (st1): write of 16 bytes at sum_as_mut_ptr + loop1_? * 16 + 16 not prov
+looprestoration	sgr_box3_row_h_8bpc_neon	fail	memory safety violation reported	line 742 (st1): write of 16 bytes at sum_as_mut_ptr + loop1_? * 16 + 16 not prov
+looprestoration	sgr_box3_vert_neon	fail	memory safety violation reported	line 29 (ld1): read of 16 bytes at sum_buf_as_mut_ptr + o_sum_buf2 * 2 + loop0_?
+looprestoration	sgr_box5_row_h_16bpc_neon	fail	memory safety violation reported	line 915 (st1): write of 16 bytes at sum_as_mut_ptr + loop1_? * 16 + 16 not prov
+looprestoration	sgr_box5_row_h_8bpc_neon	fail	memory safety violation reported	line 813 (st1): write of 16 bytes at sum_as_mut_ptr + loop1_? * 16 + 16 not prov
+looprestoration	sgr_box5_vert_neon	fail	memory safety violation reported	line 168 (ld1): read of 16 bytes at sumsq_buf_as_mut_ptr + o_sumsq_buf0 * 4 + lo
+looprestoration	sgr_finish_filter1_2rows_16bpc_neon	verified		
+looprestoration	sgr_finish_filter1_2rows_8bpc_neon	verified		
+looprestoration	sgr_finish_filter2_2rows_16bpc_neon	verified		
+looprestoration	sgr_finish_filter2_2rows_8bpc_neon	verified		
+looprestoration	sgr_finish_weighted1_16bpc_neon	verified		
+looprestoration	sgr_finish_weighted1_8bpc_neon	verified		
+looprestoration	sgr_finish_weighted2_16bpc_neon	verified		
+looprestoration	sgr_finish_weighted2_8bpc_neon	verified		
+looprestoration	sgr_weighted2_16bpc_neon	fail	memory safety violation reported	line 1460 (ld1): read of 16 bytes at dst_as_mut_ptr + loop0_? * 16 + 0 not prova
+looprestoration	sgr_weighted2_8bpc_neon	fail	memory safety violation reported	line 1373 (ld1): read of 8 bytes at dst_as_mut_ptr + loop0_? * 8 + 0 not provabl
+looprestoration	wiener_filter5_16bpc_neon	fail	memory safety violation reported	line 733 (ld1): read of 16 bytes at sp + loop0_? * 768 + 0 not provably within s
+looprestoration	wiener_filter5_8bpc_neon	fail	memory safety violation reported	line 640 (ld1): read of 16 bytes at sp + loop0_? * 768 + 0 not provably within s
+looprestoration	wiener_filter7_16bpc_neon	fail	memory safety violation reported	line 351 (ld1): read of 16 bytes at sp + loop0_? * 768 + 0 not provably within s
+looprestoration	wiener_filter7_8bpc_neon	fail	memory safety violation reported	line 310 (ld1): read of 16 bytes at sp + loop0_? * 768 + 0 not provably within s
+main	ipred_reverse_16bpc_neon	fail	memory safety violation reported	line 1665 (ld1): read of 16 bytes at src_as_ptr + src_len * 2 + loop0_? * -16 + 
+main	ipred_reverse_8bpc_neon	fail	other	cannot find function `ipred_reverse_16bpc_neon` in this scope
+main	ipred_z1_upsample_edge_8bpc_neon	fail	memory safety violation reported	line 6 (ld1): read of 16 bytes at padding_mask - in_0_len % 4294967296 + 32 not 
+main	ipred_z2_upsample_edge_8bpc_neon	verified		
+mc	avg_16bpc_neon	verified		
+mc	avg_8bpc_neon	verified		
+mc	blend_16bpc_neon	verified		
+mc	blend_8bpc_neon	verified		
+mc	blend_h_16bpc_neon	fail	memory safety violation reported	line 2515 (ld2r): read of 1 bytes at obmc_masks + h % 4294967296 + 2712 not prov
+mc	blend_h_8bpc_neon	fail	memory safety violation reported	line 1752 (ld2r): read of 1 bytes at obmc_masks + h % 4294967296 + 2712 not prov
+mc	blend_v_16bpc_neon	fail	memory safety violation reported	line 2682 (ld1): read of 16 bytes at tmp_as_ptr + 192 not provably within region
+mc	blend_v_8bpc_neon	fail	memory safety violation reported	line 1900 (ld1): read of 16 bytes at tmp_as_ptr + 96 not provably within region 
+mc	emu_edge_16bpc_neon	fail	memory safety violation reported	line 8575 (st1): write of 16 bytes at dst_as_mut_ptr + (0 - y) !& (0 - y asr 63)
+mc	emu_edge_8bpc_neon	fail	memory safety violation reported	line 8111 (st1): write of 16 bytes at dst_as_mut_ptr + (0 - y) !& (0 - y asr 63)
+mc	mask_16bpc_neon	verified		
+mc	mask_8bpc_neon	verified		
+mc	prep_8tap_regular_16bpc_neon	fail	memory safety violation reported	line 7441 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_regular_8bpc_neon	fail	memory safety violation reported	line 7131 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_regular_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_regular_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_8tap_regular_sharp_16bpc_neon	fail	memory safety violation reported	line 6476 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_regular_sharp_8bpc_neon	fail	memory safety violation reported	line 6075 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_regular_sharp_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_regular_sharp_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_8tap_regular_smooth_16bpc_neon	fail	memory safety violation reported	line 7441 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_regular_smooth_8bpc_neon	fail	memory safety violation reported	line 7131 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_regular_smooth_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_regular_smooth_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_8tap_sharp_16bpc_neon	fail	memory safety violation reported	line 6476 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_sharp_8bpc_neon	fail	memory safety violation reported	line 6075 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_sharp_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_sharp_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_8tap_sharp_regular_16bpc_neon	fail	memory safety violation reported	line 6476 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_sharp_regular_8bpc_neon	fail	memory safety violation reported	line 6075 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_sharp_regular_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_sharp_regular_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_8tap_sharp_smooth_16bpc_neon	fail	memory safety violation reported	line 6476 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_sharp_smooth_8bpc_neon	fail	memory safety violation reported	line 6075 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_sharp_smooth_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_sharp_smooth_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_8tap_smooth_16bpc_neon	fail	memory safety violation reported	line 7441 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_smooth_8bpc_neon	fail	memory safety violation reported	line 7131 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_smooth_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_smooth_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_8tap_smooth_regular_16bpc_neon	fail	memory safety violation reported	line 7441 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_smooth_regular_8bpc_neon	fail	memory safety violation reported	line 7131 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_smooth_regular_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_smooth_regular_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_8tap_smooth_sharp_16bpc_neon	fail	memory safety violation reported	line 6476 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	prep_8tap_smooth_sharp_8bpc_neon	fail	memory safety violation reported	line 6075 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	prep_8tap_smooth_sharp_8bpc_neon_dotprod	fail	memory safety violation reported	line 573 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of 
+mc	prep_8tap_smooth_sharp_8bpc_neon_i8mm	fail	memory safety violation reported	line 2205 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	prep_bilin_16bpc_neon	fail	memory safety violation reported	line 8060 (ldr): read of 2 bytes at src_as_ptr + (src_stride lsl 1) + (src_strid
+mc	prep_bilin_8bpc_neon	fail	memory safety violation reported	line 7667 (ld1): read of 16 bytes at src_as_ptr + (src_stride lsl 1) + (src_stri
+mc	prep_neon	fail	memory safety violation reported	line 2013 (ldrsw): read of 4 bytes at prep_tbl + (x8 lsl 2) + 236 not provably w
+mc	put_16bpc_neon	fail	memory safety violation reported	line 2710 (ldrsw): read of 4 bytes at put_16bpc_tbl + (x9 lsl 2) + 208 not prova
+mc	put_8tap_regular_16bpc_neon	fail	memory safety violation reported	line 5074 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_regular_8bpc_neon	fail	memory safety violation reported	line 4595 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_regular_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_regular_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_regular_sharp_16bpc_neon	fail	memory safety violation reported	line 3842 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_regular_sharp_8bpc_neon	fail	memory safety violation reported	line 3235 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_regular_sharp_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_regular_sharp_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_regular_smooth_16bpc_neon	fail	memory safety violation reported	line 5074 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_regular_smooth_8bpc_neon	fail	memory safety violation reported	line 4595 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_regular_smooth_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_regular_smooth_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_sharp_16bpc_neon	fail	memory safety violation reported	line 3842 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_sharp_8bpc_neon	fail	memory safety violation reported	line 3235 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_sharp_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_sharp_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_sharp_regular_16bpc_neon	fail	memory safety violation reported	line 3842 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_sharp_regular_8bpc_neon	fail	memory safety violation reported	line 3235 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_sharp_regular_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_sharp_regular_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_sharp_smooth_16bpc_neon	fail	memory safety violation reported	line 3842 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_sharp_smooth_8bpc_neon	fail	memory safety violation reported	line 3235 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_sharp_smooth_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_sharp_smooth_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_smooth_16bpc_neon	fail	memory safety violation reported	line 5074 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_smooth_8bpc_neon	fail	memory safety violation reported	line 4595 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_smooth_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_smooth_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_smooth_regular_16bpc_neon	fail	memory safety violation reported	line 5074 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_smooth_regular_8bpc_neon	fail	memory safety violation reported	line 4595 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_smooth_regular_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_smooth_regular_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_smooth_sharp_16bpc_neon	fail	memory safety violation reported	line 3842 (ld1): read of 16 bytes at src_as_ptr - src_stride - 2 not provably wi
+mc	put_8tap_smooth_sharp_8bpc_neon	fail	memory safety violation reported	line 3235 (ld1): read of 8 bytes at src_as_ptr - src_stride - 1 not provably wit
+mc	put_8tap_smooth_sharp_8bpc_neon_dotprod	fail	memory safety violation reported	line 1465 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_8tap_smooth_sharp_8bpc_neon_i8mm	fail	memory safety violation reported	line 3207 (ldr): read of 8 bytes at src_as_ptr - 1 not provably within region of
+mc	put_bilin_16bpc_neon	fail	memory safety violation reported	line 5806 (ldr): read of 2 bytes at src_as_ptr + (src_stride lsl 1) + (src_strid
+mc	put_bilin_8bpc_neon	fail	memory safety violation reported	line 5252 (ld1): read of 16 bytes at src_as_ptr + (src_stride lsl 1) + 0 not pro
+mc	put_neon	fail	memory safety violation reported	line 1931 (ldrsw): read of 4 bytes at put_tbl + (x8 lsl 2) + 208 not provably wi
+mc	w_avg_16bpc_neon	verified		
+mc	w_avg_8bpc_neon	verified		
+mc	w_mask_420_16bpc_neon	fail	memory safety violation reported	line 2204 (ld1): read of 16 bytes at loop0_?_widened_2 + 0 has no declared regio
+mc	w_mask_420_8bpc_neon	fail	memory safety violation reported	line 1502 (ld1): read of 16 bytes at loop0_?_widened_2 + 0 has no declared regio
+mc	w_mask_422_16bpc_neon	fail	memory safety violation reported	line 1972 (ld1): read of 16 bytes at loop0_?_widened_2 + 0 has no declared regio
+mc	w_mask_422_8bpc_neon	fail	memory safety violation reported	line 1358 (ld1): read of 16 bytes at loop0_?_widened_2 + 0 has no declared regio
+mc	w_mask_444_16bpc_neon	fail	memory safety violation reported	line 1745 (ld1): read of 16 bytes at loop0_?_widened_2 + 0 has no declared regio
+mc	w_mask_444_8bpc_neon	fail	memory safety violation reported	line 1219 (ld1): read of 16 bytes at loop0_?_widened_2 + 0 has no declared regio
+mc	warp_affine_8x8_16bpc_neon	fail	memory safety violation reported	line 8115 (ld1): read of 16 bytes at src_as_ptr - (src_stride lsl 1) - src_strid
+mc	warp_affine_8x8_8bpc_neon	fail	memory safety violation reported	line 7702 (ld1): read of 8 bytes at src_as_ptr - (src_stride lsl 1) - src_stride
+mc	warp_affine_8x8t_16bpc_neon	fail	memory safety violation reported	line 8115 (ld1): read of 16 bytes at src_as_ptr - (src_stride lsl 1) - src_strid
+mc	warp_affine_8x8t_8bpc_neon	fail	memory safety violation reported	line 7702 (ld1): read of 8 bytes at src_as_ptr - (src_stride lsl 1) - src_stride
+msac	msac_decode_bool_adapt_neon	verified		
+msac	msac_decode_bool_equi_neon	verified		
+msac	msac_decode_bool_neon	verified		
+msac	msac_decode_hi_tok_neon	fail	branch depth exceeded	line 345: branch depth exceeded 20; line 302 (ldr): Cannot prove access safe: ad
+msac	msac_decode_symbol_adapt16_neon	fail	other	line 220 (ldrh): read of 2 bytes at sp + (lane_0 atleast -16 atmost 0 % 42949672
+msac	msac_decode_symbol_adapt4_neon	verified		
+msac	msac_decode_symbol_adapt8_neon	verified		
+refmvs	load_tmvs_neon	fail	other	line 233 (ldr): no region declared for read at rf_as_ptr[168:8] + (rf_as_ptr[53:
+refmvs	save_tmvs_neon	fail	memory safety violation reported	line 47 (ld1): read of 8 bytes at ref_sign_as_ptr + 0 not provably within region
+refmvs	splat_mv_neon	fail	other	line 30 (st1): no region declared for write at rr_as_mut_ptr[0:8] + ((bx4 % 4294
