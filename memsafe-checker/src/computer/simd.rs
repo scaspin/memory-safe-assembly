@@ -1,160 +1,265 @@
 use crate::computer::*;
 
+pub fn arrangement_of(operand: &Operand) -> Option<Arrangement> {
+    match operand {
+        Operand::Vector(_, _, arrangement) => Some(arrangement.clone()),
+        Operand::VectorAccess(_, _, element, _) => Some(element.clone()),
+        _ => None,
+    }
+}
+
+fn combine_bases(
+    op_string: &str,
+    left: &[Option<AbstractExpression>],
+    right: &[Option<AbstractExpression>],
+) -> Vec<Option<AbstractExpression>> {
+    left.iter()
+        .zip(right.iter())
+        .map(|(l, r)| match (l, r) {
+            (Some(_), Some(_)) => generate_expression_from_options(op_string, l.clone(), r.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+pub fn is_vector_operand(operand: &Operand) -> bool {
+    matches!(
+        operand,
+        Operand::Vector(..) | Operand::VectorRegister(..) | Operand::VectorAccess(..)
+    )
+}
+
+pub fn range_fits_lane(range: (i64, i64), lane_bytes: usize) -> Option<(i64, i64)> {
+    if lane_bytes == 0 || lane_bytes > 8 {
+        return None;
+    }
+    let limit = 1i64 << (8 * lane_bytes - 1);
+    if range.0 >= -limit && range.1 < limit && range.0 <= range.1 {
+        Some(range)
+    } else {
+        None
+    }
+}
+
+fn mask_to_lane(value: u128, lane_bytes: usize) -> u128 {
+    if lane_bytes >= 16 {
+        value
+    } else {
+        value & ((1u128 << (8 * lane_bytes)) - 1)
+    }
+}
+
+pub fn vector_access_width(operand: &Operand) -> usize {
+    match operand {
+        Operand::Vector(_, _, arrangement) => arrangement.bytes(),
+        Operand::VectorAccess(_, _, element, _) => element.lane_bytes(),
+        Operand::VectorRegister(..) => 16,
+        _ => 8,
+    }
+}
+
+pub fn split_vector_operands(instruction: &Instruction) -> (Vec<Operand>, Option<&Operand>) {
+    let mut registers = Vec::new();
+    let mut address = None;
+    for operand in instruction.operands.iter() {
+        match operand {
+            Operand::Vector(..) | Operand::VectorRegister(..) | Operand::VectorAccess(..) => {
+                registers.push(operand.clone())
+            }
+            Operand::Memory(..) => address = Some(operand),
+            _ => (),
+        }
+    }
+    (registers, address)
+}
+
 impl ARMCORTEXA {
+    pub fn apply_writeback(
+        &mut self,
+        prefix: &RePrefix,
+        num: usize,
+        address: &RegisterValue,
+        offset: &Option<i64>,
+        register_offset: &Option<Box<Operand>>,
+        indexing: &Option<bool>,
+    ) {
+        let target = Operand::Register(prefix.clone(), num);
+
+        if let Some(register) = register_offset {
+            self.arithmetic(
+                "+",
+                &|x, y| x + y,
+                vec![target.clone(), target, (**register).clone()],
+            );
+            return;
+        }
+
+        if *indexing == Some(true) {
+            if let Some(step) = offset {
+                self.set_register(
+                    &target,
+                    address.kind.clone(),
+                    address.base.clone(),
+                    address.offset + step,
+                );
+            }
+        }
+    }
+
     pub fn vector_arithmetic(
         &mut self,
         op_string: &str,
-        op_byte: impl Fn(u8, u8) -> u8,
-        op_half: impl Fn(u16, u16) -> u16,
-        op_word: impl Fn(u32, u32) -> u32,
-        op_double: impl Fn(u64, u64) -> u64,
+        op: impl Fn(u128, u128) -> u128,
         instruction: &Instruction,
     ) {
+        let mut reg_iter = instruction.operands.iter();
+
+        let reg0 = reg_iter.next().expect("Need destination register");
+        let is_vector = |o: &Operand| {
+            matches!(
+                o,
+                Operand::Vector(..) | Operand::VectorRegister(..) | Operand::VectorAccess(..)
+            )
+        };
+        let (Some(reg1), Some(reg2)) = (reg_iter.next(), reg_iter.next()) else {
+            self.vector_unknown(reg0);
+            return;
+        };
+        if !is_vector(reg1) || !is_vector(reg2) {
+            self.vector_unknown(reg0);
+            return;
+        }
+
+        let Some(arrangement) = arrangement_of(reg0) else {
+            let mut dst = self.get_simd_register(reg0);
+            dst.set_unknown();
+            self.set_simd_register(reg0, dst);
+            return;
+        };
+
+        let src1 = self.get_simd_register(reg1);
+        let src2 = self.get_simd_register(reg2);
+        let mut dst = self.get_simd_register(reg0);
+
+        let lane_bytes = arrangement.lane_bytes();
+        for lane in 0..arrangement.lanes() {
+            let (bases1, value1) = src1.get_lane(&arrangement, lane);
+            let (bases2, value2) = src2.get_lane(&arrangement, lane);
+
+            let value = mask_to_lane(op(value1, value2), lane_bytes);
+            let bases = combine_bases(op_string, &bases1, &bases2);
+
+            dst.set_lane(&arrangement, lane, bases, value);
+        }
+
+        self.set_simd_register(reg0, dst);
+    }
+
+    pub fn vector_broadcast(
+        &mut self,
+        dst_operand: &Operand,
+        arrangement: &Arrangement,
+        bases: Vec<Option<AbstractExpression>>,
+        value: u128,
+        kind: RegisterKind,
+    ) {
+        let mut dst = self.get_simd_register(dst_operand);
+        dst.kind = kind;
+        dst.base = [BASE_INIT; 16];
+        dst.offset = [0; 16];
+        for lane in 0..arrangement.lanes() {
+            dst.set_lane(arrangement, lane, bases.clone(), value);
+        }
+        self.set_simd_register(dst_operand, dst);
+    }
+
+    pub fn vector_permute(
+        &mut self,
+        dst_operand: &Operand,
+        src_operand: &Operand,
+        arrangement: &Arrangement,
+        source_lane: impl Fn(usize) -> usize,
+    ) {
+        let src = self.get_simd_register(src_operand);
+        let mut dst = self.get_simd_register(dst_operand);
+        dst.kind = src.kind.clone();
+
+        for lane in 0..arrangement.lanes() {
+            let (bases, value) = src.get_lane(arrangement, source_lane(lane));
+            dst.set_lane(arrangement, lane, bases, value);
+        }
+
+        self.set_simd_register(dst_operand, dst);
+    }
+
+    pub fn vector_widening_add(
+        &mut self,
+        op_string: &str,
+        instruction: &Instruction,
+    ) -> Result<(), String> {
         let mut reg_iter = instruction.operands.iter();
 
         let reg0 = reg_iter.next().expect("Need destination register");
         let reg1 = reg_iter.next().expect("Need first source register");
         let reg2 = reg_iter.next().expect("Need second source register");
 
-        let mut result = self.get_simd_register(reg0);
-        let r0 = &mut result;
-        let r1 = self.get_simd_register(reg1);
-        let r2 = self.get_simd_register(reg2);
+        let Some(wide) = arrangement_of(reg0) else {
+            return Err("widening add without an arrangement".to_string());
+        };
+        let narrow = match wide {
+            Arrangement::H8 | Arrangement::H4 => Arrangement::B8,
+            Arrangement::S4 | Arrangement::S2 => Arrangement::H4,
+            Arrangement::D2 => Arrangement::S2,
+            _ => return Err(format!("no narrower arrangement for {:?}", wide)),
+        };
 
-        match (reg0, reg1, reg2) {
-            (Operand::Vector(_, _, a), Operand::Vector(..), Operand::Vector(..)) => match a {
-                Arrangement::D2 => {
-                    for i in 0..2 {
-                        let (bases1, offsets1) = r1.get_double(i);
+        let src1 = self.get_simd_register(reg1);
+        let src2 = self.get_simd_register(reg2);
+        let mut dst = self.get_simd_register(reg0);
 
-                        let (bases2, offsets2) = r2.get_double(i);
+        let lane_bytes = wide.lane_bytes();
+        for lane in 0..wide.lanes() {
+            let (bases1, value1) = src1.get_lane(&wide, lane);
+            let (bases2, value2) = src2.get_lane(&narrow, lane);
 
-                        let a = u64::from_be_bytes(offsets1);
-                        let b = u64::from_be_bytes(offsets2);
-                        let offset = op_double(a, b);
+            let value = mask_to_lane(value1.wrapping_add(value2), lane_bytes);
+            let bases = if bases1.iter().all(|b| b.is_none()) && bases2.iter().all(|b| b.is_none())
+            {
+                vec![None; lane_bytes]
+            } else {
+                combine_bases(op_string, &bases1, &vec![None; lane_bytes])
+            };
 
-                        let mut new_bases = [BASE_INIT; 8];
-                        for i in 0..8 {
-                            if bases1[i].is_some() && bases2[i].is_some() {
-                                new_bases[i] = generate_expression_from_options(
-                                    op_string,
-                                    bases1[i].clone(),
-                                    bases2[i].clone(),
-                                );
-                            }
-                        }
-
-                        r0.set_double(i, new_bases, offset.to_be_bytes());
-                    }
-                }
-                Arrangement::S4 => {
-                    for i in 0..4 {
-                        let (bases1, offsets1) = r1.get_word(i);
-
-                        let (bases2, offsets2) = r2.get_word(i);
-                        let a = u32::from_be_bytes(offsets1);
-                        let b = u32::from_be_bytes(offsets2);
-                        let offset = op_word(a, b);
-
-                        let mut new_bases = [BASE_INIT; 4];
-                        for i in 0..4 {
-                            new_bases[i] = generate_expression_from_options(
-                                op_string,
-                                bases1[i].clone(),
-                                bases2[i].clone(),
-                            );
-                        }
-
-                        r0.set_word(i, new_bases, offset.to_be_bytes());
-                    }
-                }
-                Arrangement::H4 => {
-                    for i in 0..4 {
-                        let (bases1, offsets1) = r1.get_halfword(i);
-
-                        let (bases2, offsets2) = r2.get_halfword(i);
-                        let a = u16::from_be_bytes(offsets1);
-                        let b = u16::from_be_bytes(offsets2);
-                        let offset = op_half(a, b);
-
-                        let mut new_bases = [BASE_INIT; 2];
-                        for i in 0..4 {
-                            new_bases[i] = generate_expression_from_options(
-                                op_string,
-                                bases1[i].clone(),
-                                bases2[i].clone(),
-                            );
-                        }
-
-                        r0.set_halfword(i, new_bases, offset.to_be_bytes());
-                    }
-                }
-                Arrangement::H8 => {
-                    for i in 0..8 {
-                        let (bases1, offsets1) = r1.get_halfword(i);
-
-                        let (bases2, offsets2) = r2.get_halfword(i);
-                        let a = u16::from_be_bytes(offsets1);
-                        let b = u16::from_be_bytes(offsets2);
-                        let offset = op_half(a, b);
-
-                        let mut new_bases = [BASE_INIT; 2];
-                        for i in 0..2 {
-                            new_bases[i] = generate_expression_from_options(
-                                op_string,
-                                bases1[i].clone(),
-                                bases2[i].clone(),
-                            );
-                        }
-
-                        r0.set_halfword(i, new_bases, offset.to_be_bytes());
-                    }
-                }
-                Arrangement::B8 => {
-                    for i in 0..8 {
-                        let (bases1, a) = r1.get_byte(i);
-
-                        let (bases2, b) = r2.get_byte(i);
-
-                        let offset = op_byte(a, b);
-
-                        let new_base = generate_expression_from_options(
-                            op_string,
-                            bases1.clone(),
-                            bases2.clone(),
-                        );
-
-                        r0.set_byte(i, new_base, offset);
-                    }
-                }
-                Arrangement::B16 => {
-                    for i in 0..16 {
-                        let (bases1, a) = r1.get_byte(i);
-
-                        let (bases2, b) = r2.get_byte(i);
-
-                        let offset = op_byte(a, b);
-
-                        let new_base = generate_expression_from_options(
-                            op_string,
-                            bases1.clone(),
-                            bases2.clone(),
-                        );
-
-                        r0.set_byte(i, new_base, offset);
-                    }
-                }
-                _ => {
-                    self.set_register(reg0, RegisterKind::Number, None, 0);
-                    return;
-                }
-            },
-            (_, _, _) => todo!("more simd arithmetic support"),
+            dst.set_lane(&wide, lane, bases, value);
         }
 
-        self.set_simd_register(reg0, result);
+        self.set_simd_register(reg0, dst);
+        Ok(())
+    }
+
+    pub fn lane_range(&mut self, operand: &Operand) -> Option<(i64, i64)> {
+        if !is_vector_operand(operand) {
+            return None;
+        }
+        self.get_simd_register(operand).lane_range
+    }
+
+    pub fn set_lane_range(&mut self, operand: &Operand, range: Option<(i64, i64)>) {
+        if !is_vector_operand(operand) {
+            return;
+        }
+        let mut register = self.get_simd_register(operand);
+        register.lane_range = range;
+        self.set_simd_register(operand, register);
+    }
+
+    pub fn vector_unknown(&mut self, dst_operand: &Operand) {
+        let mut dst = self.get_simd_register(dst_operand);
+        dst.set_unknown();
+        self.set_simd_register(dst_operand, dst);
     }
 }
+
 
 pub enum LaneEffect {
     Vectors(Vec<(usize, [u8; 16], Option<u64>)>),
@@ -211,7 +316,7 @@ impl ARMCORTEXA {
             return LaneEffect::Nothing;
         };
         if let Some(source) = operands.get(1).and_then(vector_index)
-            && matches!(opcode, "fmov" | "umov" | "mov")
+            && matches!(opcode, "fmov" | "mov")
             && matches!(first, Operand::Register(..))
         {
             let bound = match operands.get(1) {
