@@ -1,4 +1,3 @@
-
 use bums::common::*;
 
 fn init() {
@@ -237,4 +236,33 @@ fn an_untranslatable_address_is_reported_not_fatal() {
         error.contains("does not model"),
         "expected an unsupported-operation report, got: {error}"
     );
+}
+
+#[test]
+fn an_inexpressible_branch_condition_explores_both_sides() {
+    assert!(
+        run(&[
+            "eor x9, x1, x2",
+            "cmp x9, #4",
+            "b.hi big",
+            "ldrb w3,[x0,#1]",
+            "ret",
+            "big:",
+            "ldrb w3,[x0,#2]",
+            "ret",
+        ])
+        .is_ok()
+    );
+    let error = run(&[
+        "eor x9, x1, x2",
+        "cmp x9, #4",
+        "b.hi big",
+        "ldrb w3,[x0,#1]",
+        "ret",
+        "big:",
+        "ldrb w3,[x0,#16]",
+        "ret",
+    ])
+    .expect_err("the side past the region is explored");
+    assert!(error.contains("not provably within"), "{error}");
 }

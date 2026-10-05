@@ -990,8 +990,12 @@ where
     }
 }
 
-fn summary_fact_to_ast(fact: &AbstractComparison) -> ast::Bool {
-    comparison_to_ast(fact.clone()).unwrap_or_else(|| panic!("untranslatable summary fact {fact}"))
+fn summary_fact_to_ast(fact: &AbstractComparison) -> Option<ast::Bool> {
+    let translated = comparison_to_ast(fact.clone());
+    if translated.is_none() {
+        log::info!("summary fact not expressible, dropped: {fact}");
+    }
+    translated
 }
 
 fn facts_for_exit(
@@ -1901,8 +1905,7 @@ impl ExecutionEngine {
 
     pub fn start(&mut self, start: impl Into<String>) -> std::io::Result<()> {
         let start: String = start.into();
-        let pc = match self
-            .get_linenumber_of_label(start.trim_matches(|c| c == ':').to_string(), 0)
+        let pc = match self.get_linenumber_of_label(start.trim_matches(|c| c == ':').to_string(), 0)
         {
             Some(n) => n,
             None => return Err(Error::other("Start label not found in program")),
@@ -2173,24 +2176,22 @@ impl ExecutionEngine {
                             },
                         )
                     }
-                    ExecuteReturnType::JumpIndirect(target) => {
-                        match (target.base, target.offset) {
-                            (Some(AbstractExpression::Abstract(label)), 0) => {
-                                match self.get_linenumber_of_label(label.clone(), pc) {
-                                    Some(n) => {
-                                        Self::note_unconditional_jump(unconditional_visits, n)?;
-                                        Ok(Step::Continue(n))
-                                    }
-                                    None => Err(Error::other(format!(
-                                        "line {pc}: undefined label {label}"
-                                    ))),
+                    ExecuteReturnType::JumpIndirect(target) => match (target.base, target.offset) {
+                        (Some(AbstractExpression::Abstract(label)), 0) => {
+                            match self.get_linenumber_of_label(label.clone(), pc) {
+                                Some(n) => {
+                                    Self::note_unconditional_jump(unconditional_visits, n)?;
+                                    Ok(Step::Continue(n))
+                                }
+                                None => {
+                                    Err(Error::other(format!("line {pc}: undefined label {label}")))
                                 }
                             }
-                            _ => Err(Error::other(format!(
-                                "line {pc}: indirect jump through a value this engine cannot resolve to a label"
-                            ))),
                         }
-                    }
+                        _ => Err(Error::other(format!(
+                            "line {pc}: indirect jump through a value this engine cannot resolve to a label"
+                        ))),
+                    },
                     ExecuteReturnType::Split(_) => Err(Error::other(format!(
                         "line {pc}: a jump-table split is not supported by this engine"
                     ))),
@@ -2289,8 +2290,13 @@ impl ExecutionEngine {
                     .select_definitions
                     .get(name)
                     .map(|(_, a, b)| (a, b)),
-                Some((AbstractExpression::Immediate(-1), AbstractExpression::Immediate(0)))
-                    | Some((AbstractExpression::Immediate(0), AbstractExpression::Immediate(-1)))
+                Some((
+                    AbstractExpression::Immediate(-1),
+                    AbstractExpression::Immediate(0)
+                )) | Some((
+                    AbstractExpression::Immediate(0),
+                    AbstractExpression::Immediate(-1)
+                ))
             ),
             _ => false,
         }
@@ -2301,7 +2307,8 @@ impl ExecutionEngine {
             AbstractExpression::Expression(op, left, right) => {
                 let left = self.resolve_boolean_mask_xor(left);
                 let right = self.resolve_boolean_mask_xor(right);
-                if op.as_str() == "^" && (self.is_boolean_mask(&left) || self.is_boolean_mask(&right))
+                if op.as_str() == "^"
+                    && (self.is_boolean_mask(&left) || self.is_boolean_mask(&right))
                 {
                     generate_expression(
                         "+",
@@ -2720,18 +2727,21 @@ impl ExecutionEngine {
         for defined in self.select_definitions_in(&constraint) {
             self.assert_in_scope(defined);
         }
-        let c = comparison_to_ast(constraint)
-            .unwrap_or_else(|| panic!("untranslatable branch condition {shown}"))
-            .simplify();
+        let Some(c) = comparison_to_ast(constraint) else {
+            log::info!("branch condition not expressible, left unconstrained: {shown}");
+            return;
+        };
+        let c = c.simplify();
         self.assert_in_scope(if decision { c } else { c.not() });
     }
 
     pub fn add_invariant(&self, constraint: AbstractComparison) {
         let shown = constraint.clone();
-        let c = comparison_to_ast(constraint)
-            .unwrap_or_else(|| panic!("untranslatable invariant {shown}"))
-            .simplify();
-        self.computer.solver.assert(&c);
+        let Some(c) = comparison_to_ast(constraint) else {
+            log::info!("invariant not expressible, dropped: {shown}");
+            return;
+        };
+        self.computer.solver.assert(c.simplify());
     }
 
     fn revisit_cap(&self) -> usize {
@@ -2989,9 +2999,13 @@ impl ExecutionEngine {
     }
 
     fn decide_from_solver(&self, expression: &AbstractComparison) -> Decision {
-        let holds = comparison_to_ast(expression.clone()).expect("branch condition as ast");
-        let fails =
-            comparison_to_ast(expression.clone().not()).expect("negated branch condition as ast");
+        let (Some(holds), Some(fails)) = (
+            comparison_to_ast(expression.clone()),
+            comparison_to_ast(expression.clone().not()),
+        ) else {
+            log::info!("branch condition not expressible, exploring both: {expression}");
+            return Decision::Explore;
+        };
         let defined = self.select_definitions_in(expression);
         let under = |c: ast::Bool| {
             let mut assuming = defined.clone();
@@ -3364,10 +3378,9 @@ impl ExecutionEngine {
             .landings
             .iter()
             .filter(|(requirement, _)| {
-                self.computer
-                    .solver
-                    .check_assumptions(&[summary_fact_to_ast(requirement).not()])
-                    != SatResult::Unsat
+                summary_fact_to_ast(requirement).is_none_or(|required| {
+                    self.computer.solver.check_assumptions(&[required.not()]) != SatResult::Unsat
+                })
             })
             .map(|(_, landing)| landing.clone())
             .collect();
@@ -3380,8 +3393,8 @@ impl ExecutionEngine {
             .retain(|fact| !unjustified.contains(fact));
 
         let scope_id = self.push_scope();
-        for fact in &summary.facts {
-            self.computer.solver.assert(summary_fact_to_ast(fact));
+        for fact in summary.facts.iter().filter_map(summary_fact_to_ast) {
+            self.computer.solver.assert(fact);
         }
         let mentioned: Vec<String> = summary
             .facts
@@ -4536,7 +4549,11 @@ impl ExecutionEngine {
     fn release_loop(&mut self, active: &ActiveLoop) {
         let above = self.scopes_above(active.scope_id);
         self.pop_scope(active.scope_id);
-        let mut kept: Vec<ast::Bool> = active.facts.iter().map(summary_fact_to_ast).collect();
+        let mut kept: Vec<ast::Bool> = active
+            .facts
+            .iter()
+            .filter_map(summary_fact_to_ast)
+            .collect();
         kept.extend(active.nested_facts.iter().cloned());
         self.keep_facts(kept);
         self.rebuild_scopes(above);
@@ -4980,18 +4997,19 @@ impl ExecutionEngine {
 
         let read_by_guard = registers_in(&expression);
         let shown = expression.clone();
-        let condition = comparison_to_ast(expression)
-            .unwrap_or_else(|| panic!("untranslatable exit condition {shown}"));
-        let leaving = if active.entry_decision {
-            condition.clone()
-        } else {
-            condition.clone().not()
-        };
-        let exits = self
-            .computer
-            .solver
-            .check_assumptions(std::slice::from_ref(&leaving))
-            == SatResult::Unsat;
+        let leaving = comparison_to_ast(expression).map(|condition| {
+            if active.entry_decision {
+                condition
+            } else {
+                condition.not()
+            }
+        });
+        let exits = leaving.as_ref().is_some_and(|leaving| {
+            self.computer
+                .solver
+                .check_assumptions(std::slice::from_ref(leaving))
+                == SatResult::Unsat
+        });
 
         let unstable: Vec<usize> = active
             .invariants
@@ -5060,13 +5078,13 @@ impl ExecutionEngine {
                     self.closed_counters.push((counter, values));
                 }
             }
-            let mut kept = vec![leaving.not().simplify()];
+            let mut kept: Vec<ast::Bool> = leaving.iter().map(|l| l.not().simplify()).collect();
             kept.extend(
                 active
                     .facts
                     .iter()
                     .chain(&active.exit_facts)
-                    .map(summary_fact_to_ast),
+                    .filter_map(summary_fact_to_ast),
             );
             kept.extend(active.nested_facts.iter().cloned());
             self.keep_facts(kept);
