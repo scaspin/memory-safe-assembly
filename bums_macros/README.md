@@ -37,6 +37,8 @@ fn function_name(param1: &[u8]);
 fn function_name(param1: &[u8], length: usize);
 ```
 
+A slice's ```len()``` counts elements, as in Rust, and the memory safe region derived for it spans ```len() * size_of::<element>()``` bytes. Preconditions therefore compare element counts, not byte counts: ```param1.len() == 8``` on a ```&[u32]``` permits the assembly to touch 32 bytes.
+
 
 #### Notes on passing structs/enums/etc...
 The macro must be able to calculate the size of each parameter in the function call. To enable doing this at compile-time, all types passed must be primitives or composites of primitive types, since procedural macros do not have access to external declarations at macro expansion time. The one exception to this restriction is slices that can be passed as both a pointer and a length across multiple parameters. A developer must rewrite any enum or struct using primitives.

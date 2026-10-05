@@ -159,6 +159,144 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
+fn passed_pointer(
+    parameter: &str,
+    arguments: &Punctuated<Expr, Token![,]>,
+) -> Option<(&'static str, bool)> {
+    for argument in arguments {
+        let Expr::MethodCall(call) = argument else {
+            continue;
+        };
+        let (call, receiver) = match &*call.receiver {
+            Expr::MethodCall(inner) => (inner, &inner.receiver),
+            _ => (call, &call.receiver),
+        };
+        let Expr::Path(path) = &**receiver else {
+            continue;
+        };
+        if path.path.segments[0].ident != parameter {
+            continue;
+        }
+        match call.method.to_string().as_str() {
+            "as_mut_ptr" => return Some(("_as_mut_ptr", true)),
+            "as_ptr" => return Some(("_as_ptr", false)),
+            _ => (),
+        }
+    }
+    None
+}
+
+fn indexed_element(input: &ExprBinary) -> Option<(String, i64)> {
+    if !matches!(input.op, BinOp::Eq(_)) {
+        return None;
+    }
+    let Expr::Index(indexed) = &*input.left else {
+        return None;
+    };
+    let Expr::Path(path) = &*indexed.expr else {
+        return None;
+    };
+    let Expr::Lit(literal) = &*indexed.index else {
+        return None;
+    };
+    let Lit::Int(element) = &literal.lit else {
+        return None;
+    };
+    Some((
+        path.path.segments[0].ident.to_string(),
+        element.base10_parse::<i64>().ok()?,
+    ))
+}
+
+fn constant_index(e: &Expr) -> Option<i64> {
+    match e {
+        Expr::Lit(l) => match &l.lit {
+            Lit::Int(i) => i.base10_parse::<i64>().ok(),
+            _ => None,
+        },
+        Expr::Paren(p) => constant_index(&p.expr),
+        Expr::Unary(u) if matches!(u.op, syn::UnOp::Neg(_)) => {
+            constant_index(&u.expr).map(|v| -v)
+        }
+        Expr::Binary(b) => {
+            let (l, r) = (constant_index(&b.left)?, constant_index(&b.right)?);
+            match b.op {
+                BinOp::Add(_) => l.checked_add(r),
+                BinOp::Sub(_) => l.checked_sub(r),
+                BinOp::Mul(_) => l.checked_mul(r),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn element_bound(input: &ExprBinary) -> Option<(String, i64)> {
+    if !matches!(
+        input.op,
+        BinOp::Eq(_) | BinOp::Ne(_) | BinOp::Lt(_) | BinOp::Le(_) | BinOp::Gt(_) | BinOp::Ge(_)
+    ) {
+        return None;
+    }
+    let Expr::Index(indexed) = &*input.left else {
+        return None;
+    };
+    let Expr::Path(path) = &*indexed.expr else {
+        return None;
+    };
+    let index = match constant_index(&indexed.index) {
+        Some(index) => index,
+        None => {
+            emit_call_site_error!(
+                "an element precondition needs a literal index: a proc macro runs \
+                 before const evaluation, so a named constant cannot be resolved here"
+            );
+            return None;
+        }
+    };
+    Some((path.path.segments[0].ident.to_string(), index))
+}
+
+fn pointer_contents(
+    input: &ExprBinary,
+    arguments: &Punctuated<Expr, Token![,]>,
+) -> Option<(String, i64, String, &'static str, Option<(bool, Expr)>)> {
+    let (array, element) = indexed_element(input)?;
+    let (array_suffix, _) = passed_pointer(&array, arguments)?;
+
+    let (call, step) = match &*input.right {
+        Expr::MethodCall(call)
+            if matches!(call.method.to_string().as_str(), "add" | "byte_add") =>
+        {
+            let Expr::MethodCall(inner) = &*call.receiver else {
+                return None;
+            };
+            (
+                inner,
+                Some((call.method == "add", call.args.first()?.clone())),
+            )
+        }
+        Expr::MethodCall(call) => (call, None),
+        _ => return None,
+    };
+    let Expr::Path(slice) = &*call.receiver else {
+        return None;
+    };
+    let suffix = match call.method.to_string().as_str() {
+        "as_mut_ptr" => "_as_mut_ptr",
+        "as_ptr" => "_as_ptr",
+        _ => return None,
+    };
+
+    Some((
+        format!("{}{}", array, array_suffix),
+        element * 8,
+        slice.path.segments[0].ident.to_string(),
+        suffix,
+        step,
+    ))
+}
+
 fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
     let left_expr = syn_expr_to_abstract_expression(&input.left);
     let right_expr = syn_expr_to_abstract_expression(&input.right);
@@ -170,6 +308,18 @@ fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
         BinOp::Mul(_) => generate_expression("*", left_expr, right_expr),
         BinOp::Rem(_) => generate_expression("%", left_expr, right_expr),
         _ => todo!("expression binary to abstract {:?}", input.op),
+    }
+}
+
+fn operator_of(op: &BinOp) -> &'static str {
+    match op {
+        BinOp::Eq(_) => "==",
+        BinOp::Lt(_) => "<",
+        BinOp::Le(_) => "<=",
+        BinOp::Ne(_) => "!=",
+        BinOp::Ge(_) => ">=",
+        BinOp::Gt(_) => ">",
+        _ => todo!("comparison conversion"),
     }
 }
 
@@ -207,6 +357,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
         },
         Expr::Binary(b) => binary_to_abstract_expression(b),
         Expr::Unary(b) => unary_to_abstract_expression(b),
+        Expr::Paren(p) => syn_expr_to_abstract_expression(&p.expr),
         Expr::MethodCall(c) => {
             let mut var_name: String;
             match *c.receiver.clone() {
@@ -269,10 +420,38 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let output = &vars.item_fn.output;
 
     let mut invariants: Vec<AbstractComparison> = Vec::new();
+    let mut element_bounds: Vec<(String, i64, ExprBinary)> = Vec::new();
+    let mut pointer_values: Vec<(String, i64, String, &'static str, Option<(bool, Expr)>)> =
+        Vec::new();
     let mut asserts = quote! {};
-    if let Some(Expr::Array(a)) = attributes.argument_list.last() {
+    let argument_list = attributes.argument_list.clone();
+    if let Some(Expr::Array(a)) = argument_list.last() {
         for e in &a.elems {
             if let Expr::Binary(b) = e {
+                if let Some(value) = pointer_contents(b, &attributes.argument_list) {
+                    let stored = &*b.left;
+                    let source = match &*b.right {
+                        Expr::MethodCall(call) if call.method == "add" => {
+                            let mut call = call.clone();
+                            call.method = Ident::new("wrapping_add", call.method.span());
+                            Expr::MethodCall(call)
+                        }
+                        Expr::MethodCall(call) if call.method == "byte_add" => {
+                            let mut call = call.clone();
+                            call.method = Ident::new("wrapping_byte_add", call.method.span());
+                            Expr::MethodCall(call)
+                        }
+                        other => other.clone(),
+                    };
+                    asserts = quote! { #asserts assert!(#stored == #source as usize); };
+                    pointer_values.push(value);
+                    continue;
+                }
+                if let Some((array, index)) = element_bound(b) {
+                    element_bounds.push((array, index, b.clone()));
+                    asserts = quote! { #asserts assert!(#e);};
+                    continue;
+                }
                 invariants.push(binary_to_abstract_comparison(b));
                 asserts = quote! { #asserts assert!(#e);};
             } else {
@@ -437,10 +616,28 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut extern_fn = vars.item_fn.clone();
     extern_fn.ident = fn_name.clone();
+    let mut pointer_offsets: HashMap<String, (bool, Expr)> = HashMap::new();
     if !attributes.argument_list.is_empty() {
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
         let mut span = proc_macro2::Span::call_site();
-        for i in attributes.argument_list {
+        for original in attributes.argument_list {
+            let mut offset = None;
+            let i = match original {
+                Expr::MethodCall(ref call)
+                    if matches!(call.method.to_string().as_str(), "add" | "byte_add")
+                        && matches!(&*call.receiver, Expr::MethodCall(_)) =>
+                {
+                    offset = Some((
+                        call.method == "add",
+                        call.args
+                            .first()
+                            .expect("advancing a pointer needs an offset")
+                            .clone(),
+                    ));
+                    (*call.receiver).clone()
+                }
+                other => other,
+            };
             match i {
                 Expr::MethodCall(a) => {
                     let var_name: String;
@@ -454,6 +651,14 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                         _ => todo!("non-path receiver of a method call {:?}", a),
                     };
+                    if let Some((scaled, expression)) = offset.take() {
+                        if scaled {
+                            let buffer = Ident::new(&var_name, span);
+                            asserts =
+                                quote! { #asserts assert!(#expression <= #buffer.len()); };
+                        }
+                        pointer_offsets.insert(var_name.clone(), (scaled, expression));
+                    }
                     match a.method.to_string().as_str() {
                         "len" => {
                             let n = Ident::new(&(var_name + "_len"), span);
@@ -685,7 +890,18 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     _ => todo!("Regions pattern pattern"),
                 }
                 match &*pat_type.ty {
-                    Type::Path(_) => {
+                    Type::Path(p) => {
+                        if ["usize", "u64", "u32", "u16", "u8"]
+                            .iter()
+                            .any(|unsigned| p.path.is_ident(unsigned))
+                            && !input_expressions.contains_key(&name)
+                        {
+                            engine.add_invariant(AbstractComparison::new(
+                                ">=",
+                                AbstractExpression::Abstract(name.clone()),
+                                AbstractExpression::Immediate(0),
+                            ));
+                        }
                         if let Some(binary) = input_expressions.get(&name) {
                             match binary {
                                 Expr::Binary(b) => {
@@ -720,6 +936,29 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
                         let no_range = name.strip_suffix("_end_ptr_range").unwrap_or(no_mut_name);
                         let no_suffix = no_range.strip_suffix("_as_ptr").unwrap_or(no_range);
+
+                        if let Some((scaled, expression)) = pointer_offsets.get(no_suffix) {
+                            let mut offset = syn_expr_to_abstract_expression(expression);
+                            if *scaled {
+                                if let Some(ty) = pointer_sizes.get(no_suffix) {
+                                    offset = generate_expression(
+                                        "*",
+                                        offset,
+                                        AbstractExpression::Immediate(
+                                            calculate_size_of(ty.clone()) as i64,
+                                        ),
+                                    );
+                                }
+                            }
+                            engine.add_abstract_expression_from(
+                                i,
+                                generate_expression(
+                                    "+",
+                                    AbstractExpression::Abstract(name.clone()),
+                                    offset,
+                                ),
+                            );
+                        }
 
                         match &*a.elem {
                             Type::Path(p) => {
@@ -798,13 +1037,16 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                 }
 
                                 if name.contains("_end_ptr_range") {
-                                    let bound = no_suffix.to_owned() + "_len";
+                                    let length = byte_length(
+                                        &(no_suffix.to_owned() + "_len"),
+                                        pointer_sizes.get(no_suffix),
+                                    );
                                     let pointer_name = no_suffix.to_owned() + "_as_ptr";
 
                                     engine.add_region(
                                         RegionType::READ,
                                         pointer_name.clone(),
-                                        byte_length(&bound, pointer_sizes.get(no_suffix)),
+                                        length.clone(),
                                     );
 
                                     engine.add_abstract_expression_from(
@@ -812,7 +1054,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                         generate_expression(
                                             "+",
                                             AbstractExpression::Abstract(pointer_name),
-                                            AbstractExpression::Abstract(bound),
+                                            length,
                                         ),
                                     );
 
@@ -854,6 +1096,85 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
+    for (region, offset, slice, suffix, step) in pointer_values {
+        let base = format!("{}{}", slice, suffix);
+        if passed_pointer(&slice, &argument_list).is_none() {
+            let kind = if suffix == "_as_mut_ptr" {
+                RegionType::RW
+            } else {
+                RegionType::READ
+            };
+            engine.add_region(
+                kind,
+                base.clone(),
+                byte_length(&(slice.clone() + "_len"), pointer_sizes.get(&slice)),
+            );
+        }
+        let mut value = AbstractExpression::Abstract(base);
+        if let Some((scaled, expression)) = step {
+            let mut step = syn_expr_to_abstract_expression(&expression);
+            if scaled {
+                if let Some(ty) = pointer_sizes.get(&slice) {
+                    step = generate_expression(
+                        "*",
+                        step,
+                        AbstractExpression::Immediate(calculate_size_of(ty.clone()) as i64),
+                    );
+                }
+            }
+            value = generate_expression("+", value, step);
+        }
+        engine.add_abstract_to_memory(region, offset, value);
+    }
+    for (name, ty) in &input_types {
+        if let Type::Path(p) = ty {
+            if ["usize", "u64", "u32", "u16", "u8"]
+                .iter()
+                .any(|unsigned| p.path.is_ident(unsigned))
+            {
+                engine.add_invariant(AbstractComparison::new(
+                    ">=",
+                    AbstractExpression::Abstract(name.clone()),
+                    AbstractExpression::Immediate(0),
+                ));
+            }
+        }
+    }
+    for (array, index, comparison) in &element_bounds {
+        let Some((suffix, _)) = passed_pointer(array, &argument_list) else {
+            emit_call_site_error!("{} is not passed as a pointer", array);
+            continue;
+        };
+        let region = array.clone() + suffix;
+        let element = input_types
+            .get(array)
+            .and_then(|ty| match ty {
+                Type::Reference(r) => match &*r.elem {
+                    Type::Slice(sl) => Some(calculate_type_of_slice_ptr(sl)),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .unwrap_or_else(|| {
+                emit_call_site_error!("{} is not a slice, so it has no element size", array);
+                "u8".to_string()
+            });
+        let width = calculate_size_of(element.clone()) as i64;
+        let symbol = format!("{region}[{index}]");
+        engine.add_element_fact(region, *index, width, symbol.clone());
+        if element.starts_with('u') {
+            engine.add_invariant(AbstractComparison::new(
+                ">=",
+                AbstractExpression::Abstract(symbol.clone()),
+                AbstractExpression::Immediate(0),
+            ));
+        }
+        engine.add_invariant(AbstractComparison::new(
+            operator_of(&comparison.op),
+            AbstractExpression::Abstract(symbol),
+            syn_expr_to_abstract_expression(&comparison.right),
+        ));
+    }
     for i in invariants {
         engine.add_invariant(i);
     }
@@ -863,6 +1184,19 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let started = std::time::Instant::now();
     let res = engine.start(label.clone());
     log::info!(target: "bums_macros", "{label}: {:.1}s, {}", started.elapsed().as_secs_f64(), if res.is_ok() { "verified" } else { "failed" });
+
+    let res = res.and_then(|ok| {
+        let unread = engine.unread_element_facts();
+        if unread.is_empty() {
+            Ok(ok)
+        } else {
+            Err(std::io::Error::other(format!(
+                "{}: element precondition never read by the assembly: {}",
+                label,
+                unread.join(", ")
+            )))
+        }
+    });
 
     match res {
         Ok(_) => return token_stream,
