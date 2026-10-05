@@ -1331,6 +1331,55 @@ fn a_chained_select_stride_is_proved_safe() {
     );
 }
 
+fn select_stride_choosing(condition: &[&str], when: &str, rare: i64) -> Vec<String> {
+    let mut program = vec!["start:".to_string(), "loop:".to_string()];
+    program.push("ldr x2,[x0]".to_string());
+    program.extend(condition.iter().map(|s| s.to_string()));
+    program.push("mov x4,#8".to_string());
+    program.push(format!("mov x6,#{rare}"));
+    program.push(format!("csel x4,x6,x4,{when}"));
+    program.push("add x0,x0,x4".to_string());
+    program.push("subs x1,x1,#8".to_string());
+    program.push("b.hs loop".to_string());
+    program.push("ret".to_string());
+    program
+}
+
+fn analyze_with_one_step_of_slack(program: Vec<String>) -> Result<(), String> {
+    init();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression("+", abstract_of("length"), AbstractExpression::Immediate(8)),
+    );
+    engine.add_abstract_from(1, "length");
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        generate_expression("%", abstract_of("length"), AbstractExpression::Immediate(8)),
+        AbstractExpression::Immediate(0),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("length"),
+        AbstractExpression::Immediate(8),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_larger_step_chosen_by_data_is_not_assumed_to_be_rare() {
+    let program = select_stride_choosing(&["ldr x5,[x0]", "cmp x5,#0"], "eq", 16);
+    assert!(analyze_with_one_step_of_slack(program).is_err());
+}
+
+#[test]
+fn a_larger_step_chosen_mid_loop_is_not_assumed_to_be_the_latest() {
+    let program = select_stride_choosing(&["cmp x1,#64"], "hs", 16);
+    assert!(analyze_with_one_step_of_slack(program).is_err());
+}
+
 #[test]
 fn a_chained_select_stride_still_catches_a_read_ahead() {
     assert_rejected_access(analyze_accelerated(
@@ -1338,6 +1387,135 @@ fn a_chained_select_stride_still_catches_a_read_ahead() {
         8,
         8,
     ));
+}
+
+fn negated_chained_select_stride_loop(body: &[&str]) -> Vec<String> {
+    let mut program = vec!["start:", "mov x4,#8", "loop:"];
+    program.extend(body);
+    program.extend([
+        "subs x1,x1,#8",
+        "csel x4,x4,xzr,ne",
+        "add x0,x0,x4",
+        "b.hs loop",
+        "ret",
+    ]);
+    program.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn a_chained_select_stride_spelled_with_ne_is_proved_safe() {
+    assert_eq!(
+        analyze_accelerated(negated_chained_select_stride_loop(&["ldr x2,[x0]"]), 8, 8),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_chained_select_stride_spelled_with_ne_still_catches_a_read_ahead() {
+    assert_rejected_access(analyze_accelerated(
+        negated_chained_select_stride_loop(&["ldr x2,[x0,#8]"]),
+        8,
+        8,
+    ));
+}
+
+fn stepping_loop(choose_step: &[&str]) -> Vec<String> {
+    let mut program = vec!["start:", "loop:", "ldr x2,[x0]", "subs x1,x1,#8"];
+    program.extend(choose_step);
+    program.extend(["cmp x1,#0", "b.ge loop", "ret"]);
+    program.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn a_common_larger_step_is_never_treated_as_the_rare_one() {
+    let program = stepping_loop(&[
+        "mov x4,#8",
+        "mov x6,#16",
+        "cmp x1,#0",
+        "csel x4,x6,x4,ne",
+        "add x0,x0,x4",
+    ]);
+    assert!(analyze_accelerated(program, 8, 64).is_err());
+}
+
+fn analyze_with_slack(program: Vec<String>, slack: i64) -> Result<(), String> {
+    init();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression(
+            "+",
+            abstract_of("length"),
+            AbstractExpression::Immediate(slack),
+        ),
+    );
+    engine.add_abstract_from(1, "length");
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        generate_expression("%", abstract_of("length"), AbstractExpression::Immediate(8)),
+        AbstractExpression::Immediate(0),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("length"),
+        AbstractExpression::Immediate(8),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_common_larger_step_with_slack_for_one_overshoot_is_rejected() {
+    let program = stepping_loop(&[
+        "mov x4,#8",
+        "mov x6,#16",
+        "cmp x1,#0",
+        "csel x4,x6,x4,ne",
+        "add x0,x0,x4",
+    ]);
+    assert!(analyze_with_slack(program, 32).is_err());
+}
+
+#[test]
+fn a_three_way_step_that_overshoots_mid_loop_is_rejected() {
+    let program = stepping_loop(&[
+        "mov x4,#8",
+        "mov x6,#24",
+        "cmp x1,#16",
+        "csel x4,x6,x4,eq",
+        "cmp x1,#0",
+        "csel x4,xzr,x4,eq",
+        "add x0,x0,x4",
+    ]);
+    assert!(analyze_accelerated(program, 8, 64).is_err());
+}
+
+#[test]
+fn a_step_summing_two_selects_that_overshoots_is_rejected() {
+    let program = stepping_loop(&[
+        "mov x4,#8",
+        "cmp x1,#0",
+        "csel x4,xzr,x4,eq",
+        "mov x6,#16",
+        "cmp x1,#16",
+        "csel x5,x6,xzr,eq",
+        "add x0,x0,x4",
+        "add x0,x0,x5",
+    ]);
+    assert!(analyze_accelerated(program, 8, 64).is_err());
+}
+
+#[test]
+fn a_rare_step_taken_from_memory_is_not_trusted() {
+    let program = stepping_loop(&[
+        "ldr x5,[x0]",
+        "mov x4,#8",
+        "cmp x1,#0",
+        "csel x4,x5,x4,eq",
+        "add x0,x0,x4",
+    ]);
+    assert!(analyze_accelerated(program, 8, 64).is_err());
 }
 
 fn shared_header_loop(reenter_on: &str) -> Vec<String> {
@@ -1535,6 +1713,441 @@ fn a_pointer_that_moves_twice_as_far_as_a_count_is_bounded_by_the_count() {
 #[test]
 fn a_pointer_tracking_a_count_still_catches_a_store_past_the_end() {
     assert_rejected_access(analyze_counted_staging("str x5, [x7, #16]"));
+}
+
+fn schoolbook_multiply() -> Vec<String> {
+    [
+        "start:",
+        "cbz x0, end",
+        "mov x6, xzr",
+        "mov x7, xzr",
+        "mov x9, xzr",
+        "outerloop:",
+        "mov x8, xzr",
+        "add x11, x9, #1",
+        "cmp x11, x2",
+        "csel x12, x11, x2, cc",
+        "subs x11, x11, x4",
+        "csel x11, x11, xzr, cs",
+        "subs x10, x12, x11",
+        "b.ls innerend",
+        "lsl x14, x11, #3",
+        "add x14, x14, x3",
+        "sub x15, x9, x12",
+        "lsl x15, x15, #3",
+        "add x15, x15, x5",
+        "innerloop:",
+        "ldr x11, [x14], #8",
+        "ldr x12, [x15, x10, lsl #3]",
+        "mul x13, x11, x12",
+        "umulh x11, x11, x12",
+        "adds x6, x6, x13",
+        "adcs x7, x7, x11",
+        "adc x8, x8, xzr",
+        "subs x10, x10, #1",
+        "b.ne innerloop",
+        "innerend:",
+        "str x6, [x1, x9, lsl #3]",
+        "mov x6, x7",
+        "mov x7, x8",
+        "add x9, x9, #1",
+        "cmp x9, x0",
+        "b.cc outerloop",
+        "end:",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+fn analyze_multiply(extra_z: i64, extra_x: i64, extra_y: i64) -> Result<(), String> {
+    init();
+    let count = |name: &str, extra: i64| {
+        generate_expression("+", abstract_of(name), AbstractExpression::Immediate(extra))
+    };
+    let words =
+        |name: &str| generate_expression("*", abstract_of(name), AbstractExpression::Immediate(8));
+    let mut engine = bums::engine::ExecutionEngine::new(schoolbook_multiply());
+    engine.add_abstract_expression_from(0, count("z_len", extra_z));
+    engine.add_abstract_from(1, "z");
+    engine.add_region(RegionType::WRITE, "z", words("z_len"));
+    engine.add_abstract_expression_from(2, count("x_len", extra_x));
+    engine.add_abstract_from(3, "x");
+    engine.add_region(RegionType::READ, "x", words("x_len"));
+    engine.add_abstract_expression_from(4, count("y_len", extra_y));
+    engine.add_abstract_from(5, "y");
+    engine.add_region(RegionType::READ, "y", words("y_len"));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn pointers_recomputed_every_iteration_do_not_block_the_outer_summary() {
+    assert_eq!(analyze_multiply(0, 0, 0), Ok(()));
+}
+
+#[test]
+fn a_multiply_told_a_longer_operand_than_its_region_is_rejected() {
+    assert!(analyze_multiply(1, 0, 0).is_err());
+    assert!(analyze_multiply(0, 1, 0).is_err());
+    assert!(analyze_multiply(0, 0, 1).is_err());
+}
+
+#[test]
+fn a_pointer_read_before_it_is_recomputed_is_not_forgotten() {
+    let program = [
+        "start:",
+        "mov x4,#8",
+        "mov x3,x0",
+        "loop:",
+        "cbz x2,skip",
+        "add x3,x0,x4",
+        "skip:",
+        "ldr x5,[x3]",
+        "add x4,x4,x4",
+        "add x3,x3,x4",
+        "subs x1,x1,#8",
+        "b.hs loop",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    assert!(analyze(program).is_err());
+}
+
+fn analyze_rewinding_rounds(read: &str, after_rewind: &[&str]) -> Result<(), String> {
+    init();
+    let mut program: Vec<String> = [
+        "start:",
+        "lsr x5,x1,#2",
+        "cbz x5,end",
+        "cbz x2,end",
+        "lsl x5,x5,#5",
+        "outer:",
+        "mov x3,x5",
+        "inner:",
+        read,
+        "add x0,x0,#32",
+        "subs x3,x3,#32",
+        "b.ne inner",
+        "sub x0,x0,x5",
+    ]
+    .map(String::from)
+    .to_vec();
+    program.extend(after_rewind.iter().map(|s| s.to_string()));
+    program.extend(["subs x2,x2,#1", "b.ne outer", "end:", "ret"].map(String::from));
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression("*", abstract_of("words"), AbstractExpression::Immediate(8)),
+    );
+    engine.add_abstract_from(1, "words");
+    engine.add_abstract_from(2, "rounds");
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_pointer_rewound_by_the_inner_count_lets_the_outer_loop_close() {
+    assert_eq!(analyze_rewinding_rounds("ldr x4,[x0,#24]", &[]), Ok(()));
+}
+
+#[test]
+fn a_pointer_rewound_short_of_the_inner_count_is_rejected() {
+    assert!(analyze_rewinding_rounds("ldr x4,[x0,#24]", &["add x0,x0,#8"]).is_err());
+}
+
+#[test]
+fn a_rewinding_walk_that_reads_one_word_past_the_end_is_rejected() {
+    assert!(analyze_rewinding_rounds("ldr x4,[x0,#32]", &[]).is_err());
+}
+
+fn analyze_with_stack_frame(
+    before: &[&str],
+    body: &[&str],
+    after: &[&str],
+    region_length: AbstractExpression,
+) -> Result<(), String> {
+    init();
+    let mut program = vec!["start:", "sub sp,sp,#16"];
+    program.extend(before);
+    program.push("loop:");
+    program.extend(body);
+    program.extend(["b.ne loop", "end:"]);
+    program.extend(after);
+    program.extend(["add sp,sp,#16", "ret"]);
+    let program: Vec<String> = program.iter().map(|s| s.to_string()).collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", region_length);
+    engine.add_abstract_from(1, "count");
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("count"),
+        AbstractExpression::Immediate(1),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+const EIGHT_BYTES: AbstractExpression = AbstractExpression::Immediate(8);
+
+fn index_kept_on_the_stack(step: &str, after_store: &str) -> Result<(), String> {
+    index_on_the_stack_from(0, step, after_store)
+}
+
+fn index_on_the_stack_from(first: i64, step: &str, after_store: &str) -> Result<(), String> {
+    let set = format!("mov x9,#{first}");
+    analyze_with_stack_frame(
+        &[set.as_str(), "str x9,[sp,#8]"],
+        &[
+            "ldr x9,[sp,#8]",
+            "ldrb w10,[x0,x9]",
+            step,
+            "str x9,[sp,#8]",
+            after_store,
+            "subs x1,x1,#1",
+        ],
+        &[],
+        EIGHT_BYTES,
+    )
+}
+
+#[test]
+fn an_index_kept_only_on_the_stack_still_walks_off_the_region() {
+    assert!(index_kept_on_the_stack("add x9,x9,#1", "mov x9,#0").is_err());
+}
+
+#[test]
+fn an_index_reloaded_from_the_stack_each_iteration_still_walks_off_the_region() {
+    assert!(index_kept_on_the_stack("add x9,x9,#1", "nop").is_err());
+}
+
+#[test]
+fn an_index_on_the_stack_that_doubles_is_not_given_a_step() {
+    assert!(index_on_the_stack_from(1, "add x9,x9,x9", "nop").is_err());
+    assert_eq!(index_on_the_stack_from(0, "add x9,x9,x9", "nop"), Ok(()));
+}
+
+fn counter_kept_on_the_stack(read: &str) -> Result<(), String> {
+    analyze_with_stack_frame(
+        &["str x1,[sp,#8]"],
+        &[
+            read,
+            "add x0,x0,#1",
+            "ldr x9,[sp,#8]",
+            "subs x9,x9,#1",
+            "str x9,[sp,#8]",
+        ],
+        &[],
+        abstract_of("count"),
+    )
+}
+
+#[test]
+fn a_counter_kept_on_the_stack_bounds_the_walk() {
+    assert_eq!(counter_kept_on_the_stack("ldrb w10,[x0]"), Ok(()));
+}
+
+#[test]
+fn a_counter_kept_on_the_stack_still_catches_a_read_past_the_end() {
+    assert!(counter_kept_on_the_stack("ldrb w10,[x0,#1]").is_err());
+}
+
+fn slot_rewritten_with_the_same_value(value: i64) -> Result<(), String> {
+    let set = format!("mov x5,#{value}");
+    analyze_with_stack_frame(
+        &[set.as_str()],
+        &["str x5,[sp,#8]", "subs x1,x1,#1"],
+        &["ldr x9,[sp,#8]", "ldrb w10,[x0,x9]"],
+        EIGHT_BYTES,
+    )
+}
+
+#[test]
+fn a_slot_rewritten_with_the_same_value_keeps_it_after_the_loop() {
+    assert_eq!(slot_rewritten_with_the_same_value(7), Ok(()));
+    assert!(slot_rewritten_with_the_same_value(8).is_err());
+}
+
+fn slot_the_loop_never_writes(value: i64) -> Result<(), String> {
+    let set = format!("mov x5,#{value}");
+    analyze_with_stack_frame(
+        &[set.as_str(), "str x5,[sp,#8]"],
+        &["add x6,x6,#1", "subs x1,x1,#1"],
+        &["ldr x9,[sp,#8]", "ldrb w10,[x0,x9]"],
+        EIGHT_BYTES,
+    )
+}
+
+#[test]
+fn a_slot_the_loop_never_writes_keeps_its_value() {
+    assert_eq!(slot_the_loop_never_writes(7), Ok(()));
+    assert!(slot_the_loop_never_writes(8).is_err());
+}
+
+#[test]
+fn a_slot_whose_value_the_loop_loses_is_unknown_afterwards() {
+    let result = analyze_with_stack_frame(
+        &["mov x9,#1", "str x9,[sp,#8]"],
+        &[
+            "ldr x9,[sp,#8]",
+            "add x9,x9,x9",
+            "str x9,[sp,#8]",
+            "subs x1,x1,#1",
+        ],
+        &["ldr x9,[sp,#8]", "ldrb w10,[x0,x9]"],
+        EIGHT_BYTES,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn a_store_to_the_stack_at_an_unknown_offset_may_clobber_the_index_slot() {
+    let result = analyze_with_stack_frame(
+        &["mov x9,#0", "str x9,[sp,#8]"],
+        &[
+            "str x9,[sp,x2]",
+            "ldr x9,[sp,#8]",
+            "ldrb w10,[x0,x9]",
+            "subs x1,x1,#1",
+        ],
+        &[],
+        EIGHT_BYTES,
+    );
+    assert!(result.is_err());
+}
+
+fn buffer_filled_below_a_counter_slot(store: &str) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "sub sp,sp,#80",
+        "str x1,[sp,#72]",
+        "mov x7,sp",
+        "mov x6,#8",
+        "loop:",
+        "ldrb w10,[x0]",
+        "add x0,x0,#1",
+        store,
+        "subs x6,x6,#1",
+        "csel x6,x6,xzr,hi",
+        "add x7,x7,#8",
+        "csel x7,x7,sp,hi",
+        "ldr x9,[sp,#72]",
+        "subs x9,x9,#1",
+        "str x9,[sp,#72]",
+        "b.ne loop",
+        "add sp,sp,#80",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("count"));
+    engine.add_abstract_from(1, "count");
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("count"),
+        AbstractExpression::Immediate(1),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+fn buffer_filled_beside_an_unused_slot(read: &str) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "sub sp,sp,#80",
+        "str x5,[sp,#8]",
+        "mov x7,sp",
+        "mov x4,#8",
+        "loop:",
+        read,
+        "add x0,x0,#1",
+        "cmp x2,#0",
+        "csel x3,xzr,x4,eq",
+        "str x10,[x7,x3]",
+        "subs x1,x1,#1",
+        "b.ne loop",
+        "add sp,sp,#80",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("count"));
+    engine.add_abstract_from(1, "count");
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("count"),
+        AbstractExpression::Immediate(1),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_loop_that_may_clobber_a_slot_it_never_reads_is_still_summarized() {
+    assert_eq!(buffer_filled_beside_an_unused_slot("ldrb w10,[x0]"), Ok(()));
+    assert!(buffer_filled_beside_an_unused_slot("ldrb w10,[x0,#1]").is_err());
+}
+
+#[test]
+fn a_store_through_an_untracked_stack_pointer_loses_the_counter_slot() {
+    assert!(buffer_filled_below_a_counter_slot("str x10,[x7,x2]").is_err());
+}
+
+fn chunked_then_blocked_walk(tail_read: &str) -> Vec<String> {
+    [
+        "start:",
+        "big:",
+        "ldrb w5,[x0,#127]",
+        "add x0,x0,#128",
+        "sub x2,x2,#128",
+        "cmp x2,#128",
+        "b.hs big",
+        "cbz x2,end",
+        "b small",
+        "small:",
+        "subs x2,x2,#64",
+        "b.lo tail",
+        "ldrb w5,[x0,#63]",
+        "add x0,x0,#64",
+        "b.hi small",
+        "ret",
+        "tail:",
+        "add x2,x2,#64",
+        tail_read,
+        "end:",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+fn analyze_chunked_then_blocked_walk(tail_read: &str) -> Result<(), String> {
+    init();
+    let mut engine = bums::engine::ExecutionEngine::new(chunked_then_blocked_walk(tail_read));
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("length"));
+    engine.add_abstract_from(2, "length");
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("length"),
+        AbstractExpression::Immediate(128),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_block_loop_entered_after_a_chunk_loop_is_proved_safe() {
+    assert_eq!(analyze_chunked_then_blocked_walk("ldrb w5,[x0]"), Ok(()));
+}
+
+#[test]
+fn a_block_loop_entered_after_a_chunk_loop_still_catches_a_tail_read_past_the_end() {
+    assert!(analyze_chunked_then_blocked_walk("ldrb w5,[x0,x2]").is_err());
 }
 
 #[test]

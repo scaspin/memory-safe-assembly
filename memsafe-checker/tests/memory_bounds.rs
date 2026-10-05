@@ -201,3 +201,84 @@ fn a_shifted_register_index_is_scaled() {
     assert!(accepts_scaled_index(7));
     assert!(!accepts_scaled_index(8));
 }
+
+fn accepts_read_from_second_table(offset: i64) -> bool {
+    init();
+    let program: Vec<String> = [
+        ".quad 1,2".to_string(),
+        "second:".to_string(),
+        ".quad 3".to_string(),
+        "start:".to_string(),
+        "adr x1,second".to_string(),
+        format!("ldr x2,[x1,#{offset}]"),
+        "ret".to_string(),
+    ]
+    .to_vec();
+    bums::engine::ExecutionEngine::new(program)
+        .start("start".to_string())
+        .is_ok()
+}
+
+#[test]
+fn a_data_label_points_at_its_own_offset_in_the_static_data() {
+    assert!(accepts_read_from_second_table(0));
+    assert!(!accepts_read_from_second_table(8));
+    assert!(accepts_read_from_second_table(-16));
+    assert!(!accepts_read_from_second_table(-24));
+}
+
+fn accepts_read_through_a_page_pair(offset: i64) -> bool {
+    init();
+    let program: Vec<String> = [
+        ".quad 1,2".to_string(),
+        "second:".to_string(),
+        ".quad 3,4".to_string(),
+        "start:".to_string(),
+        "adrp x1,second@PAGE+8".to_string(),
+        "add x1,x1,second@PAGEOFF+8".to_string(),
+        format!("ldr x2,[x1,#{offset}]"),
+        "ret".to_string(),
+    ]
+    .to_vec();
+    bums::engine::ExecutionEngine::new(program)
+        .start("start".to_string())
+        .is_ok()
+}
+
+#[test]
+fn a_page_and_offset_pair_lands_on_the_label_plus_its_addend() {
+    assert!(accepts_read_through_a_page_pair(0));
+    assert!(!accepts_read_through_a_page_pair(8));
+    assert!(accepts_read_through_a_page_pair(-24));
+    assert!(!accepts_read_through_a_page_pair(-32));
+}
+
+fn accepts_walk_to_the_next_boundary(padding: usize, align: &str) -> bool {
+    init();
+    let mut program = vec![align.to_string()];
+    program.extend(std::iter::repeat_n(".quad 0".to_string(), padding));
+    program.push("table:".to_string());
+    program.extend(std::iter::repeat_n(".quad 7".to_string(), 4));
+    program.extend(
+        [
+            "start:",
+            "adr x1,table",
+            "loop:",
+            "ldr x2,[x1],#8",
+            "tst x1,#63",
+            "b.ne loop",
+            "ret",
+        ]
+        .map(String::from),
+    );
+    bums::engine::ExecutionEngine::new(program)
+        .start("start".to_string())
+        .is_ok()
+}
+
+#[test]
+fn a_walk_ending_on_an_aligned_address_is_bounded_by_the_layout() {
+    assert!(accepts_walk_to_the_next_boundary(4, ".align 6"));
+    assert!(!accepts_walk_to_the_next_boundary(3, ".align 6"));
+    assert!(!accepts_walk_to_the_next_boundary(4, ".align 3"));
+}

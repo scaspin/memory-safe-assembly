@@ -113,6 +113,70 @@ fn register_destination(instruction: &Instruction) -> Option<Option<Operand>> {
     }
 }
 
+const LIVENESS_TRACKED_REGISTERS: usize = 30;
+const WIDEST_STORED_VALUE: i64 = 16;
+const MAX_CELL_RETRIES: usize = 4;
+
+fn general_register_index(prefix: &RePrefix, number: usize) -> Option<usize> {
+    match prefix {
+        RePrefix::X | RePrefix::W => Some(number),
+        RePrefix::Fp => Some(29),
+        RePrefix::Ra => Some(30),
+        _ => None,
+    }
+}
+
+fn operand_mentions(operand: &Operand, register: usize) -> bool {
+    match operand {
+        Operand::Register(prefix, number) => {
+            general_register_index(prefix, *number) == Some(register)
+        }
+        Operand::Memory(prefix, number, _, index, _) => {
+            general_register_index(prefix, *number) == Some(register)
+                || index
+                    .as_ref()
+                    .is_some_and(|index| operand_mentions(index, register))
+        }
+        _ => false,
+    }
+}
+
+fn overwritten_operands(instruction: &Instruction) -> usize {
+    let keeps_part_of_destination = matches!(instruction.opcode.as_str(), "movk" | "bfi" | "bfxil");
+    if keeps_part_of_destination {
+        return 0;
+    }
+    if instruction.ty == InstructionType::Memory {
+        return match instruction.opcode.as_str() {
+            "ldr" | "ldur" | "ldrb" | "ldrh" | "ldrsw" | "ldrsb" | "ldrsh" => 1,
+            "ldp" => 2,
+            _ => 0,
+        };
+    }
+    match register_destination(instruction) {
+        Some(Some(_)) => 1,
+        _ => 0,
+    }
+}
+
+fn overwrites_without_reading(instruction: &Instruction, register: usize) -> bool {
+    let (written, read) = instruction
+        .operands
+        .split_at(overwritten_operands(instruction).min(instruction.operands.len()));
+    written.iter().any(|operand| {
+        matches!(operand, Operand::Register(..)) && operand_mentions(operand, register)
+    }) && !read
+        .iter()
+        .any(|operand| operand_mentions(operand, register))
+}
+
+fn mentions(instruction: &Instruction, register: usize) -> bool {
+    instruction
+        .operands
+        .iter()
+        .any(|operand| operand_mentions(operand, register))
+}
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct BranchPoint {
@@ -120,6 +184,7 @@ struct BranchPoint {
     condition: AbstractComparison,
     accesses: Vec<MemoryAccess>,
     state: ComputerState,
+    journal_len: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -144,6 +209,7 @@ struct Summary {
     exits: Vec<(usize, bool)>,
     ranges: Vec<(String, i64)>,
     ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
+    continuing: AbstractComparison,
 }
 
 impl Summary {
@@ -184,6 +250,13 @@ fn anchored(
 ) -> AbstractExpression {
     match e {
         AbstractExpression::Register(r) => {
+            if let Some(step) = ghost_step(ghosts, r) {
+                return rewind(
+                    value_of(r),
+                    SUMMARY_ITERATION,
+                    &AbstractExpression::Immediate(step),
+                );
+            }
             let found = current
                 .iter()
                 .position(|c| c == &**r)
@@ -243,9 +316,13 @@ fn flag_at_summary(
     e: &AbstractExpression,
     current: &[RegisterValue],
     updates: &[(usize, RegisterValue)],
+    clobbered_operand: &dyn Fn(&RegisterValue) -> Option<AbstractExpression>,
 ) -> Option<AbstractExpression> {
     match e {
         AbstractExpression::Register(r) => {
+            if let Some(tracked) = clobbered_operand(r) {
+                return Some(tracked);
+            }
             let mut rewrites = current
                 .iter()
                 .enumerate()
@@ -265,8 +342,8 @@ fn flag_at_summary(
         }
         AbstractExpression::Expression(op, a, b) => Some(generate_expression(
             op,
-            flag_at_summary(a, current, updates)?,
-            flag_at_summary(b, current, updates)?,
+            flag_at_summary(a, current, updates, clobbered_operand)?,
+            flag_at_summary(b, current, updates, clobbered_operand)?,
         )),
         AbstractExpression::Immediate(_) => Some(e.clone()),
         _ => None,
@@ -472,7 +549,8 @@ where
     if previous.op != current.op {
         return found;
     }
-    let live = |r: &RegisterValue| now.contains(r) || entry.contains(r);
+    let _ = entry;
+    let live = |r: &RegisterValue| now.contains(r);
     for (side, before, after) in [
         (true, &previous.left, &current.left),
         (false, &previous.right, &current.right),
@@ -710,6 +788,53 @@ fn facts_for_exit(
     facts
 }
 
+fn stepped_by_the_counter(
+    cur: &RegisterValue,
+    step: &AbstractExpression,
+    counter: &LoopCounter,
+) -> RegisterValue {
+    let kind = if cur.base.is_some() {
+        cur.kind.clone()
+    } else {
+        RegisterKind::RegisterBase
+    };
+    let narrowed = cur.base.as_ref().is_some_and(is_narrowed);
+    match (&cur.base, step) {
+        (Some(base), AbstractExpression::Immediate(stride)) if !narrowed => RegisterValue {
+            kind,
+            base: Some(advance(base.clone(), step, counter)),
+            offset: cur.offset - SUMMARY_ITERATION * stride,
+        },
+        _ => {
+            let anchor = rewind(value_of(cur), SUMMARY_ITERATION, step);
+            let advanced = advance(anchor, step, counter);
+            RegisterValue {
+                kind,
+                base: Some(if narrowed {
+                    generate_expression("%", advanced, AbstractExpression::Immediate(1i64 << 32))
+                } else {
+                    advanced
+                }),
+                offset: 0,
+            }
+        }
+    }
+}
+
+fn cells_written(journal: &[CellWrite]) -> Vec<(MemoryCell, RegisterValue)> {
+    let mut seen: Vec<(MemoryCell, RegisterValue)> = Vec::new();
+    for write in journal {
+        if seen.iter().all(|(cell, _)| *cell != write.cell) {
+            let before = write
+                .previous
+                .clone()
+                .unwrap_or_else(|| RegisterValue::new(RegisterKind::Number, None, 0));
+            seen.push((write.cell.clone(), before));
+        }
+    }
+    seen
+}
+
 fn summarize(
     id: LoopId,
     pc: usize,
@@ -732,39 +857,7 @@ fn summarize(
         match invariant {
             LoopInvariant::Fixed => (),
             LoopInvariant::Linear(step) => {
-                let kind = if cur.base.is_some() {
-                    cur.kind.clone()
-                } else {
-                    RegisterKind::RegisterBase
-                };
-                let narrowed = cur.base.as_ref().is_some_and(is_narrowed);
-                let register = match (&cur.base, &step) {
-                    (Some(base), AbstractExpression::Immediate(stride)) if !narrowed => {
-                        RegisterValue {
-                            kind,
-                            base: Some(advance(base.clone(), &step, &counter)),
-                            offset: cur.offset - SUMMARY_ITERATION * stride,
-                        }
-                    }
-                    _ => {
-                        let anchor = rewind(value_of(cur), SUMMARY_ITERATION, &step);
-                        let advanced = advance(anchor, &step, &counter);
-                        RegisterValue {
-                            kind,
-                            base: Some(if narrowed {
-                                generate_expression(
-                                    "%",
-                                    advanced,
-                                    AbstractExpression::Immediate(1i64 << 32),
-                                )
-                            } else {
-                                advanced
-                            }),
-                            offset: 0,
-                        }
-                    }
-                };
-                updates.push((i, register));
+                updates.push((i, stepped_by_the_counter(cur, &step, &counter)));
             }
             LoopInvariant::AtMost(bound) => {
                 let progress = AbstractExpression::Abstract(format!("{name}_progress_{i}"));
@@ -867,10 +960,16 @@ fn summarize(
         ));
     }
 
+    let clobbered_operand = |r: &RegisterValue| {
+        ghosts
+            .iter()
+            .find(|ghost| ghost.value == *r && !current.0.contains(r))
+            .map(|ghost| ghost_at_summary(ghost, &counter, 0))
+    };
     let flag = |label: &str, prev: &Option<FlagValue>, cur: &Option<FlagValue>| match cur {
         Some(FlagValue::Abstract(c)) if prev != cur => match (
-            flag_at_summary(&c.left, &current.0, &updates),
-            flag_at_summary(&c.right, &current.0, &updates),
+            flag_at_summary(&c.left, &current.0, &updates, &clobbered_operand),
+            flag_at_summary(&c.right, &current.0, &updates, &clobbered_operand),
         ) {
             (Some(left), Some(right)) => Some(FlagValue::Abstract(AbstractComparison::new(
                 &c.op, left, right,
@@ -966,7 +1065,8 @@ fn summarize(
         side_at_summary(true, &condition.left),
         side_at_summary(false, &condition.right),
     );
-    facts.push(if continues_when { held } else { held.not() });
+    let continuing = if continues_when { held } else { held.not() };
+    facts.push(continuing.clone());
     let ghost_checks = ghosts
         .iter()
         .map(|ghost| (ghost.path.clone(), ghost_at_summary(ghost, &counter, 1)))
@@ -985,7 +1085,59 @@ fn summarize(
         exits,
         ranges,
         ghost_checks,
+        continuing,
     }
+}
+
+fn with_counter_at(
+    e: &AbstractExpression,
+    counter: &str,
+    value: &AbstractExpression,
+) -> AbstractExpression {
+    match e {
+        AbstractExpression::Abstract(symbol) if symbol == counter => value.clone(),
+        AbstractExpression::Expression(op, left, right) => generate_expression(
+            op,
+            with_counter_at(left, counter, value),
+            with_counter_at(right, counter, value),
+        ),
+        AbstractExpression::Register(register) => {
+            AbstractExpression::Register(Box::new(RegisterValue {
+                kind: register.kind.clone(),
+                base: register
+                    .base
+                    .as_ref()
+                    .map(|base| with_counter_at(base, counter, value)),
+                offset: register.offset,
+            }))
+        }
+        other => other.clone(),
+    }
+}
+
+fn comparison_with_counter_at(
+    comparison: &AbstractComparison,
+    counter: &str,
+    value: &AbstractExpression,
+) -> AbstractComparison {
+    AbstractComparison::new(
+        &comparison.op,
+        with_counter_at(&comparison.left, counter, value),
+        with_counter_at(&comparison.right, counter, value),
+    )
+}
+
+#[derive(Debug, Clone)]
+struct SettledSelectStep {
+    register: usize,
+    holds_the_select: bool,
+    condition: AbstractComparison,
+    rare: i64,
+    usual: i64,
+}
+
+fn constant_value(e: &AbstractExpression) -> Option<i64> {
+    linear_form(e).and_then(|form| form.terms.is_empty().then_some(form.constant))
 }
 
 #[derive(Debug, Clone)]
@@ -1015,6 +1167,12 @@ struct ActiveLoop {
     round: usize,
     nested_facts: Vec<ast::Bool>,
     ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
+    cells: Vec<(MemoryCell, LoopInvariant)>,
+    journal_before_summary: usize,
+    journal_after_summary: usize,
+    blind_writes_at_summary: usize,
+    settled_steps: Vec<SettledSelectStep>,
+    continuing: AbstractComparison,
 }
 
 #[derive(Clone)]
@@ -1038,12 +1196,17 @@ pub struct ExecutionEngine {
     active_loops: Vec<ActiveLoop>,
     loop_attempts: HashMap<usize, LoopAttempt>,
     jump_history: Vec<JumpRecord>,
+    concrete_decisions: HashMap<usize, bool>,
     select_history: Vec<usize>,
     value_ranges: HashMap<String, i64>,
     fail_fast: bool,
     summaries: Rc<RefCell<Vec<Summary>>>,
     failed_summaries: Rc<RefCell<HashMap<usize, usize>>>,
+    dead_registers: Rc<RefCell<HashMap<usize, Rc<Vec<usize>>>>>,
     unstable_registers: Rc<RefCell<HashMap<usize, HashSet<usize>>>>,
+    unstable_cells: Rc<RefCell<HashMap<usize, HashSet<MemoryCell>>>>,
+    cell_retries: Rc<RefCell<HashMap<usize, usize>>>,
+    refuted_select_steps: Rc<RefCell<HashSet<usize>>>,
     counted_failures: Rc<RefCell<HashSet<(usize, LoopId, usize)>>>,
     next_loop_id: Rc<Cell<usize>>,
     scopes: Vec<Scope>,
@@ -1074,13 +1237,21 @@ impl ExecutionEngine {
         let mut code: Vec<Instruction> = Vec::new();
         let mut labels: Vec<(String, usize)> = Vec::new();
         let mut ifdefs: Vec<((String, usize), usize)> = Vec::new();
+        let mut defs_before_label: Vec<(String, usize, usize)> = Vec::new();
+        let mut instructions_before_def: Vec<usize> = Vec::new();
+        let mut instructions_seen = 0usize;
 
         let mut line_number = 0;
         let mut inifdef = false;
         let mut lastifdef: (String, usize) = ("Start".to_string(), 0);
 
-        for line in lines {
+        let statements = lines.into_iter().flat_map(|line| {
             let line: String = line.into();
+            let code = line.split_once("//").map_or(line.as_str(), |(c, _)| c);
+            let code = code.split_once(';').map_or(code, |(c, _)| c);
+            code.split("%%").map(str::to_string).collect::<Vec<_>>()
+        });
+        for line in statements {
             let trimmed = line.trim();
             let text = match trimmed.split_once("//") {
                 Some(strings) => strings.0.to_string(),
@@ -1089,8 +1260,9 @@ impl ExecutionEngine {
 
             if text.is_empty() || text.starts_with("#") {
                 continue;
-            } else if text.starts_with('.') {
+            } else if text.starts_with('.') && !text.ends_with(':') {
                 defs.push(text);
+                instructions_before_def.push(instructions_seen);
             } else {
                 if text.starts_with('#') {
                     if inifdef {
@@ -1104,7 +1276,10 @@ impl ExecutionEngine {
 
                 let i = Instruction::new(text.clone());
                 if i.ty == InstructionType::Label {
+                    defs_before_label.push((i.opcode.clone(), defs.len(), instructions_seen));
                     labels.push((i.opcode, line_number));
+                } else {
+                    instructions_seen += 1;
                 }
                 code.push(Instruction::new(text));
 
@@ -1115,14 +1290,26 @@ impl ExecutionEngine {
         let mut computer = ARMCORTEXA::new();
 
         let mut address: i64 = 0;
-        for def in defs.iter() {
+        let mut data_blocks: Vec<usize> = Vec::new();
+        let mut boundaries: Vec<(usize, i64)> = Vec::new();
+        for (position, def) in defs.iter().enumerate() {
+            for (label, _, _) in defs_before_label
+                .iter()
+                .filter(|(_, at, _)| *at == position)
+            {
+                computer.memory_labels.insert(label.clone(), address);
+            }
             let v: Vec<&str> = def.split(['\t', ',', ' ']).collect();
             if v[0] == ".align" {
                 if let Some(n) = v.get(1).and_then(|n| n.parse::<u32>().ok()) {
                     let boundary = 1i64 << n;
                     address = (address + boundary - 1) & !(boundary - 1);
+                    boundaries.push((instructions_before_def[position], boundary));
                 }
             } else if let Some(item) = item_size(v[0]) {
+                if !data_blocks.contains(&instructions_before_def[position]) {
+                    data_blocks.push(instructions_before_def[position]);
+                }
                 for i in v.iter().skip(1) {
                     if i.is_empty() {
                         continue;
@@ -1144,7 +1331,37 @@ impl ExecutionEngine {
                     .insert(def.strip_suffix(":").unwrap_or(def).to_string(), address);
             }
         }
+        for (label, _, _) in defs_before_label
+            .iter()
+            .filter(|(_, at, _)| *at == defs.len())
+        {
+            computer.memory_labels.insert(label.clone(), address);
+        }
         computer.grow_memory_region("memory".to_string(), address);
+        let holds_data =
+            |def: &String| item_size(def.split(['\t', ',', ' ']).next().unwrap_or("")).is_some();
+        let a_later_block_is_labelled = defs_before_label.iter().any(|(_, at, placed)| {
+            defs.get(*at).is_some_and(holds_data)
+                && instructions_before_def.get(*at) == Some(placed)
+                && data_blocks.first() != Some(placed)
+        });
+        if let Some(first_block) = data_blocks.first()
+            && !a_later_block_is_labelled
+        {
+            let start_boundary = boundaries
+                .iter()
+                .filter(|(block, _)| block == first_block)
+                .map(|(_, boundary)| *boundary)
+                .max()
+                .unwrap_or(1);
+            if start_boundary > 1 {
+                computer.solver.assert(
+                    ast::Int::new_const("memory")
+                        .modulo(ast::Int::from_i64(start_boundary))
+                        .eq(ast::Int::from_i64(0)),
+                );
+            }
+        }
 
         ExecutionEngine {
             program: Rc::new(Program {
@@ -1154,13 +1371,18 @@ impl ExecutionEngine {
             }),
             computer,
             jump_history: Vec::new(),
+            concrete_decisions: HashMap::new(),
             select_history: Vec::new(),
             value_ranges: HashMap::new(),
             active_loops: Vec::new(),
             fail_fast: true,
             summaries: Rc::new(RefCell::new(Vec::new())),
             failed_summaries: Rc::new(RefCell::new(HashMap::new())),
+            dead_registers: Rc::new(RefCell::new(HashMap::new())),
             unstable_registers: Rc::new(RefCell::new(HashMap::new())),
+            unstable_cells: Rc::new(RefCell::new(HashMap::new())),
+            cell_retries: Rc::new(RefCell::new(HashMap::new())),
+            refuted_select_steps: Rc::new(RefCell::new(HashSet::new())),
             counted_failures: Rc::new(RefCell::new(HashSet::new())),
             next_loop_id: Rc::new(Cell::new(0)),
             loop_attempts: HashMap::new(),
@@ -1426,6 +1648,18 @@ impl ExecutionEngine {
                 self.suspend_for_call(pc);
             }
 
+            if is_conditional_branch(&instruction.opcode) {
+                match &execute_result {
+                    Ok(ExecuteReturnType::Next) => {
+                        self.concrete_decisions.insert(pc, false);
+                    }
+                    Ok(ExecuteReturnType::JumpLabel(_)) => {
+                        self.concrete_decisions.insert(pc, true);
+                    }
+                    _ => (),
+                }
+            }
+
             match execute_result {
                 Ok(res) => match res {
                     ExecuteReturnType::Next => Ok(Step::Continue(pc + 1)),
@@ -1682,6 +1916,7 @@ impl ExecutionEngine {
                     condition: condition.clone(),
                     accesses: rw_list,
                     state: self.computer.get_state(),
+                    journal_len: self.computer.write_journal.len(),
                 };
                 self.jump_history.push(JumpRecord {
                     point: here.clone(),
@@ -1726,6 +1961,7 @@ impl ExecutionEngine {
                         condition: condition.clone(),
                         accesses: self.computer.read_rw_queue(),
                         state: self.computer.get_state(),
+                        journal_len: self.computer.write_journal.len(),
                     },
                     taken,
                     resolved: false,
@@ -1914,6 +2150,7 @@ impl ExecutionEngine {
                 condition: condition.clone(),
                 accesses: rw_list.to_vec(),
                 state: entry,
+                journal_len: self.computer.write_journal.len(),
             },
             taken: true,
             resolved: true,
@@ -2277,9 +2514,24 @@ impl ExecutionEngine {
             log::info!("line {pc} branches inside a loop body, not summarized there");
             return None;
         }
+        if let Some((_, _, walked)) =
+            self.cycle_back_edge(pc, branch_decision, &history[index + 1..])
+            && let Some(open) = self
+                .active_loops
+                .iter()
+                .find(|open| walked.contains(&open.pc))
+        {
+            log::info!(
+                "line {pc} is on the cycle of {} at line {}, not summarized again",
+                open.id,
+                open.pc
+            );
+            return None;
+        }
 
-        let mut current_state = self.computer.get_state();
         let mut entry_state = previous.state.clone();
+        self.forget_dead_registers(pc, expression, &mut [&mut entry_state]);
+        let mut current_state = self.computer.get_state();
         let observed = self.invariants_while_staying(
             expression,
             branch_decision,
@@ -2340,6 +2592,37 @@ impl ExecutionEngine {
             return None;
         }
 
+        let cycle_start = previous.journal_len.min(self.computer.write_journal.len());
+        let unstable_cells = self
+            .unstable_cells
+            .borrow()
+            .get(&pc)
+            .cloned()
+            .unwrap_or_default();
+        let mut cells: Vec<(MemoryCell, LoopInvariant)> =
+            cells_written(&self.computer.write_journal[cycle_start..])
+                .into_iter()
+                .map(|(cell, before)| {
+                    let now = self.computer.cell_content(&cell);
+                    let invariant = match invariant_of_register(&before, &now) {
+                        _ if unstable_cells.contains(&cell) => LoopInvariant::Unknown,
+                        LoopInvariant::Fixed => LoopInvariant::Fixed,
+                        LoopInvariant::Linear(step)
+                            if matches!(step, AbstractExpression::Immediate(_)) =>
+                        {
+                            LoopInvariant::Linear(step)
+                        }
+                        _ => LoopInvariant::Unknown,
+                    };
+                    (cell, invariant)
+                })
+                .collect();
+        for cell in unstable_cells {
+            if cells.iter().all(|(known, _)| *known != cell) {
+                cells.push((cell, LoopInvariant::Unknown));
+            }
+        }
+
         let id = attempt.id;
         let ghosts = ghost_operands(
             &previous.condition,
@@ -2352,7 +2635,7 @@ impl ExecutionEngine {
                     .flatten()
             },
         );
-        let summary = summarize(
+        let mut summary = summarize(
             id,
             pc,
             self.enclosing_label(pc),
@@ -2369,6 +2652,19 @@ impl ExecutionEngine {
                 &self.loop_exits(pc, branch_decision, &history[index + 1..]),
             ),
         );
+        let continuing_now = if branch_decision {
+            expression.clone()
+        } else {
+            expression.clone().not()
+        };
+        let settled_steps = self.settle_select_steps(
+            &mut summary,
+            &entry_state,
+            &current_state,
+            &ghosts,
+            &continuing_now,
+        );
+        let continuing_at_summary = summary.continuing.clone();
         log::info!(
             "detected {id} at line {pc} in {:?}, round {}",
             summary.label.as_deref().unwrap_or("?"),
@@ -2403,6 +2699,23 @@ impl ExecutionEngine {
         for (i, new_reg) in summary.updates.iter().cloned() {
             self.computer.registers[i] = new_reg;
         }
+        let journal_before_summary = self.computer.write_journal.len();
+        let counter = LoopCounter::for_loop(id);
+        for (cell, invariant) in &cells {
+            let stored = self.computer.cell_content(cell);
+            let generalized = match invariant {
+                LoopInvariant::Fixed => continue,
+                LoopInvariant::Linear(step) => stepped_by_the_counter(&stored, step, &counter),
+                _ => RegisterValue::new(RegisterKind::Number, None, 0),
+            };
+            log::info!(
+                "{id} cell {}+{} invariant: {invariant:?} now {generalized:?}",
+                cell.region,
+                cell.offset
+            );
+            self.computer.write_cell(cell, generalized);
+        }
+        let journal_after_summary = self.computer.write_journal.len();
         self.value_ranges.extend(summary.ranges.iter().cloned());
         self.computer.set_flags(summary.flags.clone());
         let invariants = summary.invariants.clone();
@@ -2430,6 +2743,12 @@ impl ExecutionEngine {
             round,
             nested_facts: Vec::new(),
             ghost_checks,
+            cells,
+            journal_before_summary,
+            journal_after_summary,
+            blind_writes_at_summary: self.computer.blind_stack_writes.len(),
+            settled_steps,
+            continuing: continuing_at_summary,
         });
         Some(branch_decision)
     }
@@ -2543,6 +2862,392 @@ impl ExecutionEngine {
         }
     }
 
+    fn literal_leaves(&self, e: &AbstractExpression, fuel: usize, found: &mut Vec<i64>) {
+        if let Some(value) = constant_value(e) {
+            if !found.contains(&value) {
+                found.push(value);
+            }
+            return;
+        }
+        if fuel == 0 {
+            return;
+        }
+        if let AbstractExpression::Abstract(name) = e
+            && let Some((_, taken, skipped)) = self.computer.select_definitions.get(name)
+        {
+            self.literal_leaves(taken, fuel - 1, found);
+            self.literal_leaves(skipped, fuel - 1, found);
+        }
+    }
+
+    fn arm_constant(
+        &self,
+        arm: &AbstractExpression,
+        continuing_now: &AbstractComparison,
+    ) -> Option<i64> {
+        if let Some(value) = constant_value(arm) {
+            return Some(value);
+        }
+        let mut candidates = Vec::new();
+        self.literal_leaves(arm, MAX_SELECT_CHAIN, &mut candidates);
+        let term = expression_to_ast(arm.clone())?;
+        let mut assuming = self.computer.select_assumptions(arm);
+        assuming.extend(self.computer.select_assumptions(&continuing_now.left));
+        assuming.extend(self.computer.select_assumptions(&continuing_now.right));
+        assuming.push(comparison_to_ast(continuing_now.clone())?);
+        candidates.into_iter().find(|candidate| {
+            let mut with = assuming.clone();
+            with.push(term.eq(ast::Int::from_i64(*candidate)).not());
+            self.computer.solver.check_assumptions(&with) == SatResult::Unsat
+        })
+    }
+
+    fn rare_only_at_the_latest(
+        &self,
+        rare_when: &AbstractComparison,
+        continuing: &AbstractComparison,
+        counter: &str,
+    ) -> bool {
+        let any = AbstractExpression::Abstract(format!("{counter}_any"));
+        let rare_at_any = comparison_with_counter_at(rare_when, counter, &any);
+        let continues_after = comparison_with_counter_at(
+            continuing,
+            counter,
+            &generate_expression("+", any.clone(), AbstractExpression::Immediate(1)),
+        );
+        let past_the_prefix =
+            AbstractComparison::new(">=", any, AbstractExpression::Immediate(SUMMARY_ITERATION));
+        let mut assuming = Vec::new();
+        for comparison in [&rare_at_any, &continues_after] {
+            assuming.extend(self.computer.select_assumptions(&comparison.left));
+            assuming.extend(self.computer.select_assumptions(&comparison.right));
+        }
+        let (Some(past), Some(rare_taken), Some(continued)) = (
+            comparison_to_ast(past_the_prefix),
+            comparison_to_ast(rare_at_any),
+            comparison_to_ast(continues_after),
+        ) else {
+            return false;
+        };
+        assuming.extend([past, rare_taken, continued]);
+        self.computer.solver.check_assumptions(&assuming) == SatResult::Unsat
+    }
+
+    fn settle_select_steps(
+        &mut self,
+        summary: &mut Summary,
+        entry: &ComputerState,
+        current: &ComputerState,
+        ghosts: &[Ghost],
+        continuing_now: &AbstractComparison,
+    ) -> Vec<SettledSelectStep> {
+        if self.refuted_select_steps.borrow().contains(&summary.pc) {
+            return Vec::new();
+        }
+        let counter = summary.counter.clone();
+        let name = counter.name().to_string();
+        let clobbered_operand = |r: &RegisterValue| {
+            ghosts
+                .iter()
+                .find(|ghost| ghost.value == *r && !current.0.contains(r))
+                .map(|ghost| ghost_at_summary(ghost, &counter, 0))
+        };
+        let mut settled = Vec::new();
+        for i in 0..summary.invariants.len() {
+            if !matches!(summary.invariants[i], LoopInvariant::AtMost(_)) {
+                continue;
+            }
+            let (before, now) = (&entry.0[i], &current.0[i]);
+            let Some(step) = step_form(before, now) else {
+                continue;
+            };
+            let [(select, 1)] = step.terms.iter().collect::<Vec<_>>()[..] else {
+                continue;
+            };
+            if step.constant != 0 {
+                continue;
+            }
+            let Some((condition, rare_arm, usual_arm)) =
+                self.computer.select_definitions.get(select).cloned()
+            else {
+                continue;
+            };
+            let (Some(rare), Some(usual)) = (
+                self.arm_constant(&rare_arm, continuing_now),
+                self.arm_constant(&usual_arm, continuing_now),
+            ) else {
+                continue;
+            };
+            let side = |e: &AbstractExpression| {
+                flag_at_summary(e, &current.0, &summary.updates, &clobbered_operand)
+            };
+            let (Some(left), Some(right)) = (side(&condition.left), side(&condition.right)) else {
+                continue;
+            };
+            let taken_when = AbstractComparison::new(&condition.op, left, right);
+            let orientations = [
+                (taken_when.clone(), rare, usual),
+                (taken_when.not(), usual, rare),
+            ];
+            let Some((latest, rare, usual)) = orientations.into_iter().find(|(rare_when, _, _)| {
+                self.rare_only_at_the_latest(rare_when, &summary.continuing, &name)
+            }) else {
+                log::info!(
+                    "{} x{i}: either arm of {select} may be taken before the latest iteration",
+                    summary.id
+                );
+                continue;
+            };
+
+            let latest_name = format!("{name}_latest_{i}");
+            self.computer.select_definitions.insert(
+                latest_name.clone(),
+                (
+                    latest.clone(),
+                    AbstractExpression::Immediate(rare),
+                    AbstractExpression::Immediate(usual),
+                ),
+            );
+            let usual_steps = generate_expression(
+                "*",
+                AbstractExpression::Immediate(usual),
+                generate_expression(
+                    "-",
+                    counter.expression(),
+                    AbstractExpression::Immediate(SUMMARY_ITERATION),
+                ),
+            );
+            let value = generate_expression(
+                "+",
+                generate_expression("+", value_of(before), usual_steps),
+                AbstractExpression::Abstract(latest_name),
+            );
+            let settled_register = RegisterValue::new(
+                if now.base.is_some() {
+                    now.kind.clone()
+                } else {
+                    RegisterKind::RegisterBase
+                },
+                Some(value),
+                0,
+            );
+            log::info!(
+                "{} x{i} steps {usual} except possibly the latest, {rare} when {latest}",
+                summary.id
+            );
+            match summary.updates.iter_mut().find(|(j, _)| *j == i) {
+                Some(update) => update.1 = settled_register,
+                None => summary.updates.push((i, settled_register)),
+            }
+            settled.push(SettledSelectStep {
+                register: i,
+                holds_the_select: false,
+                condition: latest.clone(),
+                rare,
+                usual,
+            });
+            let latest_value = AbstractExpression::Abstract(format!("{name}_latest_{i}"));
+            for (j, held) in current.0.iter().enumerate() {
+                if j == i || value_of(held) != AbstractExpression::Abstract(select.clone()) {
+                    continue;
+                }
+                let carrier =
+                    RegisterValue::new(RegisterKind::RegisterBase, Some(latest_value.clone()), 0);
+                match summary.updates.iter_mut().find(|(k, _)| *k == j) {
+                    Some(update) => update.1 = carrier,
+                    None => summary.updates.push((j, carrier)),
+                }
+                settled.push(SettledSelectStep {
+                    register: j,
+                    holds_the_select: true,
+                    condition: latest.clone(),
+                    rare,
+                    usual,
+                });
+            }
+        }
+        settled
+    }
+
+    fn settled_steps_repeat(&self, active: &ActiveLoop) -> bool {
+        let name = LoopCounter::for_loop(active.id).name().to_string();
+        let next_iteration = generate_expression(
+            "+",
+            AbstractExpression::Abstract(name.clone()),
+            AbstractExpression::Immediate(1),
+        );
+        let continues = comparison_with_counter_at(&active.continuing, &name, &next_iteration);
+        let repeats = active.settled_steps.iter().all(|settled| {
+            let now = value_of(&self.computer.registers[settled.register]);
+            let step = if settled.holds_the_select {
+                now
+            } else {
+                generate_expression("-", now, value_of(&active.state.0[settled.register]))
+            };
+            let condition = comparison_with_counter_at(&settled.condition, &name, &next_iteration);
+            let mut assuming = self.computer.select_assumptions(&step);
+            assuming.extend(self.computer.select_assumptions(&continues.left));
+            assuming.extend(self.computer.select_assumptions(&continues.right));
+            let Some(continuing) = comparison_to_ast(continues.clone()) else {
+                return false;
+            };
+            assuming.push(continuing);
+            assuming.extend(self.computer.select_assumptions(&condition.left));
+            assuming.extend(self.computer.select_assumptions(&condition.right));
+            let (Some(step), Some(condition)) =
+                (expression_to_ast(step), comparison_to_ast(condition))
+            else {
+                return false;
+            };
+            let refuted_when = |holds: ast::Bool, arm: i64| {
+                let mut with = assuming.clone();
+                with.push(holds);
+                with.push(step.eq(ast::Int::from_i64(arm)).not());
+                self.computer.solver.check_assumptions(&with) == SatResult::Unsat
+            };
+            refuted_when(condition.clone(), settled.rare)
+                && refuted_when(condition.not(), settled.usual)
+        });
+        if !repeats {
+            log::info!(
+                "{} a settled select step did not repeat; summarizing it as bounded instead",
+                active.id
+            );
+            self.refuted_select_steps.borrow_mut().insert(active.pc);
+        }
+        repeats
+    }
+
+    fn stack_cells_a_blind_write_may_reach(&self, active: &ActiveLoop) -> Vec<MemoryCell> {
+        let from = active
+            .blind_writes_at_summary
+            .min(self.computer.blind_stack_writes.len());
+        let writes = &self.computer.blind_stack_writes[from..];
+        if writes.is_empty() {
+            return Vec::new();
+        }
+        let Some(stack) = self.computer.memory.get("sp") else {
+            return Vec::new();
+        };
+        let already_unknown = |cell: &MemoryCell| {
+            active
+                .cells
+                .iter()
+                .any(|(known, invariant)| known == cell && *invariant == LoopInvariant::Unknown)
+        };
+        let tracked: Vec<MemoryCell> = stack
+            .content
+            .keys()
+            .map(|offset| MemoryCell {
+                region: "sp".to_string(),
+                offset: *offset,
+            })
+            .filter(|cell| !already_unknown(cell))
+            .collect();
+        let stack_pointer = ast::Int::new_const("sp");
+        let mut reached = Vec::new();
+        for cell in tracked {
+            let cell_start = ast::Int::add(&[&stack_pointer, &ast::Int::from_i64(cell.offset)]);
+            let cell_end = ast::Int::add(&[&cell_start, &ast::Int::from_i64(WIDEST_STORED_VALUE)]);
+            let may_overlap = writes.iter().any(|(base, offset, width)| {
+                if !is_translatable(base) {
+                    return true;
+                }
+                let Some(base) = expression_to_ast(base.clone()) else {
+                    return true;
+                };
+                let write_start = ast::Int::add(&[&base, &ast::Int::from_i64(*offset)]);
+                let write_end = ast::Int::add(&[&write_start, &ast::Int::from_i64(*width)]);
+                let overlap =
+                    ast::Bool::and(&[&write_start.lt(&cell_end), &cell_start.lt(&write_end)]);
+                self.computer.solver.check_assumptions(&[overlap]) != SatResult::Unsat
+            });
+            if may_overlap {
+                reached.push(cell);
+            }
+        }
+        reached
+    }
+
+    fn is_overwritten_before_any_read(
+        &self,
+        from: usize,
+        register: usize,
+        has_calls: bool,
+    ) -> bool {
+        let mut seen = HashSet::new();
+        let mut pending = self.static_successors(from).unwrap_or_default();
+        if pending.is_empty() {
+            return false;
+        }
+        while let Some(pc) = pending.pop() {
+            if !seen.insert(pc) {
+                continue;
+            }
+            let Some(instruction) = self.program.code.get(pc) else {
+                return false;
+            };
+            if matches!(instruction.opcode.as_str(), "bl" | "blr" | "br") {
+                return false;
+            }
+            if overwrites_without_reading(instruction, register) {
+                continue;
+            }
+            if mentions(instruction, register) {
+                return false;
+            }
+            match self.static_successors(pc) {
+                Some(successors) if successors.is_empty() => {
+                    if has_calls {
+                        return false;
+                    }
+                }
+                Some(successors) => pending.extend(successors),
+                None => return false,
+            }
+        }
+        true
+    }
+
+    fn dead_after(&self, pc: usize) -> Rc<Vec<usize>> {
+        if let Some(known) = self.dead_registers.borrow().get(&pc) {
+            return Rc::clone(known);
+        }
+        let has_calls = self
+            .program
+            .code
+            .iter()
+            .any(|instruction| matches!(instruction.opcode.as_str(), "bl" | "blr"));
+        let dead: Vec<usize> = (0..LIVENESS_TRACKED_REGISTERS)
+            .filter(|&register| self.is_overwritten_before_any_read(pc, register, has_calls))
+            .collect();
+        let dead = Rc::new(dead);
+        self.dead_registers
+            .borrow_mut()
+            .insert(pc, Rc::clone(&dead));
+        dead
+    }
+
+    fn forget_dead_registers(
+        &mut self,
+        pc: usize,
+        guard: &AbstractComparison,
+        snapshots: &mut [&mut ComputerState],
+    ) {
+        let read_by_guard = registers_in(guard);
+        let dead = self.dead_after(pc);
+        for &register in dead.iter() {
+            if read_by_guard.contains(&self.computer.registers[register]) {
+                continue;
+            }
+            let forgotten = RegisterValue::new(RegisterKind::Number, None, 0);
+            self.computer.registers[register] = forgotten.clone();
+            for snapshot in snapshots.iter_mut() {
+                snapshot.0[register] = forgotten.clone();
+            }
+        }
+    }
+
     fn cycle_back_edge(
         &self,
         loop_pc: usize,
@@ -2572,10 +3277,14 @@ impl ExecutionEngine {
             pc = next;
             let opcode = &self.program.code.get(pc)?.opcode;
             next = if is_conditional_branch(opcode) {
-                let taken = remaining
-                    .by_ref()
-                    .find(|record| record.point.pc == pc)?
-                    .taken;
+                let mut ahead = remaining.clone();
+                let taken = match ahead.find(|record| record.point.pc == pc) {
+                    Some(record) => {
+                        remaining = ahead;
+                        record.taken
+                    }
+                    None => *self.concrete_decisions.get(&pc)?,
+                };
                 branch_step(pc, taken)?
             } else {
                 match self.static_successors(pc)?.as_slice() {
@@ -3126,6 +3835,11 @@ impl ExecutionEngine {
             return None;
         }
 
+        let mut active = active;
+        let (mut summarized, mut entered) = (active.state.clone(), active.entry_state.clone());
+        self.forget_dead_registers(active.pc, &expression, &mut [&mut summarized, &mut entered]);
+        active.state = summarized;
+        active.entry_state = entered;
         let current = self.computer.get_state();
         let (mut before, mut after) = (active.state.clone(), current.clone());
         self.assume_staying(&expression, active.entry_decision);
@@ -3149,7 +3863,47 @@ impl ExecutionEngine {
         if !ghosts_repeat {
             log::info!("{} guard operand did not repeat its step", active.id);
         }
-        let holds = ghosts_repeat
+        let checked_from = active
+            .journal_after_summary
+            .min(self.computer.write_journal.len());
+        let mut rewritten = cells_written(&self.computer.write_journal[checked_from..]);
+        for (cell, _) in &active.cells {
+            if rewritten.iter().all(|(known, _)| known != cell) {
+                rewritten.push((cell.clone(), self.computer.cell_content(cell)));
+            }
+        }
+        let clobbered_cells = self.stack_cells_a_blind_write_may_reach(&active);
+        let drifting_cells: Vec<MemoryCell> = rewritten
+            .into_iter()
+            .filter(|(cell, before)| {
+                let now = self.computer.cell_content(cell);
+                let seen = self.pin_steps(&[invariant_of_register(before, &now)]);
+                let recorded = active
+                    .cells
+                    .iter()
+                    .find(|(known, _)| known == cell)
+                    .map_or(LoopInvariant::Fixed, |(_, invariant)| invariant.clone());
+                !recorded.subsumes(&seen[0])
+            })
+            .map(|(cell, _)| cell)
+            .chain(clobbered_cells)
+            .collect();
+        let cells_hold = drifting_cells.is_empty();
+        if !cells_hold {
+            log::info!(
+                "{} memory cells did not repeat their step: {drifting_cells:?}",
+                active.id
+            );
+            self.unstable_cells
+                .borrow_mut()
+                .entry(active.pc)
+                .or_default()
+                .extend(drifting_cells);
+        }
+        let steps_hold = self.settled_steps_repeat(&active);
+        let holds = cells_hold
+            && steps_hold
+            && ghosts_repeat
             && active
                 .invariants
                 .iter()
@@ -3200,6 +3954,8 @@ impl ExecutionEngine {
         }
         let retrying = !holds && !only_data_moved && self.widen_for_retry(&active, &observed);
         let force_close = !holds
+            && cells_hold
+            && steps_hold
             && ghosts_repeat
             && !retrying
             && unstable.iter().all(|&i| {
@@ -3261,6 +4017,16 @@ impl ExecutionEngine {
         }
 
         self.computer.set_state(active.entry_state);
+        self.computer
+            .undo_writes_since(active.journal_before_summary);
+        if !cells_hold {
+            let mut retries = self.cell_retries.borrow_mut();
+            let used = retries.entry(active.pc).or_insert(0);
+            if *used < MAX_CELL_RETRIES {
+                *used += 1;
+                self.loop_attempts.remove(&active.pc);
+            }
+        }
         self.jump_history.truncate(active.history_len);
 
         log::info!(
