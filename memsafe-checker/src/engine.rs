@@ -5568,6 +5568,44 @@ mod tests {
     }
 
     #[test]
+    fn a_split_step_is_confirmed_from_a_third_state() {
+        let mut engine = ExecutionEngine::new(vec![
+            "start:",
+            "loop:",
+            "cmp x4,#0",
+            "b.eq done",
+            "add x0,x0,x3",
+            "add x0,x0,#8",
+            "sub x4,x4,#1",
+            "b loop",
+            "done:",
+            "ret",
+        ]);
+        engine.add_abstract_from(0, "base");
+        engine.add_region(RegionType::RW, "base", AbstractExpression::Immediate(1024));
+        engine.add_abstract_from(3, "stride");
+        engine.add_abstract_from(4, "count");
+        let _ = engine.start("start");
+
+        let summaries = engine.summaries.borrow();
+        let summary = summaries.first().expect("the loop was summarized");
+        let (_, update) = summary
+            .updates
+            .iter()
+            .find(|(i, _)| *i == 0)
+            .expect("x0 has an update");
+        let shown = update.base.as_ref().expect("x0 keeps a base").to_string();
+        assert!(
+            !shown.contains("widened"),
+            "x0 was widened instead of stepped: {shown}"
+        );
+        assert!(
+            shown.contains("stride + 8"),
+            "the split step was not recognised: {shown}"
+        );
+    }
+
+    #[test]
     fn a_register_stepping_twice_by_a_symbolic_amount_is_summarized_as_linear() {
         let mut engine = ExecutionEngine::new(vec![
             "start:",
