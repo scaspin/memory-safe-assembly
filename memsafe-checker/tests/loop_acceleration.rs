@@ -2150,6 +2150,71 @@ fn a_block_loop_entered_after_a_chunk_loop_still_catches_a_tail_read_past_the_en
     assert!(analyze_chunked_then_blocked_walk("ldrb w5,[x0,x2]").is_err());
 }
 
+fn analyze_row_copy(words_short: i64) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "cbz x2,end",
+        "cbz x3,end",
+        "mov x5,xzr",
+        "mov x8,x1",
+        "rows:",
+        "mov x7,x3",
+        "words:",
+        "ldr x10,[x8]",
+        "add x8,x8,#8",
+        "subs x7,x7,#1",
+        "b.ne words",
+        "add x5,x5,#1",
+        "cmp x5,x2",
+        "b.ne rows",
+        "end:",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(1, "table");
+    engine.add_region(
+        RegionType::READ,
+        "table",
+        generate_expression(
+            "*",
+            abstract_of("table_words"),
+            AbstractExpression::Immediate(8),
+        ),
+    );
+    engine.add_abstract_from(2, "height");
+    engine.add_abstract_from(3, "width");
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        abstract_of("table_words"),
+        generate_expression(
+            "-",
+            generate_expression("*", abstract_of("height"), abstract_of("width")),
+            AbstractExpression::Immediate(words_short),
+        ),
+    ));
+    for name in ["height", "width"] {
+        engine.add_invariant(AbstractComparison::new(
+            ">=",
+            abstract_of(name),
+            AbstractExpression::Immediate(3),
+        ));
+    }
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_pointer_advanced_by_an_inner_loop_of_symbolic_count_is_proved_safe() {
+    assert_eq!(analyze_row_copy(0), Ok(()));
+}
+
+#[test]
+fn a_pointer_advanced_by_an_inner_loop_of_symbolic_count_still_catches_the_last_word() {
+    assert!(analyze_row_copy(1).is_err());
+}
+
 #[test]
 fn a_select_latch_that_grows_is_not_given_a_range() {
     let program = [

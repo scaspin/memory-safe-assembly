@@ -84,6 +84,174 @@ fn register_form(register: &RegisterValue) -> Option<LinearForm> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Affine {
+    pub constant: i64,
+    pub terms: Vec<(AbstractExpression, i64)>,
+}
+
+impl Affine {
+    fn atom(e: &AbstractExpression) -> Self {
+        Self {
+            constant: 0,
+            terms: vec![(e.clone(), 1)],
+        }
+    }
+
+    fn number(value: i64) -> Self {
+        Self {
+            constant: value,
+            terms: Vec::new(),
+        }
+    }
+
+    pub fn of(e: &AbstractExpression) -> Option<Affine> {
+        match e {
+            AbstractExpression::Immediate(value) => Some(Affine::number(*value)),
+            AbstractExpression::Register(register) => Affine::of_register(register),
+            AbstractExpression::Expression(op, a, b) => {
+                let (left, right) = (Affine::of(a)?, Affine::of(b)?);
+                match op.as_str() {
+                    "+" => left.combine(&right, 1),
+                    "-" => left.combine(&right, -1),
+                    "*" if right.terms.is_empty() => left.scaled(right.constant),
+                    "*" if left.terms.is_empty() => right.scaled(left.constant),
+                    _ => Some(Affine::atom(e)),
+                }
+            }
+            other => Some(Affine::atom(other)),
+        }
+    }
+
+    pub fn of_register(register: &RegisterValue) -> Option<Affine> {
+        match &register.base {
+            None if register.kind == RegisterKind::Number => None,
+            None => Some(Affine::number(register.offset)),
+            Some(base) => Affine::of(base)?.combine(&Affine::number(register.offset), 1),
+        }
+    }
+
+    pub fn combine(&self, other: &Affine, sign: i64) -> Option<Affine> {
+        let mut terms = self.terms.clone();
+        for (atom, coefficient) in &other.terms {
+            let moved = coefficient.checked_mul(sign)?;
+            match terms.iter_mut().find(|(known, _)| known == atom) {
+                Some((_, total)) => *total = total.checked_add(moved)?,
+                None => terms.push((atom.clone(), moved)),
+            }
+        }
+        terms.retain(|(_, coefficient)| *coefficient != 0);
+        Some(Affine {
+            constant: self
+                .constant
+                .checked_add(other.constant.checked_mul(sign)?)?,
+            terms,
+        })
+    }
+
+    pub fn scaled(&self, factor: i64) -> Option<Affine> {
+        let mut terms = Vec::new();
+        for (atom, coefficient) in &self.terms {
+            let scaled = coefficient.checked_mul(factor)?;
+            if scaled != 0 {
+                terms.push((atom.clone(), scaled));
+            }
+        }
+        Some(Affine {
+            constant: self.constant.checked_mul(factor)?,
+            terms,
+        })
+    }
+
+    pub fn coefficient(&self, atom: &AbstractExpression) -> i64 {
+        self.terms
+            .iter()
+            .find(|(known, _)| known == atom)
+            .map_or(0, |(_, coefficient)| *coefficient)
+    }
+
+    pub fn without(&self, atom: &AbstractExpression) -> Affine {
+        Affine {
+            constant: self.constant,
+            terms: self
+                .terms
+                .iter()
+                .filter(|(known, _)| known != atom)
+                .cloned()
+                .collect(),
+        }
+    }
+
+    pub fn mentions_only_as_term(&self, atom: &AbstractExpression) -> bool {
+        let AbstractExpression::Abstract(name) = atom else {
+            return false;
+        };
+        self.terms
+            .iter()
+            .all(|(known, _)| known == atom || !known.contains(name))
+    }
+
+    pub fn to_register(&self) -> RegisterValue {
+        let mut base: Option<AbstractExpression> = None;
+        for (atom, coefficient) in &self.terms {
+            let magnitude = match coefficient.unsigned_abs() {
+                1 => atom.clone(),
+                n => {
+                    generate_expression("*", atom.clone(), AbstractExpression::Immediate(n as i64))
+                }
+            };
+            base = Some(match (base, *coefficient > 0) {
+                (None, true) => magnitude,
+                (None, false) => {
+                    generate_expression("-", AbstractExpression::Immediate(0), magnitude)
+                }
+                (Some(sum), true) => generate_expression("+", sum, magnitude),
+                (Some(sum), false) => generate_expression("-", sum, magnitude),
+            });
+        }
+        match base {
+            Some(base) => RegisterValue::new(RegisterKind::RegisterBase, Some(base), self.constant),
+            None => RegisterValue::new_imm(self.constant),
+        }
+    }
+
+    pub fn to_expression(&self) -> AbstractExpression {
+        expression_of_register(&self.to_register())
+    }
+
+    pub fn mentions_a_loop_counter(&self) -> bool {
+        self.terms.iter().any(|(atom, _)| atom.contains("_?"))
+    }
+}
+
+fn expression_of_register(register: &RegisterValue) -> AbstractExpression {
+    match (&register.base, register.offset) {
+        (Some(base), 0) => base.clone(),
+        (Some(base), offset) => {
+            generate_expression("+", base.clone(), AbstractExpression::Immediate(offset))
+        }
+        (None, offset) => AbstractExpression::Immediate(offset),
+    }
+}
+
+pub fn counter_value_at_exit(
+    counter: &AbstractExpression,
+    exit: &Affine,
+) -> Option<AbstractExpression> {
+    let unit = exit.coefficient(counter);
+    if unit == 0 || !exit.mentions_only_as_term(counter) {
+        return None;
+    }
+    let rest = exit
+        .without(counter)
+        .scaled(-unit.signum())?
+        .to_expression();
+    Some(match unit.abs() {
+        1 => rest,
+        divisor => generate_expression("/", rest, AbstractExpression::Immediate(divisor)),
+    })
+}
+
 pub fn step_form(prev: &RegisterValue, cur: &RegisterValue) -> Option<LinearForm> {
     register_form(cur)?.combine(&register_form(prev)?, -1)
 }

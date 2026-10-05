@@ -115,6 +115,9 @@ fn register_destination(instruction: &Instruction) -> Option<Option<Operand>> {
 
 const LIVENESS_TRACKED_REGISTERS: usize = 30;
 const WIDEST_STORED_VALUE: i64 = 16;
+const MAX_EXIT_WINDOW: i64 = 8;
+const MAX_SETTLING_CHOICES: usize = 64;
+const CANDIDATE_PROOF_RESOURCE_LIMIT: u32 = 50_000_000;
 const MAX_CELL_RETRIES: usize = 4;
 
 fn general_register_index(prefix: &RePrefix, number: usize) -> Option<usize> {
@@ -1089,6 +1092,20 @@ fn summarize(
     }
 }
 
+fn exit_window(op: &str, per_iteration: i64) -> Vec<i64> {
+    if per_iteration == 0 || per_iteration.abs() > MAX_EXIT_WINDOW {
+        return Vec::new();
+    }
+    match (op, per_iteration.signum()) {
+        ("==", _) => vec![0],
+        ("<", -1) => (per_iteration..=-1).collect(),
+        ("<=", -1) => (per_iteration + 1..=0).collect(),
+        (">", 1) => (1..=per_iteration).collect(),
+        (">=", 1) => (0..per_iteration).collect(),
+        _ => Vec::new(),
+    }
+}
+
 fn with_counter_at(
     e: &AbstractExpression,
     counter: &str,
@@ -1197,6 +1214,7 @@ pub struct ExecutionEngine {
     loop_attempts: HashMap<usize, LoopAttempt>,
     jump_history: Vec<JumpRecord>,
     concrete_decisions: HashMap<usize, bool>,
+    closed_counters: Vec<(AbstractExpression, Vec<AbstractExpression>)>,
     select_history: Vec<usize>,
     value_ranges: HashMap<String, i64>,
     fail_fast: bool,
@@ -1372,6 +1390,7 @@ impl ExecutionEngine {
             computer,
             jump_history: Vec::new(),
             concrete_decisions: HashMap::new(),
+            closed_counters: Vec::new(),
             select_history: Vec::new(),
             value_ranges: HashMap::new(),
             active_loops: Vec::new(),
@@ -2532,12 +2551,13 @@ impl ExecutionEngine {
         let mut entry_state = previous.state.clone();
         self.forget_dead_registers(pc, expression, &mut [&mut entry_state]);
         let mut current_state = self.computer.get_state();
-        let observed = self.invariants_while_staying(
+        let mut observed = self.invariants_while_staying(
             expression,
             branch_decision,
             &mut entry_state,
             &mut current_state,
         );
+        self.step_past_inner_loops(&mut observed, &entry_state, &current_state);
 
         let mut attempt = match self.loop_attempts.get(&pc) {
             Some(earlier) if earlier.widened => LoopAttempt {
@@ -2900,6 +2920,183 @@ impl ExecutionEngine {
             with.push(term.eq(ast::Int::from_i64(*candidate)).not());
             self.computer.solver.check_assumptions(&with) == SatResult::Unsat
         })
+    }
+
+    fn proves_step(
+        &self,
+        before: &RegisterValue,
+        after: &RegisterValue,
+        step: &AbstractExpression,
+    ) -> bool {
+        if before.kind == RegisterKind::Number || after.kind == RegisterKind::Number {
+            return false;
+        }
+        let moved = generate_expression("-", value_of(after), value_of(before));
+        let mut assuming = self.computer.select_assumptions(&moved);
+        assuming.extend(self.computer.select_assumptions(step));
+        let (Some(moved), Some(step)) = (expression_to_ast(moved), expression_to_ast(step.clone()))
+        else {
+            return false;
+        };
+        assuming.push(moved.eq(&step).not());
+        self.within_candidate_budget(|solver| solver.check_assumptions(&assuming))
+            == SatResult::Unsat
+    }
+
+    fn within_candidate_budget(&self, check: impl FnOnce(&Solver) -> SatResult) -> SatResult {
+        let solver = Solver::new();
+        for assertion in self.computer.solver.get_assertions() {
+            solver.assert(&assertion);
+        }
+        let mut bounded = Params::new();
+        bounded.set_u32("rlimit", CANDIDATE_PROOF_RESOURCE_LIMIT);
+        solver.set_params(&bounded);
+        check(&solver)
+    }
+
+    fn step_past_inner_loops(
+        &self,
+        observed: &mut [LoopInvariant],
+        entry: &ComputerState,
+        current: &ComputerState,
+    ) {
+        for (i, invariant) in observed.iter_mut().enumerate() {
+            if *invariant != LoopInvariant::Unknown {
+                continue;
+            }
+            let (before, after) = (&entry.0[i], &current.0[i]);
+            if before.kind == RegisterKind::Number || after.kind == RegisterKind::Number {
+                continue;
+            }
+            let mentioned: Vec<String> = [value_of(before), value_of(after)]
+                .iter()
+                .flat_map(|e| e.get_abstracts())
+                .collect();
+            let relevant: Vec<&(AbstractExpression, Vec<AbstractExpression>)> = self
+                .closed_counters
+                .iter()
+                .rev()
+                .filter(|(counter, _)| match counter {
+                    AbstractExpression::Abstract(name) => mentioned.contains(name),
+                    _ => false,
+                })
+                .collect();
+            if relevant.is_empty() {
+                if let Some(step) = self.step_held_by_invariant_symbols(i, entry, current) {
+                    log::info!("x{i} steps by {step}");
+                    *invariant = LoopInvariant::Linear(step);
+                }
+                continue;
+            }
+            let choices: usize = relevant.iter().map(|(_, values)| values.len()).product();
+            if choices > MAX_SETTLING_CHOICES {
+                continue;
+            }
+            for choice in 0..choices {
+                let mut remaining = choice;
+                let assignment: Vec<(&AbstractExpression, &AbstractExpression)> = relevant
+                    .iter()
+                    .map(|(counter, values)| {
+                        let value = &values[remaining % values.len()];
+                        remaining /= values.len();
+                        (counter, value)
+                    })
+                    .collect();
+                let settle = |e: AbstractExpression| {
+                    assignment
+                        .iter()
+                        .fold(e, |e, (counter, value)| match counter {
+                            AbstractExpression::Abstract(name) => with_counter_at(&e, name, value),
+                            _ => e,
+                        })
+                };
+                let settled_before = settle(value_of(before));
+                let settled_after = settle(value_of(after));
+                if let Some(step) =
+                    self.proven_settled_step(before, after, &settled_before, &settled_after)
+                {
+                    log::info!("x{i} steps by {step} once inner loop counters are settled");
+                    *invariant = LoopInvariant::Linear(step);
+                    break;
+                }
+            }
+        }
+    }
+
+    fn step_held_by_invariant_symbols(
+        &self,
+        register: usize,
+        entry: &ComputerState,
+        current: &ComputerState,
+    ) -> Option<AbstractExpression> {
+        let (before, after) = (&entry.0[register], &current.0[register]);
+        let moved = Affine::of_register(after)?.combine(&Affine::of_register(before)?, -1)?;
+        if moved.terms.is_empty() || moved.mentions_a_loop_counter() {
+            return None;
+        }
+        let moving: Vec<(usize, Vec<String>)> = entry
+            .0
+            .iter()
+            .zip(current.0.iter())
+            .enumerate()
+            .filter(|(_, (was, is))| was != is)
+            .map(|(j, (was, is))| {
+                let mut symbols = value_of(was).get_abstracts();
+                symbols.extend(value_of(is).get_abstracts());
+                (j, symbols)
+            })
+            .collect();
+        let carried_elsewhere = |symbol: &String| {
+            moving
+                .iter()
+                .any(|(j, symbols)| *j != register && symbols.contains(symbol))
+        };
+        let carried_anywhere =
+            |symbol: &String| moving.iter().any(|(_, symbols)| symbols.contains(symbol));
+        let invariant = moved.terms.iter().all(|(atom, _)| match atom {
+            AbstractExpression::Abstract(symbol) => !carried_elsewhere(symbol),
+            product => product
+                .get_abstracts()
+                .iter()
+                .all(|symbol| !carried_anywhere(symbol)),
+        });
+        if !invariant {
+            return None;
+        }
+        let step = moved.to_expression();
+        self.proves_step(before, after, &step).then_some(step)
+    }
+
+    fn proven_settled_step(
+        &self,
+        before: &RegisterValue,
+        after: &RegisterValue,
+        settled_before: &AbstractExpression,
+        settled_after: &AbstractExpression,
+    ) -> Option<AbstractExpression> {
+        let (settled_before, settled_after) =
+            (Affine::of(settled_before)?, Affine::of(settled_after)?);
+        let moved = settled_after.combine(&settled_before, -1)?;
+        if moved.mentions_a_loop_counter() {
+            return None;
+        }
+        let (known_before, known_after) = (
+            settled_before.to_expression().get_abstracts(),
+            settled_after.to_expression().get_abstracts(),
+        );
+        let step = moved.to_expression();
+        let held_throughout = step
+            .get_abstracts()
+            .iter()
+            .all(|symbol| known_before.contains(symbol) && known_after.contains(symbol));
+        if !held_throughout {
+            return None;
+        }
+        let constant_part = AbstractExpression::Immediate(moved.constant);
+        if step != constant_part && self.proves_step(before, after, &constant_part) {
+            return Some(constant_part);
+        }
+        self.proves_step(before, after, &step).then_some(step)
     }
 
     fn rare_only_at_the_latest(
@@ -3850,7 +4047,15 @@ impl ExecutionEngine {
         self.assume_staying(&expression, active.entry_decision);
         self.pin_unknown_steps(&mut observed, &before.0, &after.0, &expression);
         self.computer.solver.pop(1);
-        let observed = self.bound_values(&observed, &before.0, &after.0);
+        let mut observed = self.bound_values(&observed, &before.0, &after.0);
+        for (i, recorded) in active.invariants.iter().enumerate() {
+            if let LoopInvariant::Linear(step) = recorded
+                && !recorded.subsumes(&observed[i])
+                && self.proves_step(&before.0[i], &after.0[i], step)
+            {
+                observed[i] = recorded.clone();
+            }
+        }
         let ghosts_repeat =
             active.ghost_checks.iter().all(|(path, expected)| {
                 match condition_side(&expression, path) {
@@ -3984,6 +4189,34 @@ impl ExecutionEngine {
                     active.id,
                     active.pc
                 );
+            }
+            let left_by = if active.entry_decision {
+                shown.not()
+            } else {
+                shown.clone()
+            };
+            let counter = AbstractExpression::Abstract(format!("{}_?", active.id));
+            if let (Some(left), Some(right)) =
+                (Affine::of(&left_by.left), Affine::of(&left_by.right))
+                && let Some(distance) = left.combine(&right, -1)
+            {
+                let values: Vec<AbstractExpression> =
+                    exit_window(&left_by.op, distance.coefficient(&counter))
+                        .into_iter()
+                        .filter_map(|reached| {
+                            counter_value_at_exit(
+                                &counter,
+                                &Affine {
+                                    constant: distance.constant - reached,
+                                    terms: distance.terms.clone(),
+                                },
+                            )
+                        })
+                        .collect();
+                if !values.is_empty() {
+                    log::info!("{} leaves with its counter at one of {values:?}", active.id);
+                    self.closed_counters.push((counter, values));
+                }
             }
             let mut kept = vec![leaving.not().simplify()];
             kept.extend(
