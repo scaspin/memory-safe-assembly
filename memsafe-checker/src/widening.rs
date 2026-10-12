@@ -222,6 +222,35 @@ impl Affine {
     pub fn mentions_a_loop_counter(&self) -> bool {
         self.terms.iter().any(|(atom, _)| atom.contains("_?"))
     }
+
+    pub fn without_terms_tied_to(&self, seeds: &[String]) -> Affine {
+        let mut tied: Vec<String> = seeds.to_vec();
+        loop {
+            let known = tied.len();
+            for (atom, _) in &self.terms {
+                let symbols = atom.get_abstracts();
+                if symbols.iter().any(|symbol| tied.contains(symbol)) {
+                    for symbol in symbols {
+                        if !tied.contains(&symbol) {
+                            tied.push(symbol);
+                        }
+                    }
+                }
+            }
+            if tied.len() == known {
+                break;
+            }
+        }
+        Affine {
+            constant: self.constant,
+            terms: self
+                .terms
+                .iter()
+                .filter(|(atom, _)| !atom.get_abstracts().iter().any(|s| tied.contains(s)))
+                .cloned()
+                .collect(),
+        }
+    }
 }
 
 fn expression_of_register(register: &RegisterValue) -> AbstractExpression {

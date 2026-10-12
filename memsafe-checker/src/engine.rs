@@ -2643,6 +2643,7 @@ impl ExecutionEngine {
             }
         }
 
+        self.anchor_past_inner_loops(pc, &attempt.invariants, &history, &mut current_state);
         let id = attempt.id;
         let ghosts = ghost_operands(
             &previous.condition,
@@ -3065,6 +3066,84 @@ impl ExecutionEngine {
         }
         let step = moved.to_expression();
         self.proves_step(before, after, &step).then_some(step)
+    }
+
+    fn anchor_past_inner_loops(
+        &self,
+        pc: usize,
+        invariants: &[LoopInvariant],
+        history: &[JumpRecord],
+        current: &mut ComputerState,
+    ) {
+        let closed: Vec<String> = self
+            .closed_counters
+            .iter()
+            .filter_map(|(counter, _)| match counter {
+                AbstractExpression::Abstract(name) => Some(name.clone()),
+                _ => None,
+            })
+            .collect();
+        if closed.is_empty() {
+            return;
+        }
+        for (i, invariant) in invariants.iter().enumerate() {
+            let LoopInvariant::Linear(step) = invariant else {
+                continue;
+            };
+            let mentions_closed = value_of(&current.0[i])
+                .get_abstracts()
+                .iter()
+                .any(|symbol| closed.contains(symbol));
+            if !mentions_closed {
+                continue;
+            }
+            let mut visits: Vec<RegisterValue> = history
+                .iter()
+                .filter(|record| record.point.pc == pc)
+                .map(|record| record.point.state.0[i].clone())
+                .collect();
+            visits.push(current.0[i].clone());
+            let earliest = visits.len().saturating_sub(SUMMARY_ITERATION as usize + 1);
+            if let Some(anchor) = (earliest..visits.len())
+                .find_map(|start| self.proven_anchor(&visits[start..], step, &closed))
+            {
+                log::info!("x{i} re-anchored past inner loops at {anchor:?}");
+                current.0[i] = anchor;
+            }
+        }
+    }
+
+    fn proven_anchor(
+        &self,
+        visits: &[RegisterValue],
+        step: &AbstractExpression,
+        closed: &[String],
+    ) -> Option<RegisterValue> {
+        let first = visits.first()?;
+        let cleaned = Affine::of_register(first)?.without_terms_tied_to(closed);
+        let with_kind_of_first = |affine: &Affine| {
+            let mut register = affine.to_register();
+            if register.base.is_some() {
+                register.kind = first.kind.clone();
+            }
+            register
+        };
+        let anchor = with_kind_of_first(&cleaned);
+        if !self.proves_step(&anchor, first, &AbstractExpression::Immediate(0)) {
+            return None;
+        }
+        if !visits
+            .windows(2)
+            .all(|pair| self.proves_step(&pair[0], &pair[1], step))
+        {
+            return None;
+        }
+        let travelled = Affine::of(&generate_expression(
+            "*",
+            AbstractExpression::Immediate(visits.len() as i64 - 1),
+            step.clone(),
+        ))?;
+        Some(with_kind_of_first(&cleaned.combine(&travelled, 1)?))
     }
 
     fn proven_settled_step(

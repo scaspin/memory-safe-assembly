@@ -2215,6 +2215,162 @@ fn a_pointer_advanced_by_an_inner_loop_of_symbolic_count_still_catches_the_last_
     assert!(analyze_row_copy(1).is_err());
 }
 
+fn analyze_column_walk(bytes_short: i64) -> Result<(), String> {
+    analyze_column_walk_rewinding(bytes_short, "mov x6,x6")
+}
+
+fn analyze_column_walk_rewinding(bytes_short: i64, rewind_adjustment: &str) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "mul x6,x1,x2",
+        rewind_adjustment,
+        "columns:",
+        "mov x4,x2",
+        "rows:",
+        "ldr x5,[x0]",
+        "add x0,x0,x1",
+        "ldr x5,[x0]",
+        "add x0,x0,x1",
+        "subs x4,x4,#2",
+        "b.gt rows",
+        "sub x0,x0,x6",
+        "add x0,x0,#8",
+        "subs x3,x3,#8",
+        "b.gt columns",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression(
+            "-",
+            generate_expression("*", abstract_of("stride"), abstract_of("height")),
+            AbstractExpression::Immediate(bytes_short),
+        ),
+    );
+    engine.add_abstract_from(1, "stride");
+    engine.add_abstract_from(2, "height");
+    engine.add_abstract_from(3, "width");
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("stride"),
+        abstract_of("width"),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        generate_expression("%", abstract_of("width"), AbstractExpression::Immediate(8)),
+        AbstractExpression::Immediate(0),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        generate_expression("%", abstract_of("height"), AbstractExpression::Immediate(2)),
+        AbstractExpression::Immediate(0),
+    ));
+    for name in ["height", "width"] {
+        engine.add_invariant(AbstractComparison::new(
+            ">=",
+            abstract_of(name),
+            AbstractExpression::Immediate(24),
+        ));
+    }
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_column_walk_that_rewinds_its_rows_is_proved_safe() {
+    assert_eq!(analyze_column_walk(0), Ok(()));
+}
+
+#[test]
+fn a_column_walk_that_rewinds_its_rows_still_catches_the_last_byte() {
+    assert!(analyze_column_walk(1).is_err());
+}
+
+fn analyze_column_walk_with_wide_first_columns(bytes_short: i64) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "mul x6,x1,x2",
+        "mov x9,#16",
+        "mov x10,#16",
+        "columns:",
+        "mov x4,x2",
+        "rows:",
+        "ldr x5,[x0]",
+        "add x0,x0,x1",
+        "ldr x5,[x0]",
+        "add x0,x0,x1",
+        "subs x4,x4,#2",
+        "b.gt rows",
+        "sub x0,x0,x6",
+        "add x0,x0,x9",
+        "mov x9,x10",
+        "mov x10,#8",
+        "subs x3,x3,#8",
+        "b.gt columns",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression(
+            "-",
+            generate_expression("*", abstract_of("stride"), abstract_of("height")),
+            AbstractExpression::Immediate(bytes_short),
+        ),
+    );
+    engine.add_abstract_from(1, "stride");
+    engine.add_abstract_from(2, "height");
+    engine.add_abstract_from(3, "width");
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        abstract_of("stride"),
+        generate_expression("+", abstract_of("width"), AbstractExpression::Immediate(16)),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        generate_expression("%", abstract_of("width"), AbstractExpression::Immediate(8)),
+        AbstractExpression::Immediate(0),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "==",
+        generate_expression("%", abstract_of("height"), AbstractExpression::Immediate(2)),
+        AbstractExpression::Immediate(0),
+    ));
+    for (name, least) in [("height", 24), ("width", 40)] {
+        engine.add_invariant(AbstractComparison::new(
+            ">=",
+            abstract_of(name),
+            AbstractExpression::Immediate(least),
+        ));
+    }
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_column_walk_whose_first_columns_are_wider_is_proved_safe() {
+    assert_eq!(analyze_column_walk_with_wide_first_columns(0), Ok(()));
+}
+
+#[test]
+fn a_column_walk_whose_first_columns_are_wider_still_catches_the_last_word() {
+    assert!(analyze_column_walk_with_wide_first_columns(8).is_err());
+}
+
+#[test]
+fn a_column_walk_that_rewinds_one_row_short_is_rejected() {
+    assert!(analyze_column_walk_rewinding(0, "sub x6,x6,x1").is_err());
+}
+
 #[test]
 fn a_select_latch_that_grows_is_not_given_a_range() {
     let program = [
