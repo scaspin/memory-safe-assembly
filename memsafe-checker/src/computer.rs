@@ -31,6 +31,7 @@ pub struct ARMCORTEXA {
     pub memory_labels: HashMap<String, i64>,
     pub select_definitions:
         HashMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>,
+    pub symbols_bounding_counter: HashMap<String, Vec<String>>,
     rw_queue: Vec<MemoryAccess>,
     alignment: i64,
     flag_counter: usize,
@@ -182,6 +183,7 @@ impl ARMCORTEXA {
             memory,
             memory_labels: HashMap::new(),
             select_definitions: HashMap::new(),
+            symbols_bounding_counter: HashMap::new(),
             rw_queue: Vec::new(),
             alignment: 4,
             flag_counter: 0,
@@ -785,5 +787,47 @@ mod tests {
                 offset: 0,
             }
         );
+    }
+
+    fn counter_can_reach_ten(counter_is_bounded_by_its_facts: bool) -> bool {
+        let mut computer = ARMCORTEXA::new();
+        let (counter, clamp, length) = (
+            AbstractExpression::Abstract("loop7_?".to_string()),
+            AbstractExpression::Abstract("select_3".to_string()),
+            AbstractExpression::Abstract("len".to_string()),
+        );
+        computer.select_definitions.insert(
+            "select_3".to_string(),
+            (
+                AbstractComparison::new("<", length.clone(), AbstractExpression::Immediate(10)),
+                length,
+                AbstractExpression::Immediate(10),
+            ),
+        );
+        let trip_fact = AbstractComparison::new("<", counter.clone(), clamp);
+        computer
+            .solver
+            .assert(comparison_to_ast(trip_fact.clone()).expect("trip fact"));
+        if counter_is_bounded_by_its_facts {
+            computer
+                .symbols_bounding_counter
+                .insert("loop7_?".to_string(), trip_fact.get_abstracts());
+        }
+        let mut assuming = computer.select_assumptions(&counter);
+        assuming.push(
+            comparison_to_ast(AbstractComparison::new(
+                ">=",
+                counter,
+                AbstractExpression::Immediate(10),
+            ))
+            .expect("reach"),
+        );
+        computer.solver.check_assumptions(&assuming) == SatResult::Sat
+    }
+
+    #[test]
+    fn a_counter_brings_the_definitions_of_the_selects_bounding_it() {
+        assert!(!counter_can_reach_ten(true));
+        assert!(counter_can_reach_ten(false));
     }
 }

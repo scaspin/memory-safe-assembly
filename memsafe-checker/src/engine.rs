@@ -2834,6 +2834,19 @@ impl ExecutionEngine {
         for fact in &summary.facts {
             self.computer.solver.assert(summary_fact_to_ast(fact));
         }
+        let mentioned: Vec<String> = summary
+            .facts
+            .iter()
+            .chain(&summary.exit_facts)
+            .flat_map(|fact| fact.get_abstracts())
+            .collect();
+        for counter in mentioned.iter().filter(|symbol| symbol.contains("_?")) {
+            self.computer
+                .symbols_bounding_counter
+                .entry(counter.clone())
+                .or_default()
+                .extend(mentioned.iter().cloned());
+        }
         if self.computer.solver.check() == SatResult::Unsat {
             self.pop_scope(scope_id);
             *self.failed_summaries.borrow_mut().entry(pc).or_insert(0) += 1;

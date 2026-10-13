@@ -381,6 +381,9 @@ impl ARMCORTEXA {
             if !seen.insert(name.clone()) {
                 continue;
             }
+            if let Some(bounding) = self.symbols_bounding_counter.get(&name) {
+                pending.extend(bounding.iter().cloned());
+            }
             let Some((condition, taken, skipped)) = self.select_definitions.get(&name) else {
                 continue;
             };

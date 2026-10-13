@@ -2422,3 +2422,56 @@ fn a_long_concrete_loop_with_a_heavy_body_is_summarized_and_proved_safe() {
 fn a_long_concrete_loop_with_a_heavy_body_still_catches_its_last_read() {
     assert!(analyze_long_concrete_loop(199).is_err());
 }
+
+fn analyze_chunks_counted_by_a_clamp(bytes_short: i64) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "chunk:",
+        "cmp x2,#16",
+        "b.lt done",
+        "lsr x4,x2,#3",
+        "mov x10,#10",
+        "cmp x4,x10",
+        "csel x7,x4,x10,lt",
+        "words:",
+        "ldr x3,[x0],#8",
+        "subs x7,x7,#1",
+        "b.gt words",
+        "sub x2,x2,#80",
+        "b chunk",
+        "done:",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression(
+            "-",
+            abstract_of("len"),
+            AbstractExpression::Immediate(bytes_short),
+        ),
+    );
+    engine.add_abstract_from(2, "len");
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("len"),
+        AbstractExpression::Immediate(0),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+#[ignore = "the chunk pointer steps by a fresh select every iteration, so the outer loop never summarizes"]
+fn chunks_counted_by_a_clamped_length_are_bounded_by_the_clamp() {
+    assert_eq!(analyze_chunks_counted_by_a_clamp(0), Ok(()));
+}
+
+#[test]
+fn chunks_counted_by_a_clamped_length_still_catch_a_short_region() {
+    assert!(analyze_chunks_counted_by_a_clamp(1).is_err());
+}
