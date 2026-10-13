@@ -1275,11 +1275,7 @@ impl ExecutionEngine {
             code.split("%%").map(str::to_string).collect::<Vec<_>>()
         });
         for line in statements {
-            let trimmed = line.trim();
-            let text = match trimmed.split_once("//") {
-                Some(strings) => strings.0.to_string(),
-                None => trimmed.to_string(),
-            };
+            let text = line.trim().to_string();
 
             if text.is_empty() || text.starts_with("#") {
                 continue;
