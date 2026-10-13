@@ -1,4 +1,3 @@
-
 use crate::common::*;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -350,6 +349,7 @@ pub enum LoopInvariant {
     Tracks(usize, i64),
     NonDecreasing,
     NonIncreasing,
+    Geometric(i64),
     Unknown,
 }
 
@@ -500,12 +500,78 @@ pub fn invariant_of_register(prev: &RegisterValue, cur: &RegisterValue) -> LoopI
         {
             return LoopInvariant::Linear(step);
         }
+        if let Some(divisor) = geometric_step(prev, cur) {
+            return LoopInvariant::Geometric(divisor);
+        }
         return LoopInvariant::Unknown;
     }
     match cur.offset.checked_sub(prev.offset) {
         Some(0) => LoopInvariant::Fixed,
         Some(step) => LoopInvariant::Linear(AbstractExpression::Immediate(step)),
         None => LoopInvariant::Unknown,
+    }
+}
+
+fn narrowing_core(e: &AbstractExpression) -> (&AbstractExpression, bool) {
+    match e {
+        AbstractExpression::Expression(_, inner, _) if is_narrowed(e) => {
+            (narrowing_core(inner).0, true)
+        }
+        other => (other, false),
+    }
+}
+
+pub fn geometric_step(prev: &RegisterValue, cur: &RegisterValue) -> Option<i64> {
+    if prev.offset != 0 || cur.offset != 0 {
+        return None;
+    }
+    let before = narrowing_core(prev.base.as_ref()?);
+    let AbstractExpression::Expression(op, operand, amount) = narrowing_core(cur.base.as_ref()?).0
+    else {
+        return None;
+    };
+    let (core, narrowed) = narrowing_core(operand);
+    if core != before.0 || (before.1 && !narrowed) {
+        return None;
+    }
+    match (op.as_str(), &**amount) {
+        ("lsr" | ">>", AbstractExpression::Immediate(bits)) if (1..=62).contains(bits) => {
+            Some(1i64 << bits)
+        }
+        ("/", AbstractExpression::Immediate(k)) if *k >= 2 => Some(*k),
+        _ => None,
+    }
+}
+
+pub fn divisions_to_zero(bound: i64, divisor: i64) -> Option<i64> {
+    if bound < 0 || divisor < 2 {
+        return None;
+    }
+    let (mut left, mut steps) = (bound, 0);
+    while left > 0 {
+        left /= divisor;
+        steps += 1;
+    }
+    Some(steps)
+}
+
+pub fn upper_bound_of(e: &AbstractExpression) -> Option<i64> {
+    let AbstractExpression::Expression(op, inner, right) = e else {
+        return match e {
+            AbstractExpression::Immediate(v) => Some(*v),
+            _ => None,
+        };
+    };
+    let within = upper_bound_of(inner);
+    match (op.as_str(), &**right) {
+        ("%", AbstractExpression::Immediate(m)) if *m > 0 => {
+            Some(within.filter(|w| *w >= 0).map_or(m - 1, |w| w.min(m - 1)))
+        }
+        ("lsr" | ">>", AbstractExpression::Immediate(bits)) if (0..63).contains(bits) => {
+            within.map(|w| w >> bits)
+        }
+        ("atmost", AbstractExpression::Immediate(h)) => Some(within.map_or(*h, |w| w.min(*h))),
+        _ => None,
     }
 }
 
@@ -1006,5 +1072,109 @@ mod tests {
                 LoopInvariant::Fixed
             ]
         );
+    }
+
+    fn narrowed(e: AbstractExpression) -> RegisterValue {
+        RegisterValue {
+            kind: RegisterKind::RegisterBase,
+            base: Some(generate_expression(
+                "%",
+                e,
+                AbstractExpression::Immediate(1 << 32),
+            )),
+            offset: 0,
+        }
+    }
+
+    #[test]
+    fn a_shifted_register_is_geometric() {
+        let prev = narrowed(abstract_of("mask"));
+        let cur = narrowed(generate_expression(
+            "lsr",
+            prev.base.clone().unwrap(),
+            AbstractExpression::Immediate(4),
+        ));
+        assert_eq!(geometric_step(&prev, &cur), Some(16));
+        assert_eq!(
+            invariant_of_register(&prev, &cur),
+            LoopInvariant::Geometric(16)
+        );
+    }
+
+    #[test]
+    fn other_steps_are_not_geometric() {
+        let prev = narrowed(abstract_of("mask"));
+        let plus = narrowed(generate_expression(
+            "+",
+            prev.base.clone().unwrap(),
+            AbstractExpression::Immediate(4),
+        ));
+        assert_eq!(geometric_step(&prev, &plus), None);
+        let elsewhere = narrowed(generate_expression(
+            "lsr",
+            abstract_of("other"),
+            AbstractExpression::Immediate(4),
+        ));
+        assert_eq!(geometric_step(&prev, &elsewhere), None);
+        let unnarrowed_operand = narrowed(generate_expression(
+            "lsr",
+            abstract_of("mask"),
+            AbstractExpression::Immediate(4),
+        ));
+        assert_eq!(geometric_step(&prev, &unnarrowed_operand), None);
+        let plain = RegisterValue::new(RegisterKind::RegisterBase, Some(abstract_of("mask")), 0);
+        assert_eq!(geometric_step(&plain, &prev), None);
+        let narrowed_operand = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression(
+                "lsr",
+                prev.base.clone().unwrap(),
+                AbstractExpression::Immediate(4),
+            )),
+            0,
+        );
+        assert_eq!(geometric_step(&plain, &narrowed_operand), Some(16));
+    }
+
+    #[test]
+    fn divisions_to_zero_counts_the_shifts() {
+        assert_eq!(divisions_to_zero((1i64 << 32) - 1, 16), Some(8));
+        assert_eq!(divisions_to_zero(255, 16), Some(2));
+        assert_eq!(divisions_to_zero(0, 16), Some(0));
+        assert_eq!(divisions_to_zero(-1, 16), None);
+        assert_eq!(divisions_to_zero(100, 1), None);
+    }
+
+    #[test]
+    fn an_upper_bound_is_read_off_a_narrowing_or_a_clamp() {
+        assert_eq!(
+            upper_bound_of(&generate_expression(
+                "%",
+                abstract_of("x"),
+                AbstractExpression::Immediate(1 << 32)
+            )),
+            Some((1i64 << 32) - 1)
+        );
+        assert_eq!(
+            upper_bound_of(&generate_expression(
+                "atmost",
+                abstract_of("x"),
+                AbstractExpression::Immediate(7)
+            )),
+            Some(7)
+        );
+        assert_eq!(
+            upper_bound_of(
+                &narrowed(generate_expression(
+                    "lsr",
+                    narrowed(abstract_of("x")).base.unwrap(),
+                    AbstractExpression::Immediate(12)
+                ))
+                .base
+                .unwrap()
+            ),
+            Some((1i64 << 20) - 1)
+        );
+        assert_eq!(upper_bound_of(&abstract_of("x")), None);
     }
 }

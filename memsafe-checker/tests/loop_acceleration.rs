@@ -1,4 +1,3 @@
-
 use bums::common::*;
 
 fn init() {
@@ -2553,13 +2552,20 @@ fn select_of_the_counter_drops_its_unrolled_range() {
             engine.add_invariant(AbstractComparison::new(
                 "==",
                 abstract_of("count"),
-                generate_expression("+", abstract_of("words"), AbstractExpression::Immediate(extra)),
+                generate_expression(
+                    "+",
+                    abstract_of("words"),
+                    AbstractExpression::Immediate(extra),
+                ),
             ));
         }
         engine.start("start").map_err(|e| e.to_string())
     };
     assert_eq!(engine("x1", None), Ok(()));
-    assert!(engine("x5", Some(1)).is_err(), "one word past the region was accepted");
+    assert!(
+        engine("x5", Some(1)).is_err(),
+        "one word past the region was accepted"
+    );
 }
 
 #[test]
@@ -2598,13 +2604,20 @@ fn an_inner_loop_left_each_outer_iteration_starts_its_revisits_afresh() {
         init();
         let mut engine = bums::engine::ExecutionEngine::new(program.clone());
         engine.add_abstract_from(0, "key");
-        engine.add_region(RegionType::READ, "key", AbstractExpression::Immediate(schedule));
+        engine.add_region(
+            RegionType::READ,
+            "key",
+            AbstractExpression::Immediate(schedule),
+        );
         engine.add_abstract_to_memory("key", 240, abstract_of("rounds"));
         engine.add_abstract_from(1, "blocks");
         engine.start("start").map_err(|e| e.to_string())
     };
     assert_eq!(run(244), Ok(()));
-    assert!(run(243).is_err(), "the round count read past a 243-byte context");
+    assert!(
+        run(243).is_err(),
+        "the round count read past a 243-byte context"
+    );
 }
 
 fn negative_index_rows(extra: i64) -> Vec<String> {
@@ -2646,7 +2659,10 @@ fn an_inner_guard_equal_to_an_outer_counter_still_steps() {
         engine.start("start").map_err(|e| e.to_string())
     };
     assert_eq!(run(0), Ok(()));
-    assert!(run(1).is_err(), "a row one word longer than the buffer was accepted");
+    assert!(
+        run(1).is_err(),
+        "a row one word longer than the buffer was accepted"
+    );
 }
 
 #[test]
@@ -2867,4 +2883,74 @@ fn what_a_loop_walked_is_known_after_it_closes() {
     engine
         .start("start")
         .expect("both columns stay inside the region");
+}
+
+fn nibble_walk(bytes: i64) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "loop:",
+        "ldrb w4,[x0]",
+        "add x0,x0,#1",
+        "lsr w6,w6,#4",
+        "cbnz w6,loop",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        AbstractExpression::Immediate(bytes),
+    );
+    engine.add_abstract_from(6, "mask");
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_loop_that_shifts_a_word_to_zero_reads_one_byte_per_nibble() {
+    nibble_walk(8).expect("a 32-bit mask runs out after eight nibbles");
+}
+
+#[test]
+fn a_loop_that_shifts_a_word_to_zero_still_catches_one_byte_too_few() {
+    let err = nibble_walk(7).expect_err("the eighth nibble reads past seven bytes");
+    assert!(err.contains("not provably within"), "{err}");
+}
+
+#[test]
+fn a_shift_beside_a_loop_that_counts_something_else_bounds_nothing() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "loop:",
+        "ldrb w4,[x0]",
+        "add x0,x0,#1",
+        "lsr w6,w6,#4",
+        "subs x1,x1,#1",
+        "b.ne loop",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
+    engine.add_abstract_from(6, "mask");
+    engine.add_abstract_from(1, "count");
+    for (op, bound) in [(">=", 1), ("<=", 100)] {
+        engine.add_invariant(AbstractComparison::new(
+            op,
+            abstract_of("count"),
+            AbstractExpression::Immediate(bound),
+        ));
+    }
+    let err = engine
+        .start("start")
+        .expect_err("a hundred reads leave an eight-byte region");
+    assert!(err.to_string().contains("not provably within"), "{err}");
 }

@@ -944,6 +944,28 @@ where
     iterations_before_leaving(&op, step, bound.checked_sub(shift)?)
 }
 
+fn continues_while_nonzero(
+    continuing: &AbstractComparison,
+    walked: &RegisterValue,
+    bound: i64,
+) -> bool {
+    let word = generate_expression(
+        "%",
+        value_of(walked),
+        AbstractExpression::Immediate(1 << 32),
+    );
+    let is_walked = |e: &AbstractExpression| match e {
+        AbstractExpression::Register(r) => {
+            **r == *walked || (bound < 1 << 32 && value_of(r) == word)
+        }
+        _ => false,
+    };
+    let zero = AbstractExpression::Immediate(0);
+    continuing.op == "!="
+        && ((*continuing.left == zero && is_walked(&continuing.right))
+            || (*continuing.right == zero && is_walked(&continuing.left)))
+}
+
 fn trip_facts(
     op: &str,
     inclusive: bool,
@@ -1286,7 +1308,7 @@ fn summarize(
                     },
                 ));
             }
-            LoopInvariant::Unknown => {
+            LoopInvariant::Unknown | LoopInvariant::Geometric(_) => {
                 updates.push((i, RegisterValue::new_empty(&format!("{name}_widened_{i}"))));
             }
             LoopInvariant::Tracks(..) => {}
@@ -3346,6 +3368,7 @@ impl ExecutionEngine {
         } else {
             expression.clone().not()
         };
+        self.bound_geometric_walks(&mut summary, &continuing_now, &current_state);
         let settled_steps = self.settle_select_steps(
             &mut summary,
             &entry_state,
@@ -3471,6 +3494,63 @@ impl ExecutionEngine {
             continuing: continuing_at_summary,
         });
         Some(branch_decision)
+    }
+
+    fn proven_upper_bound(&self, register: &RegisterValue) -> Option<i64> {
+        let value = value_of(register);
+        let word = is_narrowed(&value).then_some((1i64 << 32) - 1);
+        [upper_bound_of(&value), word]
+            .into_iter()
+            .flatten()
+            .find(|bound| {
+                self.proves(AbstractComparison::new(
+                    ">=",
+                    value.clone(),
+                    AbstractExpression::Immediate(0),
+                )) && self.proves(AbstractComparison::new(
+                    "<=",
+                    value.clone(),
+                    AbstractExpression::Immediate(*bound),
+                ))
+            })
+    }
+
+    fn bound_geometric_walks(
+        &self,
+        summary: &mut Summary,
+        continuing_now: &AbstractComparison,
+        current: &ComputerState,
+    ) {
+        let counter = summary.counter.clone();
+        for (i, invariant) in summary.invariants.iter().enumerate() {
+            let LoopInvariant::Geometric(divisor) = invariant else {
+                continue;
+            };
+            let Some(bound) = self.proven_upper_bound(&current.0[i]) else {
+                continue;
+            };
+            let widened = AbstractExpression::Abstract(format!("{}_widened_{i}", counter.name()));
+            summary.facts.push(AbstractComparison::new(
+                ">=",
+                widened.clone(),
+                AbstractExpression::Immediate(0),
+            ));
+            summary.facts.push(AbstractComparison::new(
+                "<=",
+                widened,
+                AbstractExpression::Immediate(bound),
+            ));
+            if continues_while_nonzero(continuing_now, &current.0[i], bound)
+                && let Some(divisions) = divisions_to_zero(bound, *divisor)
+            {
+                log::info!("{} leaves within {divisions} divisions of x{i}", summary.id);
+                summary.facts.push(AbstractComparison::new(
+                    "<=",
+                    counter.expression(),
+                    AbstractExpression::Immediate(divisions + SUMMARY_ITERATION - 1),
+                ));
+            }
+        }
     }
 
     fn pinned_value(&self, e: &AbstractExpression) -> Option<i64> {
