@@ -2389,3 +2389,36 @@ fn a_select_latch_that_grows_is_not_given_a_range() {
     .to_vec();
     assert!(analyze_accelerated(program, 8, 8).is_err());
 }
+
+fn analyze_long_concrete_loop(region_words: i64) -> Result<(), String> {
+    init();
+    let trips = 200;
+    let mut program = vec![
+        "start:".to_string(),
+        format!("mov x2,#{trips}"),
+        "work:".to_string(),
+        format!("mov x4,#{trips}"),
+        "sub x4,x4,x2".to_string(),
+        "ldr x3,[x0,x4,lsl #3]".to_string(),
+    ];
+    program.extend(std::iter::repeat_n("add x5,x5,#1".to_string(), 2000));
+    program.extend(["sub x2,x2,#1", "cbnz x2,work", "ret"].map(String::from));
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        AbstractExpression::Immediate(region_words * 8),
+    );
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_long_concrete_loop_with_a_heavy_body_is_summarized_and_proved_safe() {
+    assert_eq!(analyze_long_concrete_loop(200), Ok(()));
+}
+
+#[test]
+fn a_long_concrete_loop_with_a_heavy_body_still_catches_its_last_read() {
+    assert!(analyze_long_concrete_loop(199).is_err());
+}

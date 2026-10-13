@@ -12,6 +12,7 @@ const MAX_SUMMARY_TRIES: usize = 3;
 const MAX_SELECT_CHAIN: usize = 16;
 const SUMMARY_ITERATION: i64 = 3;
 const DECIDED_REPEATS_BEFORE_SUMMARY: usize = 3;
+const UNROLLING_INSTRUCTION_BUDGET: i64 = 200_000;
 const MAX_MERGED_BLOCK: usize = 16;
 use z3::ast::Ast;
 use z3::*;
@@ -188,6 +189,7 @@ struct BranchPoint {
     accesses: Vec<MemoryAccess>,
     state: ComputerState,
     journal_len: usize,
+    instructions_run: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -1215,6 +1217,9 @@ pub struct ExecutionEngine {
     jump_history: Vec<JumpRecord>,
     concrete_decisions: HashMap<usize, bool>,
     closed_counters: Vec<(AbstractExpression, Vec<AbstractExpression>)>,
+    instructions_run: usize,
+    concrete_latch_visits: HashMap<usize, (usize, i64)>,
+    costly_latches: HashSet<usize>,
     select_history: Vec<usize>,
     value_ranges: HashMap<String, i64>,
     fail_fast: bool,
@@ -1391,6 +1396,9 @@ impl ExecutionEngine {
             jump_history: Vec::new(),
             concrete_decisions: HashMap::new(),
             closed_counters: Vec::new(),
+            instructions_run: 0,
+            concrete_latch_visits: HashMap::new(),
+            costly_latches: HashSet::new(),
             select_history: Vec::new(),
             value_ranges: HashMap::new(),
             active_loops: Vec::new(),
@@ -1644,6 +1652,7 @@ impl ExecutionEngine {
         depth: usize,
         unconditional_visits: &mut HashMap<usize, usize>,
     ) -> std::io::Result<Step> {
+        self.instructions_run += 1;
         if let Some(&end) = self.program.loop_ends.get(&pc)
             && let Some((written, exits)) = self.memory_free_loop(pc, end)
         {
@@ -1662,9 +1671,17 @@ impl ExecutionEngine {
 
             log::info!("{:?}: {:?}", pc, instruction);
 
-            let execute_result = self.computer.execute(pc, &instruction);
+            let mut execute_result = self.computer.execute(pc, &instruction);
             if instruction.opcode == "bl" && execute_result.is_ok() {
                 self.suspend_for_call(pc);
+            }
+            if let Some(condition) = self.costly_concrete_latch(pc, &instruction, &execute_result)
+                && let Some(Operand::Label(label)) = instruction.operands.get(1)
+            {
+                execute_result = Ok(ExecuteReturnType::ConditionalJumpLabel(
+                    condition,
+                    label.clone(),
+                ));
             }
 
             if is_conditional_branch(&instruction.opcode) {
@@ -1936,6 +1953,7 @@ impl ExecutionEngine {
                     accesses: rw_list,
                     state: self.computer.get_state(),
                     journal_len: self.computer.write_journal.len(),
+                    instructions_run: self.instructions_run,
                 };
                 self.jump_history.push(JumpRecord {
                     point: here.clone(),
@@ -1981,6 +1999,7 @@ impl ExecutionEngine {
                         accesses: self.computer.read_rw_queue(),
                         state: self.computer.get_state(),
                         journal_len: self.computer.write_journal.len(),
+                        instructions_run: self.instructions_run,
                     },
                     taken,
                     resolved: false,
@@ -2170,6 +2189,7 @@ impl ExecutionEngine {
                 accesses: rw_list.to_vec(),
                 state: entry,
                 journal_len: self.computer.write_journal.len(),
+                instructions_run: self.instructions_run,
             },
             taken: true,
             resolved: true,
@@ -2310,9 +2330,13 @@ impl ExecutionEngine {
                 self.path_ends = true;
                 None
             }
-            Decision::Take(taken) if self.repeats_unboundedly(pc, taken, expression) => self
-                .try_summarize(pc, depth, expression, rw_list)
-                .or(Some(taken)),
+            Decision::Take(taken)
+                if self.repeats_unboundedly(pc, taken, expression)
+                    || self.unrolling_costs_too_much(pc, taken, expression) =>
+            {
+                self.try_summarize(pc, depth, expression, rw_list)
+                    .or(Some(taken))
+            }
             Decision::Take(taken) => Some(taken),
             Decision::Explore => self.try_summarize(pc, depth, expression, rw_list),
         }
@@ -2336,6 +2360,106 @@ impl ExecutionEngine {
         progresses
             && 1 + visits.count() >= DECIDED_REPEATS_BEFORE_SUMMARY
             && self.bounded_guard(pc).is_none()
+    }
+
+    fn costly_concrete_latch(
+        &mut self,
+        pc: usize,
+        instruction: &Instruction,
+        result: &Result<ExecuteReturnType, String>,
+    ) -> Option<AbstractComparison> {
+        let op = match instruction.opcode.as_str() {
+            "cbz" => "==",
+            "cbnz" => "!=",
+            _ => return None,
+        };
+        let Ok(ExecuteReturnType::Next | ExecuteReturnType::JumpLabel(_)) = result else {
+            return None;
+        };
+        let Some(Operand::Label(label)) = instruction.operands.get(1) else {
+            return None;
+        };
+        if self.get_linenumber_of_label(label.clone())? > pc {
+            return None;
+        }
+        let tested = self.computer.get_register(&instruction.operands[0]);
+        if tested.base.is_some() || tested.kind == RegisterKind::Number {
+            return None;
+        }
+        let condition = AbstractComparison::new(
+            op,
+            AbstractExpression::Immediate(0),
+            AbstractExpression::Register(Box::new(tested.clone())),
+        );
+        if self.costly_latches.contains(&pc) {
+            return Some(condition);
+        }
+        let now = (self.instructions_run, tested.offset);
+        if let Some((run_before, value_before)) = self.concrete_latch_visits.insert(pc, now) {
+            let closing = value_before - tested.offset;
+            let per_iteration = (self.instructions_run - run_before) as i64;
+            if closing != 0 && tested.offset.signum() == closing.signum() {
+                let remaining = tested.offset / closing;
+                if remaining.saturating_mul(per_iteration) > UNROLLING_INSTRUCTION_BUDGET {
+                    log::info!(
+                        "line {pc} would unroll {remaining} more iterations of {per_iteration} instructions, tracking it as a loop guard"
+                    );
+                    self.costly_latches.insert(pc);
+                    return Some(condition);
+                }
+            }
+        }
+        None
+    }
+
+    fn unrolling_costs_too_much(
+        &self,
+        pc: usize,
+        taken: bool,
+        expression: &AbstractComparison,
+    ) -> bool {
+        if self.active_loops.iter().any(|open| open.pc == pc) {
+            return false;
+        }
+        let mut visits = self
+            .jump_history
+            .iter()
+            .rev()
+            .filter(|record| record.point.pc == pc && !record.resolved)
+            .take_while(|record| record.taken == taken);
+        let Some(last) = visits.next() else {
+            return false;
+        };
+        if 1 + visits.count() < DECIDED_REPEATS_BEFORE_SUMMARY {
+            return false;
+        }
+        let distance_of = |condition: &AbstractComparison| {
+            expression_to_ast(generate_expression(
+                "-",
+                (*condition.left).clone(),
+                (*condition.right).clone(),
+            ))?
+            .simplify()
+            .as_i64()
+        };
+        let (Some(now), Some(before)) =
+            (distance_of(expression), distance_of(&last.point.condition))
+        else {
+            return false;
+        };
+        let closing = before - now;
+        if closing == 0 || now.signum() != closing.signum() {
+            return false;
+        }
+        let per_iteration = (self.instructions_run - last.point.instructions_run) as i64;
+        let remaining = now / closing;
+        let costs_too_much = remaining.saturating_mul(per_iteration) > UNROLLING_INSTRUCTION_BUDGET;
+        if costs_too_much {
+            log::info!(
+                "line {pc} would unroll {remaining} more iterations of {per_iteration} instructions, summarizing instead"
+            );
+        }
+        costs_too_much
     }
 
     fn select_definitions_in(&self, condition: &AbstractComparison) -> Vec<ast::Bool> {
@@ -3033,6 +3157,19 @@ impl ExecutionEngine {
         let (before, after) = (&entry.0[register], &current.0[register]);
         let moved = Affine::of_register(after)?.combine(&Affine::of_register(before)?, -1)?;
         if moved.terms.is_empty() || moved.mentions_a_loop_counter() {
+            return None;
+        }
+        let known_at_entry: Vec<String> = entry
+            .0
+            .iter()
+            .flat_map(|value| value_of(value).get_abstracts())
+            .collect();
+        let made_this_iteration = moved.terms.iter().any(|(atom, _)| {
+            atom.get_abstracts()
+                .iter()
+                .any(|symbol| !known_at_entry.contains(symbol))
+        });
+        if made_this_iteration {
             return None;
         }
         let moving: Vec<(usize, Vec<String>)> = entry
