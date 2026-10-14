@@ -232,9 +232,7 @@ fn constant_index(e: &Expr) -> Option<i64> {
             _ => None,
         },
         Expr::Paren(p) => constant_index(&p.expr),
-        Expr::Unary(u) if matches!(u.op, syn::UnOp::Neg(_)) => {
-            constant_index(&u.expr).map(|v| -v)
-        }
+        Expr::Unary(u) if matches!(u.op, syn::UnOp::Neg(_)) => constant_index(&u.expr).map(|v| -v),
         Expr::Binary(b) => {
             let (l, r) = (constant_index(&b.left)?, constant_index(&b.right)?);
             match b.op {
@@ -600,11 +598,11 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         let mut #scratch = #real_struct_name { #fields };
                     };
                     after_call = quote! { #after_call #copied_back };
-                    arguments_to_pass
-                        .push(parse_quote! {&mut #scratch as *mut #real_struct_name})
+                    arguments_to_pass.push(parse_quote! {&mut #scratch as *mut #real_struct_name})
                 } else {
-                    arguments_to_pass
-                        .push(parse_quote! {&#real_struct_name { #fields } as *const #real_struct_name})
+                    arguments_to_pass.push(
+                        parse_quote! {&#real_struct_name { #fields } as *const #real_struct_name},
+                    )
                 }
             } else {
                 arguments_to_pass.push(i.clone());
@@ -672,8 +670,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                     if let Some((scaled, expression)) = offset.take() {
                         if scaled {
                             let buffer = Ident::new(&var_name, span);
-                            asserts =
-                                quote! { #asserts assert!(#expression <= #buffer.len()); };
+                            asserts = quote! { #asserts assert!(#expression <= #buffer.len()); };
                         }
                         pointer_offsets.insert(var_name.clone(), (scaled, expression));
                     }
@@ -1030,7 +1027,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                                     Type::Path(p) => {
                                                         p.path.segments[0].ident.to_string()
                                                     }
-                                                    _ => todo!("pointer field to {:?}", pointer.elem),
+                                                    _ => {
+                                                        todo!("pointer field to {:?}", pointer.elem)
+                                                    }
                                                 };
                                                 engine.add_abstract_to_memory(
                                                     name.clone(),
@@ -1160,6 +1159,18 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ));
             }
         }
+        if let Type::Reference(r) = ty
+            && let Type::Slice(sl) = &*r.elem
+        {
+            engine.add_invariant(AbstractComparison::new(
+                "<=",
+                byte_length(
+                    &(name.clone() + "_len"),
+                    Some(&calculate_type_of_slice_ptr(sl)),
+                ),
+                AbstractExpression::Immediate(isize::MAX as i64),
+            ));
+        }
     }
     for (array, index, comparison) in &element_bounds {
         let Some((suffix, _)) = passed_pointer(array, &argument_list) else {
@@ -1198,6 +1209,17 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     for i in invariants {
         engine.add_invariant(i);
+    }
+    if let ReturnType::Type(_, ty) = output
+        && let Type::Array(a) = &**ty
+    {
+        let result = format!("{fn_name}_result");
+        engine.add_abstract("x8", AbstractExpression::Abstract(result.clone()));
+        engine.add_region(
+            RegionType::WRITE,
+            result,
+            AbstractExpression::Immediate(calculate_size_of_array(a) as i64),
+        );
     }
     let label = vars.item_fn.ident.to_string();
     let _ = env_logger::try_init();
