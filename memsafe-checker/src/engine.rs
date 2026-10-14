@@ -4382,17 +4382,7 @@ impl ExecutionEngine {
                 .entry(active.pc)
                 .or_insert(0) += 1;
         }
-        let retrying = !holds && !only_data_moved && self.widen_for_retry(&active, &observed);
-        let force_close = !holds
-            && cells_hold
-            && steps_hold
-            && ghosts_repeat
-            && !retrying
-            && unstable.iter().all(|&i| {
-                !self.carries_region(&active.entry_state.0[i])
-                    && !self.carries_region(&active.state.0[i])
-                    && !self.carries_region(&current.0[i])
-            });
+        let retrying = !holds && self.widen_for_retry(&active, &observed);
 
         let above = if retrying {
             Vec::new()
@@ -4402,19 +4392,8 @@ impl ExecutionEngine {
         self.pop_scope(active.scope_id);
         self.active_loops.pop();
 
-        let closed = holds || force_close;
+        let closed = holds;
         if closed {
-            if force_close {
-                for &i in &unstable {
-                    self.computer.registers[i] =
-                        RegisterValue::new_empty(&format!("{}_unstable_{i}", active.id));
-                }
-                log::info!(
-                    "{} at line {} closed with data registers {unstable:?} widened",
-                    active.id,
-                    active.pc
-                );
-            }
             let left_by = if active.entry_decision {
                 shown.not()
             } else {

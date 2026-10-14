@@ -2475,3 +2475,40 @@ fn chunks_counted_by_a_clamped_length_are_bounded_by_the_clamp() {
 fn chunks_counted_by_a_clamped_length_still_catch_a_short_region() {
     assert!(analyze_chunks_counted_by_a_clamp(1).is_err());
 }
+
+#[test]
+fn an_index_whose_step_grows_after_the_unrolled_iterations_is_rejected() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "mov x5,#0",
+        "mov x9,#0",
+        "loop:",
+        "ldr x3,[x0,x5]",
+        "cmp x9,#3",
+        "mov x7,#8",
+        "mov x8,#64",
+        "csel x7,x7,x8,lt",
+        "add x5,x5,x7",
+        "add x9,x9,#1",
+        "subs x2,x2,#1",
+        "b.ne loop",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression("*", abstract_of("n"), AbstractExpression::Immediate(8)),
+    );
+    engine.add_abstract_from(2, "n");
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("n"),
+        AbstractExpression::Immediate(1),
+    ));
+    assert!(engine.start("start").is_err());
+}
