@@ -2099,7 +2099,7 @@ impl ExecutionEngine {
                 Step::Done => break,
             }
         }
-        self.computer.check_stack_pointer_restored();
+        self.computer.check_stack_pointer_restored(pc);
         Ok(())
     }
 
@@ -2162,6 +2162,10 @@ impl ExecutionEngine {
             match execute_result {
                 Ok(res) => match res {
                     ExecuteReturnType::Next => Ok(Step::Continue(pc + 1)),
+                    ExecuteReturnType::Trap => {
+                        log::info!("line {pc}: trap, path does not return");
+                        Ok(Step::Stop)
+                    }
                     ExecuteReturnType::JumpLabel(label) => {
                         if &label == "return" {
                             return Ok(Step::Done);

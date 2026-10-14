@@ -1781,6 +1781,7 @@ impl ARMCORTEXA {
             },
             InstructionType::Other => match instruction.opcode.as_str() {
                 "nop" | "hint" => {}
+                "brk" | "udf" | "hlt" => return Ok(ExecuteReturnType::Trap),
                 "cmp" => {
                     self.cmp(&instruction.operands[0], &instruction.operands[1]);
                 }

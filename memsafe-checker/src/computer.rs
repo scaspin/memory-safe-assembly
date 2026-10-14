@@ -774,18 +774,22 @@ impl ARMCORTEXA {
         Some((base, offset + addend))
     }
 
-    pub fn check_stack_pointer_restored(&self) {
+    pub fn check_stack_pointer_restored(&self, pc: usize) {
         let s = &self.registers[31];
         match &s.base {
             Some(b) => {
                 if b == &AbstractExpression::Abstract("sp".to_string()) && s.offset == 0 {
                     log::info!("Stack pointer restored to start");
                 } else {
-                    log::error!("Stack pointer offset not restored");
+                    log::error!(
+                        "line {pc}: stack pointer not restored on return: sp is {} {:+}",
+                        b,
+                        s.offset
+                    );
                 }
             }
             None => {
-                log::error!("Stack pointer not restored {:?}", s.base);
+                log::error!("line {pc}: stack pointer not restored on return: sp has no base");
             }
         }
     }

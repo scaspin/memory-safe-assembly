@@ -96,11 +96,7 @@ impl Arrangement {
             Arrangement::B8 | Arrangement::H8 => 8,
             Arrangement::H4 | Arrangement::S4 => 4,
             Arrangement::S2 | Arrangement::D2 => 2,
-            Arrangement::B
-            | Arrangement::H
-            | Arrangement::S
-            | Arrangement::D
-            | Arrangement::Q => 1,
+            Arrangement::B | Arrangement::H | Arrangement::S | Arrangement::D | Arrangement::Q => 1,
         }
     }
 
@@ -500,6 +496,9 @@ fn normalize_arrangement_suffix(opcode: &mut String, operands: &mut [Operand]) {
 }
 
 fn match_instruction_type(opcode: &str, operands: &[Operand]) -> InstructionType {
+    if matches!(opcode, "brk" | "udf" | "hlt") {
+        return InstructionType::Other;
+    }
     if operands.is_empty() {
         if opcode.ends_with(':') {
             return InstructionType::Label;

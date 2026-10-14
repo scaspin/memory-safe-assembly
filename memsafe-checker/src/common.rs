@@ -1422,8 +1422,20 @@ mod tests {
     #[test]
     fn a_mask_of_several_runs_keeps_each_run() {
         for mask in [0xffff_fffc, 0xb6, 0x7fff_ffff_ffff_fff0, 0x8000_0001] {
-            for value in [0, 3, 4, 0x1234_5677, 0xffff_ffff, 0x1_0000_0007, -5, i64::MIN + 9] {
-                assert!(equals(&masked(value, mask), value & mask), "{value:#x} & {mask:#x}");
+            for value in [
+                0,
+                3,
+                4,
+                0x1234_5677,
+                0xffff_ffff,
+                0x1_0000_0007,
+                -5,
+                i64::MIN + 9,
+            ] {
+                assert!(
+                    equals(&masked(value, mask), value & mask),
+                    "{value:#x} & {mask:#x}"
+                );
             }
         }
     }
@@ -1612,6 +1624,7 @@ pub enum ExecuteReturnType {
         RegisterValue,
         RegisterValue,
     ),
+    Trap,
 }
 
 #[cfg(test)]
