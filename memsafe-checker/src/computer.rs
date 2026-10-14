@@ -281,6 +281,11 @@ impl ARMCORTEXA {
         let Some(region) = self.memory.get_mut(&cell.region) else {
             return;
         };
+        let value = if width > 8 {
+            RegisterValue::new(RegisterKind::Number, None, 0)
+        } else {
+            value
+        };
         region.put(cell.offset, Some((value, Some(width))));
         region.mark_written(cell.offset, width);
         self.write_journal.push(CellWrite {

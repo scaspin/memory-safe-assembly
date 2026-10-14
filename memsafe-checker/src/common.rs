@@ -902,10 +902,10 @@ impl MemorySafeRegion {
                 let v = self.content.get(&k)?;
                 (at < k + self.widths.get(&k).copied().unwrap_or(8)).then_some((k, v))
             })?;
-            if stored.kind != RegisterKind::Immediate {
+            if stored.kind != RegisterKind::Immediate || stored.base.is_some() {
                 return None;
             }
-            let b = ((stored.offset as u64) >> (8 * (at - start))) & 0xff;
+            let b = (stored.offset as u64).checked_shr(8 * (at - start) as u32)? & 0xff;
             value |= b << (8 * byte);
         }
         Some(RegisterValue::new_imm(value as i64))
@@ -1409,6 +1409,15 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_narrow_read_inside_a_wide_constant_is_unknown_past_its_eighth_byte() {
+        let mut region = MemorySafeRegion::new(AbstractExpression::Immediate(16), RegionType::RW);
+        region.insert_sized(0, RegisterValue::new_imm(0x0807_0605_0403_0201), 16);
+        assert_eq!(region.read(1, 1).map(|v| v.offset), Some(2));
+        assert!(region.read(9, 1).is_none());
+        assert!(region.read(6, 4).is_none());
+    }
 
     #[test]
     fn a_mask_of_several_runs_keeps_each_run() {
