@@ -215,7 +215,10 @@ impl ARMCORTEXA {
                 );
                 let base = address.base.expect("Need base");
                 self.forget_where_written(&base, address.offset, width);
-                if base.contains("sp") {
+                if self
+                    .region_of(&base)
+                    .is_some_and(|(region, _, _)| region == "sp")
+                {
                     self.blind_stack_writes
                         .push((base.clone(), address.offset, width));
                 }
@@ -270,7 +273,10 @@ impl ARMCORTEXA {
                 );
                 let base = address.base.expect("Need base");
                 self.forget_where_written(&base, address.offset, width);
-                if base.contains("sp") {
+                if self
+                    .region_of(&base)
+                    .is_some_and(|(region, _, _)| region == "sp")
+                {
                     self.blind_stack_writes
                         .push((base.clone(), address.offset, width));
                 }
@@ -284,6 +290,17 @@ impl ARMCORTEXA {
         } else {
             res
         }
+    }
+
+    fn region_of(&self, base: &AbstractExpression) -> Option<(String, String, i64)> {
+        let abstracts = base.get_abstracts();
+        if let Some(region) = abstracts.iter().find(|a| self.memory.contains_key(*a)) {
+            return Some((region.clone(), region.clone(), 0));
+        }
+        abstracts.into_iter().find_map(|label| {
+            let address = *self.memory_labels.get(&label)?;
+            Some(("memory".to_string(), label, address))
+        })
     }
 
     fn get_memory_pointer(&self, base: String, offset: i64) -> (String, i64) {
@@ -464,60 +481,17 @@ impl ARMCORTEXA {
                 None => base_expr,
             },
         };
-        let (region, base, base_access) = match base_expr.clone() {
-            AbstractExpression::Abstract(regbase) => {
-                if let Some(region) = self.memory.get(&regbase.clone()) {
-                    (
-                        region,
-                        ast::Int::new_const(regbase.clone()),
-                        ast::Int::new_const(regbase),
-                    )
-                } else if let Some(address) = self.memory_labels.get(&regbase.clone()) {
-                    offset += address;
-                    (
-                        self.memory
-                            .get("memory")
-                            .expect("labelled data lives in the memory region"),
-                        ast::Int::new_const(regbase.clone()),
-                        ast::Int::new_const(regbase),
-                    )
-                } else {
-                    return Err(MemorySafetyError::new(&format!(
-                        "{ty} of {width} bytes at {} has no declared region for base {regbase}",
-                        format_address(&base_expr, offset)
-                    )));
-                }
-            }
-            _ => {
-                let abstracts = base_expr.get_abstracts();
-                if let Some(r) = abstracts.iter().find(|a| self.memory.contains_key(*a)) {
-                    (
-                        &self.memory[r],
-                        ast::Int::new_const(r.clone()),
-                        expression_to_ast(base_expr.clone())
-                            .ok_or_else(|| untranslatable(&base_expr, ty, width))?,
-                    )
-                } else if let Some((label, address)) = abstracts
-                    .iter()
-                    .find_map(|a| self.memory_labels.get(a).map(|address| (a, *address)))
-                {
-                    offset += address;
-                    (
-                        self.memory
-                            .get("memory")
-                            .expect("labelled data lives in the memory region"),
-                        ast::Int::new_const(label.clone()),
-                        expression_to_ast(base_expr.clone())
-                            .ok_or_else(|| untranslatable(&base_expr, ty, width))?,
-                    )
-                } else {
-                    return Err(MemorySafetyError::new(&format!(
-                        "no region declared for {ty} at {}",
-                        format_address(&base_expr, offset)
-                    )));
-                }
-            }
+        let Some((region_name, symbol, label_offset)) = self.region_of(&base_expr) else {
+            return Err(MemorySafetyError::new(&format!(
+                "no region declared for {ty} at {}",
+                format_address(&base_expr, offset)
+            )));
         };
+        offset += label_offset;
+        let region = &self.memory[&region_name];
+        let base = ast::Int::new_const(symbol);
+        let base_access = expression_to_ast(base_expr.clone())
+            .ok_or_else(|| untranslatable(&base_expr, ty, width))?;
 
         if ty == RegionType::WRITE && region.kind == RegionType::READ {
             return Err(MemorySafetyError::new(&format!(
@@ -526,23 +500,36 @@ impl ARMCORTEXA {
             )));
         }
 
-        let upperbound_value = expression_to_ast(region.get_length())
-            .unwrap_or_else(|| panic!("no translation for region length {}", region.get_length()));
-
-        let (l, u) = if base_expr.contains("sp") {
+        let (l, u, extent) = if region_name == "sp" {
+            let Some((low, high)) = self.stack_bounds() else {
+                return Err(MemorySafetyError::new(&format!(
+                    "{ty} of {width} bytes at {} has no frame to measure: \
+                     the stack pointer is not the entry value plus a known amount",
+                    format_address(&base_expr, offset)
+                )));
+            };
             let displacement = ast::Int::add(&[
                 &ast::Int::sub(&[&base_access, &base]),
                 &ast::Int::from_i64(offset),
             ]);
             let last_byte = ast::Int::add(&[&displacement, &ast::Int::from_i64(width - 1)]);
-            let below_max = ast::Int::sub(&[&ast::Int::from_i64(0), &upperbound_value]);
-            (displacement.lt(&below_max), last_byte.ge(&upperbound_value))
+            (
+                displacement.lt(ast::Int::from_i64(low)),
+                last_byte.ge(ast::Int::from_i64(high)),
+                format!("stack frame [{low}, {high})"),
+            )
         } else {
+            let upperbound_value = expression_to_ast(region.get_length()).unwrap_or_else(|| {
+                panic!("no translation for region length {}", region.get_length())
+            });
             let access = ast::Int::add(&[&base_access, &ast::Int::from_i64(offset)]);
             let last_byte = ast::Int::add(&[&access, &ast::Int::from_i64(width - 1)]);
-            let low_access = ast::Int::add(&[&base, &ast::Int::from_i64(0)]);
             let up_access = ast::Int::add(&[&base, &upperbound_value]);
-            (access.lt(&low_access), last_byte.ge(&up_access))
+            (
+                access.lt(&base),
+                last_byte.ge(&up_access),
+                format!("region of length {}", region.get_length()),
+            )
         };
 
         let selects = self.select_assumptions(&base_expr);
@@ -589,9 +576,8 @@ impl ARMCORTEXA {
                     self.solver.get_model()
                 );
                 Err(MemorySafetyError::new(&format!(
-                    "{ty} of {width} bytes at {} not provably within region of length {}",
+                    "{ty} of {width} bytes at {} not provably within {extent}",
                     format_address(&base_expr, offset),
-                    region.get_length()
                 )))
             }
         }
