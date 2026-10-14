@@ -684,7 +684,7 @@ impl ARMCORTEXA {
         self.memory.insert(name, new_region);
     }
 
-    fn label_to_memory_index(&self, label: String) -> (String, i64) {
+    fn label_to_memory_index(&self, label: &str) -> Option<(String, i64)> {
         let label = label
             .trim_start_matches(":pg_hi21_nc:")
             .trim_start_matches(":pg_hi21:")
@@ -698,9 +698,8 @@ impl ARMCORTEXA {
             .memory_labels
             .get(name)
             .or_else(|| self.memory_labels.get(name.trim_start_matches('_')))
-            .copied()
-            .unwrap_or(0);
-        ("memory".to_string(), offset + addend)
+            .copied()?;
+        Some(("memory".to_string(), offset + addend))
     }
 
     pub fn check_stack_pointer_restored(&self) {

@@ -25,6 +25,18 @@ enum Tested {
 }
 
 impl ARMCORTEXA {
+    fn set_label_address(&mut self, register: &Operand, label: &str) {
+        match self.label_to_memory_index(label) {
+            Some((region, index)) => self.set_register(
+                register,
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(region)),
+                index,
+            ),
+            None => self.set_register(register, RegisterKind::Number, None, 0),
+        }
+    }
+
     fn condition_holds(&self, condition: &str) -> Option<Result<bool, AbstractComparison>> {
         let single = |flag: &Option<FlagValue>, negated: bool| match flag.as_ref()? {
             FlagValue::Real(set) => Some(Ok(*set != negated)),
@@ -452,21 +464,9 @@ impl ARMCORTEXA {
                 "add" => (),
                 "adr" => {
                     if let Operand::Address(label, _) = &instruction.operands[1] {
-                        let (region, index) = self.label_to_memory_index(label.clone());
-                        self.set_register(
-                            &instruction.operands[0],
-                            RegisterKind::RegisterBase,
-                            Some(AbstractExpression::Abstract(region)),
-                            index,
-                        );
+                        self.set_label_address(&instruction.operands[0], label);
                     } else if let Operand::Label(label) = &instruction.operands[1] {
-                        let (region, index) = self.label_to_memory_index(label.clone());
-                        self.set_register(
-                            &instruction.operands[0],
-                            RegisterKind::RegisterBase,
-                            Some(AbstractExpression::Abstract(region)),
-                            index,
-                        );
+                        self.set_label_address(&instruction.operands[0], label);
                     } else {
                         panic!("adr not invoked correctly with register and label")
                     }
@@ -475,13 +475,7 @@ impl ARMCORTEXA {
                     if let Operand::Address(label, _) | Operand::Label(label) =
                         &instruction.operands[1]
                     {
-                        let (region, index) = self.label_to_memory_index(label.clone());
-                        self.set_register(
-                            &instruction.operands[0],
-                            RegisterKind::RegisterBase,
-                            Some(AbstractExpression::Abstract(region)),
-                            index,
-                        );
+                        self.set_label_address(&instruction.operands[0], label);
                     } else {
                         panic!("adrp not invoked correctly with register and label")
                     }
