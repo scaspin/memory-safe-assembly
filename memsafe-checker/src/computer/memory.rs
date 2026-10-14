@@ -571,6 +571,53 @@ impl ARMCORTEXA {
         assumptions
     }
 
+    fn fits_a_word(&self, e: &AbstractExpression) -> bool {
+        fn worth_asking(e: &AbstractExpression, budget: &mut i32) -> bool {
+            *budget -= 1;
+            if *budget < 0 {
+                return false;
+            }
+            match e {
+                AbstractExpression::Immediate(_) | AbstractExpression::Abstract(_) => true,
+                AbstractExpression::Register(r) => match &r.base {
+                    Some(b) => worth_asking(b, budget),
+                    None => true,
+                },
+                AbstractExpression::Expression(op, a, b) => {
+                    matches!(op.as_str(), "+" | "-" | "*")
+                        && worth_asking(a, budget)
+                        && worth_asking(b, budget)
+                }
+                _ => false,
+            }
+        }
+
+        worth_asking(e, &mut 24) && self.fits_in_32(&Some(e.clone()), 0)
+    }
+
+    fn without_redundant_narrowing(&self, e: &AbstractExpression) -> AbstractExpression {
+        match e {
+            AbstractExpression::Expression(op, left, right) => {
+                let inner = self.without_redundant_narrowing(left);
+                if op == "%"
+                    && **right == AbstractExpression::Immediate(1i64 << 32)
+                    && self.fits_a_word(&inner)
+                {
+                    return inner;
+                }
+                generate_expression(op, inner, self.without_redundant_narrowing(right))
+            }
+            AbstractExpression::Register(r) => match &r.base {
+                Some(base) => AbstractExpression::Register(Box::new(RegisterValue {
+                    base: Some(self.without_redundant_narrowing(base)),
+                    ..(**r).clone()
+                })),
+                None => e.clone(),
+            },
+            other => other.clone(),
+        }
+    }
+
     fn mem_safe_access(
         &self,
         base_expr: AbstractExpression,
@@ -578,6 +625,7 @@ impl ARMCORTEXA {
         ty: RegionType,
         width: i64,
     ) -> Result<(), MemorySafetyError> {
+        let base_expr = self.without_redundant_narrowing(&base_expr);
         let base_expr = match self.aligned_offset(&base_expr) {
             Some((name, folded)) => {
                 offset += folded;
@@ -719,5 +767,59 @@ impl ARMCORTEXA {
         ty: RegionType,
     ) -> Result<(), MemorySafetyError> {
         self.mem_safe_access(address_base(address)?, address.offset, ty, width)
+    }
+}
+
+#[cfg(test)]
+mod narrowing_tests {
+    use super::*;
+
+    fn narrowed(inner: AbstractExpression) -> AbstractExpression {
+        generate_expression("%", inner, AbstractExpression::Immediate(1i64 << 32))
+    }
+
+    #[test]
+    fn a_narrowing_comes_off_only_where_the_path_bounds_it() {
+        let computer = ARMCORTEXA::new();
+        for (op, bound) in [(">=", 0), ("<=", 128)] {
+            let fact =
+                AbstractComparison::new(op, abstract_of("h"), AbstractExpression::Immediate(bound));
+            computer
+                .solver
+                .assert(comparison_to_ast(fact).expect("a literal bound translates"));
+        }
+        assert_eq!(
+            computer.without_redundant_narrowing(&narrowed(abstract_of("h"))),
+            abstract_of("h")
+        );
+        let product = generate_expression("*", abstract_of("stride"), narrowed(abstract_of("h")));
+        assert_eq!(
+            computer.without_redundant_narrowing(&product).to_string(),
+            "stride * h"
+        );
+        assert_eq!(
+            computer.without_redundant_narrowing(&narrowed(narrowed(abstract_of("h")))),
+            abstract_of("h")
+        );
+        let counter = narrowed(abstract_of("loop0_?"));
+        assert_eq!(computer.without_redundant_narrowing(&counter), counter);
+        let moving = narrowed(generate_expression(
+            "-",
+            abstract_of("h"),
+            abstract_of("loop0_?"),
+        ));
+        assert_eq!(computer.without_redundant_narrowing(&moving), moving);
+    }
+
+    #[test]
+    fn a_narrowing_round_is_not_spent_on_a_term_that_cannot_be_bounded() {
+        let computer = ARMCORTEXA::new();
+        assert!(!computer.fits_a_word(&abstract_of("base[0:4]")));
+        assert!(!computer.fits_a_word(&generate_expression(
+            "lsr",
+            abstract_of("h"),
+            AbstractExpression::Immediate(4)
+        )));
+        assert!(!computer.fits_a_word(&abstract_of("h")));
     }
 }
