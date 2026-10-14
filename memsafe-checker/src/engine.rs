@@ -5606,6 +5606,62 @@ mod tests {
     }
 
     #[test]
+    fn a_counter_bound_follows_only_from_a_walk_towards_its_bound() {
+        const HALF: i64 = 1 << 31;
+
+        assert_eq!(iterations_before_leaving(">", -1, 0), Some(HALF));
+        assert_eq!(iterations_before_leaving(">", -2, 0), Some(HALF / 2));
+        assert_eq!(iterations_before_leaving(">=", -4, 0), Some(HALF / 4));
+        assert_eq!(iterations_before_leaving("<", 1, 0), Some(HALF + 1));
+        assert_eq!(iterations_before_leaving(">", -1, HALF - 2), Some(2));
+
+        assert_eq!(iterations_before_leaving(">", 1, 0), None);
+        assert_eq!(iterations_before_leaving("<", -1, 0), None);
+        assert_eq!(iterations_before_leaving(">", 0, 0), None);
+        assert_eq!(iterations_before_leaving("!=", -1, 0), None);
+        assert_eq!(iterations_before_leaving("==", -1, 0), None);
+        assert_eq!(iterations_before_leaving(">", -1, HALF), None);
+        assert_eq!(iterations_before_leaving("<", 1, -HALF - 1), None);
+    }
+
+    #[test]
+    fn a_summary_stands_where_the_loop_stood_after_summary_iteration_rounds() {
+        let counter = LoopCounter::for_loop(LoopId::new(0));
+        let at_summary = |register: &RegisterValue, step: &AbstractExpression| {
+            let stepped = stepped_by_the_counter(register, step, &counter);
+            let settled = with_counter_at(
+                &value_of(&stepped),
+                counter.name(),
+                &AbstractExpression::Immediate(SUMMARY_ITERATION),
+            );
+            Affine::of(&settled)
+                .and_then(|now| now.combine(&Affine::of_register(register)?, -1))
+                .expect("both sides are affine")
+        };
+        let unchanged = Affine {
+            constant: 0,
+            terms: Vec::new(),
+        };
+
+        let walking = RegisterValue::new(RegisterKind::RegisterBase, Some(abstract_of("dst")), 24);
+        assert_eq!(
+            at_summary(&walking, &AbstractExpression::Immediate(8)),
+            unchanged
+        );
+
+        let held = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression(
+                "+",
+                abstract_of("dst"),
+                abstract_of("stride"),
+            )),
+            8,
+        );
+        assert_eq!(at_summary(&held, &abstract_of("stride")), unchanged);
+    }
+
+    #[test]
     fn a_register_stepping_twice_by_a_symbolic_amount_is_summarized_as_linear() {
         let mut engine = ExecutionEngine::new(vec![
             "start:",
