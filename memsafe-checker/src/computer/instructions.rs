@@ -381,7 +381,7 @@ impl ARMCORTEXA {
                     }
                 }
                 "umull" | "smull" | "umnegl" | "smnegl" | "smulh" | "udiv" | "sdiv" | "mneg"
-                | "ubfiz" | "sbfiz" | "bfi" | "bfxil" | "ubfm" | "sbfm" => {
+                | "ubfiz" | "sbfiz" | "bfxil" | "ubfm" | "sbfm" => {
                     let dest = instruction
                         .operands
                         .first()
@@ -427,6 +427,28 @@ impl ARMCORTEXA {
                         );
                         self.set_register(dst, RegisterKind::RegisterBase, Some(expression), 0);
                     }
+                }
+                "bfi" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dst = reg_iter.next().expect("Need destination register");
+                    let src = reg_iter.next().expect("Need source register");
+                    let (Some(Operand::Immediate(lsb)), Some(Operand::Immediate(width))) =
+                        (reg_iter.next(), reg_iter.next())
+                    else {
+                        return Err("bfi needs an lsb and a width".to_string());
+                    };
+                    let bits = match dst {
+                        Operand::Register(RePrefix::W, _) => 32,
+                        _ => 64,
+                    };
+                    let value = instruction_aux::insert_bits(
+                        self.get_register(dst),
+                        self.get_register(src),
+                        *lsb,
+                        *width,
+                        bits,
+                    );
+                    self.set_register(dst, value.kind, value.base, value.offset);
                 }
                 "ubfx" | "sbfx" => {
                     let mut reg_iter = instruction.operands.iter();

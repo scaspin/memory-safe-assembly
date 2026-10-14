@@ -116,6 +116,12 @@ impl ARMCORTEXA {
             })
         };
 
+        if op_string == "|"
+            && let Some(value) = or_sets_a_tag_bit(&r1, &r2)
+        {
+            return Some(value);
+        }
+
         if !matches!(op_string, "+" | "-") && (r1.base.is_some() || r2.base.is_some()) {
             if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
                 return Some(RegisterValue {
@@ -670,6 +676,69 @@ pub fn extract_bits(value: RegisterValue, lsb: i64, width: i64, signed: bool) ->
             }
         }
         RegisterKind::Number => unknown,
+    }
+}
+
+fn or_sets_a_tag_bit(left: &RegisterValue, right: &RegisterValue) -> Option<RegisterValue> {
+    const STACK_ALIGNMENT: i64 = 16;
+    let (address, tag) = match (&left.kind, &right.kind) {
+        (RegisterKind::RegisterBase, RegisterKind::Immediate) => (left, right.offset),
+        (RegisterKind::Immediate, RegisterKind::RegisterBase) => (right, left.offset),
+        _ => return None,
+    };
+    if address.base.as_ref()? != &AbstractExpression::Abstract("sp".to_string()) {
+        return None;
+    }
+    if tag <= 0 || tag >= STACK_ALIGNMENT || address.offset.rem_euclid(STACK_ALIGNMENT) & tag != 0 {
+        return None;
+    }
+    Some(RegisterValue {
+        kind: RegisterKind::RegisterBase,
+        base: address.base.clone(),
+        offset: address.offset + tag,
+    })
+}
+
+pub fn insert_bits(
+    destination: RegisterValue,
+    field: RegisterValue,
+    lsb: i64,
+    width: i64,
+    bits: i64,
+) -> RegisterValue {
+    let unknown = RegisterValue {
+        kind: RegisterKind::Number,
+        base: None,
+        offset: 0,
+    };
+    if lsb < 0 || width <= 0 || lsb + width > bits || bits > 64 {
+        return unknown;
+    }
+    if destination.kind != RegisterKind::Immediate {
+        return unknown;
+    }
+    let span = low_bits_mask(width) << lsb;
+    let kept = (destination.offset as u64) & !span & low_bits_mask(bits);
+    let low_bits = extract_bits(field, 0, width, false);
+    if low_bits.kind == RegisterKind::Number {
+        return unknown;
+    }
+    let placed = shift_imm("lsl".to_string(), low_bits, lsb);
+    add_values(
+        placed,
+        RegisterValue {
+            kind: RegisterKind::Immediate,
+            base: None,
+            offset: kept as i64,
+        },
+    )
+}
+
+fn low_bits_mask(width: i64) -> u64 {
+    if width >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << width) - 1
     }
 }
 
