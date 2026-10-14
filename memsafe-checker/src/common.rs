@@ -986,9 +986,14 @@ fn masked_bits(value: &ast::Int, mask: &AbstractExpression) -> Option<ast::Int> 
     let mut parts = Vec::new();
     let mut remaining = *mask as u64;
     while remaining != 0 {
-        let bit = remaining & remaining.wrapping_neg();
-        parts.push(bit_of(value, bit as i64));
-        remaining -= bit;
+        let low = remaining & remaining.wrapping_neg();
+        let filled = remaining | (low - 1);
+        let above = filled.wrapping_add(1) & !filled;
+        parts.push(ast::Int::sub(&[
+            &value.modulo(ast::Int::from_u64(above)),
+            &value.modulo(ast::Int::from_u64(low)),
+        ]));
+        remaining &= above.wrapping_neg();
     }
     let borrowed: Vec<&ast::Int> = parts.iter().collect();
     match borrowed.is_empty() {
@@ -1118,6 +1123,15 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_mask_of_several_runs_keeps_each_run() {
+        for mask in [0xffff_fffc, 0xb6, 0x7fff_ffff_ffff_fff0, 0x8000_0001] {
+            for value in [0, 3, 4, 0x1234_5677, 0xffff_ffff, 0x1_0000_0007, -5, i64::MIN + 9] {
+                assert!(equals(&masked(value, mask), value & mask), "{value:#x} & {mask:#x}");
+            }
+        }
+    }
 
     #[test]
     fn mask_modulus_recognizes_all_ones() {

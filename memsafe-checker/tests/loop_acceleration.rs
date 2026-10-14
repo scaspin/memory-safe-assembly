@@ -2512,3 +2512,139 @@ fn an_index_whose_step_grows_after_the_unrolled_iterations_is_rejected() {
     ));
     assert!(engine.start("start").is_err());
 }
+
+fn last_nonzero_index(count: &str) -> Vec<String> {
+    [
+        "start:",
+        "cbz x1, done",
+        &format!("mov x4, {count}"),
+        "mov x2, x0",
+        "mov x0, #0",
+        "mov x3, #0",
+        "loop:",
+        "ldr x5, [x2], #8",
+        "add x3, x3, #1",
+        "cmp x5, #0",
+        "csel x0, x3, x0, ne",
+        "cmp x3, x4",
+        "b.lo loop",
+        "done:",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+#[test]
+fn select_of_the_counter_drops_its_unrolled_range() {
+    let mut engine = |count: &str, extra: Option<i64>| {
+        init();
+        let mut engine = bums::engine::ExecutionEngine::new(last_nonzero_index(count));
+        engine.add_abstract_from(0, "base");
+        engine.add_abstract_from(1, "words");
+        engine.add_region(
+            RegionType::READ,
+            "base",
+            generate_expression("*", abstract_of("words"), AbstractExpression::Immediate(8)),
+        );
+        if let Some(extra) = extra {
+            engine.add_abstract_from(5, "count");
+            engine.add_invariant(AbstractComparison::new(
+                "==",
+                abstract_of("count"),
+                generate_expression("+", abstract_of("words"), AbstractExpression::Immediate(extra)),
+            ));
+        }
+        engine.start("start").map_err(|e| e.to_string())
+    };
+    assert_eq!(engine("x1", None), Ok(()));
+    assert!(engine("x5", Some(1)).is_err(), "one word past the region was accepted");
+}
+
+#[test]
+fn an_inner_loop_left_each_outer_iteration_starts_its_revisits_afresh() {
+    let program: Vec<String> = [
+        "start:",
+        "cbz x1, done",
+        "ldr w5, [x0, #240]",
+        "cmp w5, #160",
+        "b.eq valid",
+        "cmp w5, #192",
+        "b.eq valid",
+        "cmp w5, #224",
+        "b.eq valid",
+        "mov x0, #-1",
+        "ret",
+        "valid:",
+        "outer:",
+        "sub x6, x5, #16",
+        "ld1 {v2.4s}, [x0], #16",
+        "inner:",
+        "ld1 {v2.4s}, [x0], #16",
+        "subs x6, x6, #16",
+        "b.gt inner",
+        "ldr q3, [x0]",
+        "sub x0, x0, x5",
+        "subs x1, x1, #1",
+        "b.gt outer",
+        "done:",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let run = |schedule: i64| {
+        init();
+        let mut engine = bums::engine::ExecutionEngine::new(program.clone());
+        engine.add_abstract_from(0, "key");
+        engine.add_region(RegionType::READ, "key", AbstractExpression::Immediate(schedule));
+        engine.add_abstract_to_memory("key", 240, abstract_of("rounds"));
+        engine.add_abstract_from(1, "blocks");
+        engine.start("start").map_err(|e| e.to_string())
+    };
+    assert_eq!(run(244), Ok(()));
+    assert!(run(243).is_err(), "the round count read past a 243-byte context");
+}
+
+fn negative_index_rows(extra: i64) -> Vec<String> {
+    [
+        "start:",
+        "cbz x0, exit",
+        &format!("add x6, x0, #{extra}"),
+        "neg x0, x6, lsl #3",
+        "sub x2, x2, x0",
+        "mov x10, x0",
+        "outer:",
+        "mov x9, x0",
+        "inner:",
+        "ldr x5, [x2, x9]",
+        "adds x9, x9, #8",
+        "b.ne inner",
+        "adds x10, x10, #8",
+        "b.ne outer",
+        "exit:",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+#[test]
+fn an_inner_guard_equal_to_an_outer_counter_still_steps() {
+    let run = |extra: i64| {
+        init();
+        let mut engine = bums::engine::ExecutionEngine::new(negative_index_rows(extra));
+        engine.add_abstract_from(0, "words");
+        engine.add_abstract_from(2, "base");
+        engine.add_region(
+            RegionType::READ,
+            "base",
+            generate_expression("*", abstract_of("words"), AbstractExpression::Immediate(8)),
+        );
+        engine.start("start").map_err(|e| e.to_string())
+    };
+    assert_eq!(run(0), Ok(()));
+    assert!(run(1).is_err(), "a row one word longer than the buffer was accepted");
+}

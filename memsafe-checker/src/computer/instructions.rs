@@ -188,6 +188,11 @@ impl ARMCORTEXA {
                 "sub" => {
                     self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
                 }
+                "neg" => {
+                    let mut operands = instruction.operands.clone();
+                    operands.insert(1, Operand::Register(RePrefix::Ze, 0));
+                    self.arithmetic("-", |x, y| x - y, operands);
+                }
                 "mul" => {
                     self.arithmetic("*", |x, y| x * y, instruction.operands.clone());
                 }
@@ -1636,7 +1641,10 @@ impl ARMCORTEXA {
                 | "uzp2" | "srshr" | "uaddlv" | "umaxv" | "cmgt" | "cmge" | "cmle" | "cmhi"
                 | "cnt" | "xtn" | "shrn" | "ushl" | "ushll" | "ushll2" | "sshll" | "sshll2"
                 | "abs" | "umin" | "bic" | "eor3" | "bcax" | "rax1" | "xar" | "sri" | "usra"
-                | "fcsel" | "ssra" | "uaddlp" | "saddlp" | "uadalp" | "sadalp" => {
+                | "fcsel" | "ssra" | "uaddlp" | "saddlp" | "uadalp" | "sadalp" | "addhn"
+                | "addhn2" | "cmeq" | "cmlt" | "mvni" | "sha1su0" | "sha1su1" | "sha1h"
+                | "sha1c" | "sha1p" | "sha1m" | "sha256su0" | "sha256su1" | "sha256h"
+                | "sha256h2" | "sha512su0" | "sha512su1" | "sha512h" | "sha512h2" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("Need destination register");
@@ -1846,7 +1854,7 @@ impl ARMCORTEXA {
                 a => todo!("simd instruction {} not supported yet", a),
             },
             InstructionType::Other => match instruction.opcode.as_str() {
-                "nop" => {}
+                "nop" | "hint" => {}
                 "cmp" => {
                     self.cmp(&instruction.operands[0], &instruction.operands[1]);
                 }

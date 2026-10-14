@@ -859,7 +859,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     let label = vars.item_fn.ident.to_string();
     let _ = env_logger::try_init();
+    log::info!(target: "bums_macros", "checking {label}");
+    let started = std::time::Instant::now();
     let res = engine.start(label.clone());
+    log::info!(target: "bums_macros", "{label}: {:.1}s, {}", started.elapsed().as_secs_f64(), if res.is_ok() { "verified" } else { "failed" });
 
     match res {
         Ok(_) => return token_stream,

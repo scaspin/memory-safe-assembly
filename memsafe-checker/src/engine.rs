@@ -99,7 +99,7 @@ fn register_destination(instruction: &Instruction) -> Option<Option<Operand>> {
         InstructionType::Label => Some(None),
         InstructionType::Arithmetic => destination(),
         InstructionType::Other => match instruction.opcode.as_str() {
-            "nop" | "cmp" | "cmn" | "tst" => Some(None),
+            "nop" | "hint" | "cmp" | "cmn" | "tst" => Some(None),
             "mov" | "movz" | "movk" | "mvn" | "neg" | "negs" | "ngc" | "ngcs" | "rbit" | "rev"
             | "clz" | "cls" => destination(),
             _ => None,
@@ -498,7 +498,7 @@ fn ghost_leaves<F>(
     before: &AbstractExpression,
     after: &AbstractExpression,
     path: &mut Vec<bool>,
-    live: &dyn Fn(&RegisterValue) -> bool,
+    live: &dyn Fn(&RegisterValue, &RegisterValue) -> bool,
     pin: &F,
     found: &mut Vec<Ghost>,
 ) where
@@ -506,7 +506,7 @@ fn ghost_leaves<F>(
 {
     match (before, after) {
         (AbstractExpression::Register(before), AbstractExpression::Register(after))
-            if !live(after) =>
+            if !live(before, after) =>
         {
             let step = match invariant_of_register(before, after) {
                 LoopInvariant::Linear(AbstractExpression::Immediate(step)) => Some(step),
@@ -554,8 +554,13 @@ where
     if previous.op != current.op {
         return found;
     }
-    let _ = entry;
-    let live = |r: &RegisterValue| now.contains(r);
+    let live = |before: &RegisterValue, after: &RegisterValue| {
+        let moved = invariant_of_register(before, after);
+        entry
+            .iter()
+            .zip(now)
+            .any(|(was, is)| is == after && invariant_of_register(was, is) == moved)
+    };
     for (side, before, after) in [
         (true, &previous.left, &current.left),
         (false, &previous.right, &current.right),
@@ -1005,9 +1010,10 @@ fn summarize(
             .or_else(|| previous.0.iter().position(|c| c == r))
     };
 
-    let register_step = |r: &RegisterValue| match index_of(r) {
-        Some(i) => step_at(Some(i), &invariants),
-        None => AbstractExpression::Immediate(ghost_step(ghosts, r).unwrap_or(0)),
+    let register_step = |r: &RegisterValue| match (ghost_step(ghosts, r), index_of(r)) {
+        (Some(step), _) => AbstractExpression::Immediate(step),
+        (None, Some(i)) => step_at(Some(i), &invariants),
+        (None, None) => AbstractExpression::Immediate(0),
     };
     let trip = trip_of(condition, &register_step);
 
@@ -2249,11 +2255,15 @@ impl ExecutionEngine {
     fn check_not_stuck(&self, pc: usize, what: &str) -> std::io::Result<()> {
         let cap = self.revisit_cap();
         if self.jump_history.len() > MAX_JUMP_HISTORY {
-            let last = self.jump_history.last().expect("jump history").point.pc;
+            let latest = self.jump_history.last().expect("jump history");
+            let last = latest.point.pc;
             let loop_count = self
                 .jump_history
                 .iter()
-                .filter(|h| h.point.pc == last && !h.resolved)
+                .rev()
+                .filter(|h| h.point.pc == last)
+                .take_while(|h| h.taken == latest.taken)
+                .filter(|h| !h.resolved)
                 .count();
             let allowance = self
                 .bounded_guard(last)
@@ -2783,6 +2793,7 @@ impl ExecutionEngine {
             (expression, &ghosts),
             branch_decision,
             self.bound_values(
+                pc,
                 &self.pin_steps(&attempt.invariants),
                 &entry_state.0,
                 &current_state.0,
@@ -2947,16 +2958,20 @@ impl ExecutionEngine {
 
     fn bound_values(
         &self,
+        pc: usize,
         invariants: &[LoopInvariant],
         entry: &[RegisterValue],
         current: &[RegisterValue],
     ) -> Vec<LoopInvariant> {
+        let unstable = self.unstable_registers.borrow().get(&pc).cloned().unwrap_or_default();
         invariants
             .iter()
             .zip(entry.iter().zip(current.iter()))
-            .map(|(invariant, (before, after))| match invariant {
+            .enumerate()
+            .map(|(i, (invariant, (before, after)))| match invariant {
                 LoopInvariant::Unknown
-                    if before.kind != RegisterKind::Number
+                    if !unstable.contains(&i)
+                        && before.kind != RegisterKind::Number
                         && after.kind != RegisterKind::Number
                         && !self.carries_region(after) =>
                 {
@@ -4272,7 +4287,7 @@ impl ExecutionEngine {
         self.assume_staying(&expression, active.entry_decision);
         self.pin_unknown_steps(&mut observed, &before.0, &after.0, &expression);
         self.computer.solver.pop(1);
-        let mut observed = self.bound_values(&observed, &before.0, &after.0);
+        let mut observed = self.bound_values(active.pc, &observed, &before.0, &after.0);
         for (i, recorded) in active.invariants.iter().enumerate() {
             if let LoopInvariant::Linear(step) = recorded
                 && !recorded.subsumes(&observed[i])
