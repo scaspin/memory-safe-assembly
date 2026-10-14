@@ -81,6 +81,21 @@ fn ldrh_reads_two_bytes() {
 }
 
 #[test]
+fn ldrsb_reads_one_byte() {
+    pins_width("ldrsb x2,[x0]", 1);
+}
+
+#[test]
+fn ldrsh_reads_two_bytes() {
+    pins_width("ldrsh x2,[x0]", 2);
+}
+
+#[test]
+fn ldrsw_reads_four_bytes() {
+    pins_width("ldrsw x2,[x0]", 4);
+}
+
+#[test]
 fn ldur_reads_eight_bytes() {
     pins_width("ldur x2,[x0,#0]", 8);
 }
@@ -93,6 +108,21 @@ fn ldurb_reads_one_byte() {
 #[test]
 fn ldurh_reads_two_bytes() {
     pins_width("ldurh w2,[x0,#0]", 2);
+}
+
+#[test]
+fn ldursb_reads_one_byte() {
+    pins_width("ldursb x2,[x0,#0]", 1);
+}
+
+#[test]
+fn ldursh_reads_two_bytes() {
+    pins_width("ldursh x2,[x0,#0]", 2);
+}
+
+#[test]
+fn ldursw_reads_four_bytes() {
+    pins_width("ldursw x2,[x0,#0]", 4);
 }
 
 #[test]
@@ -145,8 +175,52 @@ fn ldrb_zero_extends() {
 }
 
 #[test]
+fn ldrsb_sign_extends() {
+    assert_eq!(round_trip("strb w1,[x0]", "ldrsb x2,[x0]", 0xff), -1);
+}
+
+#[test]
+fn ldrsb_leaves_a_positive_byte_alone() {
+    assert_eq!(round_trip("strb w1,[x0]", "ldrsb x2,[x0]", 0x7f), 127);
+}
+
+#[test]
 fn ldrh_zero_extends() {
     assert_eq!(round_trip("strh w1,[x0]", "ldrh w2,[x0]", 0xfffe), 65534);
+}
+
+#[test]
+fn ldrsh_sign_extends() {
+    assert_eq!(round_trip("strh w1,[x0]", "ldrsh x2,[x0]", 0xfffe), -2);
+}
+
+#[test]
+fn ldrsw_sign_extends() {
+    assert_eq!(round_trip("str w1,[x0]", "ldrsw x2,[x0]", 0xffff_fffe), -2);
+}
+
+#[test]
+fn ldursb_sign_extends() {
+    assert_eq!(
+        round_trip("sturb w1,[x0,#0]", "ldursb x2,[x0,#0]", 0x80),
+        -128
+    );
+}
+
+#[test]
+fn ldursh_sign_extends() {
+    assert_eq!(
+        round_trip("sturh w1,[x0,#0]", "ldursh x2,[x0,#0]", 0x8000),
+        -32768
+    );
+}
+
+#[test]
+fn ldursw_sign_extends() {
+    assert_eq!(
+        round_trip("stur w1,[x0,#0]", "ldursw x2,[x0,#0]", 0x8000_0000),
+        -2147483648
+    );
 }
 
 #[test]
