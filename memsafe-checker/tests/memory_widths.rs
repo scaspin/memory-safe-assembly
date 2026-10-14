@@ -1,0 +1,158 @@
+// Each load and store spelling reads or writes a particular number of bytes, and the
+// `s` forms sign extend what they load. These pin both per opcode: the extent decides
+// what counts as in bounds, and the extension decides the value that comes back.
+
+use bums::common::*;
+
+fn init() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
+// Runs `body` against an `n`-byte region whose base is in x0.
+fn accepts(n: i64, body: &[&str]) -> bool {
+    init();
+    let mut program = vec!["start:".to_string()];
+    program.extend(body.iter().map(|line| line.to_string()));
+    program.push("ret".to_string());
+
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::RW,
+        "base".to_string(),
+        AbstractExpression::Immediate(n),
+    );
+    engine.add_immediate("x1", 0);
+    engine.start("start".to_string()).is_ok()
+}
+
+// An access of `width` bytes at offset 0 fits in exactly `width` bytes and no less.
+fn pins_width(access: &str, width: i64) {
+    assert!(
+        accepts(width, &[access]),
+        "`{access}` rejected in {width} bytes"
+    );
+    assert!(
+        !accepts(width - 1, &[access]),
+        "`{access}` accepted in {} bytes",
+        width - 1
+    );
+}
+
+// Stores `value` with `store`, reads it back with `load`, and returns x2.
+fn round_trip(store: &str, load: &str, value: usize) -> i64 {
+    init();
+    let program = vec![
+        "start:".to_string(),
+        store.to_string(),
+        load.to_string(),
+        "ret".to_string(),
+    ];
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base".to_string());
+    engine.add_region(
+        RegionType::RW,
+        "base".to_string(),
+        AbstractExpression::Immediate(8),
+    );
+    engine.add_immediate("x1", value);
+    engine.start("start".to_string()).expect("runs");
+    engine.get_register_output(2).offset
+}
+
+#[test]
+fn ldr_reads_eight_bytes() {
+    pins_width("ldr x2,[x0]", 8);
+}
+
+#[test]
+fn ldr_into_w_reads_four_bytes() {
+    pins_width("ldr w2,[x0]", 4);
+}
+
+#[test]
+fn ldrb_reads_one_byte() {
+    pins_width("ldrb w2,[x0]", 1);
+}
+
+#[test]
+fn ldrh_reads_two_bytes() {
+    pins_width("ldrh w2,[x0]", 2);
+}
+
+#[test]
+fn ldur_reads_eight_bytes() {
+    pins_width("ldur x2,[x0,#0]", 8);
+}
+
+#[test]
+fn ldurb_reads_one_byte() {
+    pins_width("ldurb w2,[x0,#0]", 1);
+}
+
+#[test]
+fn ldurh_reads_two_bytes() {
+    pins_width("ldurh w2,[x0,#0]", 2);
+}
+
+#[test]
+fn str_writes_eight_bytes() {
+    pins_width("str x1,[x0]", 8);
+}
+
+#[test]
+fn strb_writes_one_byte() {
+    pins_width("strb w1,[x0]", 1);
+}
+
+#[test]
+fn strh_writes_two_bytes() {
+    pins_width("strh w1,[x0]", 2);
+}
+
+#[test]
+fn stur_writes_eight_bytes() {
+    pins_width("stur x1,[x0,#0]", 8);
+}
+
+#[test]
+fn sturb_writes_one_byte() {
+    pins_width("sturb w1,[x0,#0]", 1);
+}
+
+#[test]
+fn sturh_writes_two_bytes() {
+    pins_width("sturh w1,[x0,#0]", 2);
+}
+
+// The unscaled forms are the ones that take a negative offset.
+#[test]
+fn ldur_reaches_back_from_the_end() {
+    assert!(accepts(16, &["add x3,x0,#16", "ldur x2,[x3,#-8]"]));
+    assert!(!accepts(16, &["add x3,x0,#16", "ldur x2,[x3,#-24]"]));
+}
+
+#[test]
+fn stur_reaches_back_from_the_end() {
+    assert!(accepts(16, &["add x3,x0,#16", "stur x1,[x3,#-8]"]));
+    assert!(!accepts(16, &["add x3,x0,#16", "stur x1,[x3,#-24]"]));
+}
+
+// An unsigned load keeps the loaded bytes; a signed one copies the top bit up.
+#[test]
+fn ldrb_zero_extends() {
+    assert_eq!(round_trip("strb w1,[x0]", "ldrb w2,[x0]", 0xff), 255);
+}
+
+#[test]
+fn ldrh_zero_extends() {
+    assert_eq!(round_trip("strh w1,[x0]", "ldrh w2,[x0]", 0xfffe), 65534);
+}
+
+#[test]
+fn ldurb_zero_extends() {
+    assert_eq!(
+        round_trip("sturb w1,[x0,#0]", "ldurb w2,[x0,#0]", 0x80),
+        128
+    );
+}

@@ -287,3 +287,260 @@ fn stride_stepping_over_a_long_bound_is_rejected() {
     );
     assert!(r.is_err(), "accepted a walk that steps over its bound");
 }
+
+fn run_with(
+    lines: &[&str],
+    setup: impl FnOnce(&mut bums::engine::ExecutionEngine),
+) -> Result<(), String> {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let program: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    setup(&mut engine);
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+fn buffer(engine: &mut bums::engine::ExecutionEngine, register: usize, name: &str, length: i64) {
+    engine.add_abstract_from(register, name);
+    engine.add_region(RegionType::RW, name, AbstractExpression::Immediate(length));
+}
+
+// An index kept in memory, then overwritten at a symbolic offset that may hit it.
+fn stale_after_symbolic_store(index: i64) -> Result<(), String> {
+    run_with(
+        &[
+            "start:",
+            &format!("mov x3,#{index}"),
+            "str x3,[x1]",
+            "and x4,x2,#1",
+            "lsl x4,x4,#3",
+            "str x5,[x1,x4]",
+            "ldr x6,[x1]",
+            "ldr x7,[x0,x6]",
+            "ret",
+        ],
+        |e| {
+            buffer(e, 0, "data", 64);
+            buffer(e, 1, "scratch", 16);
+            e.add_abstract_from(2, "selector");
+        },
+    )
+}
+
+#[test]
+fn a_symbolic_store_forgets_what_it_may_overwrite() {
+    assert!(stale_after_symbolic_store(0).is_err());
+}
+
+fn stale_after_narrow_store() -> Result<(), String> {
+    run_with(
+        &[
+            "start:",
+            "mov x3,#0",
+            "str x3,[x1]",
+            "strb w5,[x1,#1]",
+            "ldr x6,[x1]",
+            "ldr x7,[x0,x6]",
+            "ret",
+        ],
+        |e| {
+            buffer(e, 0, "data", 64);
+            buffer(e, 1, "scratch", 16);
+        },
+    )
+}
+
+#[test]
+fn a_narrow_store_inside_a_stored_value_invalidates_it() {
+    assert!(stale_after_narrow_store().is_err());
+}
+
+// `.long 0, 1` read as one doubleword is 2^32, not 0.
+fn wide_read_of_a_narrow_table(item: &str) -> Result<(), String> {
+    run_with(
+        &[
+            "table:",
+            item,
+            "start:",
+            "adr x1,table",
+            "ldr x6,[x1]",
+            "ldr x7,[x0,x6]",
+            "ret",
+        ],
+        |e| buffer(e, 0, "data", 64),
+    )
+}
+
+#[test]
+fn a_wide_load_assembles_every_item_it_covers() {
+    assert_eq!(wide_read_of_a_narrow_table(".long 0, 0"), Ok(()));
+    assert!(wide_read_of_a_narrow_table(".long 0, 1").is_err());
+}
+
+// A symbolic index into the second table, plus an immediate that must not be lost.
+fn indexed_table_read(immediate: i64) -> Result<(), String> {
+    run_with(
+        &[
+            ".quad 1,2",
+            "second:",
+            ".quad 3,4",
+            "start:",
+            "adr x1,second",
+            "and x2,x2,#1",
+            "lsl x2,x2,#3",
+            "add x1,x1,x2",
+            &format!("ldr x3,[x1,#{immediate}]"),
+            "ret",
+        ],
+        |e| e.add_abstract_from(2, "selector"),
+    )
+}
+
+#[test]
+fn an_immediate_after_a_symbolic_table_index_is_kept() {
+    assert_eq!(indexed_table_read(0), Ok(()));
+    assert!(indexed_table_read(8).is_err());
+    assert!(indexed_table_read(64).is_err());
+}
+
+#[test]
+fn an_undefined_symbol_is_not_the_start_of_the_data() {
+    let result = run_with(
+        &[
+            ".quad 1,2",
+            "start:",
+            "adrp x1,external@PAGE",
+            "ldr x3,[x1]",
+            "ret",
+        ],
+        |_| {},
+    );
+    assert!(result.is_err(), "{result:?}");
+}
+
+fn stack_access(lines: &[&str]) -> Result<(), String> {
+    let mut program = vec!["start:"];
+    program.extend_from_slice(lines);
+    program.push("ret");
+    run_with(&program, |_| {})
+}
+
+#[test]
+fn the_stack_is_bounded_by_its_frame() {
+    assert_eq!(
+        stack_access(&[
+            "sub sp,sp,#32",
+            "str x1,[sp,#24]",
+            "ldr x1,[sp,#24]",
+            "add sp,sp,#32"
+        ]),
+        Ok(())
+    );
+    assert!(stack_access(&["sub sp,sp,#32", "str x1,[sp,#4096]", "add sp,sp,#32"]).is_err());
+    assert!(stack_access(&["str x1,[sp,#-8]"]).is_err());
+    assert!(stack_access(&["str x1,[sp,#-144]"]).is_err());
+}
+
+// A buffer whose name happens to contain "sp" is still that buffer.
+#[test]
+fn a_region_named_like_the_stack_is_not_the_stack() {
+    let result = run_with(&["start:", "ldr x3,[x0,#-8]", "ret"], |e| {
+        buffer(e, 0, "dsp", 64)
+    });
+    assert!(result.is_err(), "{result:?}");
+}
+
+#[test]
+fn clz_of_a_word_counts_32_bits() {
+    let read = |offset: &str| {
+        run_with(
+            &[
+                "start:",
+                "mov w2,#1",
+                "clz w3,w2",
+                &format!("add x3,x3,#{offset}"),
+                "ldrb w4,[x0,x3]",
+                "ret",
+            ],
+            |e| buffer(e, 0, "data", 32),
+        )
+    };
+    assert_eq!(read("0"), Ok(()));
+    assert!(read("1").is_err());
+}
+
+// sxtb reads the index byte as signed: 0xf8 is -8 and 0xf7 is one byte before the buffer.
+#[test]
+fn a_sign_extended_index_is_negative() {
+    let read = |value: i64| {
+        run_with(
+            &[
+                "start:",
+                &format!("mov x2,#{value}"),
+                "add x1,x0,#8",
+                "ldrb w3,[x1,w2,sxtb]",
+                "ret",
+            ],
+            |e| buffer(e, 0, "data", 16),
+        )
+    };
+    assert_eq!(read(0x07), Ok(()));
+    assert_eq!(read(0xf8), Ok(()));
+    assert!(read(0xf7).is_err());
+}
+
+// Counted down by two in a w register: an odd count leaves the loop at -1, one
+// step past where an even count stops, and the read after it is then past the
+// end. The exit has to admit the odd counts.
+#[test]
+fn a_w_countdown_exits_on_odd_counts_too() {
+    let result = run_with(
+        &[
+            "start:",
+            "loop:",
+            "add x0,x0,#8",
+            "subs w1,w1,#2",
+            "b.gt loop",
+            "ldr x4,[x0,#-8]",
+            "ret",
+        ],
+        |e| {
+            e.add_abstract_from(0, "base");
+            e.add_abstract_from(1, "h");
+            e.add_region(
+                RegionType::READ,
+                "base",
+                generate_expression("*", abstract_of("h"), AbstractExpression::Immediate(4)),
+            );
+            e.add_invariant(AbstractComparison::new(
+                ">=",
+                abstract_of("h"),
+                AbstractExpression::Immediate(1),
+            ));
+            e.add_invariant(AbstractComparison::new(
+                "<=",
+                abstract_of("h"),
+                AbstractExpression::Immediate(128),
+            ));
+        },
+    );
+    assert!(result.is_err(), "{result:?}");
+}
+
+// An extend written without an amount is still an operand of the instruction.
+#[test]
+fn an_extend_without_an_amount_still_computes() {
+    let read = |value: i64| {
+        run_with(
+            &[
+                "start:",
+                &format!("mov x2,#{value}"),
+                "add x1,x0,w2,uxtw",
+                "ldrb w3,[x1]",
+                "ret",
+            ],
+            |e| buffer(e, 0, "data", 16),
+        )
+    };
+    assert_eq!(read(15), Ok(()));
+    assert!(read(16).is_err());
+}
