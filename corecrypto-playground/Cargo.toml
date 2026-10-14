@@ -1,0 +1,22 @@
+[package]
+name = "corecrypto-playground"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Annotations for the arm64 assembly in Apple's corecrypto
+# (https://github.com/apple/corecrypto). The crate never links, so the extern
+# symbols do not need to resolve; only the proc-macro's symbolic execution runs.
+# Render the assembly first with `import-corecrypto.py` (see build.rs).
+
+[features]
+default = ["ccn", "ccaes", "aes", "sha", "mlkem"]
+ccn = []
+ccaes = []
+aes = []
+sha = []
+mlkem = []
+probe = []
+
+[dependencies]
+bums_macros = { path = "../bums_macros" }
