@@ -490,38 +490,26 @@ impl ARMCORTEXA {
             }
             _ => {
                 let abstracts = base_expr.get_abstracts();
-                let mut result: Option<(&MemorySafeRegion, z3::ast::Int, z3::ast::Int)> = None;
-                for r in self.memory.keys() {
-                    if abstracts.contains(r) {
-                        result = Some((
-                            self.memory.get(r).expect("region named by its own key"),
-                            expression_to_ast(AbstractExpression::Abstract(r.to_string()))
-                                .expect("an abstract always translates"),
-                            expression_to_ast(base_expr.clone())
-                                .ok_or_else(|| untranslatable(&base_expr, ty, width))?,
-                        ));
-                        break;
-                    }
-                    for r in self.memory_labels.clone() {
-                        if abstracts.contains(&r.0)
-                            && let Some(address) = self.memory_labels.get(&r.0.clone())
-                        {
-                            offset = *address;
-                            result = Some((
-                                self.memory
-                                    .get("memory")
-                                    .expect("labelled data lives in the memory region"),
-                                expression_to_ast(AbstractExpression::Abstract(r.0.to_string()))
-                                    .expect("an abstract always translates"),
-                                expression_to_ast(base_expr.clone())
-                                    .ok_or_else(|| untranslatable(&base_expr, ty, width))?,
-                            ));
-                            break;
-                        }
-                    }
-                }
-                if let Some(res) = result {
-                    res
+                if let Some(r) = abstracts.iter().find(|a| self.memory.contains_key(*a)) {
+                    (
+                        &self.memory[r],
+                        ast::Int::new_const(r.clone()),
+                        expression_to_ast(base_expr.clone())
+                            .ok_or_else(|| untranslatable(&base_expr, ty, width))?,
+                    )
+                } else if let Some((label, address)) = abstracts
+                    .iter()
+                    .find_map(|a| self.memory_labels.get(a).map(|address| (a, *address)))
+                {
+                    offset += address;
+                    (
+                        self.memory
+                            .get("memory")
+                            .expect("labelled data lives in the memory region"),
+                        ast::Int::new_const(label.clone()),
+                        expression_to_ast(base_expr.clone())
+                            .ok_or_else(|| untranslatable(&base_expr, ty, width))?,
+                    )
                 } else {
                     return Err(MemorySafetyError::new(&format!(
                         "no region declared for {ty} at {}",
