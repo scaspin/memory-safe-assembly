@@ -39,14 +39,6 @@ fn content_symbol(region: &str, offset: i64, width: i64, epoch: usize) -> Regist
     }
 }
 
-fn format_address(base: &AbstractExpression, offset: i64) -> String {
-    if offset < 0 {
-        format!("{base} - {}", -offset)
-    } else {
-        format!("{base} + {offset}")
-    }
-}
-
 fn region_base(
     address: &RegisterValue,
     ty: RegionType,
@@ -433,40 +425,6 @@ impl ARMCORTEXA {
         }
     }
 
-    pub(crate) fn region_of(&self, base: &AbstractExpression) -> Option<(String, String, i64)> {
-        let counted_once: Vec<String> = crate::widening::Affine::of(base)
-            .map(|form| {
-                form.terms
-                    .into_iter()
-                    .filter_map(|(atom, coefficient)| match atom {
-                        AbstractExpression::Abstract(name) if coefficient == 1 => Some(name),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let abstracts: Vec<String> = counted_once
-            .into_iter()
-            .chain(base.get_abstracts())
-            .collect();
-        if let Some(region) = abstracts.iter().find(|a| self.memory.contains_key(*a)) {
-            return Some((region.clone(), region.clone(), 0));
-        }
-        abstracts.into_iter().find_map(|label| {
-            let (section, address) = self.memory_labels.get(&label)?.clone();
-            Some((section, label, address))
-        })
-    }
-
-    fn get_memory_pointer(&self, base: String, offset: i64) -> (String, i64) {
-        match self.memory_labels.get(&base) {
-            Some((section, address)) if !self.memory.contains_key(&base) => {
-                (section.clone(), address + offset)
-            }
-            _ => (base, offset),
-        }
-    }
-
     fn data_symbol_at(&self, section: &str, offset: i64) -> Option<(String, String, i64)> {
         self.memory_labels
             .iter()
@@ -571,28 +529,6 @@ impl ARMCORTEXA {
         }
     }
 
-    pub(crate) fn finite_values(&self, symbol: &str, cap: usize) -> Option<Vec<i64>> {
-        let var = ast::Int::new_const(symbol.to_string());
-        let mut found: Vec<i64> = Vec::new();
-        loop {
-            let excluded: Vec<ast::Bool> = found
-                .iter()
-                .map(|v| var.eq(ast::Int::from_i64(*v)).not())
-                .collect();
-            match self.solver.check_assumptions(&excluded) {
-                SatResult::Unsat => return Some(found),
-                SatResult::Unknown => return None,
-                SatResult::Sat => {
-                    let value = self.solver.get_model()?.eval(&var, true)?.as_i64()?;
-                    if found.contains(&value) || found.len() >= cap {
-                        return None;
-                    }
-                    found.push(value);
-                }
-            }
-        }
-    }
-
     pub(crate) fn model_symbols(&self) -> Vec<String> {
         if self.solver.check() != SatResult::Sat {
             return Vec::new();
@@ -686,38 +622,6 @@ impl ARMCORTEXA {
             }
             _ => None,
         }
-    }
-
-    pub fn select_assumptions(&self, e: &AbstractExpression) -> Vec<ast::Bool> {
-        let mut seen = std::collections::BTreeSet::new();
-        let mut pending = e.get_abstracts();
-        let mut assumptions = Vec::new();
-        while let Some(name) = pending.pop() {
-            if !seen.insert(name.clone()) {
-                continue;
-            }
-            if let Some(bounding) = self.symbols_bounding_counter.get(&name) {
-                pending.extend(bounding.iter().cloned());
-            }
-            let Some((condition, taken, skipped)) = self.select_definitions.get(&name) else {
-                continue;
-            };
-            pending.extend(taken.get_abstracts());
-            pending.extend(skipped.get_abstracts());
-            if !is_translatable(taken) || !is_translatable(skipped) {
-                continue;
-            }
-            if let (Some(condition), Some(taken), Some(skipped)) = (
-                comparison_to_ast(condition.clone()),
-                expression_to_ast(taken.clone()),
-                expression_to_ast(skipped.clone()),
-            ) {
-                let chosen = ast::Int::new_const(name);
-                assumptions.push(ast::Bool::or(&[&condition.not(), &chosen.eq(taken)]));
-                assumptions.push(ast::Bool::or(&[&condition, &chosen.eq(skipped)]));
-            }
-        }
-        assumptions
     }
 
     fn fits_a_word(&self, e: &AbstractExpression) -> bool {

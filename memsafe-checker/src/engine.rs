@@ -30,9 +30,9 @@ use z3::ast::Ast;
 use z3::*;
 
 use crate::common::*;
-use crate::computer::*;
-use crate::instruction_parser::*;
-use crate::loader::{DataItem, DataValue, Listing};
+use crate::computer::{ARMCORTEXA, MAX_EXPRESSION_NODES};
+use crate::loader::Listing;
+use crate::machine::*;
 use crate::widening::*;
 
 enum BranchOutcome {
@@ -47,60 +47,6 @@ enum Step {
 }
 
 const MAX_EXPLORED_KEY_BYTES: usize = 256 << 20;
-
-fn flags_dead(code: &[Instruction], pc: usize) -> bool {
-    for instruction in code.iter().skip(pc) {
-        let opcode = instruction.opcode.as_str();
-        if instruction.is_label()
-            || matches!(
-                opcode,
-                "nop" | "hint" | "mov" | "movz" | "movk" | "movn" | "mvn" | "adr" | "adrp"
-            )
-        {
-            continue;
-        }
-        if matches!(
-            opcode,
-            "cmp" | "cmn" | "tst" | "subs" | "adds" | "ands" | "bics" | "negs" | "fcmp" | "fcmpe"
-        ) {
-            return true;
-        }
-        let reads_flags = matches!(
-            opcode,
-            "adc"
-                | "adcs"
-                | "sbc"
-                | "sbcs"
-                | "ngc"
-                | "ngcs"
-                | "csel"
-                | "csinc"
-                | "csinv"
-                | "csneg"
-                | "cset"
-                | "csetm"
-                | "cinc"
-                | "cinv"
-                | "cneg"
-                | "ccmp"
-                | "ccmn"
-                | "fcsel"
-                | "fccmp"
-                | "fccmpe"
-        );
-        let straight_line = matches!(
-            instruction.ty,
-            InstructionType::Arithmetic
-                | InstructionType::Memory
-                | InstructionType::SIMDArithmetic
-                | InstructionType::SIMDManagement
-        );
-        if reads_flags || !straight_line {
-            return false;
-        }
-    }
-    false
-}
 
 fn symbols_of(fact: &str) -> impl Iterator<Item = &str> {
     const KEYWORDS: [&str; 20] = [
@@ -161,44 +107,12 @@ fn join_branch_errors(e1: Error, e2: Error) -> String {
     if e1 == e2 { e1 } else { format!("{e1}; {e2}") }
 }
 
-#[derive(Clone)]
-struct Program {
-    code: Vec<Instruction>,
+struct Program<I> {
+    code: Vec<I>,
     labels: Vec<(String, usize)>,
     loop_ends: BTreeMap<usize, usize>,
     line_at: BTreeMap<i64, usize>,
     addresses: BTreeMap<String, i64>,
-}
-
-fn store_data_item(computer: &mut ARMCORTEXA, section: &str, item: &DataItem) {
-    match &item.value {
-        DataValue::Literal(value) | DataValue::LabelDifference { value, .. } => {
-            computer.add_memory_value(section.to_string(), item.offset, *value, item.width)
-        }
-        DataValue::Pointer(symbol, addend) => {
-            if let Some((base, offset)) = computer.symbol_address(symbol) {
-                let pointer = RegisterValue::new(
-                    RegisterKind::RegisterBase,
-                    Some(AbstractExpression::Abstract(base)),
-                    offset + addend,
-                );
-                computer.add_memory_pointer(section, item.offset, pointer, item.width);
-            }
-        }
-        DataValue::Unknown => (),
-    }
-}
-
-fn branch_label(instruction: &Instruction) -> Option<&str> {
-    let is_branch = instruction.ty == InstructionType::ControlFlow
-        && (instruction.opcode == "b" || is_conditional_branch(&instruction.opcode));
-    if !is_branch {
-        return None;
-    }
-    instruction.operands.iter().rev().find_map(|op| match op {
-        Operand::Label(label) => Some(label.as_str()),
-        _ => None,
-    })
 }
 
 fn local_label_reference(label: &str) -> Option<(&str, bool)> {
@@ -235,10 +149,20 @@ fn label_line(labels: &[(String, usize)], label: &str, pc: usize) -> Option<usiz
         .map(|l| l.1)
 }
 
-fn loop_ends_of(code: &[Instruction], labels: &[(String, usize)]) -> BTreeMap<usize, usize> {
+fn branch_target<I: MachineInstruction>(instruction: &I) -> Option<&str> {
+    match instruction.flow() {
+        Flow::Jump(label) | Flow::Branch(label) => Some(label),
+        _ => None,
+    }
+}
+
+fn loop_ends_of<I: MachineInstruction>(
+    code: &[I],
+    labels: &[(String, usize)],
+) -> BTreeMap<usize, usize> {
     let mut ends: BTreeMap<usize, usize> = BTreeMap::new();
     for (pc, instruction) in code.iter().enumerate() {
-        if let Some(target) = branch_label(instruction).and_then(|l| label_line(labels, l, pc))
+        if let Some(target) = branch_target(instruction).and_then(|l| label_line(labels, l, pc))
             && target <= pc
         {
             let end = ends.entry(target).or_insert(pc);
@@ -248,99 +172,11 @@ fn loop_ends_of(code: &[Instruction], labels: &[(String, usize)]) -> BTreeMap<us
     ends
 }
 
-fn register_destination(instruction: &Instruction) -> Option<Option<Operand>> {
-    let destination = || match instruction.operands.first() {
-        Some(Operand::Register(prefix, n)) if *prefix != RePrefix::Sp => {
-            Some(Some(Operand::Register(prefix.clone(), *n)))
-        }
-        _ => None,
-    };
-    match instruction.ty {
-        InstructionType::Label => Some(None),
-        InstructionType::Arithmetic => destination(),
-        InstructionType::Other => match instruction.opcode.as_str() {
-            "nop" | "hint" | "cmp" | "cmn" | "tst" => Some(None),
-            "mov" | "movz" | "movk" | "mvn" | "neg" | "negs" | "ngc" | "ngcs" | "rbit" | "rev"
-            | "clz" | "cls" => destination(),
-            _ => None,
-        },
-        InstructionType::ControlFlow => match instruction.opcode.as_str() {
-            "csel" | "csinc" | "csinv" | "csneg" | "cset" | "csetm" | "cinc" | "cinv" | "cneg"
-            | "mrs" => destination(),
-            _ if branch_label(instruction).is_some() => Some(None),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-const LIVENESS_TRACKED_REGISTERS: usize = 30;
 const WIDEST_STORED_VALUE: i64 = 16;
 const MAX_EXIT_WINDOW: i64 = 8;
 const MAX_SETTLING_CHOICES: usize = 64;
 const CANDIDATE_PROOF_RESOURCE_LIMIT: u32 = 50_000_000;
 const MAX_CELL_RETRIES: usize = 4;
-
-fn general_register_index(prefix: &RePrefix, number: usize) -> Option<usize> {
-    match prefix {
-        RePrefix::X | RePrefix::W => Some(number),
-        RePrefix::Fp => Some(29),
-        RePrefix::Ra => Some(30),
-        _ => None,
-    }
-}
-
-fn operand_mentions(operand: &Operand, register: usize) -> bool {
-    match operand {
-        Operand::Register(prefix, number) => {
-            general_register_index(prefix, *number) == Some(register)
-        }
-        Operand::Memory(prefix, number, _, index, _) => {
-            general_register_index(prefix, *number) == Some(register)
-                || index
-                    .as_ref()
-                    .is_some_and(|index| operand_mentions(index, register))
-        }
-        Operand::ShiftedRegister(inner, ..) => operand_mentions(inner, register),
-        _ => false,
-    }
-}
-
-fn overwritten_operands(instruction: &Instruction) -> usize {
-    let keeps_part_of_destination = matches!(instruction.opcode.as_str(), "movk" | "bfi" | "bfxil");
-    if keeps_part_of_destination {
-        return 0;
-    }
-    if instruction.ty == InstructionType::Memory {
-        return match instruction.opcode.as_str() {
-            "ldr" | "ldur" | "ldrb" | "ldrh" | "ldrsw" | "ldrsb" | "ldrsh" => 1,
-            "ldp" => 2,
-            _ => 0,
-        };
-    }
-    match register_destination(instruction) {
-        Some(Some(_)) => 1,
-        _ => 0,
-    }
-}
-
-fn overwrites_without_reading(instruction: &Instruction, register: usize) -> bool {
-    let (written, read) = instruction
-        .operands
-        .split_at(overwritten_operands(instruction).min(instruction.operands.len()));
-    written.iter().any(|operand| {
-        matches!(operand, Operand::Register(..)) && operand_mentions(operand, register)
-    }) && !read
-        .iter()
-        .any(|operand| operand_mentions(operand, register))
-}
-
-fn mentions(instruction: &Instruction, register: usize) -> bool {
-    instruction
-        .operands
-        .iter()
-        .any(|operand| operand_mentions(operand, register))
-}
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -348,7 +184,7 @@ struct BranchPoint {
     pc: usize,
     condition: AbstractComparison,
     accesses: Vec<MemoryAccess>,
-    state: ComputerState,
+    state: MachineState,
     journal_len: usize,
     slots: Vec<SymbolicSlot>,
     instructions_run: usize,
@@ -823,24 +659,6 @@ fn registers_in(condition: &AbstractComparison) -> Vec<RegisterValue> {
     collect(&condition.left, &mut found);
     collect(&condition.right, &mut found);
     found
-}
-
-fn is_conditional_branch(opcode: &str) -> bool {
-    matches!(
-        opcode,
-        "cbz"
-            | "cbnz"
-            | "tbz"
-            | "tbnz"
-            | "bne"
-            | "beq"
-            | "bgt"
-            | "bt"
-            | "bge"
-            | "bhi"
-            | "bcs"
-            | "blo"
-    ) || opcode.starts_with("b.")
 }
 
 fn continues_at_equality(op: &str, continues_when: bool) -> bool {
@@ -1427,8 +1245,8 @@ fn summarize(
     continues_when: bool,
     invariants: Vec<LoopInvariant>,
     states: (
-        &ComputerState,
-        &ComputerState,
+        &MachineState,
+        &MachineState,
         &[GhostedRecord],
         &[GhostedRecord],
     ),
@@ -1897,8 +1715,8 @@ struct ActiveLoop {
     entry_decision: bool,
     invariants: Vec<LoopInvariant>,
     exit_facts: Vec<AbstractComparison>,
-    state: ComputerState,
-    entry_state: ComputerState,
+    state: MachineState,
+    entry_state: MachineState,
     history_len: usize,
     entry_condition: AbstractComparison,
     entry_accesses: Vec<MemoryAccess>,
@@ -1920,7 +1738,7 @@ struct ActiveLoop {
 #[derive(Debug, Clone)]
 struct RoundEntry {
     exit: usize,
-    state: ComputerState,
+    state: MachineState,
     generalization: Option<Generalization>,
 }
 
@@ -1932,10 +1750,12 @@ struct Generalization {
     nonnegative: Vec<usize>,
 }
 
+pub type ExecutionEngine = Engine<ARMCORTEXA>;
+
 #[derive(Clone)]
-pub struct ExecutionEngine {
-    program: Rc<Program>,
-    computer: ARMCORTEXA,
+pub struct Engine<M: Machine> {
+    program: Rc<Program<M::Instruction>>,
+    computer: M,
     active_loops: Vec<ActiveLoop>,
     loop_attempts: BTreeMap<usize, LoopAttempt>,
     jump_history: Vec<JumpRecord>,
@@ -1981,10 +1801,10 @@ struct Scope {
     facts: Vec<ast::Bool>,
 }
 
-impl ExecutionEngine {
-    pub fn new<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> ExecutionEngine {
-        let listing = Listing::parse(lines);
-        let mut computer = ARMCORTEXA::new();
+impl<M: Machine> Engine<M> {
+    pub fn new<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> Engine<M> {
+        let listing = Listing::<M::Instruction>::parse(lines);
+        let mut computer = M::new();
 
         let mut addresses: BTreeMap<String, i64> = BTreeMap::new();
         for section in &listing.data {
@@ -1997,17 +1817,14 @@ impl ExecutionEngine {
             addresses.insert(section.name.clone(), section.address);
         }
         for (name, symbol) in &listing.data_symbols {
-            computer
-                .memory_labels
-                .insert(name.clone(), (symbol.section.clone(), symbol.offset));
-            if let Some(size) = symbol.size.filter(|s| *s > 0) {
-                computer.data_symbol_sizes.insert(name.clone(), size);
-            }
+            computer.add_data_symbol(name, &symbol.section, symbol.offset, symbol.size);
         }
-        computer.code_labels = Rc::new(listing.labels.iter().map(|(n, _)| n.clone()).collect());
+        computer.set_code_labels(Rc::new(
+            listing.labels.iter().map(|(n, _)| n.clone()).collect(),
+        ));
         for section in &listing.data {
             for item in &section.items {
-                store_data_item(&mut computer, &section.name, item);
+                computer.store_data_item(&section.name, item);
             }
         }
         for name in listing
@@ -2027,7 +1844,7 @@ impl ExecutionEngine {
             ..
         } = listing;
 
-        ExecutionEngine {
+        Engine {
             program: Rc::new(Program {
                 loop_ends: loop_ends_of(&code, &labels),
                 code,
@@ -2077,11 +1894,11 @@ impl ExecutionEngine {
         let zero = ast::Int::from_i64(0);
         for a in length.get_abstracts() {
             let temp = ast::Int::new_const(a);
-            self.computer.solver.assert(temp.ge(&zero));
+            self.computer.solver().assert(temp.ge(&zero));
         }
         let base = base.into();
         self.computer
-            .solver
+            .solver()
             .assert(ast::Int::new_const(base.clone()).ge(&zero));
         self.computer.add_memory_region(base, ty, length);
     }
@@ -2105,24 +1922,12 @@ impl ExecutionEngine {
     }
 
     pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
-        if register < 8 {
-            let name = ("x".to_owned() + &register.to_string()).to_string();
-            self.computer.set_abstract(name.clone(), value);
-        } else {
-            let stack_index = ((register as i64) - 8) * 8;
-            self.computer.set_stack_element(stack_index, Some(value), 0);
-        }
+        self.computer.set_argument(register, value);
     }
 
     pub fn add_abstract_from(&mut self, register: usize, value: impl Into<String>) {
-        let value = AbstractExpression::Abstract(value.into());
-        if register < 8 {
-            let name = ("x".to_owned() + &register.to_string()).to_string();
-            self.computer.set_abstract(name.clone(), value);
-        } else {
-            let stack_index = ((register as i64) - 8) * 8;
-            self.computer.set_stack_element(stack_index, Some(value), 0);
-        }
+        self.computer
+            .set_argument(register, AbstractExpression::Abstract(value.into()));
     }
 
     pub fn add_element_fact(
@@ -2166,7 +1971,7 @@ impl ExecutionEngine {
     }
 
     pub fn allow_red_zone(&mut self, bytes: i64) {
-        self.computer.red_zone = bytes;
+        self.computer.allow_red_zone(bytes);
     }
 
     pub fn findings(&self) -> Vec<String> {
@@ -2174,7 +1979,7 @@ impl ExecutionEngine {
     }
 
     pub fn get_register_output(&self, register: usize) -> RegisterValue {
-        self.computer.registers[register].clone()
+        self.computer.register_at(register)
     }
 
     pub fn address_of(&self, name: &str) -> Option<i64> {
@@ -2236,7 +2041,7 @@ impl ExecutionEngine {
         for value in values {
             let mut branch = self.fork();
             let pinned = ast::Int::new_const(symbol.to_string()).eq(ast::Int::from_i64(*value));
-            branch.computer.solver.assert(&pinned);
+            branch.computer.solver().assert(&pinned);
             branch.computer.substitute_symbol(symbol, *value);
             if let Err(e) = branch.run(pc, depth + 1) {
                 let text = e.to_string();
@@ -2302,8 +2107,8 @@ impl ExecutionEngine {
     }
 
     fn push_scope_with(&mut self, id: usize) {
-        let base = self.computer.solver.get_assertions().len();
-        self.computer.solver.push();
+        let base = self.computer.solver().get_assertions().len();
+        self.computer.solver().push();
         self.scopes.push(Scope {
             id,
             base,
@@ -2311,9 +2116,9 @@ impl ExecutionEngine {
         });
     }
 
-    fn fork(&self) -> ExecutionEngine {
+    fn fork(&self) -> Engine<M> {
         let mut forked = self.clone();
-        let assertions = self.computer.solver.get_assertions();
+        let assertions = self.computer.solver().get_assertions();
         let solver = Solver::new();
         let mut next = 0;
         for scope in &self.scopes {
@@ -2327,7 +2132,7 @@ impl ExecutionEngine {
         for assertion in &assertions[next..] {
             solver.assert(assertion);
         }
-        forked.computer.solver = solver;
+        forked.computer.set_solver(solver);
         forked
     }
 
@@ -2336,7 +2141,7 @@ impl ExecutionEngine {
             return;
         }
         while let Some(top) = self.scopes.pop() {
-            self.computer.solver.pop(1);
+            self.computer.solver().pop(1);
             if top.id == id {
                 break;
             }
@@ -2360,7 +2165,7 @@ impl ExecutionEngine {
     }
 
     fn assert_in_scope(&mut self, c: ast::Bool) {
-        self.computer.solver.assert(&c);
+        self.computer.solver().assert(&c);
         if let Some(scope) = self.scopes.last_mut() {
             scope.facts.push(c);
         }
@@ -2415,11 +2220,12 @@ impl ExecutionEngine {
         Ok(())
     }
 
-    fn merge_key(&self, pc: usize) -> String {
+    fn merge_key(&self, pc: usize) -> Option<String> {
+        let fingerprint = self
+            .computer
+            .fingerprint(!M::Instruction::flags_dead(&self.program.code, pc))?;
         let mut state = format!(
-            "{pc}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
-            self.computer
-                .fingerprint(!flags_dead(&self.program.code, pc)),
+            "{pc}|{fingerprint}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
             self.active_loops,
             self.loop_attempts,
             self.concrete_decisions,
@@ -2434,7 +2240,7 @@ impl ExecutionEngine {
         );
         let facts = self
             .computer
-            .solver
+            .solver()
             .get_assertions()
             .iter()
             .map(|fact| fact.to_string())
@@ -2443,11 +2249,13 @@ impl ExecutionEngine {
             state.push('|');
             state.push_str(&fact);
         }
-        state
+        Some(state)
     }
 
     fn already_explored(&self, pc: usize, reached: &mut Vec<String>) -> bool {
-        let key = self.merge_key(pc);
+        let Some(key) = self.merge_key(pc) else {
+            return false;
+        };
         let mut explored = self.explored.borrow_mut();
         match explored.finished.get(&key) {
             Some(finished) => *finished,
@@ -2501,19 +2309,16 @@ impl ExecutionEngine {
             log::info!("{:?}: {:?}", pc, instruction);
 
             let mut execute_result = self.computer.execute(pc, &instruction);
-            if matches!(instruction.opcode.as_str(), "bl" | "blr") && execute_result.is_ok() {
+            if instruction.flow() == Flow::Call && execute_result.is_ok() {
                 self.suspend_for_call(pc);
             }
-            if let Some(condition) = self.costly_concrete_latch(pc, &instruction, &execute_result)
-                && let Some(Operand::Label(label)) = instruction.operands.get(1)
+            if let Some((condition, label)) =
+                self.costly_concrete_latch(pc, &instruction, &execute_result)
             {
-                execute_result = Ok(ExecuteReturnType::ConditionalJumpLabel(
-                    condition,
-                    label.clone(),
-                ));
+                execute_result = Ok(ExecuteReturnType::ConditionalJumpLabel(condition, label));
             }
 
-            if is_conditional_branch(&instruction.opcode) {
+            if matches!(instruction.flow(), Flow::Branch(_)) {
                 match &execute_result {
                     Ok(ExecuteReturnType::Next) => {
                         self.concrete_decisions.insert(pc, false);
@@ -2549,7 +2354,7 @@ impl ExecutionEngine {
                     }
                     ExecuteReturnType::JumpAddress(address) => {
                         let dest = address as usize;
-                        if instruction.opcode == "ret"
+                        if instruction.flow() == Flow::Return
                             && self
                                 .suspended
                                 .last()
@@ -2604,7 +2409,7 @@ impl ExecutionEngine {
                     }
                 },
                 Err(err) => {
-                    let err = format!("line {pc} ({}): {err}", instruction.opcode);
+                    let err = format!("line {pc} ({}): {err}", instruction.opcode());
                     log::error!("{err}");
                     if self.fail_fast {
                         return Err(Error::other(err));
@@ -2694,7 +2499,7 @@ impl ExecutionEngine {
             AbstractExpression::Immediate(-1) | AbstractExpression::Immediate(0) => true,
             AbstractExpression::Abstract(name) => matches!(
                 self.computer
-                    .select_definitions
+                    .select_definitions()
                     .get(name)
                     .map(|(_, a, b)| (a, b)),
                 Some((
@@ -2753,7 +2558,7 @@ impl ExecutionEngine {
         &mut self,
         pc: usize,
         condition: AbstractComparison,
-        register: Operand,
+        register: M::Operand,
         option1: RegisterValue,
         option2: RegisterValue,
         depth: usize,
@@ -2771,8 +2576,8 @@ impl ExecutionEngine {
             ))
         })?;
         match (
-            check(&self.computer.solver, &[take]),
-            check(&self.computer.solver, &[skip]),
+            check(self.computer.solver(), &[take]),
+            check(self.computer.solver(), &[skip]),
         ) {
             (SatResult::Sat, SatResult::Unsat) => {
                 self.add_constraint(condition, true);
@@ -2791,8 +2596,8 @@ impl ExecutionEngine {
                     && option1.base == option2.base
                     && option1.kind == option2.kind
                 {
-                    let name = format!("select_{}", self.computer.next_carry());
-                    self.computer.select_definitions.insert(
+                    let name = format!("select_{}", self.computer.fresh_index());
+                    self.computer.select_definitions_mut().insert(
                         name.clone(),
                         (
                             condition.clone(),
@@ -2812,9 +2617,11 @@ impl ExecutionEngine {
                     );
                     return Ok(BranchOutcome::Next(pc + 1));
                 }
-                if !self.carries_region(&option1) && !self.carries_region(&option2) {
-                    let name = format!("select_{}", self.computer.next_carry());
-                    self.computer.select_definitions.insert(
+                if !self.computer.carries_region(&option1)
+                    && !self.computer.carries_region(&option2)
+                {
+                    let name = format!("select_{}", self.computer.fresh_index());
+                    self.computer.select_definitions_mut().insert(
                         name.clone(),
                         (
                             condition.clone(),
@@ -2882,8 +2689,8 @@ impl ExecutionEngine {
                     condition: condition.clone(),
                     accesses: rw_list,
                     state: self.computer.get_state(),
-                    journal_len: self.computer.write_journal.len(),
-                    slots: self.computer.symbolic_slots.clone(),
+                    journal_len: self.computer.write_journal().len(),
+                    slots: self.computer.symbolic_slots(),
                     instructions_run: self.instructions_run,
                 };
                 self.jump_history.push(JumpRecord {
@@ -2931,8 +2738,8 @@ impl ExecutionEngine {
                         condition: condition.clone(),
                         accesses: self.computer.read_rw_queue(),
                         state: self.computer.get_state(),
-                        journal_len: self.computer.write_journal.len(),
-                        slots: self.computer.symbolic_slots.clone(),
+                        journal_len: self.computer.write_journal().len(),
+                        slots: self.computer.symbolic_slots(),
                         instructions_run: self.instructions_run,
                     },
                     taken,
@@ -2954,26 +2761,26 @@ impl ExecutionEngine {
         &mut self,
         header: usize,
         end: usize,
-    ) -> Option<(Vec<Operand>, Vec<usize>)> {
+    ) -> Option<(Vec<M::Operand>, Vec<usize>)> {
         let mut written = Vec::new();
         let mut exits = Vec::new();
         let mut conditional_branches = 0;
         let program = Rc::clone(&self.program);
         for pc in header..=end {
             let instruction = program.code.get(pc)?;
-            if let Some(destination) = register_destination(instruction)? {
+            if let Some(destination) = instruction.register_written()? {
                 let current = self.computer.get_register(&destination);
-                if self.carries_region(&current) {
+                if self.computer.carries_region(&current) {
                     return None;
                 }
                 if !written.contains(&destination) {
                     written.push(destination);
                 }
             }
-            if is_conditional_branch(&instruction.opcode) {
+            if matches!(instruction.flow(), Flow::Branch(_)) {
                 conditional_branches += 1;
             }
-            if let Some(label) = branch_label(instruction) {
+            if let Some(label) = branch_target(instruction) {
                 let target = self.resolve_jump_target(label, pc).ok()?;
                 if (target < header || target > end) && !exits.contains(&target) {
                     exits.push(target);
@@ -2983,7 +2790,7 @@ impl ExecutionEngine {
         if conditional_branches < 2 {
             return None;
         }
-        if self.program.code[end].opcode != "b" && !exits.contains(&(end + 1)) {
+        if !matches!(self.program.code[end].flow(), Flow::Jump(_)) && !exits.contains(&(end + 1)) {
             exits.push(end + 1);
         }
         Some((written, exits))
@@ -2992,7 +2799,7 @@ impl ExecutionEngine {
     fn havoc_memory_free_loop(
         &mut self,
         header: usize,
-        written: Vec<Operand>,
+        written: Vec<M::Operand>,
         exits: Vec<usize>,
         depth: usize,
     ) -> std::io::Result<Step> {
@@ -3026,49 +2833,36 @@ impl ExecutionEngine {
                 return Some(pc);
             }
             let instruction = self.program.code.get(pc)?.clone();
-            let vector_floating_point = is_floating_point(&instruction.opcode)
-                && instruction
-                    .operands
-                    .first()
-                    .is_none_or(|destination| vector_index(destination).is_some());
-            match instruction.ty {
-                InstructionType::Label => {}
-                InstructionType::Arithmetic => {}
-                InstructionType::Other if matches!(instruction.opcode.as_str(), "mov") => {}
-                InstructionType::SIMDArithmetic | InstructionType::SIMDManagement
-                    if vector_floating_point => {}
-                InstructionType::ControlFlow if instruction.opcode == "b" => {
-                    let Some(Operand::Label(label)) = instruction.operands.first() else {
-                        return None;
-                    };
-                    return self.resolve_jump_target(label, pc).ok();
-                }
-                InstructionType::ControlFlow if is_conditional_branch(&instruction.opcode) => {
-                    pc = match self.computer.execute(pc, &instruction) {
-                        Ok(ExecuteReturnType::Next) => pc + 1,
-                        Ok(ExecuteReturnType::JumpLabel(label)) => {
-                            self.resolve_jump_target(&label, pc).ok()?
+            if !instruction.is_label() {
+                match instruction.flow() {
+                    Flow::Jump(label) => return self.resolve_jump_target(label, pc).ok(),
+                    Flow::Branch(_) => {
+                        pc = match self.computer.execute(pc, &instruction) {
+                            Ok(ExecuteReturnType::Next) => pc + 1,
+                            Ok(ExecuteReturnType::JumpLabel(label)) => {
+                                self.resolve_jump_target(&label, pc).ok()?
+                            }
+                            Ok(ExecuteReturnType::ConditionalJumpLabel(condition, label)) => {
+                                let target = self.resolve_jump_target(&label, pc).ok()?;
+                                let join = (target > pc)
+                                    .then(|| self.merge_branch_arms(pc, &condition, target, &[]))
+                                    .flatten()?;
+                                (join > pc).then_some(join)?
+                            }
+                            _ => return None,
+                        };
+                        continue;
+                    }
+                    Flow::Next if instruction.data_only() => {
+                        if !matches!(
+                            self.computer.execute(pc, &instruction),
+                            Ok(ExecuteReturnType::Next)
+                        ) {
+                            return None;
                         }
-                        Ok(ExecuteReturnType::ConditionalJumpLabel(condition, label)) => {
-                            let target = self.resolve_jump_target(&label, pc).ok()?;
-                            let join = (target > pc)
-                                .then(|| self.merge_branch_arms(pc, &condition, target, &[]))
-                                .flatten()?;
-                            (join > pc).then_some(join)?
-                        }
-                        _ => return None,
-                    };
-                    continue;
+                    }
+                    _ => return None,
                 }
-                _ => return None,
-            }
-            if !instruction.is_label()
-                && !matches!(
-                    self.computer.execute(pc, &instruction),
-                    Ok(ExecuteReturnType::Next)
-                )
-            {
-                return None;
             }
             pc += 1;
         }
@@ -3088,13 +2882,11 @@ impl ExecutionEngine {
             return None;
         }
         let entry = self.computer.get_state();
-        let vectors = self.computer.simd_registers.clone();
-        let lanes = self.computer.lane_bounds.clone();
+        let lanes = self.computer.lanes();
         let history_len = self.jump_history.len();
-        let abandon = |engine: &mut Self, entry: ComputerState| {
+        let abandon = |engine: &mut Self, entry: MachineState| {
             engine.computer.set_state(entry);
-            engine.computer.simd_registers = vectors.clone();
-            engine.computer.lane_bounds = lanes.clone();
+            engine.computer.set_lanes(lanes.clone());
             engine.jump_history.truncate(history_len);
             None
         };
@@ -3112,11 +2904,9 @@ impl ExecutionEngine {
                 _ => return abandon(self, entry),
             }
         };
-        let pointer_moved = taken
-            .0
-            .iter()
-            .zip(fallen.0.iter())
-            .any(|(a, b)| a != b && (self.carries_region(a) || self.carries_region(b)));
+        let pointer_moved = taken.0.iter().zip(fallen.0.iter()).any(|(a, b)| {
+            a != b && (self.computer.carries_region(a) || self.computer.carries_region(b))
+        });
         if pointer_moved {
             return abandon(self, entry);
         }
@@ -3125,8 +2915,8 @@ impl ExecutionEngine {
             if if_taken == if_fallen {
                 continue;
             }
-            let name = format!("select_{}", self.computer.next_carry());
-            self.computer.select_definitions.insert(
+            let name = format!("select_{}", self.computer.fresh_index());
+            self.computer.select_definitions_mut().insert(
                 name.clone(),
                 (
                     condition.clone(),
@@ -3152,8 +2942,8 @@ impl ExecutionEngine {
                 condition: condition.clone(),
                 accesses: rw_list.to_vec(),
                 state: entry,
-                journal_len: self.computer.write_journal.len(),
-                slots: self.computer.symbolic_slots.clone(),
+                journal_len: self.computer.write_journal().len(),
+                slots: self.computer.symbolic_slots(),
                 instructions_run: self.instructions_run,
             },
             taken: true,
@@ -3280,7 +3070,7 @@ impl ExecutionEngine {
         let (behind, order) = if step == 1 { (">=", "<") } else { ("<=", ">") };
         let started_past =
             comparison_to_ast(AbstractComparison::new(behind, start, bound.clone()))?;
-        if self.computer.solver.check_assumptions(&[started_past]) != SatResult::Unsat {
+        if self.computer.solver().check_assumptions(&[started_past]) != SatResult::Unsat {
             return None;
         }
         Some(AbstractComparison::new(order, walker, bound))
@@ -3289,12 +3079,10 @@ impl ExecutionEngine {
     fn straight_from_the_loop_branch(&self, pc: usize, loop_pc: usize) -> bool {
         pc > loop_pc
             && (loop_pc + 1..pc).all(|i| {
-                self.program.code.get(i).is_some_and(|instruction| {
-                    !matches!(
-                        instruction.ty,
-                        InstructionType::ControlFlow | InstructionType::Label
-                    ) && !matches!(instruction.opcode.as_str(), "brk" | "udf" | "hlt")
-                })
+                self.program
+                    .code
+                    .get(i)
+                    .is_some_and(MachineInstruction::is_straight_line)
             })
     }
 
@@ -3304,13 +3092,13 @@ impl ExecutionEngine {
             log::info!("invariant not expressible, dropped: {shown}");
             return;
         };
-        self.computer.solver.assert(c.simplify());
+        self.computer.solver().assert(c.simplify());
     }
 
     fn revisit_cap(&self) -> usize {
         let widest_region = self
             .computer
-            .memory
+            .memory()
             .values()
             .filter_map(|region| match region.get_length() {
                 AbstractExpression::Immediate(bytes) if bytes > 0 => Some(bytes as usize / 8),
@@ -3335,7 +3123,7 @@ impl ExecutionEngine {
                 &distance.gt(ast::Int::from_i64(bound)),
                 &distance.lt(ast::Int::from_i64(-bound)),
             ]);
-            self.computer.solver.check_assumptions(&[outside]) == SatResult::Unsat
+            self.computer.solver().check_assumptions(&[outside]) == SatResult::Unsat
         })
     }
 
@@ -3451,24 +3239,18 @@ impl ExecutionEngine {
     fn costly_concrete_latch(
         &mut self,
         pc: usize,
-        instruction: &Instruction,
-        result: &Result<ExecuteReturnType, String>,
-    ) -> Option<AbstractComparison> {
-        let op = match instruction.opcode.as_str() {
-            "cbz" => "==",
-            "cbnz" => "!=",
-            _ => return None,
-        };
+        instruction: &M::Instruction,
+        result: &Result<ExecuteReturnType<M::Operand>, String>,
+    ) -> Option<(AbstractComparison, String)> {
+        let (op, tested, label) = instruction.zero_test()?;
         let Ok(ExecuteReturnType::Next | ExecuteReturnType::JumpLabel(_)) = result else {
             return None;
         };
-        let Some(Operand::Label(label)) = instruction.operands.get(1) else {
-            return None;
-        };
+        let label = label.to_string();
         if self.get_linenumber_of_label(label.clone(), pc)? > pc {
             return None;
         }
-        let tested = self.computer.get_register(&instruction.operands[0]);
+        let tested = self.computer.get_register(tested);
         if tested.base.is_some() || tested.kind == RegisterKind::Number {
             return None;
         }
@@ -3478,7 +3260,7 @@ impl ExecutionEngine {
             AbstractExpression::Register(Box::new(tested.clone())),
         );
         if self.costly_latches.contains(&pc) {
-            return Some(condition);
+            return Some((condition, label));
         }
         let now = (self.instructions_run, tested.offset);
         if let Some((run_before, value_before)) = self.concrete_latch_visits.insert(pc, now) {
@@ -3491,7 +3273,7 @@ impl ExecutionEngine {
                         "line {pc} would unroll {remaining} more iterations of {per_iteration} instructions, tracking it as a loop guard"
                     );
                     self.costly_latches.insert(pc);
-                    return Some(condition);
+                    return Some((condition, label));
                 }
             }
         }
@@ -3566,7 +3348,7 @@ impl ExecutionEngine {
         let under = |c: ast::Bool| {
             let mut assuming = defined.clone();
             assuming.push(c);
-            check(&self.computer.solver, &assuming)
+            check(self.computer.solver(), &assuming)
         };
         match (under(holds), under(fails)) {
             (SatResult::Unsat, SatResult::Unsat) => Decision::Unreachable,
@@ -3581,15 +3363,15 @@ impl ExecutionEngine {
         &mut self,
         condition: &AbstractComparison,
         continues_when: bool,
-        entry_state: &mut ComputerState,
-        current_state: &mut ComputerState,
+        entry_state: &mut MachineState,
+        current_state: &mut MachineState,
     ) -> Vec<LoopInvariant> {
         self.assume_staying(condition, continues_when);
         self.resolve_selects(entry_state);
         self.resolve_selects(current_state);
         let mut observed = invariant_of_registers(&entry_state.0, &current_state.0);
         self.pin_unknown_steps(&mut observed, &entry_state.0, &current_state.0, condition);
-        self.computer.solver.pop(1);
+        self.computer.solver().pop(1);
         observed
     }
 
@@ -3599,9 +3381,9 @@ impl ExecutionEngine {
         } else {
             condition.clone().not()
         });
-        self.computer.solver.push();
+        self.computer.solver().push();
         if let Some(staying) = staying {
-            self.computer.solver.assert(staying);
+            self.computer.solver().assert(staying);
         }
     }
 
@@ -3630,8 +3412,8 @@ impl ExecutionEngine {
             if prev.kind == RegisterKind::Number || cur.kind == RegisterKind::Number {
                 continue;
             }
-            if !(self.carries_region(prev)
-                || self.carries_region(cur)
+            if !(self.computer.carries_region(prev)
+                || self.computer.carries_region(cur)
                 || named_in_guard(prev)
                 || named_in_guard(cur))
             {
@@ -3668,7 +3450,9 @@ impl ExecutionEngine {
             fresh.then_some(step)
         };
         for i in 0..registers {
-            if !(self.carries_region(&entry[i]) || self.carries_region(&current[i])) {
+            if !(self.computer.carries_region(&entry[i])
+                || self.computer.carries_region(&current[i]))
+            {
                 continue;
             }
             let Some(follower) = fresh_data_step(i, &observed[i]) else {
@@ -3676,8 +3460,8 @@ impl ExecutionEngine {
             };
             let leader = (0..registers).find_map(|j| {
                 if j == i
-                    || self.carries_region(&entry[j])
-                    || self.carries_region(&current[j])
+                    || self.computer.carries_region(&entry[j])
+                    || self.computer.carries_region(&current[j])
                     || !guarded.contains(&current[j])
                 {
                     return None;
@@ -3819,7 +3603,8 @@ impl ExecutionEngine {
             }
         }
         if let Some((i, _)) = attempt.invariants.iter().enumerate().find(|(i, inv)| {
-            matches!(inv, LoopInvariant::Unknown) && self.carries_region(&current_state.0[*i])
+            matches!(inv, LoopInvariant::Unknown)
+                && self.computer.carries_region(&current_state.0[*i])
         }) {
             log::info!(
                 "{} at line {pc} declined: would widen a region in x{i} (entry {:?} exit {:?})",
@@ -3830,7 +3615,9 @@ impl ExecutionEngine {
             return None;
         }
 
-        let cycle_start = previous.journal_len.min(self.computer.write_journal.len());
+        let cycle_start = previous
+            .journal_len
+            .min(self.computer.write_journal().len());
         let unstable_cells = self
             .unstable_cells
             .borrow()
@@ -3838,7 +3625,7 @@ impl ExecutionEngine {
             .cloned()
             .unwrap_or_default();
         let mut cells: Vec<(MemoryCell, LoopInvariant)> =
-            cells_written(&self.computer.write_journal[cycle_start..])
+            cells_written(&self.computer.write_journal()[cycle_start..])
                 .into_iter()
                 .map(|(cell, before)| {
                     let now = self.computer.cell_content(&cell);
@@ -3945,7 +3732,7 @@ impl ExecutionEngine {
             .iter()
             .filter(|(requirement, _)| {
                 summary_fact_to_ast(requirement).is_none_or(|required| {
-                    self.computer.solver.check_assumptions(&[required.not()]) != SatResult::Unsat
+                    self.computer.solver().check_assumptions(&[required.not()]) != SatResult::Unsat
                 })
             })
             .map(|(_, landing)| landing.clone())
@@ -3960,20 +3747,20 @@ impl ExecutionEngine {
 
         let scope_id = self.push_scope();
         for fact in summary.facts.iter().filter_map(summary_fact_to_ast) {
-            self.computer.solver.assert(fact);
+            self.computer.solver().assert(fact);
         }
-        let mut summarized = self.computer.registers.clone();
+        let mut summarized = self.computer.get_state();
         for (i, new_reg) in summary.updates.iter().cloned() {
-            summarized[i] = new_reg;
+            summarized.0[i] = new_reg;
         }
-        for bound in bounds.iter().map(|bound| bound.at(&summarized)) {
+        for bound in bounds.iter().map(|bound| bound.at(&summarized.0)) {
             log::info!("{id} assumes {bound}");
             for fact in self
                 .select_definitions_in(&bound)
                 .into_iter()
                 .chain(comparison_to_ast(bound))
             {
-                self.computer.solver.assert(fact);
+                self.computer.solver().assert(fact);
             }
         }
         let mentioned: Vec<String> = summary
@@ -3984,26 +3771,30 @@ impl ExecutionEngine {
             .collect();
         for counter in mentioned.iter().filter(|symbol| symbol.contains("_?")) {
             self.computer
-                .symbols_bounding_counter
+                .symbols_bounding_counter_mut()
                 .entry(counter.clone())
                 .or_default()
                 .extend(mentioned.iter().cloned());
         }
-        if self.computer.solver.check() == SatResult::Unsat {
+        if self.computer.solver().check() == SatResult::Unsat {
             self.pop_scope(scope_id);
             *self.failed_summaries.borrow_mut().entry(pc).or_insert(0) += 1;
             log::info!("{id} at line {pc} summary contradicts the path, unrolling");
             return None;
         }
 
-        self.computer.registers = summarized;
+        self.computer.set_state(summarized);
         if self.unstable_slots.borrow().contains(&pc) {
-            self.computer.symbolic_slots.clear();
+            self.computer.set_symbolic_slots(Vec::new());
         }
-        self.computer
-            .symbolic_slots
-            .retain(|slot| previous.slots.contains(slot));
-        let journal_before_summary = self.computer.write_journal.len();
+        let kept = self
+            .computer
+            .symbolic_slots()
+            .into_iter()
+            .filter(|slot| previous.slots.contains(slot))
+            .collect();
+        self.computer.set_symbolic_slots(kept);
+        let journal_before_summary = self.computer.write_journal().len();
         let counter = LoopCounter::for_loop(id);
         for (cell, invariant) in &cells {
             let stored = self.computer.cell_content(cell);
@@ -4019,7 +3810,7 @@ impl ExecutionEngine {
             );
             self.computer.write_cell(cell, generalized);
         }
-        let journal_after_summary = self.computer.write_journal.len();
+        let journal_after_summary = self.computer.write_journal().len();
         self.value_ranges.extend(summary.ranges.iter().cloned());
         self.computer.set_flags(summary.flags.clone());
         let invariants = summary.invariants.clone();
@@ -4050,8 +3841,8 @@ impl ExecutionEngine {
             cells,
             journal_before_summary,
             journal_after_summary,
-            blind_writes_at_summary: self.computer.blind_stack_writes.len(),
-            slots: self.computer.symbolic_slots.clone(),
+            blind_writes_at_summary: self.computer.blind_stack_writes().len(),
+            slots: self.computer.symbolic_slots(),
             settled_steps,
             continuing: continuing_at_summary,
             bounds,
@@ -4062,16 +3853,17 @@ impl ExecutionEngine {
     fn reads_a_changing_load(
         &self,
         condition: &AbstractComparison,
-        previous: &ComputerState,
+        previous: &MachineState,
     ) -> bool {
         let tested = registers_in(condition);
         self.computer
-            .registers
+            .get_state()
+            .0
             .iter()
             .zip(previous.0.iter())
-            .zip(self.computer.loaded.iter())
-            .any(|((now, before), loaded)| {
-                *loaded
+            .enumerate()
+            .any(|(i, (now, before))| {
+                self.computer.loaded(i)
                     && tested.contains(now)
                     && (now != before || (now.kind == RegisterKind::Number && now.base.is_none()))
             })
@@ -4100,7 +3892,7 @@ impl ExecutionEngine {
         &self,
         summary: &mut Summary,
         continuing_now: &AbstractComparison,
-        current: &ComputerState,
+        current: &MachineState,
     ) {
         let counter = summary.counter.clone();
         for (i, invariant) in summary.invariants.iter().enumerate() {
@@ -4137,24 +3929,24 @@ impl ExecutionEngine {
     fn pinned_value(&self, e: &AbstractExpression) -> Option<i64> {
         let term = expression_to_ast(e.clone())?;
         let mut assuming = self.computer.select_assumptions(e);
-        if self.computer.solver.check_assumptions(&assuming) != SatResult::Sat {
+        if self.computer.solver().check_assumptions(&assuming) != SatResult::Sat {
             return None;
         }
         let value = self
             .computer
-            .solver
+            .solver()
             .get_model()?
             .eval(&term, true)?
             .as_i64()?;
         assuming.push(term.eq(ast::Int::from_i64(value)).not());
-        (self.computer.solver.check_assumptions(&assuming) == SatResult::Unsat).then_some(value)
+        (self.computer.solver().check_assumptions(&assuming) == SatResult::Unsat).then_some(value)
     }
 
     fn select_bound(&self, name: &str, fuel: usize) -> Option<i64> {
         if let Some(bound) = self.value_ranges.get(name) {
             return Some(*bound);
         }
-        let (_, taken, skipped) = self.computer.select_definitions.get(name)?;
+        let (_, taken, skipped) = self.computer.select_definitions().get(name)?;
         let reach = |e: &AbstractExpression| match e {
             AbstractExpression::Immediate(value) => Some(*value),
             AbstractExpression::Abstract(inner) if fuel > 0 => self.select_bound(inner, fuel - 1),
@@ -4194,7 +3986,7 @@ impl ExecutionEngine {
                     if !unstable.contains(&i)
                         && before.kind != RegisterKind::Number
                         && after.kind != RegisterKind::Number
-                        && !self.carries_region(after) =>
+                        && !self.computer.carries_region(after) =>
                 {
                     self.value_bound(before)
                         .zip(self.value_bound(after))
@@ -4235,20 +4027,14 @@ impl ExecutionEngine {
 
     fn static_successors(&self, pc: usize) -> Option<Vec<usize>> {
         let instruction = self.program.code.get(pc)?;
-        let label_at = |i: usize| match instruction.operands.get(i) {
-            Some(Operand::Label(label)) => self.resolve_jump_target(label, pc).ok(),
-            _ => None,
-        };
+        let target = |label: &str| self.resolve_jump_target(label, pc).ok();
         let next = pc + 1;
-        match instruction.opcode.as_str() {
-            "ret" | "brk" | "udf" | "hlt" => Some(Vec::new()),
-            "br" => None,
-            "b" => Some(vec![label_at(0)?]),
-            "bl" | "blr" => Some(vec![next]),
-            "cbz" | "cbnz" => Some(vec![label_at(1)?, next]),
-            "tbz" | "tbnz" => Some(vec![label_at(2)?, next]),
-            op if is_conditional_branch(op) => Some(vec![label_at(0)?, next]),
-            _ => Some(vec![next]),
+        match instruction.flow() {
+            Flow::Return | Flow::Trap => Some(Vec::new()),
+            Flow::Indirect => None,
+            Flow::Jump(label) => Some(vec![target(label)?]),
+            Flow::Branch(label) => Some(vec![target(label)?, next]),
+            Flow::Call | Flow::Next => Some(vec![next]),
         }
     }
 
@@ -4263,7 +4049,7 @@ impl ExecutionEngine {
             return;
         }
         if let AbstractExpression::Abstract(name) = e
-            && let Some((_, taken, skipped)) = self.computer.select_definitions.get(name)
+            && let Some((_, taken, skipped)) = self.computer.select_definitions().get(name)
         {
             self.literal_leaves(taken, fuel - 1, found);
             self.literal_leaves(skipped, fuel - 1, found);
@@ -4288,7 +4074,7 @@ impl ExecutionEngine {
         candidates.into_iter().find(|candidate| {
             let mut with = assuming.clone();
             with.push(term.eq(ast::Int::from_i64(*candidate)).not());
-            self.computer.solver.check_assumptions(&with) == SatResult::Unsat
+            self.computer.solver().check_assumptions(&with) == SatResult::Unsat
         })
     }
 
@@ -4315,7 +4101,7 @@ impl ExecutionEngine {
 
     fn within_candidate_budget(&self, check: impl FnOnce(&Solver) -> SatResult) -> SatResult {
         let solver = Solver::new();
-        for assertion in self.computer.solver.get_assertions() {
+        for assertion in self.computer.solver().get_assertions() {
             solver.assert(&assertion);
         }
         let mut bounded = Params::new();
@@ -4327,8 +4113,8 @@ impl ExecutionEngine {
     fn step_past_inner_loops(
         &self,
         observed: &mut [LoopInvariant],
-        entry: &ComputerState,
-        current: &ComputerState,
+        entry: &MachineState,
+        current: &MachineState,
     ) {
         for (i, invariant) in observed.iter_mut().enumerate() {
             if *invariant != LoopInvariant::Unknown {
@@ -4396,8 +4182,8 @@ impl ExecutionEngine {
     fn step_held_by_invariant_symbols(
         &self,
         register: usize,
-        entry: &ComputerState,
-        current: &ComputerState,
+        entry: &MachineState,
+        current: &MachineState,
     ) -> Option<AbstractExpression> {
         let (before, after) = (&entry.0[register], &current.0[register]);
         let moved = Affine::of_register(after)?.combine(&Affine::of_register(before)?, -1)?;
@@ -4455,7 +4241,7 @@ impl ExecutionEngine {
         pc: usize,
         invariants: &[LoopInvariant],
         history: &[JumpRecord],
-        current: &mut ComputerState,
+        current: &mut MachineState,
     ) {
         let closed: Vec<String> = self
             .closed_counters
@@ -4588,14 +4374,14 @@ impl ExecutionEngine {
             return false;
         };
         assuming.extend([past, rare_taken, continued]);
-        self.computer.solver.check_assumptions(&assuming) == SatResult::Unsat
+        self.computer.solver().check_assumptions(&assuming) == SatResult::Unsat
     }
 
     fn settle_select_steps(
         &mut self,
         summary: &mut Summary,
-        entry: &ComputerState,
-        current: &ComputerState,
+        entry: &MachineState,
+        current: &MachineState,
         ghosts: &[Ghost],
         continuing_now: &AbstractComparison,
     ) -> Vec<SettledSelectStep> {
@@ -4626,7 +4412,7 @@ impl ExecutionEngine {
                 continue;
             }
             let Some((condition, rare_arm, usual_arm)) =
-                self.computer.select_definitions.get(select).cloned()
+                self.computer.select_definitions().get(select).cloned()
             else {
                 continue;
             };
@@ -4658,7 +4444,7 @@ impl ExecutionEngine {
             };
 
             let latest_name = format!("{name}_latest_{i}");
-            self.computer.select_definitions.insert(
+            self.computer.select_definitions_mut().insert(
                 latest_name.clone(),
                 (
                     latest.clone(),
@@ -4736,7 +4522,7 @@ impl ExecutionEngine {
         );
         let continues = comparison_with_counter_at(&active.continuing, &name, &next_iteration);
         let repeats = active.settled_steps.iter().all(|settled| {
-            let now = value_of(&self.computer.registers[settled.register]);
+            let now = value_of(&self.computer.register_at(settled.register));
             let step = if settled.holds_the_select {
                 now
             } else {
@@ -4761,7 +4547,7 @@ impl ExecutionEngine {
                 let mut with = assuming.clone();
                 with.push(holds);
                 with.push(step.eq(ast::Int::from_i64(arm)).not());
-                self.computer.solver.check_assumptions(&with) == SatResult::Unsat
+                self.computer.solver().check_assumptions(&with) == SatResult::Unsat
             };
             refuted_when(condition.clone(), settled.rare)
                 && refuted_when(condition.not(), settled.usual)
@@ -4779,12 +4565,12 @@ impl ExecutionEngine {
     fn stack_cells_a_blind_write_may_reach(&self, active: &ActiveLoop) -> Vec<MemoryCell> {
         let from = active
             .blind_writes_at_summary
-            .min(self.computer.blind_stack_writes.len());
-        let writes = &self.computer.blind_stack_writes[from..];
+            .min(self.computer.blind_stack_writes().len());
+        let writes = &self.computer.blind_stack_writes()[from..];
         if writes.is_empty() {
             return Vec::new();
         }
-        let Some(stack) = self.computer.memory.get("sp") else {
+        let Some(stack) = self.computer.memory().get("sp") else {
             return Vec::new();
         };
         let already_unknown = |cell: &MemoryCell| {
@@ -4818,7 +4604,7 @@ impl ExecutionEngine {
                 let write_end = ast::Int::add(&[&write_start, &ast::Int::from_i64(*width)]);
                 let overlap =
                     ast::Bool::and(&[&write_start.lt(&cell_end), &cell_start.lt(&write_end)]);
-                self.computer.solver.check_assumptions(&[overlap]) != SatResult::Unsat
+                self.computer.solver().check_assumptions(&[overlap]) != SatResult::Unsat
             });
             if may_overlap {
                 reached.push(cell);
@@ -4845,13 +4631,13 @@ impl ExecutionEngine {
             let Some(instruction) = self.program.code.get(pc) else {
                 return false;
             };
-            if matches!(instruction.opcode.as_str(), "bl" | "blr" | "br") {
+            if matches!(instruction.flow(), Flow::Call | Flow::Indirect) {
                 return false;
             }
-            if overwrites_without_reading(instruction, register) {
+            if instruction.overwrites_without_reading(register) {
                 continue;
             }
-            if mentions(instruction, register) {
+            if instruction.mentions(register) {
                 return false;
             }
             match self.static_successors(pc) {
@@ -4875,8 +4661,8 @@ impl ExecutionEngine {
             .program
             .code
             .iter()
-            .any(|instruction| matches!(instruction.opcode.as_str(), "bl" | "blr"));
-        let dead: Vec<usize> = (0..LIVENESS_TRACKED_REGISTERS)
+            .any(|instruction| instruction.flow() == Flow::Call);
+        let dead: Vec<usize> = (0..M::Instruction::TRACKED_REGISTERS)
             .filter(|&register| self.is_overwritten_before_any_read(pc, register, has_calls))
             .collect();
         let dead = Rc::new(dead);
@@ -4890,16 +4676,16 @@ impl ExecutionEngine {
         &mut self,
         pc: usize,
         guard: &AbstractComparison,
-        snapshots: &mut [&mut ComputerState],
+        snapshots: &mut [&mut MachineState],
     ) {
         let read_by_guard = registers_in(guard);
         let dead = self.dead_after(pc);
         for &register in dead.iter() {
-            if read_by_guard.contains(&self.computer.registers[register]) {
+            if read_by_guard.contains(&self.computer.register_at(register)) {
                 continue;
             }
             let forgotten = RegisterValue::new(RegisterKind::Number, None, 0);
-            self.computer.registers[register] = forgotten.clone();
+            self.computer.set_register_at(register, forgotten.clone());
             for snapshot in snapshots.iter_mut() {
                 snapshot.0[register] = forgotten.clone();
             }
@@ -4933,8 +4719,8 @@ impl ExecutionEngine {
             }
             walked.insert(next);
             pc = next;
-            let opcode = &self.program.code.get(pc)?.opcode;
-            next = if is_conditional_branch(opcode) {
+            let flow = self.program.code.get(pc)?.flow();
+            next = if matches!(flow, Flow::Branch(_)) {
                 let mut ahead = remaining.clone();
                 let taken = match ahead.find(|record| record.point.pc == pc) {
                     Some(record) => {
@@ -5003,29 +4789,7 @@ impl ExecutionEngine {
     }
 
     fn flag_source(&self, branch_pc: usize) -> Option<usize> {
-        let mut pc = branch_pc;
-        loop {
-            pc = pc.checked_sub(1)?;
-            let instruction = self.program.code.get(pc)?;
-            if matches!(
-                instruction.ty,
-                InstructionType::Label | InstructionType::ControlFlow
-            ) {
-                return None;
-            }
-            let source = match instruction.opcode.as_str() {
-                "subs" | "adds" => instruction.operands.get(1),
-                "cmp" | "cmn" => instruction.operands.first(),
-                op if op.ends_with('s') || op == "tst" || op == "ccmp" || op == "ccmn" => {
-                    return None;
-                }
-                _ => continue,
-            };
-            return match source {
-                Some(Operand::Register(RePrefix::X, n)) => Some(*n),
-                _ => None,
-            };
-        }
+        M::Instruction::flag_source(&self.program.code, branch_pc)
     }
 
     fn exit_ghosts(
@@ -5108,8 +4872,8 @@ impl ExecutionEngine {
         exits
     }
 
-    fn resolve_selects(&self, state: &mut ComputerState) {
-        if self.computer.select_definitions.is_empty() {
+    fn resolve_selects(&self, state: &mut MachineState) {
+        if self.computer.select_definitions().is_empty() {
             return;
         }
         for register in state.0.iter_mut() {
@@ -5118,7 +4882,8 @@ impl ExecutionEngine {
             };
             let mut resolved = base;
             for name in resolved.get_abstracts() {
-                let Some((condition, taken, skipped)) = self.computer.select_definitions.get(&name)
+                let Some((condition, taken, skipped)) =
+                    self.computer.select_definitions().get(&name)
                 else {
                     continue;
                 };
@@ -5127,12 +4892,13 @@ impl ExecutionEngine {
                 };
                 let settled = if self
                     .computer
-                    .solver
+                    .solver()
                     .check_assumptions(std::slice::from_ref(&holds))
                     == SatResult::Unsat
                 {
                     skipped
-                } else if self.computer.solver.check_assumptions(&[holds.not()]) == SatResult::Unsat
+                } else if self.computer.solver().check_assumptions(&[holds.not()])
+                    == SatResult::Unsat
                 {
                     taken
                 } else {
@@ -5149,16 +4915,6 @@ impl ExecutionEngine {
         }
     }
 
-    fn carries_region(&self, register: &RegisterValue) -> bool {
-        let Some(base) = &register.base else {
-            return false;
-        };
-        base.get_abstracts().iter().any(|symbol| {
-            self.computer.memory.contains_key(symbol)
-                || self.computer.memory_labels.contains_key(symbol)
-        })
-    }
-
     fn widen_for_retry(
         &mut self,
         active: &ActiveLoop,
@@ -5167,7 +4923,9 @@ impl ExecutionEngine {
     ) -> bool {
         let mut joined = join_all(&active.invariants, observed);
         for (i, inv) in joined.iter_mut().enumerate() {
-            if *inv != active.invariants[i] && self.carries_region(&active.entry_state.0[i]) {
+            if *inv != active.invariants[i]
+                && self.computer.carries_region(&active.entry_state.0[i])
+            {
                 *inv = active.invariants[i].clone();
             }
         }
@@ -5233,7 +4991,7 @@ impl ExecutionEngine {
 
     fn keep_facts(&mut self, facts: Vec<ast::Bool>) {
         for fact in &facts {
-            self.computer.solver.assert(fact);
+            self.computer.solver().assert(fact);
         }
         if let Some(enclosing) = self.active_loops.last_mut() {
             enclosing.nested_facts.extend(facts);
@@ -5297,12 +5055,13 @@ impl ExecutionEngine {
         };
         let mut assuming = self.select_definitions_in(fact);
         assuming.push(violated);
-        check(&self.computer.solver, &assuming) == SatResult::Unsat
+        check(self.computer.solver(), &assuming) == SatResult::Unsat
     }
 
     fn proves(&self, fact: AbstractComparison) -> bool {
-        comparison_to_ast(fact)
-            .is_some_and(|c| self.computer.solver.check_assumptions(&[c.not()]) == SatResult::Unsat)
+        comparison_to_ast(fact).is_some_and(|c| {
+            self.computer.solver().check_assumptions(&[c.not()]) == SatResult::Unsat
+        })
     }
 
     fn repeat_round(
@@ -5368,11 +5127,11 @@ impl ExecutionEngine {
 
     fn generalize_round(
         &mut self,
-        previous: &ComputerState,
-        current: &ComputerState,
+        previous: &MachineState,
+        current: &MachineState,
         prefix: &[(AbstractComparison, bool)],
         expression: &mut AbstractComparison,
-    ) -> Option<(ComputerState, Generalization)> {
+    ) -> Option<(MachineState, Generalization)> {
         let invariants = self.pin_steps(&drift_of_registers(&previous.0, &current.0));
         let mut unit =
             invariants
@@ -5486,16 +5245,16 @@ impl ExecutionEngine {
             .filter(|&i| self.proves(at_least_zero(&current.0[i])))
             .collect();
         let progresses = comparison_to_ast(AbstractComparison::new(">=", progress, zero))?;
-        self.computer.solver.assert(progresses);
+        self.computer.solver().assert(progresses);
         for guard in guards {
-            self.computer.solver.assert(guard);
+            self.computer.solver().assert(guard);
         }
         for (i, register) in updates {
-            self.computer.registers[i] = register;
+            self.computer.set_register_at(i, register);
         }
         for &i in &nonnegative {
-            if let Some(stays) = comparison_to_ast(at_least_zero(&self.computer.registers[i])) {
-                self.computer.solver.assert(stays);
+            if let Some(stays) = comparison_to_ast(at_least_zero(&self.computer.register_at(i))) {
+                self.computer.solver().assert(stays);
             }
         }
         self.computer.set_flags(flags);
@@ -5513,8 +5272,8 @@ impl ExecutionEngine {
 
     fn round_covers(
         &self,
-        generalized: &ComputerState,
-        next: &ComputerState,
+        generalized: &MachineState,
+        next: &MachineState,
         generalization: &Generalization,
     ) -> bool {
         let Some(&(first, sign)) = generalization.steps.first() else {
@@ -5589,7 +5348,9 @@ impl ExecutionEngine {
                             })
                             .zip(comparison_to_ast(now.clone()))
                             .is_some_and(|(was, now)| {
-                                self.computer.solver.check_assumptions(&[was.eq(now).not()])
+                                self.computer
+                                    .solver()
+                                    .check_assumptions(&[was.eq(now).not()])
                                     == SatResult::Unsat
                             })
                     }
@@ -5639,11 +5400,11 @@ impl ExecutionEngine {
         self.assume_staying(&expression, active.entry_decision);
         self.resolve_selects(&mut before);
         self.resolve_selects(&mut after);
-        self.computer.solver.pop(1);
+        self.computer.solver().pop(1);
         let mut observed = self.pin_steps(&invariant_of_registers(&before.0, &after.0));
         self.assume_staying(&expression, active.entry_decision);
         self.pin_unknown_steps(&mut observed, &before.0, &after.0, &expression);
-        self.computer.solver.pop(1);
+        self.computer.solver().pop(1);
         let mut observed = self.bound_values(active.pc, &observed, &before.0, &after.0);
         for (i, recorded) in active.invariants.iter().enumerate() {
             if let LoopInvariant::Linear(step) = recorded
@@ -5667,8 +5428,8 @@ impl ExecutionEngine {
         }
         let checked_from = active
             .journal_after_summary
-            .min(self.computer.write_journal.len());
-        let mut rewritten = cells_written(&self.computer.write_journal[checked_from..]);
+            .min(self.computer.write_journal().len());
+        let mut rewritten = cells_written(&self.computer.write_journal()[checked_from..]);
         for (cell, _) in &active.cells {
             if rewritten.iter().all(|(known, _)| known != cell) {
                 rewritten.push((cell.clone(), self.computer.cell_content(cell)));
@@ -5764,7 +5525,7 @@ impl ExecutionEngine {
         });
         let exits = leaving.as_ref().is_some_and(|leaving| {
             self.computer
-                .solver
+                .solver()
                 .check_assumptions(std::slice::from_ref(leaving))
                 == SatResult::Unsat
         });
@@ -5781,7 +5542,7 @@ impl ExecutionEngine {
             && unstable.iter().all(|&i| {
                 [&active.entry_state.0[i], &active.state.0[i], &current.0[i]]
                     .into_iter()
-                    .all(|r| !self.carries_region(r) && !read_by_guard.contains(r))
+                    .all(|r| !self.computer.carries_region(r) && !read_by_guard.contains(r))
             });
         if !holds
             && !only_data_moved
@@ -5860,7 +5621,7 @@ impl ExecutionEngine {
         self.rebuild_scopes(above);
 
         if closed {
-            if self.computer.solver.check() == SatResult::Unsat {
+            if self.computer.solver().check() == SatResult::Unsat {
                 log::info!(
                     "{} at line {} has no feasible exit on this path",
                     active.id,
@@ -5874,7 +5635,7 @@ impl ExecutionEngine {
         self.computer.set_state(active.entry_state);
         self.computer
             .undo_writes_since(active.journal_before_summary);
-        self.computer.symbolic_slots = active.slots;
+        self.computer.set_symbolic_slots(active.slots);
         if !cells_hold || !slots_hold {
             let mut retries = self.cell_retries.borrow_mut();
             let used = retries.entry(active.pc).or_insert(0);
@@ -6335,13 +6096,7 @@ mod tests {
                             AbstractExpression::Immediate(0),
                         ),
                         accesses: Vec::new(),
-                        state: (
-                            std::array::from_fn(|_| RegisterValue::new_imm(0)),
-                            None,
-                            None,
-                            None,
-                            None,
-                        ),
+                        state: (vec![RegisterValue::new_imm(0); 33], None, None, None, None),
                         journal_len: 0,
                         slots: Vec::new(),
                         instructions_run: 0,

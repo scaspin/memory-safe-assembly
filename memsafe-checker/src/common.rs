@@ -799,6 +799,14 @@ pub fn access_width(opcode: &str, register: &instruction_parser::Operand) -> i64
     }
 }
 
+pub fn format_address(base: &AbstractExpression, offset: i64) -> String {
+    if offset < 0 {
+        format!("{base} - {}", -offset)
+    } else {
+        format!("{base} + {offset}")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryAccess {
     pub kind: RegionType,
@@ -1706,7 +1714,7 @@ pub fn confined_load_width(e: &AbstractExpression) -> Option<i64> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ExecuteReturnType {
+pub enum ExecuteReturnType<O = instruction_parser::Operand> {
     Next,
     Split(Vec<AbstractComparison>),
     JumpIndirect(RegisterValue),
@@ -1714,12 +1722,7 @@ pub enum ExecuteReturnType {
     JumpAddress(u128),
     ConditionalJumpLabel(AbstractComparison, String),
     ConditionalJumpAddress(AbstractComparison, u128),
-    Select(
-        AbstractComparison,
-        instruction_parser::Operand,
-        RegisterValue,
-        RegisterValue,
-    ),
+    Select(AbstractComparison, O, RegisterValue, RegisterValue),
     Trap,
 }
 

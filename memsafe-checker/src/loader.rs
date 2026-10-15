@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
-use crate::instruction_parser::{Instruction, InstructionType};
+use crate::instruction_parser::Instruction;
+use crate::machine::MachineInstruction;
 
 const PAGE: i64 = 1 << 12;
 const TEXT_DATA: &str = ".text.data";
@@ -41,9 +42,9 @@ pub struct DataSymbol {
     pub size: Option<i64>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct Listing {
-    pub code: Vec<Instruction>,
+#[derive(Debug, Clone)]
+pub struct Listing<I = Instruction> {
+    pub code: Vec<I>,
     pub labels: Vec<(String, usize)>,
     pub line_addresses: Vec<i64>,
     pub line_at: BTreeMap<i64, usize>,
@@ -53,7 +54,22 @@ pub struct Listing {
     held_alignment: Vec<(String, String)>,
 }
 
-impl Listing {
+impl<I> Default for Listing<I> {
+    fn default() -> Self {
+        Listing {
+            code: Vec::new(),
+            labels: Vec::new(),
+            line_addresses: Vec::new(),
+            line_at: BTreeMap::new(),
+            data: Vec::new(),
+            data_symbols: BTreeMap::new(),
+            text_block: None,
+            held_alignment: Vec::new(),
+        }
+    }
+}
+
+impl<I> Listing<I> {
     pub fn address_of(&self, name: &str) -> Option<i64> {
         if let Some(&(_, line)) = self.labels.iter().find(|(l, _)| l == name) {
             return self.line_addresses.get(line).copied();
@@ -76,16 +92,6 @@ struct TextRun {
 enum Section {
     Text,
     Data(usize),
-}
-
-fn item_width(directive: &str) -> Option<i64> {
-    match directive {
-        ".byte" => Some(1),
-        ".hword" | ".short" | ".2byte" => Some(2),
-        ".word" | ".long" | ".int" | ".4byte" => Some(4),
-        ".quad" | ".xword" | ".dword" | ".8byte" => Some(8),
-        _ => None,
-    }
 }
 
 fn parse_integer(text: &str) -> Option<i64> {
@@ -124,8 +130,8 @@ fn is_writable_section(name: &str) -> bool {
     name.starts_with(".data") || name.starts_with(".bss") || name.starts_with("__DATA")
 }
 
-impl Listing {
-    pub fn parse<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> Listing {
+impl<I: MachineInstruction> Listing<I> {
+    pub fn parse<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> Listing<I> {
         let mut listing = Listing::default();
         let mut section = Section::Text;
         let mut pending: Vec<(usize, usize, String)> = Vec::new();
@@ -133,14 +139,7 @@ impl Listing {
         let mut waiting: Vec<String> = Vec::new();
         let mut run: Option<TextRun> = None;
 
-        let statements = lines.into_iter().flat_map(|line| {
-            let line: String = line.into();
-            let code = line.split_once("//").map_or(line.as_str(), |(c, _)| c);
-            let code = code.split_once(';').map_or(code, |(c, _)| c);
-            code.split("%%")
-                .map(|statement| statement.trim().to_string())
-                .collect::<Vec<_>>()
-        });
+        let statements = I::statements(lines.into_iter().map(Into::into).collect());
         for text in statements {
             if text.is_empty() || text.starts_with('#') {
                 continue;
@@ -183,7 +182,7 @@ impl Listing {
                         }
                         Section::Text => {
                             let aligns = matches!(directive, ".align" | ".p2align" | ".balign");
-                            if item_width(directive).is_some()
+                            if I::item_width(directive).is_some()
                                 || (aligns && (run.is_some() || waiting.is_empty()))
                             {
                                 run.get_or_insert_with(|| TextRun {
@@ -210,15 +209,15 @@ impl Listing {
                 _ => {
                     let encoded = run.take().map(|r| r.labels).unwrap_or_default();
                     for label in encoded.into_iter().chain(waiting.drain(..)) {
-                        listing.push_code(Instruction::new(label));
+                        listing.push_code(I::parse(label));
                     }
-                    listing.push_code(Instruction::new(text));
+                    listing.push_code(I::parse(text));
                 }
             }
         }
         listing.commit(run.take(), &mut pending);
         for label in waiting.drain(..) {
-            listing.push_code(Instruction::new(label));
+            listing.push_code(I::parse(label));
         }
 
         listing.lay_out();
@@ -238,7 +237,12 @@ impl Listing {
         let Some(run) = run else {
             return;
         };
-        if run.labels.is_empty() && run.directives.iter().all(|(d, _)| item_width(d).is_none()) {
+        if run.labels.is_empty()
+            && run
+                .directives
+                .iter()
+                .all(|(d, _)| I::item_width(d).is_none())
+        {
             self.held_alignment.extend(run.directives);
             return;
         }
@@ -254,10 +258,9 @@ impl Listing {
         }
     }
 
-    fn push_code(&mut self, instruction: Instruction) {
-        if instruction.ty == InstructionType::Label {
-            self.labels
-                .push((instruction.opcode.clone(), self.code.len()));
+    fn push_code(&mut self, instruction: I) {
+        if let Some(label) = instruction.label() {
+            self.labels.push((label.to_string(), self.code.len()));
         } else {
             self.text_block = None;
             self.held_alignment.clear();
@@ -326,14 +329,9 @@ impl Listing {
         };
         let argument = || parse_integer(rest.split(',').next().unwrap_or("").trim());
         match directive {
-            ".align" | ".p2align" => {
-                if let Some(n) = argument().filter(|n| (0..32).contains(n)) {
-                    align_to(data, 1 << n);
-                }
-            }
-            ".balign" => {
-                if let Some(n) = argument() {
-                    align_to(data, n);
+            ".align" | ".p2align" | ".balign" => {
+                if let Some(boundary) = argument().and_then(|n| I::alignment(directive, n)) {
+                    align_to(data, boundary);
                 }
             }
             ".zero" | ".space" | ".skip" => {
@@ -344,7 +342,7 @@ impl Listing {
             ".globl" | ".global" | ".private_extern" | ".hidden" | ".type" | ".local" | ".weak" => {
             }
             _ => {
-                let Some(width) = item_width(directive) else {
+                let Some(width) = I::item_width(directive) else {
                     log::warn!("data directive {directive} not modelled");
                     return;
                 };

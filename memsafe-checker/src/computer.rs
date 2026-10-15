@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::instruction_parser::*;
+use crate::machine::*;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -9,6 +10,7 @@ use z3::*;
 mod instruction_aux;
 mod instructions;
 pub(crate) use instructions::is_floating_point;
+mod machine;
 mod memory;
 mod simd;
 pub(crate) use simd::{
@@ -17,14 +19,6 @@ pub(crate) use simd::{
 
 pub const MAX_EXPRESSION_NODES: usize = 150;
 const WORD_FIT_RESOURCE_LIMIT: u32 = 5_000_000;
-
-pub type ComputerState = (
-    [RegisterValue; 33],
-    Option<FlagValue>,
-    Option<FlagValue>,
-    Option<FlagValue>,
-    Option<FlagValue>,
-);
 
 #[derive(Clone)]
 pub struct ARMCORTEXA {
@@ -39,11 +33,10 @@ pub struct ARMCORTEXA {
     pub memory_labels: BTreeMap<String, (String, i64)>,
     pub data_symbol_sizes: BTreeMap<String, i64>,
     pub code_labels: Rc<BTreeSet<String>>,
-    pub select_definitions:
-        BTreeMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>,
+    pub select_definitions: SelectDefinitions,
     pub symbols_bounding_counter: BTreeMap<String, Vec<String>>,
     rw_queue: Vec<MemoryAccess>,
-    element_facts: Rc<RefCell<BTreeMap<(String, i64), (String, bool)>>>,
+    element_facts: ElementFacts,
     stack_arguments: i64,
     pub red_zone: i64,
     findings: Rc<RefCell<Vec<String>>>,
@@ -58,35 +51,6 @@ pub struct ARMCORTEXA {
     pointer_elements: BTreeMap<String, String>,
     element_ranges: BTreeMap<String, Vec<ElementRange>>,
     pristine_read: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ElementRange {
-    pub width: i64,
-    pub signed: bool,
-    pub op: String,
-    pub bound: AbstractExpression,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SymbolicSlot {
-    pub base: AbstractExpression,
-    pub offset: i64,
-    pub width: i64,
-    pub value: RegisterValue,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MemoryCell {
-    pub region: String,
-    pub offset: i64,
-}
-
-#[derive(Debug, Clone)]
-pub struct CellWrite {
-    pub cell: MemoryCell,
-    pub previous: Option<RegisterValue>,
-    pub previous_width: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -277,160 +241,15 @@ impl ARMCORTEXA {
             && unsat_within_budget(value.ge(ast::Int::from_i64(MODULUS)))
     }
 
-    pub fn fits_unsigned(&self, value: &AbstractExpression, bits: u32) -> bool {
-        let limit = if bits >= 63 { i64::MAX } else { 1i64 << bits };
-        [
-            AbstractComparison::new(">=", value.clone(), AbstractExpression::Immediate(0)),
-            AbstractComparison::new("<", value.clone(), AbstractExpression::Immediate(limit)),
-        ]
-        .into_iter()
-        .all(|fact| {
-            comparison_to_ast(fact)
-                .is_some_and(|c| self.solver.check_assumptions(&[c.not()]) == SatResult::Unsat)
-        })
-    }
-
-    pub fn write_cell(&mut self, cell: &MemoryCell, value: RegisterValue) {
-        let Some(region) = self.memory.get_mut(&cell.region) else {
-            return;
-        };
-        let previous = region.content.get(&cell.offset).cloned();
-        let previous_width = region.width_at(cell.offset);
-        region.insert(cell.offset, value);
-        self.write_journal.push(CellWrite {
-            cell: cell.clone(),
-            previous,
-            previous_width,
-        });
-    }
-
-    fn forget_cell(&mut self, region_name: &str, offset: i64) {
-        let Some(region) = self.memory.get_mut(region_name) else {
-            return;
-        };
-        let previous = region.content.get(&offset).cloned();
-        let previous_width = region.width_at(offset);
-        region.put(offset, None);
-        self.write_journal.push(CellWrite {
-            cell: MemoryCell {
-                region: region_name.to_string(),
-                offset,
-            },
-            previous,
-            previous_width,
-        });
-    }
-
-    pub fn store_cell(&mut self, cell: &MemoryCell, value: RegisterValue, width: i64) {
-        let Some(region) = self.memory.get(&cell.region) else {
-            return;
-        };
-        for k in region.overlapping(cell.offset, width) {
-            self.forget_cell(&cell.region, k);
-        }
-        let Some(region) = self.memory.get_mut(&cell.region) else {
-            return;
-        };
-        let value = if width > 8 {
-            RegisterValue::new(RegisterKind::Number, None, 0)
-        } else {
-            value
-        };
-        region.put(cell.offset, Some((value, Some(width))));
-        region.mark_written(cell.offset, width);
-        self.write_journal.push(CellWrite {
-            cell: cell.clone(),
-            previous: None,
-            previous_width: None,
-        });
-    }
-
-    pub fn forget_where_written(&mut self, base: &AbstractExpression, offset: i64, width: i64) {
-        let named = base.get_abstracts();
-        let regions: Vec<String> = self
-            .memory
-            .keys()
-            .filter(|name| {
-                named.contains(name)
-                    || named.iter().any(|n| {
-                        self.memory_labels
-                            .get(n)
-                            .is_some_and(|(section, _)| section == *name)
-                    })
-            })
-            .cloned()
-            .collect();
-        let start = expression_to_ast(base.clone())
-            .map(|b| ast::Int::add(&[&b, &ast::Int::from_i64(offset)]));
-        for name in regions {
-            let slots: Vec<(i64, i64)> = self.memory[&name]
-                .content
-                .keys()
-                .map(|k| (*k, self.memory[&name].width_at(*k).unwrap_or(8)))
-                .collect();
-            for (k, slot_width) in slots {
-                let apart = start.as_ref().is_some_and(|start| {
-                    let slot_start = ast::Int::add(&[
-                        &ast::Int::new_const(name.clone()),
-                        &ast::Int::from_i64(k),
-                    ]);
-                    let slot_end = ast::Int::add(&[&slot_start, &ast::Int::from_i64(slot_width)]);
-                    let end = ast::Int::add(&[start, &ast::Int::from_i64(width)]);
-                    let overlap = ast::Bool::and(&[&start.lt(&slot_end), &slot_start.lt(&end)]);
-                    self.solver.check_assumptions(&[overlap]) == SatResult::Unsat
-                });
-                if !apart {
-                    self.forget_cell(&name, k);
-                }
-            }
-            if let Some(region) = self.memory.get_mut(&name) {
-                region.renew_unwritten();
-            }
-        }
-    }
-
     pub fn substitute_symbol(&mut self, symbol: &str, value: i64) {
-        fn replaced(e: &AbstractExpression, symbol: &str, value: i64) -> AbstractExpression {
-            match e {
-                AbstractExpression::Abstract(name) if name == symbol => {
-                    AbstractExpression::Immediate(value)
-                }
-                AbstractExpression::Register(r) => {
-                    AbstractExpression::Register(Box::new(RegisterValue {
-                        base: r.base.as_ref().map(|b| replaced(b, symbol, value)),
-                        ..(**r).clone()
-                    }))
-                }
-                AbstractExpression::Expression(op, a, b) => {
-                    generate_expression(op, replaced(a, symbol, value), replaced(b, symbol, value))
-                }
-                other => other.clone(),
-            }
-        }
-        let respelled = |register: &RegisterValue| {
-            let base = register.base.as_ref()?;
-            if register.kind != RegisterKind::RegisterBase
-                || !base.get_abstracts().iter().any(|name| name == symbol)
-            {
-                return None;
-            }
-            let value = RegisterValue {
-                base: Some(replaced(base, symbol, value)),
-                ..register.clone()
-            };
-            Some(match crate::widening::Affine::of_register(&value) {
-                Some(form) if form.terms.is_empty() => RegisterValue::new_imm(form.constant),
-                _ => value,
-            })
-        };
         for i in 0..self.registers.len() {
-            if let Some(register) = respelled(&self.registers[i]) {
+            if let Some(register) = respelled(&self.registers[i], symbol, value) {
                 self.registers[i] = register;
             }
         }
         for slot in self.symbolic_slots.iter_mut() {
-            slot.base = replaced(&slot.base, symbol, value);
-            if let Some(register) = respelled(&slot.value) {
+            slot.base = substituted(&slot.base, symbol, value);
+            if let Some(register) = respelled(&slot.value, symbol, value) {
                 slot.value = register;
             }
         }
@@ -482,10 +301,6 @@ impl ARMCORTEXA {
             .map(|slot| slot.value.clone())
     }
 
-    pub fn slots_kept(&self, slots: &[SymbolicSlot]) -> bool {
-        slots.iter().all(|slot| self.symbolic_slots.contains(slot))
-    }
-
     pub fn forget_slots_overlapping(&mut self, base: &AbstractExpression, offset: i64, width: i64) {
         if self.symbolic_slots.is_empty() {
             return;
@@ -524,31 +339,9 @@ impl ARMCORTEXA {
             .collect();
     }
 
-    pub fn cell_content(&self, cell: &MemoryCell) -> RegisterValue {
-        self.memory
-            .get(&cell.region)
-            .and_then(|region| region.content.get(&cell.offset).cloned())
-            .unwrap_or_else(|| RegisterValue::new(RegisterKind::Number, None, 0))
-    }
-
-    pub fn undo_writes_since(&mut self, journal_len: usize) {
-        while self.write_journal.len() > journal_len {
-            let Some(write) = self.write_journal.pop() else {
-                break;
-            };
-            let Some(region) = self.memory.get_mut(&write.cell.region) else {
-                continue;
-            };
-            region.put(
-                write.cell.offset,
-                write.previous.map(|value| (value, write.previous_width)),
-            );
-        }
-    }
-
-    pub fn get_state(&self) -> ComputerState {
+    pub fn get_state(&self) -> MachineState {
         (
-            self.registers.clone(),
+            self.registers.to_vec(),
             self.zero.clone(),
             self.neg.clone(),
             self.carry.clone(),
@@ -591,9 +384,11 @@ impl ARMCORTEXA {
         out
     }
 
-    pub fn set_state(&mut self, state: ComputerState) {
+    pub fn set_state(&mut self, state: MachineState) {
         let (registers, zero, neg, carry, overflow) = state;
-        self.registers = registers;
+        self.registers = registers
+            .try_into()
+            .expect("an AArch64 state holds 33 registers");
         self.zero = zero;
         self.neg = neg;
         self.carry = carry;
@@ -750,43 +545,6 @@ impl ARMCORTEXA {
         }
     }
 
-    pub fn add_element_fact(&mut self, region: &str, address: i64, width: i64, symbol: &str) {
-        let value = RegisterValue::new(
-            RegisterKind::RegisterBase,
-            Some(AbstractExpression::Abstract(symbol.to_string())),
-            0,
-        );
-        match self.memory.get_mut(region) {
-            Some(r) => r.insert_sized(address, value, width),
-            None => panic!("no region {region} to place {symbol} in"),
-        }
-        self.element_facts
-            .borrow_mut()
-            .insert((region.to_string(), address), (symbol.to_string(), false));
-    }
-
-    pub fn note_element_read(&self, region: &str, address: i64) {
-        if let Some(entry) = self
-            .element_facts
-            .borrow_mut()
-            .get_mut(&(region.to_string(), address))
-        {
-            entry.1 = true;
-        }
-    }
-
-    pub fn unread_element_facts(&self) -> Vec<String> {
-        let mut unread: Vec<String> = self
-            .element_facts
-            .borrow()
-            .values()
-            .filter(|(_, read)| !read)
-            .map(|(symbol, _)| symbol.clone())
-            .collect();
-        unread.sort();
-        unread
-    }
-
     pub fn region_named_by(&self, expression: &AbstractExpression) -> Option<String> {
         expression
             .get_abstracts()
@@ -894,92 +652,10 @@ impl ARMCORTEXA {
         }
     }
 
-    pub fn add_memory_value(&mut self, region: String, address: i64, value: i64, width: i64) {
-        let reg_value = RegisterValue::new(RegisterKind::Immediate, None, value);
-        match self.memory.get_mut(&region) {
-            Some(r) => {
-                r.insert_sized(address, reg_value, width);
-                r.grow_to(address + width);
-            }
-            None => {
-                let mut region_map =
-                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW)
-                        .with_alignment(4096);
-                region_map.insert_sized(address, reg_value, width);
-                region_map.grow_to(address + width);
-                self.memory.insert(region, region_map);
-            }
-        }
-    }
-
-    pub fn add_memory_value_abstract(
-        &mut self,
-        region: String,
-        address: i64,
-        value: AbstractExpression,
-    ) {
-        let reg_value = RegisterValue::new(RegisterKind::RegisterBase, Some(value), 0);
-        match self.memory.get_mut(&region) {
-            Some(r) => {
-                r.insert(address, reg_value);
-            }
-            None => {
-                let mut region_map =
-                    MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW)
-                        .with_alignment(4096);
-                region_map.insert(address, reg_value);
-                self.memory.insert(region, region_map);
-            }
-        }
-    }
-
     pub fn grow_memory_region(&mut self, name: String, end: i64) {
         if let Some(r) = self.memory.get_mut(&name) {
             r.grow_to(end);
         }
-    }
-
-    pub fn add_data_section(&mut self, name: &str, ty: RegionType, size: i64, alignment: i64) {
-        let region = MemorySafeRegion::new(AbstractExpression::Immediate(size), ty)
-            .with_alignment(alignment);
-        self.memory.insert(name.to_string(), region);
-        if alignment > 1 {
-            self.solver.assert(
-                ast::Int::new_const(name)
-                    .modulo(ast::Int::from_i64(alignment))
-                    .eq(ast::Int::from_i64(0)),
-            );
-        }
-    }
-
-    pub fn add_memory_pointer(
-        &mut self,
-        region: &str,
-        at: i64,
-        pointer: RegisterValue,
-        width: i64,
-    ) {
-        if let Some(r) = self.memory.get_mut(region) {
-            r.insert_sized(at, pointer, width);
-        }
-    }
-
-    pub fn symbol_address(&self, symbol: &str) -> Option<(String, i64)> {
-        let name = symbol.split('@').next().unwrap_or(symbol).trim();
-        [name, name.trim_start_matches('_')]
-            .into_iter()
-            .find_map(|name| match self.memory_labels.get(name) {
-                Some(placed) => Some(placed.clone()),
-                None => self
-                    .code_labels
-                    .contains(name)
-                    .then(|| (name.to_string(), 0)),
-            })
-    }
-
-    pub fn add_memory_region(&mut self, name: String, ty: RegionType, length: AbstractExpression) {
-        let new_region = MemorySafeRegion::new(length, ty);
-        self.memory.insert(name, new_region);
     }
 
     fn label_to_memory_index(&self, label: &str) -> Option<(String, i64)> {
