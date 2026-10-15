@@ -11,9 +11,11 @@ fn example_stack_push_pop() {
     let mut program = Vec::new();
     let start_label = "test";
     program.push("test:");
+    program.push("sub sp,sp,#16");
     program.push("add x3,x3,#21");
     program.push("str x3,[sp,#4]");
     program.push("ldr x0,[sp,#4]");
+    program.push("add sp,sp,#16");
     program.push("ret");
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
@@ -27,9 +29,6 @@ fn example_stack_push_pop() {
     assert_eq!(engine.get_register_output(0).offset, 22);
 }
 
-/*
- * This should fail since first memory access can succeed when length is 0,
- */
 #[test]
 fn example_basic_abstract_loop() -> std::io::Result<()> {
     init();
@@ -50,7 +49,6 @@ fn example_basic_abstract_loop() -> std::io::Result<()> {
 
     let length = abstract_of("Length");
     let base = abstract_of("Base");
-    // Base is the base address of the input buffer
     engine.add_abstract("x1", base.clone());
     engine.add_region(RegionType::READ, "Base", length.clone());
 
@@ -81,7 +79,6 @@ fn example_bad_increment_abstract_loop() -> std::io::Result<()> {
 
     let length = abstract_of("Length");
     let base = abstract_of("Base");
-    // Base is the base address of the input buffer
     engine.add_abstract("x1", base.clone());
     engine.add_region(RegionType::READ, "Base", length.clone());
 
@@ -93,10 +90,6 @@ fn example_bad_increment_abstract_loop() -> std::io::Result<()> {
     Ok(())
 }
 
-// x1 region isn't bounded by length 2, so loop
-// over x1 from 0 to a random abstract length2
-// doesn't work, since we're missing length 2
-// being connected to the memory region
 #[test]
 fn example_loop_on_input_abstract_loop() -> std::io::Result<()> {
     init();
@@ -128,46 +121,6 @@ fn example_loop_on_input_abstract_loop() -> std::io::Result<()> {
     assert!(res.is_err());
     Ok(())
 }
-
-// #[test]
-// fn example_double_loop() -> std::io::Result<()> {
-//     init();
-
-//     let mut program = Vec::new();
-//     let start_label = "test";
-//     program.push("test:");
-//     program.push("add x3,x1,x2");
-//     program.push("add x4,x1,#0");
-//     program.push("loop_1:");
-//     program.push("ldr x5,[x1]");
-//     program.push("add x1,x1,#1");
-//     program.push("cmp x1,x3");
-//     program.push("b.ne loop_1");
-//     program.push("loop_2:");
-//     program.push("sub x1,x1,#1");
-//     program.push("ldr x5,[x1]");
-//     program.push("cmp x1,x4");
-//     program.push("b.ne loop_2");
-//     program.push("ret");
-
-//     let cfg = Config::new();
-//     let ctx = Context::new(&cfg);
-//     let mut engine = bums::engine::ExecutionEngine::new(program);
-
-//     let length = abstract_of("Length");
-//     let base = abstract_of("Base");
-//     // Base is the base address of the input buffer
-//     engine.add_abstract("x1", base.clone());
-//     engine.add_abstract("x2", length.clone());
-
-//     engine.add_region(RegionType::READ, "Base", length.clone());
-//     engine.add_invariant(generate_comparison("<", AbstractExpression::Immediate(0), length));
-
-//     engine.change_alignment(1);
-//     let res = engine.start(start_label);
-//     assert!(res.is_ok());
-//     Ok(())
-// }
 
 #[test]
 fn example_z3_abstract_bound_unsafe() -> std::io::Result<()> {
@@ -227,7 +180,6 @@ fn example_unrelated_unknowns_not_treated_as_equal() -> std::io::Result<()> {
     Ok(())
 }
 
-// `cmn` carries its own copy of the `r1 == r2` shortcut.
 #[test]
 fn example_unrelated_unknowns_not_treated_as_equal_cmn() -> std::io::Result<()> {
     init();
@@ -262,7 +214,6 @@ fn example_z3_real_bound_safe() -> std::io::Result<()> {
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base");
-    // The load at offset 4 spans bytes 4..11.
     engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(12));
 
     let res = engine.start("start");
@@ -270,7 +221,6 @@ fn example_z3_real_bound_safe() -> std::io::Result<()> {
     Ok(())
 }
 
-// Symbolic base landing exactly one past the end of an 8-byte region.
 #[test]
 fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
     init();
@@ -287,7 +237,6 @@ fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
     Ok(())
 }
 
-// Same path, landing inside the region.
 #[test]
 fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
     init();
@@ -297,7 +246,6 @@ fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base");
-    // The load spans bytes 4..11.
     engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(12));
 
     let res = engine.start("start");
@@ -305,7 +253,6 @@ fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
     Ok(())
 }
 
-// Last byte of an 8-byte region; pins the boundary from the safe side.
 #[test]
 fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
     init();
@@ -322,7 +269,6 @@ fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
     Ok(())
 }
 
-// Lower bound: backing the pointer below its region.
 #[test]
 fn example_z3_symbolic_base_below_region_unsafe() -> std::io::Result<()> {
     init();
@@ -339,7 +285,6 @@ fn example_z3_symbolic_base_below_region_unsafe() -> std::io::Result<()> {
     Ok(())
 }
 
-// In-bounds store into a READ-only region.
 #[test]
 fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
     init();
@@ -356,7 +301,6 @@ fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
     Ok(())
 }
 
-// Kind check is one-directional: only WRITE-to-READ is rejected.
 #[test]
 fn example_z3_read_from_write_region_safe() -> std::io::Result<()> {
     init();
@@ -382,7 +326,6 @@ fn example_z3_real_bound_unsafe() -> std::io::Result<()> {
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base");
-    // Big enough for the first load, so the second is what fails.
     engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
 
     let res = engine.start("start");
@@ -437,49 +380,12 @@ fn example_z3_simple_loop_with_mem_access_safe() -> std::io::Result<()> {
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base");
-    // Four iterations stepping 4, and the last load spans bytes 12..19.
     engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(20));
 
     let res = engine.start("start");
     assert!(res.is_ok());
     Ok(())
 }
-
-// #[test]
-// fn example_z3_complex_loop_with_mem_access_safe() -> std::io::Result<()> {
-//     init();
-
-//     let mut program = Vec::new();
-//     program.push("start:");
-//     program.push("add x1,x0,x1,lsl#2");
-//     program.push("loop:");
-//     program.push("cmp x0,x1");
-//     program.push("b.eq end");
-//     program.push("ldr x3,[x0,#0]");
-//     program.push("add x0,x0,#4");
-//     program.push("b loop");
-//     program.push("end:");
-//     program.push("ret");
-
-//     let mut cfg = Config::new();
-//     cfg.set_proof_generation(true);
-//     let ctx = Context::new(&cfg);
-//     let mut engine = bums::engine::ExecutionEngine::new(program);
-
-//     engine.add_abstract_from(0, "base");
-//     engine.add_abstract_from(1, "blocks");
-
-//     let length = AbstractExpression::Expression(
-//         "lsl",
-//         Box::new(abstract_of("blocks")),
-//         Box::new(AbstractExpression::Immediate(2)),
-//     );
-//     engine.add_region(RegionType::READ, "base", length);
-
-//     let res = engine.start("start");
-//     assert!(res.is_ok());
-//     Ok(())
-// }
 
 #[test]
 fn example_z3_complex_loop_with_mem_access_unsafe() -> std::io::Result<()> {
@@ -536,16 +442,17 @@ fn example_z3_complex_loop_with_no_mem_access() -> std::io::Result<()> {
     Ok(())
 }
 
-// Code after a `bl` must run: callee adds 10, call site adds 1.
 #[test]
 fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
     init();
 
     let program = vec![
         "test:",
+        "sub sp,sp,#16",
         "str x30,[sp,#0]",
         "bl sub",
         "ldr x30,[sp,#0]",
+        "add sp,sp,#16",
         "add x0,x0,#1",
         "ret",
         "sub:",
@@ -565,7 +472,6 @@ fn example_nested_call_returns_to_call_site() -> std::io::Result<()> {
     Ok(())
 }
 
-// `b` to its own label cycles with no condition to resolve; must be bounded, not hang.
 #[test]
 fn example_unconditional_self_loop_bounded() -> std::io::Result<()> {
     init();
@@ -581,7 +487,6 @@ fn example_unconditional_self_loop_bounded() -> std::io::Result<()> {
     Ok(())
 }
 
-// Same cycle through the JumpAddress path: `ret` to a concrete address that leads back to it.
 #[test]
 fn example_ret_to_self_bounded() -> std::io::Result<()> {
     init();
@@ -595,7 +500,6 @@ fn example_ret_to_self_bounded() -> std::io::Result<()> {
     Ok(())
 }
 
-// The bound must not reject unconditional jumps that terminate.
 #[test]
 fn example_unconditional_forward_jump_terminates() -> std::io::Result<()> {
     init();
@@ -622,16 +526,17 @@ fn example_unconditional_forward_jump_terminates() -> std::io::Result<()> {
     Ok(())
 }
 
-// Two frames deep: the inner call clobbers x30, so the outer return needs the spill.
 #[test]
 fn example_nested_call_two_levels_returns_to_call_sites() -> std::io::Result<()> {
     init();
 
     let program = vec![
         "test:",
+        "sub sp,sp,#16",
         "str x30,[sp,#0]",
         "bl outer",
         "ldr x30,[sp,#0]",
+        "add sp,sp,#16",
         "add x0,x0,#1",
         "ret",
         "outer:",
@@ -659,8 +564,6 @@ fn example_nested_call_two_levels_returns_to_call_sites() -> std::io::Result<()>
 
 #[test]
 fn example_z3_example_branch() -> std::io::Result<()> {
-    //env_logger::init();;
-
     let program = vec![
         "start:",
         "cmp x1,x2",
@@ -683,7 +586,6 @@ fn example_z3_example_branch() -> std::io::Result<()> {
     Ok(())
 }
 
-// Records which side of a carry-driven branch ran: 2 for taken, 1 for fallthrough.
 fn carry_branch_program<'a>(compare: &'a str, branch: &'a str) -> Vec<&'a str> {
     vec![
         "start:",
@@ -724,7 +626,6 @@ fn example_cmp_carry_clear_when_unsigned_less() -> std::io::Result<()> {
     Ok(())
 }
 
-// -1 is below 1 signed but above it unsigned, so carry must read the operands as u64.
 #[test]
 fn example_cmp_carry_uses_unsigned_comparison() -> std::io::Result<()> {
     let program = carry_branch_program("cmp x1,x2", "b.cs taken");
@@ -732,7 +633,6 @@ fn example_cmp_carry_uses_unsigned_comparison() -> std::io::Result<()> {
     Ok(())
 }
 
-// b.ls is taken on Z set or carry clear.
 #[test]
 fn example_cmp_carry_clear_takes_b_ls() -> std::io::Result<()> {
     let program = carry_branch_program("cmp x1,x2", "b.ls taken");
@@ -747,7 +647,6 @@ fn example_cmp_equal_operands_set_carry() -> std::io::Result<()> {
     Ok(())
 }
 
-// Signed overflow must not flip b.gt, since neg already holds the signed comparison.
 #[test]
 fn example_cmp_signed_overflow_does_not_flip_b_gt() -> std::io::Result<()> {
     let program = carry_branch_program("cmp x1,x2", "b.gt taken");
@@ -755,7 +654,6 @@ fn example_cmp_signed_overflow_does_not_flip_b_gt() -> std::io::Result<()> {
     Ok(())
 }
 
-// -1 + 1 wraps past u64::MAX, so carry is set even though the signed sum is zero.
 #[test]
 fn example_cmn_carry_set_on_unsigned_carry_out() -> std::io::Result<()> {
     let program = carry_branch_program("cmn x1,x2", "b.cs taken");
@@ -800,17 +698,14 @@ fn example_b_ls_and_b_le_agree_on_equality() -> std::io::Result<()> {
     Ok(())
 }
 
-// Guards a symbolic index with `b.cs`, so the fallthrough must carry `x1 < 8`.
 fn symbolic_carry_guard(program: Vec<&str>) -> std::io::Result<()> {
     init();
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
     engine.add_abstract_from(0, "base");
-    // The guard bounds i below 8, and the load at base+i spans 8 bytes.
     engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(16));
     engine.add_abstract_from(1, "i");
-    // The carry guard only bounds the index from above.
     engine.add_invariant(AbstractComparison::new(
         ">=",
         abstract_of("i"),
@@ -849,7 +744,6 @@ fn example_symbolic_carry_bounds_index_via_b_cc() -> std::io::Result<()> {
     ])
 }
 
-// Addition does not cancel a shared base, so `cmn x1,x1` must not report equality.
 #[test]
 fn example_cmn_same_register_not_assumed_equal() -> std::io::Result<()> {
     init();
@@ -875,7 +769,6 @@ fn example_cmn_same_register_not_assumed_equal() -> std::io::Result<()> {
     Ok(())
 }
 
-// Contradictory invariants make every bounds query vacuously unsat.
 #[test]
 fn example_infeasible_path_does_not_prove_access_safe() -> std::io::Result<()> {
     init();

@@ -2538,7 +2538,7 @@ fn last_nonzero_index(count: &str) -> Vec<String> {
 
 #[test]
 fn select_of_the_counter_drops_its_unrolled_range() {
-    let mut engine = |count: &str, extra: Option<i64>| {
+    let engine = |count: &str, extra: Option<i64>| {
         init();
         let mut engine = bums::engine::ExecutionEngine::new(last_nonzero_index(count));
         engine.add_abstract_from(0, "base");
@@ -2647,4 +2647,224 @@ fn an_inner_guard_equal_to_an_outer_counter_still_steps() {
     };
     assert_eq!(run(0), Ok(()));
     assert!(run(1).is_err(), "a row one word longer than the buffer was accepted");
+}
+
+#[test]
+fn a_64_bit_countdown_gets_no_32_bit_bound() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "loop:",
+        "ldrb w4,[x0]",
+        "add x0,x0,#1",
+        "subs x1,x1,#1",
+        "b.gt loop",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_abstract_from(1, "h");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        AbstractExpression::Immediate((1i64 << 31) + 16),
+    );
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("h"),
+        AbstractExpression::Immediate(1),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "<=",
+        abstract_of("h"),
+        AbstractExpression::Immediate(1i64 << 40),
+    ));
+
+    let err = engine
+        .start("start")
+        .expect_err("a run of 2^40 bytes leaves the region");
+    assert!(err.to_string().contains("not provably within"), "{err}");
+}
+
+#[test]
+fn a_countdown_that_branches_out_is_bounded_the_same_way() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "loop:",
+        "ldr x4,[x0]",
+        "add x0,x0,#8",
+        "subs w1,w1,#1",
+        "b.le out",
+        "b loop",
+        "out:",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_abstract_from(1, "h");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression("*", abstract_of("h"), AbstractExpression::Immediate(8)),
+    );
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("h"),
+        AbstractExpression::Immediate(1),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "<=",
+        abstract_of("h"),
+        AbstractExpression::Immediate(128),
+    ));
+
+    engine
+        .start("start")
+        .expect("h rows of 8 bytes are in bounds");
+}
+
+#[test]
+fn a_w_register_countdown_bounds_its_rows() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "loop:",
+        "ldr x4,[x0]",
+        "add x0,x0,#8",
+        "subs w1,w1,#1",
+        "b.gt loop",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_abstract_from(1, "h");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression("*", abstract_of("h"), AbstractExpression::Immediate(8)),
+    );
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("h"),
+        AbstractExpression::Immediate(1),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "<=",
+        abstract_of("h"),
+        AbstractExpression::Immediate(128),
+    ));
+
+    engine
+        .start("start")
+        .expect("h rows of 8 bytes are in bounds");
+}
+
+#[test]
+fn a_w_register_countdown_still_catches_one_row_too_many() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "loop:",
+        "ldr x4,[x0]",
+        "add x0,x0,#8",
+        "subs w1,w1,#1",
+        "b.gt loop",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_abstract_from(1, "h");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression(
+            "-",
+            generate_expression("*", abstract_of("h"), AbstractExpression::Immediate(8)),
+            AbstractExpression::Immediate(8),
+        ),
+    );
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("h"),
+        AbstractExpression::Immediate(1),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "<=",
+        abstract_of("h"),
+        AbstractExpression::Immediate(128),
+    ));
+
+    let err = engine
+        .start("start")
+        .expect_err("the last row is past the region");
+    assert!(err.to_string().contains("not provably within"), "{err}");
+}
+
+#[test]
+fn what_a_loop_walked_is_known_after_it_closes() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "mov x6,#2",
+        "col:",
+        "mov x5,x2",
+        "row:",
+        "ldr x4,[x0]",
+        "add x0,x0,x1",
+        "subs x5,x5,#1",
+        "b.le endrow",
+        "b row",
+        "endrow:",
+        "msub x0,x1,x2,x0",
+        "add x0,x0,#8",
+        "subs x6,x6,#1",
+        "b.gt col",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_abstract_from(1, "stride");
+    engine.add_abstract_from(2, "h");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        generate_expression("*", abstract_of("stride"), abstract_of("h")),
+    );
+    for (name, op, bound) in [
+        ("h", ">=", 1),
+        ("h", "<=", 128),
+        ("stride", ">=", 16),
+        ("stride", "<=", 4096),
+    ] {
+        engine.add_invariant(AbstractComparison::new(
+            op,
+            abstract_of(name),
+            AbstractExpression::Immediate(bound),
+        ));
+    }
+
+    engine
+        .start("start")
+        .expect("both columns stay inside the region");
 }

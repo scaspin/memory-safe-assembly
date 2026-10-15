@@ -1462,7 +1462,7 @@ impl ExecutionEngine {
             let name = ("x".to_owned() + &register.to_string()).to_string();
             self.computer.set_abstract(name.clone(), value);
         } else {
-            let stack_index = ((register as i64) - 3) * -8;
+            let stack_index = ((register as i64) - 8) * 8;
             self.computer.set_stack_element(stack_index, Some(value), 0);
         }
     }
@@ -1473,9 +1473,25 @@ impl ExecutionEngine {
             let name = ("x".to_owned() + &register.to_string()).to_string();
             self.computer.set_abstract(name.clone(), value);
         } else {
-            let stack_index = ((register as i64) - 3) * -8;
+            let stack_index = ((register as i64) - 8) * 8;
             self.computer.set_stack_element(stack_index, Some(value), 0);
         }
+    }
+
+    pub fn add_element_fact(
+        &mut self,
+        region: impl Into<String>,
+        index: i64,
+        element_size: i64,
+        symbol: impl Into<String>,
+    ) {
+        let region = region.into();
+        self.computer
+            .add_element_fact(&region, index * element_size, element_size, &symbol.into());
+    }
+
+    pub fn unread_element_facts(&self) -> Vec<String> {
+        self.computer.unread_element_facts()
     }
 
     pub fn get_register_output(&self, register: usize) -> RegisterValue {
@@ -1762,6 +1778,27 @@ impl ExecutionEngine {
                             },
                         )
                     }
+                    ExecuteReturnType::JumpIndirect(target) => {
+                        match (target.base, target.offset) {
+                            (Some(AbstractExpression::Abstract(label)), 0) => {
+                                match self.get_linenumber_of_label(label.clone()) {
+                                    Some(n) => {
+                                        Self::note_unconditional_jump(unconditional_visits, n)?;
+                                        Ok(Step::Continue(n))
+                                    }
+                                    None => Err(Error::other(format!(
+                                        "line {pc}: undefined label {label}"
+                                    ))),
+                                }
+                            }
+                            _ => Err(Error::other(format!(
+                                "line {pc}: indirect jump through a value this engine cannot resolve to a label"
+                            ))),
+                        }
+                    }
+                    ExecuteReturnType::Split(_) => Err(Error::other(format!(
+                        "line {pc}: a jump-table split is not supported by this engine"
+                    ))),
                 },
                 Err(err) => {
                     let err = format!("line {pc} ({}): {err}", instruction.opcode);
@@ -1840,8 +1877,11 @@ impl ExecutionEngine {
         option2: RegisterValue,
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
-        let take = comparison_to_ast(condition.clone()).expect("select condition");
-        let skip = comparison_to_ast(condition.clone().not()).expect("negated select condition");
+        let take = comparison_to_ast(condition.clone())
+            .ok_or_else(|| Error::other("select condition uses an operation the engine does not model"))?;
+        let skip = comparison_to_ast(condition.clone().not()).ok_or_else(|| {
+            Error::other("negated select condition uses an operation the engine does not model")
+        })?;
         match (
             self.computer.solver.check_assumptions(&[take]),
             self.computer.solver.check_assumptions(&[skip]),
