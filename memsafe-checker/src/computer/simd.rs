@@ -260,14 +260,29 @@ impl ARMCORTEXA {
     }
 }
 
-
 pub enum LaneEffect {
-    Vectors(Vec<(usize, [u8; 16], Option<u64>)>),
-    General(Operand, u64),
+    Vectors(Vec<LaneWrite>),
+    General(Operand, u64, Vec<AbstractExpression>),
     Nothing,
 }
 
-fn vector_index(operand: &Operand) -> Option<usize> {
+pub struct LaneWrite {
+    register: usize,
+    bytes: [u8; 16],
+    scalar: Option<u64>,
+    maxima: Vec<AbstractExpression>,
+}
+
+fn lanes_bounded_by(register: usize, bytes: [u8; 16]) -> LaneWrite {
+    LaneWrite {
+        register,
+        bytes,
+        scalar: None,
+        maxima: Vec::new(),
+    }
+}
+
+pub fn vector_index(operand: &Operand) -> Option<usize> {
     match operand {
         Operand::Vector(_, n, _)
         | Operand::VectorRegister(_, n)
@@ -308,7 +323,7 @@ impl ARMCORTEXA {
                 .iter()
                 .filter(|op| !matches!(op, Operand::Memory(..)))
                 .filter_map(vector_index)
-                .map(|n| (n, [u8::MAX; 16], None))
+                .map(|n| lanes_bounded_by(n, [u8::MAX; 16]))
                 .collect();
             return LaneEffect::Vectors(written);
         }
@@ -319,6 +334,7 @@ impl ARMCORTEXA {
             && matches!(opcode, "fmov" | "mov")
             && matches!(first, Operand::Register(..))
         {
+            let maxima = bounds.maxima[source].clone();
             let bound = match operands.get(1) {
                 Some(Operand::VectorAccess(_, _, arrangement, lane)) => {
                     let width = arrangement.element_width() as usize;
@@ -327,14 +343,14 @@ impl ARMCORTEXA {
                 _ => bounds.scalar[source],
             };
             return match bound {
-                Some(bound) => LaneEffect::General(first.clone(), bound),
+                Some(bound) => LaneEffect::General(first.clone(), bound, maxima),
                 None => LaneEffect::Nothing,
             };
         }
         let Some(dst) = vector_index(first) else {
             return LaneEffect::Nothing;
         };
-        let unknown = LaneEffect::Vectors(vec![(dst, [u8::MAX; 16], None)]);
+        let unknown = LaneEffect::Vectors(vec![lanes_bounded_by(dst, [u8::MAX; 16])]);
         match (opcode, operands.as_slice()) {
             (
                 "mov" | "ins",
@@ -350,7 +366,7 @@ impl ARMCORTEXA {
                     .map_or([u8::MAX; 16], |v| truncated(v, width));
                 let start = *lane as usize * width;
                 bytes[start..start + width].copy_from_slice(&value[..width]);
-                LaneEffect::Vectors(vec![(dst, bytes, None)])
+                LaneEffect::Vectors(vec![lanes_bounded_by(dst, bytes)])
             }
             (
                 "dup",
@@ -371,13 +387,58 @@ impl ARMCORTEXA {
                         {
                             *byte = lane[k % width];
                         }
-                        LaneEffect::Vectors(vec![(dst, bytes, None)])
+                        LaneEffect::Vectors(vec![lanes_bounded_by(dst, bytes)])
                     }
-                    None => unknown,
+                    None => {
+                        let value = self.get_register(source);
+                        let whole = instruction_aux::full_value(&value);
+                        if value.kind == RegisterKind::RegisterBase
+                            && self.fits_unsigned(&whole, 8 * width as u32)
+                        {
+                            LaneEffect::Vectors(vec![LaneWrite {
+                                maxima: vec![whole],
+                                ..lanes_bounded_by(dst, [u8::MAX; 16])
+                            }])
+                        } else {
+                            unknown
+                        }
+                    }
                 }
             }
+            (
+                "umin",
+                [
+                    Operand::Vector(_, _, arrangement),
+                    Operand::Vector(_, a, _),
+                    Operand::Vector(_, b, _),
+                ],
+            ) => {
+                let width = arrangement.element_width() as usize;
+                let lanes = arrangement.width() as usize / width;
+                let mut bytes = [u8::MAX; 16];
+                for lane in 0..lanes {
+                    let smaller = if lane_max(&bounds.bytes[*a], lane, width)
+                        <= lane_max(&bounds.bytes[*b], lane, width)
+                    {
+                        *a
+                    } else {
+                        *b
+                    };
+                    let range = lane * width..(lane + 1) * width;
+                    bytes[range.clone()].copy_from_slice(&bounds.bytes[smaller][range]);
+                }
+                let maxima = bounds.maxima[*a]
+                    .iter()
+                    .chain(&bounds.maxima[*b])
+                    .cloned()
+                    .collect();
+                LaneEffect::Vectors(vec![LaneWrite {
+                    maxima,
+                    ..lanes_bounded_by(dst, bytes)
+                }])
+            }
             ("eor", [_, Operand::Vector(_, a, _), Operand::Vector(_, b, _)]) if a == b => {
-                LaneEffect::Vectors(vec![(dst, [0u8; 16], None)])
+                LaneEffect::Vectors(vec![lanes_bounded_by(dst, [0u8; 16])])
             }
             (
                 "and",
@@ -395,14 +456,14 @@ impl ARMCORTEXA {
                 {
                     *byte = bounds.bytes[*a][k].min(bounds.bytes[*b][k]);
                 }
-                LaneEffect::Vectors(vec![(dst, bytes, None)])
+                LaneEffect::Vectors(vec![lanes_bounded_by(dst, bytes)])
             }
             ("cnt", [Operand::Vector(_, _, arrangement), Operand::Vector(..)]) => {
                 let mut bytes = [0u8; 16];
                 for byte in bytes.iter_mut().take(arrangement.width() as usize) {
                     *byte = 8;
                 }
-                LaneEffect::Vectors(vec![(dst, bytes, None)])
+                LaneEffect::Vectors(vec![lanes_bounded_by(dst, bytes)])
             }
             ("uaddlv", [_, Operand::Vector(_, source, arrangement)]) => {
                 let width = arrangement.element_width() as usize;
@@ -410,7 +471,10 @@ impl ARMCORTEXA {
                 let sum = (0..lanes)
                     .map(|lane| lane_max(&bounds.bytes[*source], lane, width))
                     .sum();
-                LaneEffect::Vectors(vec![(dst, [u8::MAX; 16], Some(sum))])
+                LaneEffect::Vectors(vec![LaneWrite {
+                    scalar: Some(sum),
+                    ..lanes_bounded_by(dst, [u8::MAX; 16])
+                }])
             }
             _ => unknown,
         }
@@ -419,22 +483,23 @@ impl ARMCORTEXA {
     pub fn apply_lane_effect(&mut self, effect: LaneEffect) {
         match effect {
             LaneEffect::Vectors(written) => {
-                for (n, bytes, scalar) in written {
-                    self.lane_bounds.bytes[n] = bytes;
-                    self.lane_bounds.scalar[n] = scalar;
+                for write in written {
+                    self.lane_bounds.bytes[write.register] = write.bytes;
+                    self.lane_bounds.scalar[write.register] = write.scalar;
+                    self.lane_bounds.maxima[write.register] = write.maxima;
                 }
             }
-            LaneEffect::General(register, bound) => {
+            LaneEffect::General(register, bound, maxima) => {
                 let name = format!("lane_value_{}", self.next_carry());
                 let value = ast::Int::new_const(name.clone());
                 self.solver.assert(value.ge(ast::Int::from_i64(0)));
                 self.solver.assert(value.le(ast::Int::from_u64(bound)));
-                self.set_register(
-                    &register,
-                    RegisterKind::RegisterBase,
-                    Some(AbstractExpression::Abstract(name)),
-                    0,
-                );
+                let bounded = maxima
+                    .into_iter()
+                    .fold(AbstractExpression::Abstract(name), |value, maximum| {
+                        generate_expression("atmost", value, maximum)
+                    });
+                self.set_register(&register, RegisterKind::RegisterBase, Some(bounded), 0);
             }
             LaneEffect::Nothing => {}
         }

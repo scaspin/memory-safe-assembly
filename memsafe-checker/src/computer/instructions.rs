@@ -1770,13 +1770,17 @@ impl ARMCORTEXA {
                     } else {
                         from_width
                     };
+                    let maxima = match source.and_then(vector_index) {
+                        Some(n) if !signed => self.lane_bounds.maxima[n].clone(),
+                        _ => Vec::new(),
+                    };
                     let Some(dst) = instruction.operands.first() else {
                         return Ok(ExecuteReturnType::Next);
                     };
                     match range {
                         Some((low, high)) => {
                             let name = self.fresh_symbol("lane");
-                            let bounded = generate_expression(
+                            let lane = generate_expression(
                                 "atmost",
                                 generate_expression(
                                     "atleast",
@@ -1785,6 +1789,9 @@ impl ARMCORTEXA {
                                 ),
                                 AbstractExpression::Immediate(high),
                             );
+                            let bounded = maxima.into_iter().fold(lane, |value, maximum| {
+                                generate_expression("atmost", value, maximum)
+                            });
                             self.set_register(dst, RegisterKind::RegisterBase, Some(bounded), 0);
                         }
                         None => self.set_register(dst, RegisterKind::Number, None, 0),

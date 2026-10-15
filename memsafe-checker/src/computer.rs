@@ -11,7 +11,7 @@ mod instructions;
 mod memory;
 mod simd;
 pub(crate) use simd::{
-    arrangement_of, range_fits_lane, split_vector_operands, vector_access_width,
+    arrangement_of, range_fits_lane, split_vector_operands, vector_access_width, vector_index,
 };
 
 pub const MAX_EXPRESSION_NODES: usize = 150;
@@ -72,6 +72,7 @@ pub struct CellWrite {
 pub struct LaneBounds {
     pub bytes: [[u8; 16]; 32],
     pub scalar: [Option<u64>; 32],
+    pub maxima: [Vec<AbstractExpression>; 32],
 }
 
 impl Default for LaneBounds {
@@ -79,6 +80,7 @@ impl Default for LaneBounds {
         Self {
             bytes: [[u8::MAX; 16]; 32],
             scalar: [None; 32],
+            maxima: std::array::from_fn(|_| Vec::new()),
         }
     }
 }
@@ -248,6 +250,19 @@ impl ARMCORTEXA {
         };
         unsat_within_budget(value.lt(ast::Int::from_i64(0)))
             && unsat_within_budget(value.ge(ast::Int::from_i64(MODULUS)))
+    }
+
+    pub fn fits_unsigned(&self, value: &AbstractExpression, bits: u32) -> bool {
+        let limit = if bits >= 63 { i64::MAX } else { 1i64 << bits };
+        [
+            AbstractComparison::new(">=", value.clone(), AbstractExpression::Immediate(0)),
+            AbstractComparison::new("<", value.clone(), AbstractExpression::Immediate(limit)),
+        ]
+        .into_iter()
+        .all(|fact| {
+            comparison_to_ast(fact)
+                .is_some_and(|c| self.solver.check_assumptions(&[c.not()]) == SatResult::Unsat)
+        })
     }
 
     pub fn write_cell(&mut self, cell: &MemoryCell, value: RegisterValue) {
