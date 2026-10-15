@@ -747,6 +747,48 @@ fn is_ordered(op: &str) -> bool {
     matches!(op, "<" | "<=" | ">" | ">=")
 }
 
+fn without_registers(e: &AbstractExpression) -> Option<AbstractExpression> {
+    match e {
+        AbstractExpression::Register(r) if r.kind == RegisterKind::Number => None,
+        AbstractExpression::Register(r) => without_registers(&value_of(r)),
+        AbstractExpression::Expression(op, left, right) => Some(generate_expression(
+            op,
+            without_registers(left)?,
+            without_registers(right)?,
+        )),
+        other => Some(other.clone()),
+    }
+}
+
+fn counter_affine(e: &AbstractExpression, counter: &str) -> Option<(AbstractExpression, i64)> {
+    match e {
+        AbstractExpression::Abstract(name) if name == counter => {
+            Some((AbstractExpression::Immediate(0), 1))
+        }
+        AbstractExpression::Expression(op, left, right)
+            if matches!(op.as_str(), "+" | "-" | "*") =>
+        {
+            let (a, b) = (
+                counter_affine(left, counter)?,
+                counter_affine(right, counter)?,
+            );
+            match (op.as_str(), a, b) {
+                ("+", (s, x), (t, y)) => Some((generate_expression("+", s, t), x.checked_add(y)?)),
+                ("-", (s, x), (t, y)) => Some((generate_expression("-", s, t), x.checked_sub(y)?)),
+                ("*", (s, 0), (t, 0)) => Some((generate_expression("*", s, t), 0)),
+                ("*", (s, x), (AbstractExpression::Immediate(k), 0))
+                | ("*", (AbstractExpression::Immediate(k), 0), (s, x)) => Some((
+                    generate_expression("*", s, AbstractExpression::Immediate(k)),
+                    x.checked_mul(k)?,
+                )),
+                _ => None,
+            }
+        }
+        _ if e.get_abstracts().iter().any(|name| name.contains("_?")) => None,
+        _ => Some((e.clone(), 0)),
+    }
+}
+
 fn landing_requirements(
     op: &str,
     distance: &AbstractExpression,
@@ -2559,6 +2601,7 @@ impl ExecutionEngine {
 
                 let taken_scope = self.push_scope();
                 self.add_constraint(condition.clone(), true);
+                self.order_a_monotone_guard(pc, &condition, true);
                 let res1 = self.run(jump_dest, depth + 1);
                 self.pop_scope(taken_scope);
 
@@ -2571,7 +2614,8 @@ impl ExecutionEngine {
                 log::info!("exploring non-jump branch starting line: {:?}", pc + 1);
 
                 let other_scope = clone.push_scope();
-                clone.add_constraint(condition, false);
+                clone.add_constraint(condition.clone(), false);
+                clone.order_a_monotone_guard(pc, &condition, false);
                 let res2 = clone.run(pc + 1, depth + 1);
                 clone.pop_scope(other_scope);
 
@@ -2596,7 +2640,8 @@ impl ExecutionEngine {
                 });
                 self.computer.clear_rw_queue();
                 if self.active_loops.last().is_none_or(|open| open.pc != pc) {
-                    self.add_constraint(condition, taken);
+                    self.add_constraint(condition.clone(), taken);
+                    self.order_a_monotone_guard(pc, &condition, taken);
                 }
                 let next = if taken { jump_dest } else { pc + 1 };
                 log::info!("exploring line: {}", next);
@@ -2800,6 +2845,87 @@ impl ExecutionEngine {
         };
         let c = c.simplify();
         self.assert_in_scope(if decision { c } else { c.not() });
+    }
+
+    fn order_a_monotone_guard(&mut self, pc: usize, condition: &AbstractComparison, taken: bool) {
+        let Some(ordering) = self.ordering_from_a_monotone_guard(pc, condition, taken) else {
+            return;
+        };
+        let Some(ordered) = comparison_to_ast(ordering.clone()) else {
+            return;
+        };
+        log::info!("line {pc}: a walker stepping by one never passed its bound: {ordering}");
+        self.assert_in_scope(ordered.simplify());
+    }
+
+    fn ordering_from_a_monotone_guard(
+        &self,
+        pc: usize,
+        condition: &AbstractComparison,
+        taken: bool,
+    ) -> Option<AbstractComparison> {
+        let held = if taken {
+            condition.clone()
+        } else {
+            condition.not()
+        };
+        if held.op != "!=" {
+            return None;
+        }
+        let active = self.active_loops.last()?;
+        if active.entry_decision || !self.straight_from_the_loop_branch(pc, active.pc) {
+            return None;
+        }
+        let counter = LoopCounter::for_loop(active.id);
+        let (left, right) = (
+            without_registers(&held.left)?,
+            without_registers(&held.right)?,
+        );
+        let (walks_left, start, step, walker, bound) = match (
+            counter_affine(&left, counter.name()),
+            counter_affine(&right, counter.name()),
+        ) {
+            (Some((start, step)), Some((_, 0))) if step.abs() == 1 => {
+                (true, start, step, left, right)
+            }
+            (Some((_, 0)), Some((start, step))) if step.abs() == 1 => {
+                (false, start, step, right, left)
+            }
+            _ => return None,
+        };
+        let history = &self.jump_history[..active.history_len.min(self.jump_history.len())];
+        let last_round = history.iter().rposition(|r| r.point.pc == active.pc)?;
+        let unrolled = history[last_round..].iter().find(|r| r.point.pc == pc)?;
+        let unrolled_bound = if walks_left {
+            &unrolled.point.condition.right
+        } else {
+            &unrolled.point.condition.left
+        };
+        if unrolled.taken != taken
+            || unrolled.point.condition.op != condition.op
+            || without_registers(unrolled_bound).as_ref() != Some(&bound)
+        {
+            return None;
+        }
+        let (behind, order) = if step == 1 { (">=", "<") } else { ("<=", ">") };
+        let started_past =
+            comparison_to_ast(AbstractComparison::new(behind, start, bound.clone()))?;
+        if self.computer.solver.check_assumptions(&[started_past]) != SatResult::Unsat {
+            return None;
+        }
+        Some(AbstractComparison::new(order, walker, bound))
+    }
+
+    fn straight_from_the_loop_branch(&self, pc: usize, loop_pc: usize) -> bool {
+        pc > loop_pc
+            && (loop_pc + 1..pc).all(|i| {
+                self.program.code.get(i).is_some_and(|instruction| {
+                    !matches!(
+                        instruction.ty,
+                        InstructionType::ControlFlow | InstructionType::Label
+                    ) && !matches!(instruction.opcode.as_str(), "brk" | "udf" | "hlt")
+                })
+            })
     }
 
     pub fn add_invariant(&self, constraint: AbstractComparison) {
