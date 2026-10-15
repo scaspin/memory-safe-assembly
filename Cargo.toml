@@ -6,7 +6,8 @@ members = [
   "bignum-playground",
   "rav1d-playground",
   "awslc-probe",
-  "corecrypto-playground"
+  "corecrypto-playground",
+  "graviola-playground"
 ]
 exclude = ["scrape-asm"]
 resolver = "2"
