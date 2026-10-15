@@ -55,6 +55,14 @@ fn region_base(
     })
 }
 
+fn unproved_reason(path: SatResult) -> Option<&'static str> {
+    match path {
+        SatResult::Sat => None,
+        SatResult::Unsat => Some("path has no model"),
+        SatResult::Unknown => Some("solver did not decide the path"),
+    }
+}
+
 impl ARMCORTEXA {
     pub fn load(
         &mut self,
@@ -712,9 +720,9 @@ impl ARMCORTEXA {
             self.solver.check_assumptions(&with(&u)),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
-                if self.solver.check_assumptions(&selects) == SatResult::Unsat {
+                if let Some(why) = unproved_reason(self.solver.check_assumptions(&selects)) {
                     return Err(MemorySafetyError::new(&format!(
-                        "{ty} of {width} bytes at {} unprovable: path has no model",
+                        "{ty} of {width} bytes at {} unprovable: {why}",
                         format_address(&base_expr, offset)
                     )));
                 }
@@ -829,5 +837,28 @@ mod narrowing_tests {
             AbstractExpression::Immediate(4)
         )));
         assert!(!computer.fits_a_word(&abstract_of("h")));
+    }
+}
+
+#[cfg(test)]
+mod unproved_reason_tests {
+    use super::*;
+
+    #[test]
+    fn a_path_with_a_model_proves_the_access() {
+        assert_eq!(unproved_reason(SatResult::Sat), None);
+    }
+
+    #[test]
+    fn a_contradictory_path_proves_nothing() {
+        assert_eq!(unproved_reason(SatResult::Unsat), Some("path has no model"));
+    }
+
+    #[test]
+    fn an_undecided_path_is_reported_as_undecided() {
+        assert_eq!(
+            unproved_reason(SatResult::Unknown),
+            Some("solver did not decide the path")
+        );
     }
 }
