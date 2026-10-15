@@ -5,6 +5,7 @@ pub mod instruction_parser;
 pub mod loader;
 pub mod machine;
 pub mod widening;
+pub mod x86;
 
 #[macro_export]
 macro_rules! extract_three_registers {
