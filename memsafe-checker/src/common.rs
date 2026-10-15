@@ -1609,6 +1609,34 @@ pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
     }
 }
 
+pub fn confined_load(value: AbstractExpression, width: i64) -> AbstractExpression {
+    generate_expression(
+        "atmost",
+        generate_expression("atleast", value, AbstractExpression::Immediate(0)),
+        AbstractExpression::Immediate((1i64 << (8 * width)) - 1),
+    )
+}
+
+pub fn confined_load_width(e: &AbstractExpression) -> Option<i64> {
+    let AbstractExpression::Expression(most, inner, top) = e else {
+        return None;
+    };
+    let AbstractExpression::Expression(least, symbol, zero) = inner.as_ref() else {
+        return None;
+    };
+    let AbstractExpression::Immediate(top) = top.as_ref() else {
+        return None;
+    };
+    let named = matches!(symbol.as_ref(), AbstractExpression::Abstract(_));
+    (most == "atmost" && least == "atleast" && named && **zero == AbstractExpression::Immediate(0))
+        .then(|| {
+            [1, 2, 4]
+                .into_iter()
+                .find(|w| (1i64 << (8 * w)) - 1 == *top)
+        })
+        .flatten()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExecuteReturnType {
     Next,

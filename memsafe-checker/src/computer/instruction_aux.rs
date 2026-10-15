@@ -262,20 +262,33 @@ impl ARMCORTEXA {
             return;
         }
         let value = self.get_register(dst);
+        let signed = opcode.starts_with("ldrs") || opcode.starts_with("ldurs");
+        let confined = value
+            .base
+            .as_ref()
+            .map(peel_narrowing)
+            .filter(|base| value.offset == 0 && confined_load_width(base) == Some(width));
+        if let Some(base) = confined {
+            if signed {
+                let extended =
+                    generate_expression("sext", base, AbstractExpression::Immediate(8 * width));
+                self.set_register(dst, RegisterKind::RegisterBase, Some(extended), 0);
+                self.mark_loaded(dst);
+            }
+            return;
+        }
         if value.kind != RegisterKind::Immediate {
             return;
         }
         let bits = 8 * width as u32;
         let low = (value.offset as u64) & ((1u64 << bits) - 1);
-        let extended = if opcode.starts_with("ldrs") || opcode.starts_with("ldurs") {
+        let extended = if signed {
             ((low << (64 - bits)) as i64) >> (64 - bits)
         } else {
             low as i64
         };
         self.set_register(dst, RegisterKind::Immediate, None, extended);
-        if let Operand::Register(RePrefix::X | RePrefix::W, n) = dst {
-            self.loaded[*n] = true;
-        }
+        self.mark_loaded(dst);
     }
 
     pub fn memory_address(

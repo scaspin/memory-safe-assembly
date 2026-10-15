@@ -239,6 +239,7 @@ struct BranchPoint {
     accesses: Vec<MemoryAccess>,
     state: ComputerState,
     journal_len: usize,
+    slots: Vec<SymbolicSlot>,
     instructions_run: usize,
 }
 
@@ -1387,7 +1388,23 @@ fn summarize(
                 ));
             }
             LoopInvariant::Unknown | LoopInvariant::Geometric(_) => {
-                updates.push((i, RegisterValue::new_empty(&format!("{name}_widened_{i}"))));
+                let widened = RegisterValue::new_empty(&format!("{name}_widened_{i}"));
+                let confined = [&previous.0[i], cur].map(|r| {
+                    r.base
+                        .as_ref()
+                        .filter(|_| r.offset == 0)
+                        .and_then(confined_load_width)
+                });
+                updates.push((
+                    i,
+                    match confined {
+                        [Some(before), Some(now)] if before == now => RegisterValue {
+                            base: widened.base.map(|symbol| confined_load(symbol, now)),
+                            ..widened
+                        },
+                        _ => widened,
+                    },
+                ));
             }
             LoopInvariant::Tracks(..) => {}
             LoopInvariant::NonDecreasing | LoopInvariant::NonIncreasing => {
@@ -1713,6 +1730,7 @@ struct ActiveLoop {
     journal_before_summary: usize,
     journal_after_summary: usize,
     blind_writes_at_summary: usize,
+    slots: Vec<SymbolicSlot>,
     settled_steps: Vec<SettledSelectStep>,
     continuing: AbstractComparison,
 }
@@ -1752,6 +1770,7 @@ pub struct ExecutionEngine {
     dead_registers: Rc<RefCell<HashMap<usize, Rc<Vec<usize>>>>>,
     unstable_registers: Rc<RefCell<HashMap<usize, HashSet<usize>>>>,
     unstable_cells: Rc<RefCell<HashMap<usize, HashSet<MemoryCell>>>>,
+    unstable_slots: Rc<RefCell<HashSet<usize>>>,
     cell_retries: Rc<RefCell<HashMap<usize, usize>>>,
     refuted_select_steps: Rc<RefCell<HashSet<usize>>>,
     counted_failures: Rc<RefCell<HashSet<(usize, LoopId, usize)>>>,
@@ -1849,6 +1868,7 @@ impl ExecutionEngine {
             dead_registers: Rc::new(RefCell::new(HashMap::new())),
             unstable_registers: Rc::new(RefCell::new(HashMap::new())),
             unstable_cells: Rc::new(RefCell::new(HashMap::new())),
+            unstable_slots: Rc::new(RefCell::new(HashSet::new())),
             cell_retries: Rc::new(RefCell::new(HashMap::new())),
             refuted_select_steps: Rc::new(RefCell::new(HashSet::new())),
             counted_failures: Rc::new(RefCell::new(HashSet::new())),
@@ -2585,6 +2605,7 @@ impl ExecutionEngine {
                     accesses: rw_list,
                     state: self.computer.get_state(),
                     journal_len: self.computer.write_journal.len(),
+                    slots: self.computer.symbolic_slots.clone(),
                     instructions_run: self.instructions_run,
                 };
                 self.jump_history.push(JumpRecord {
@@ -2633,6 +2654,7 @@ impl ExecutionEngine {
                         accesses: self.computer.read_rw_queue(),
                         state: self.computer.get_state(),
                         journal_len: self.computer.write_journal.len(),
+                        slots: self.computer.symbolic_slots.clone(),
                         instructions_run: self.instructions_run,
                     },
                     taken,
@@ -2824,6 +2846,7 @@ impl ExecutionEngine {
                 accesses: rw_list.to_vec(),
                 state: entry,
                 journal_len: self.computer.write_journal.len(),
+                slots: self.computer.symbolic_slots.clone(),
                 instructions_run: self.instructions_run,
             },
             taken: true,
@@ -3610,6 +3633,12 @@ impl ExecutionEngine {
         for (i, new_reg) in summary.updates.iter().cloned() {
             self.computer.registers[i] = new_reg;
         }
+        if self.unstable_slots.borrow().contains(&pc) {
+            self.computer.symbolic_slots.clear();
+        }
+        self.computer
+            .symbolic_slots
+            .retain(|slot| previous.slots.contains(slot));
         let journal_before_summary = self.computer.write_journal.len();
         let counter = LoopCounter::for_loop(id);
         for (cell, invariant) in &cells {
@@ -3658,6 +3687,7 @@ impl ExecutionEngine {
             journal_before_summary,
             journal_after_summary,
             blind_writes_at_summary: self.computer.blind_stack_writes.len(),
+            slots: self.computer.symbolic_slots.clone(),
             settled_steps,
             continuing: continuing_at_summary,
         });
@@ -5268,7 +5298,38 @@ impl ExecutionEngine {
                 .extend(drifting_cells);
         }
         let steps_hold = self.settled_steps_repeat(&active);
+        let slots_hold = self.computer.slots_kept(&active.slots);
+        let confinements_hold = active
+            .state
+            .0
+            .iter()
+            .zip(&current.0)
+            .all(|(summarized, now)| {
+                match summarized
+                    .base
+                    .as_ref()
+                    .filter(|_| summarized.kind == RegisterKind::RegisterBase)
+                    .and_then(confined_load_width)
+                {
+                    Some(width) => {
+                        now.kind == RegisterKind::RegisterBase
+                            && self
+                                .computer
+                                .fits_unsigned(&value_of(now), 8 * width as u32)
+                    }
+                    None => true,
+                }
+            });
+        if !confinements_hold {
+            log::info!("{} a widened load left its width", active.id);
+        }
+        if !slots_hold {
+            log::info!("{} a saved slot did not survive the body", active.id);
+            self.unstable_slots.borrow_mut().insert(active.pc);
+        }
         let holds = cells_hold
+            && slots_hold
+            && confinements_hold
             && steps_hold
             && ghosts_repeat
             && active
@@ -5394,7 +5455,8 @@ impl ExecutionEngine {
         self.computer.set_state(active.entry_state);
         self.computer
             .undo_writes_since(active.journal_before_summary);
-        if !cells_hold {
+        self.computer.symbolic_slots = active.slots;
+        if !cells_hold || !slots_hold {
             let mut retries = self.cell_retries.borrow_mut();
             let used = retries.entry(active.pc).or_insert(0);
             if *used < MAX_CELL_RETRIES {
@@ -5862,6 +5924,7 @@ mod tests {
                             None,
                         ),
                         journal_len: 0,
+                        slots: Vec::new(),
                         instructions_run: 0,
                     },
                     taken,

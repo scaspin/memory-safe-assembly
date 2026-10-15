@@ -27,9 +27,14 @@ fn content_symbol(region: &str, offset: i64, width: i64, epoch: usize) -> Regist
     } else {
         format!("{region}[{offset}:{width}]#{epoch}")
     };
+    let value = AbstractExpression::Abstract(name);
     RegisterValue {
         kind: RegisterKind::RegisterBase,
-        base: Some(AbstractExpression::Abstract(name)),
+        base: Some(if width < 8 {
+            confined_load(value, width)
+        } else {
+            value
+        }),
         offset: 0,
     }
 }
@@ -89,9 +94,7 @@ impl ARMCORTEXA {
                         self.note_element_read(&region_name, offset);
                         Some(v)
                     }
-                    None if region.overwritten(offset, width) => {
-                        Some(RegisterValue::new(RegisterKind::Number, None, 0))
-                    }
+                    None if region.overwritten(offset, width) => Some(self.unknown_load(width)),
                     None => Some(content_symbol(&region_name, offset, width, region.epoch)),
                 };
                 match value {
@@ -120,12 +123,16 @@ impl ARMCORTEXA {
                     "Loading from an abstract but safe region of memory {:?}",
                     address
                 );
+                let base = address.base.expect("Need base");
+                let value = self
+                    .recall_slot(&base, address.offset, width)
+                    .unwrap_or_else(|| self.unknown_load(width));
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
-                    base: address.base.expect("Need base"),
+                    base,
                     offset: address.offset,
                 });
-                self.set_register(&t, RegisterKind::Number, None, 0);
+                self.set_register(&t, value.kind, value.base, value.offset);
                 self.mark_loaded(&t);
                 Ok(())
             }
@@ -134,7 +141,19 @@ impl ARMCORTEXA {
         }
     }
 
-    fn mark_loaded(&mut self, register: &Operand) {
+    fn unknown_load(&mut self, width: i64) -> RegisterValue {
+        if width >= 8 {
+            return RegisterValue::new(RegisterKind::Number, None, 0);
+        }
+        let name = self.fresh_symbol("loaded");
+        RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(confined_load(AbstractExpression::Abstract(name), width)),
+            0,
+        )
+    }
+
+    pub(crate) fn mark_loaded(&mut self, register: &Operand) {
         if let Operand::Register(RePrefix::X | RePrefix::W, n) = register {
             self.loaded[*n] = true;
         }
@@ -213,6 +232,9 @@ impl ARMCORTEXA {
         );
 
         if res.is_ok() {
+            if let Some(base) = &region {
+                self.forget_slots_overlapping(base, address.offset, width);
+            }
             if let Some(AbstractExpression::Abstract(base)) = region.clone() {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
@@ -237,6 +259,10 @@ impl ARMCORTEXA {
                 );
                 let base = address.base.expect("Need base");
                 self.forget_where_written(&base, address.offset, width);
+                if width <= 8 {
+                    let value = self.get_register(&register);
+                    self.remember_slot(base.clone(), address.offset, value, width);
+                }
                 if self
                     .region_of(&base)
                     .is_some_and(|(region, _, _)| region == "sp")
@@ -271,6 +297,9 @@ impl ARMCORTEXA {
         );
 
         if res.is_ok() {
+            if let Some(base) = &region {
+                self.forget_slots_overlapping(base, address.offset, width);
+            }
             if let Some(AbstractExpression::Abstract(base)) = region.clone() {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
@@ -314,8 +343,22 @@ impl ARMCORTEXA {
         }
     }
 
-    fn region_of(&self, base: &AbstractExpression) -> Option<(String, String, i64)> {
-        let abstracts = base.get_abstracts();
+    pub(crate) fn region_of(&self, base: &AbstractExpression) -> Option<(String, String, i64)> {
+        let counted_once: Vec<String> = crate::widening::Affine::of(base)
+            .map(|form| {
+                form.terms
+                    .into_iter()
+                    .filter_map(|(atom, coefficient)| match atom {
+                        AbstractExpression::Abstract(name) if coefficient == 1 => Some(name),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let abstracts: Vec<String> = counted_once
+            .into_iter()
+            .chain(base.get_abstracts())
+            .collect();
         if let Some(region) = abstracts.iter().find(|a| self.memory.contains_key(*a)) {
             return Some((region.clone(), region.clone(), 0));
         }
@@ -674,12 +717,26 @@ impl ARMCORTEXA {
         }
 
         let (l, u, extent, below_red_zone) = if region_name == "sp" {
-            let Some((low, high)) = self.stack_bounds() else {
-                return Err(MemorySafetyError::new(&format!(
-                    "{ty} of {width} bytes at {} has no frame to measure: \
-                     the stack pointer is not the entry value plus a known amount",
-                    format_address(&base_expr, offset)
-                )));
+            let (low, high, shown) = match self.stack_bounds() {
+                Some((low, high)) => (ast::Int::from_i64(low), high, low.to_string()),
+                None => {
+                    let Some((low, shown)) = self
+                        .stack_displacement()
+                        .and_then(|d| Some((expression_to_ast(d.clone())?, d)))
+                    else {
+                        return Err(MemorySafetyError::new(&format!(
+                            "{ty} of {width} bytes at {} has no frame to measure: \
+                             the stack pointer is not the entry value plus an amount",
+                            format_address(&base_expr, offset)
+                        )));
+                    };
+                    let zero = ast::Int::from_i64(0);
+                    (
+                        low.lt(&zero).ite(&low, &zero),
+                        self.stack_arguments,
+                        format!("min({shown}, 0)"),
+                    )
+                }
             };
             let displacement = ast::Int::add(&[
                 &ast::Int::sub(&[&base_access, &base]),
@@ -687,11 +744,12 @@ impl ARMCORTEXA {
             ]);
             let last_byte = ast::Int::add(&[&displacement, &ast::Int::from_i64(width - 1)]);
             (
-                displacement.lt(ast::Int::from_i64(low)),
+                displacement.lt(&low),
                 last_byte.ge(ast::Int::from_i64(high)),
-                format!("stack frame [{low}, {high})"),
-                (self.red_zone > 0)
-                    .then(|| displacement.lt(ast::Int::from_i64(low - self.red_zone))),
+                format!("stack frame [{shown}, {high})"),
+                (self.red_zone > 0).then(|| {
+                    displacement.lt(ast::Int::sub(&[&low, &ast::Int::from_i64(self.red_zone)]))
+                }),
             )
         } else {
             let upperbound_value = expression_to_ast(region.get_length()).unwrap_or_else(|| {

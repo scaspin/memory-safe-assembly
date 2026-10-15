@@ -53,6 +53,15 @@ pub struct ARMCORTEXA {
     pub lane_bounds: Box<LaneBounds>,
     pub write_journal: Vec<CellWrite>,
     pub blind_stack_writes: Vec<(AbstractExpression, i64, i64)>,
+    pub symbolic_slots: Vec<SymbolicSlot>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SymbolicSlot {
+    pub base: AbstractExpression,
+    pub offset: i64,
+    pub width: i64,
+    pub value: RegisterValue,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -215,6 +224,7 @@ impl ARMCORTEXA {
             lane_bounds: Box::default(),
             write_journal: Vec::new(),
             blind_stack_writes: Vec::new(),
+            symbolic_slots: Vec::new(),
             solver,
         }
     }
@@ -362,6 +372,76 @@ impl ARMCORTEXA {
                 region.renew_unwritten();
             }
         }
+    }
+
+    pub fn remember_slot(
+        &mut self,
+        base: AbstractExpression,
+        offset: i64,
+        value: RegisterValue,
+        width: i64,
+    ) {
+        self.symbolic_slots.push(SymbolicSlot {
+            base,
+            offset,
+            width,
+            value,
+        });
+    }
+
+    pub fn recall_slot(
+        &self,
+        base: &AbstractExpression,
+        offset: i64,
+        width: i64,
+    ) -> Option<RegisterValue> {
+        self.symbolic_slots
+            .iter()
+            .rev()
+            .find(|slot| slot.base == *base && slot.offset == offset && slot.width == width)
+            .map(|slot| slot.value.clone())
+    }
+
+    pub fn slots_kept(&self, slots: &[SymbolicSlot]) -> bool {
+        slots.iter().all(|slot| self.symbolic_slots.contains(slot))
+    }
+
+    pub fn forget_slots_overlapping(&mut self, base: &AbstractExpression, offset: i64, width: i64) {
+        if self.symbolic_slots.is_empty() {
+            return;
+        }
+        let written_region = self.region_of(base).map(|(region, ..)| region);
+        let written = expression_to_ast(base.clone());
+        let slots = std::mem::take(&mut self.symbolic_slots);
+        self.symbolic_slots = slots
+            .into_iter()
+            .filter(|slot| {
+                let slot_region = self.region_of(&slot.base).map(|(region, ..)| region);
+                if written_region.is_some()
+                    && slot_region.is_some()
+                    && written_region != slot_region
+                {
+                    return true;
+                }
+                if slot.base == *base {
+                    return offset + width <= slot.offset || slot.offset + slot.width <= offset;
+                }
+                let (Some(written), Some(kept)) = (&written, expression_to_ast(slot.base.clone()))
+                else {
+                    return false;
+                };
+                let start = ast::Int::add(&[written, &ast::Int::from_i64(offset)]);
+                let slot_start = ast::Int::add(&[&kept, &ast::Int::from_i64(slot.offset)]);
+                let overlap = ast::Bool::and(&[
+                    &start.lt(ast::Int::add(&[
+                        &slot_start,
+                        &ast::Int::from_i64(slot.width),
+                    ])),
+                    &slot_start.lt(ast::Int::add(&[&start, &ast::Int::from_i64(width)])),
+                ]);
+                self.solver.check_assumptions(&[overlap]) == SatResult::Unsat
+            })
+            .collect();
     }
 
     pub fn cell_content(&self, cell: &MemoryCell) -> RegisterValue {
@@ -517,7 +597,10 @@ impl ARMCORTEXA {
                 }
                 RePrefix::Fp => self.registers[29].set(kind, base, offset),
                 RePrefix::Ra => self.registers[30].set(kind, base, offset),
-                RePrefix::Sp => self.registers[31].set(kind, base, offset),
+                RePrefix::Sp => {
+                    self.registers[31].set(kind, base, offset);
+                    self.canonical_stack_pointer();
+                }
                 RePrefix::Ze => (),
                 RePrefix::V => unreachable!(),
             },
@@ -626,6 +709,29 @@ impl ARMCORTEXA {
 
     pub fn findings(&self) -> Vec<String> {
         self.findings.borrow().clone()
+    }
+
+    fn canonical_stack_pointer(&mut self) {
+        if let Some(AbstractExpression::Immediate(displacement)) = self.stack_displacement() {
+            self.registers[31].set(
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract("sp".to_string())),
+                displacement,
+            );
+        }
+    }
+
+    pub fn stack_displacement(&self) -> Option<AbstractExpression> {
+        let sp = &self.registers[31];
+        if sp.kind != RegisterKind::RegisterBase {
+            return None;
+        }
+        let entry = AbstractExpression::Abstract("sp".to_string());
+        let form = crate::widening::Affine::of_register(sp)?;
+        if form.coefficient(&entry) != 1 || !form.mentions_only_as_term(&entry) {
+            return None;
+        }
+        Some(form.without(&entry).to_expression())
     }
 
     pub fn stack_bounds(&self) -> Option<(i64, i64)> {
