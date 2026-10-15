@@ -1220,6 +1220,15 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 let zero = ast::Int::from_i64(0);
                 return Some(value.ge(&zero).ite(&value, &zero));
             }
+            if op == "!&"
+                && let AbstractExpression::Immediate(mask) = old2.as_ref()
+            {
+                return expression_to_ast(generate_expression(
+                    "&",
+                    *old1.clone(),
+                    AbstractExpression::Immediate(!mask),
+                ));
+            }
             let constant_shift = match old2.as_ref() {
                 AbstractExpression::Immediate(k) if *k >= 0 => Some(*k),
                 _ => None,
@@ -1245,9 +1254,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     let modulus = ast::Int::from_str(&(1u128 << 64).to_string()).expect("modulus");
                     let divisor =
                         ast::Int::from_str(&(1u128 << shift).to_string()).expect("divisor");
-                    let wrapped = ast::Int::add(&[&new1, &modulus]);
-                    let unsigned = new1.ge(&zero).ite(&new1, &wrapped);
-                    Some(unsigned.div(&divisor))
+                    Some(new1.modulo(&modulus).div(&divisor))
                 }
                 "clz" if matches!(constant_shift, Some(32 | 64)) => {
                     let width = constant_shift.unwrap() as u32;
@@ -1305,17 +1312,12 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     Some(new1.div(&divisor))
                 }
                 "%" => Some(new1.modulo(&new2)),
-                "umulh" => match *old2 {
-                    AbstractExpression::Immediate(factor) => {
-                        let half_word = ast::Int::from_u64(1 << 32);
-                        let word = ast::Int::mul(&[&half_word, &half_word]);
-                        let unsigned = new1.modulo(&word);
-                        let product =
-                            ast::Int::mul(&[&unsigned, &ast::Int::from_u64(factor as u64)]);
-                        Some(product.div(&word))
-                    }
-                    _ => Some(ast::Int::new_const(opaque_name("umulh", &expression))),
-                },
+                "umulh" => {
+                    let half_word = ast::Int::from_u64(1 << 32);
+                    let word = ast::Int::mul(&[&half_word, &half_word]);
+                    let product = ast::Int::mul(&[&new1.modulo(&word), &new2.modulo(&word)]);
+                    Some(product.div(&word))
+                }
                 "&" => {
                     if let Some(modulus) = mask_modulus(&old2) {
                         Some(new1.modulo(ast::Int::from_i64(modulus)))

@@ -479,23 +479,37 @@ impl ARMCORTEXA {
 
     pub fn tst(&mut self, reg1: &Operand, reg2: &Operand) {
         let (r1, r2) = (self.get_register(reg1), self.get_register(reg2));
-        self.tst_values(r1, r2);
+        let bits = Self::flag_bits(&[reg1.clone(), reg2.clone()]);
+        self.tst_values_sized(r1, r2, bits);
     }
 
-    pub fn tst_values(&mut self, r1: RegisterValue, r2: RegisterValue) {
+    pub fn tst_values_sized(&mut self, r1: RegisterValue, r2: RegisterValue, bits: u32) {
         if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
             self.set_unknown_flags();
         } else if r1.base.is_none() && r2.base.is_none() {
             let result = r1.offset & r2.offset;
-            self.neg = Some(FlagValue::Real(result < 0));
-            self.zero = Some(FlagValue::Real(result == 0));
+            let (negative, zero) = if bits == 32 {
+                (result & (1 << 31) != 0, result & 0xffff_ffff == 0)
+            } else {
+                (result < 0, result == 0)
+            };
+            self.neg = Some(FlagValue::Real(negative));
+            self.zero = Some(FlagValue::Real(zero));
         } else {
-            let result = generate_expression("&", r1.expression(), r2.expression());
-            self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
-                result.clone(),
-                AbstractExpression::Immediate(0),
-            )));
+            let mut result = generate_expression("&", r1.expression(), r2.expression());
+            if bits == 32 {
+                result =
+                    generate_expression("%", result, AbstractExpression::Immediate(1i64 << 32));
+            }
+            self.neg = Some(FlagValue::Abstract(if bits == 32 {
+                AbstractComparison::new(
+                    ">=",
+                    result.clone(),
+                    AbstractExpression::Immediate(1i64 << 31),
+                )
+            } else {
+                AbstractComparison::new("<", result.clone(), AbstractExpression::Immediate(0))
+            }));
             self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
                 "==",
                 result,
@@ -727,24 +741,35 @@ pub fn insert_bits(
     if lsb < 0 || width <= 0 || lsb + width > bits || bits > 64 {
         return unknown;
     }
-    if destination.kind != RegisterKind::Immediate {
-        return unknown;
-    }
-    let span = low_bits_mask(width) << lsb;
-    let kept = (destination.offset as u64) & !span & low_bits_mask(bits);
     let low_bits = extract_bits(field, 0, width, false);
     if low_bits.kind == RegisterKind::Number {
         return unknown;
     }
     let placed = shift_imm("lsl".to_string(), low_bits, lsb);
-    add_values(
-        placed,
-        RegisterValue {
-            kind: RegisterKind::Immediate,
-            base: None,
-            offset: kept as i64,
-        },
-    )
+    match destination.kind {
+        RegisterKind::Immediate => {
+            let span = low_bits_mask(width) << lsb;
+            let kept = (destination.offset as u64) & !span & low_bits_mask(bits);
+            add_values(placed, RegisterValue::new_imm(kept as i64))
+        }
+        RegisterKind::RegisterBase => {
+            let replaced = shift_imm(
+                "lsl".to_string(),
+                extract_bits(destination.clone(), lsb, width, false),
+                lsb,
+            );
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(generate_expression(
+                    "+",
+                    generate_expression("-", full_value(&destination), full_value(&replaced)),
+                    full_value(&placed),
+                )),
+                offset: 0,
+            }
+        }
+        RegisterKind::Number => unknown,
+    }
 }
 
 fn low_bits_mask(width: i64) -> u64 {

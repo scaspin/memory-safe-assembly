@@ -635,21 +635,6 @@ impl ARMCORTEXA {
         }
     }
 
-    fn set_register_from_tuple(
-        &mut self,
-        register: (RePrefix, usize),
-        kind: RegisterKind,
-        base: Option<AbstractExpression>,
-        offset: i64,
-    ) {
-        self.set_register(
-            &Operand::Register(register.0, register.1),
-            kind,
-            base,
-            offset,
-        );
-    }
-
     pub fn add_element_fact(&mut self, region: &str, address: i64, width: i64, symbol: &str) {
         let value = RegisterValue::new(
             RegisterKind::RegisterBase,
@@ -1857,11 +1842,12 @@ mod tests {
             0,
         );
         let _ = computer.execute(1, &Instruction::new("sxth x3, w2".to_string()));
-        assert_eq!(
-            computer
-                .get_register(&Operand::Register(RePrefix::X, 3))
-                .kind,
-            RegisterKind::Number
+        let extended = computer.get_register(&Operand::Register(RePrefix::X, 3));
+        assert_eq!(extended.kind, RegisterKind::RegisterBase);
+        let shown = extended.base.expect("a bounded field").to_string();
+        assert!(
+            shown.contains("-32768") && shown.contains("32767"),
+            "{shown}"
         );
     }
 

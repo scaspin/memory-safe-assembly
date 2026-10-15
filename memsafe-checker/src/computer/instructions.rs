@@ -19,6 +19,46 @@ fn signed_sides(
     }
 }
 
+fn permuted(opcode: &str, word: bool, value: u64) -> u64 {
+    let per_half =
+        |f: &dyn Fn(u32) -> u32| ((f((value >> 32) as u32) as u64) << 32) | f(value as u32) as u64;
+    let swap_halfword_bytes = |x: u32| ((x & 0x00ff_00ff) << 8) | ((x >> 8) & 0x00ff_00ff);
+    match (opcode, word) {
+        ("rev", true) => (value as u32).swap_bytes() as u64,
+        ("rev", false) => value.swap_bytes(),
+        ("rev32", _) => per_half(&|x| x.swap_bytes()),
+        ("rev16", true) => swap_halfword_bytes(value as u32) as u64,
+        ("rev16", false) => per_half(&swap_halfword_bytes),
+        ("rbit", true) => (value as u32).reverse_bits() as u64,
+        _ => value.reverse_bits(),
+    }
+}
+
+fn changed(value: RegisterValue, change: &str) -> RegisterValue {
+    if value.kind == RegisterKind::Number {
+        return value;
+    }
+    let negated = |base: Option<AbstractExpression>| {
+        base.map(|b| generate_expression("-", AbstractExpression::Immediate(0), b))
+    };
+    match change {
+        "inc" => RegisterValue {
+            offset: value.offset.wrapping_add(1),
+            ..value
+        },
+        "inv" => RegisterValue {
+            base: negated(value.base),
+            offset: !value.offset,
+            ..value
+        },
+        _ => RegisterValue {
+            base: negated(value.base),
+            offset: value.offset.wrapping_neg(),
+            ..value
+        },
+    }
+}
+
 enum Tested {
     Known(i64),
     Symbolic(AbstractExpression),
@@ -59,38 +99,97 @@ impl ARMCORTEXA {
             "pl" | "ge" => single(&self.neg, true),
             "vs" => single(&self.overflow, false),
             "vc" => single(&self.overflow, true),
-            "hi" => Some(Ok(real(&self.carry)? && !real(&self.zero)?)),
-            "ls" => Some(Ok(!real(&self.carry)? || real(&self.zero)?)),
+            "hi" | "ls" => match (real(&self.carry), real(&self.zero)) {
+                (Some(c), Some(z)) => Some(Ok((c && !z) == (condition == "hi"))),
+                _ => {
+                    let (left, right) = self.unsigned_order()?;
+                    let op = if condition == "hi" { ">" } else { "<=" };
+                    Some(Err(AbstractComparison::new(op, left, right)))
+                }
+            },
             "gt" => Some(Ok(!real(&self.zero)? && !real(&self.neg)?)),
             "le" => Some(Ok(real(&self.zero)? || real(&self.neg)?)),
             _ => None,
         }
     }
 
-    fn set_on_condition(
+    pub(crate) fn field_of_unknown(
         &mut self,
-        dest: &Operand,
-        condition: &str,
-        value: i64,
-    ) -> ExecuteReturnType {
-        match self.condition_holds(condition) {
-            Some(Ok(holds)) => {
-                self.set_register(
-                    dest,
-                    RegisterKind::Immediate,
-                    None,
-                    if holds { value } else { 0 },
-                );
-                ExecuteReturnType::Next
-            }
-            Some(Err(holds)) => {
-                ExecuteReturnType::Select(holds, dest.clone(), immediate(value), immediate(0))
-            }
-            None => {
-                self.set_register(dest, RegisterKind::Number, None, 0);
-                ExecuteReturnType::Next
-            }
+        value: RegisterValue,
+        width: i64,
+        signed: bool,
+    ) -> RegisterValue {
+        if value.kind != RegisterKind::Number || !(1..=62).contains(&width) {
+            return value;
         }
+        let (low, high) = if signed {
+            (-(1i64 << (width - 1)), (1i64 << (width - 1)) - 1)
+        } else {
+            (0, (1i64 << width) - 1)
+        };
+        let name = self.fresh_symbol("field");
+        let bounded = generate_expression(
+            "atmost",
+            generate_expression(
+                "atleast",
+                AbstractExpression::Abstract(name),
+                AbstractExpression::Immediate(low),
+            ),
+            AbstractExpression::Immediate(high),
+        );
+        RegisterValue::new(RegisterKind::RegisterBase, Some(bounded), 0)
+    }
+
+    fn unsigned_order(&self) -> Option<(AbstractExpression, AbstractExpression)> {
+        let (Some(FlagValue::Abstract(carry)), Some(FlagValue::Abstract(_))) =
+            (&self.carry, &self.zero)
+        else {
+            return None;
+        };
+        let widened = |e: &AbstractExpression| {
+            matches!(e, AbstractExpression::Expression(op, _, width)
+                if op == "zext" && **width == AbstractExpression::Immediate(64))
+        };
+        (carry.op == ">=" && widened(&carry.left) && widened(&carry.right))
+            .then(|| (*carry.left.clone(), *carry.right.clone()))
+    }
+
+    fn unsigned_extreme(
+        &self,
+        dest: &Operand,
+        opt1: &RegisterValue,
+        opt2: &RegisterValue,
+        cond: &str,
+    ) -> Option<AbstractExpression> {
+        if !matches!(dest, Operand::Register(RePrefix::W, _)) || !matches!(cond, "hi" | "ls") {
+            return None;
+        }
+        let (left, right) = self.unsigned_order()?;
+        let compared = |e: &AbstractExpression| match e {
+            AbstractExpression::Expression(_, inner, _) => match inner.as_ref() {
+                AbstractExpression::Register(r) => Some((**r).clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        let (left, right) = (compared(&left)?, compared(&right)?);
+        let in_order = *opt1 == left && *opt2 == right;
+        if !in_order && !(*opt1 == right && *opt2 == left) {
+            return None;
+        }
+        if opt1.kind == RegisterKind::Number || opt2.kind == RegisterKind::Number {
+            return None;
+        }
+        let extreme = if in_order == (cond == "ls") {
+            "atmost"
+        } else {
+            "atleast"
+        };
+        Some(generate_expression(
+            extreme,
+            instruction_aux::full_value(opt1),
+            instruction_aux::full_value(opt2),
+        ))
     }
 
     fn tested_value(&mut self, register: RegisterValue) -> Tested {
@@ -103,6 +202,175 @@ impl ARMCORTEXA {
             ))),
             (false, _) => Tested::Symbolic(AbstractExpression::Register(Box::new(register))),
         }
+    }
+
+    fn conditional_select(
+        &mut self,
+        dest: &Operand,
+        opt1: RegisterValue,
+        opt2: RegisterValue,
+        cond: &str,
+    ) -> Result<ExecuteReturnType, String> {
+        if let Some(extreme) = self.unsigned_extreme(dest, &opt1, &opt2, cond) {
+            self.set_register(dest, RegisterKind::RegisterBase, Some(extreme), 0);
+            return Ok(ExecuteReturnType::Next);
+        }
+        match cond {
+            "cc" | "lo" => {
+                match self
+                    .carry
+                    .clone()
+                    .expect("csel cc reads a carry flag the program never set")
+                {
+                    FlagValue::Real(b) => {
+                        if b {
+                            self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                        } else {
+                            self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                        }
+                    }
+                    FlagValue::Abstract(a) => {
+                        return Ok(ExecuteReturnType::Select(a.not(), dest.clone(), opt1, opt2));
+                    }
+                }
+            }
+            "cs" | "hs" => match self.carry.clone() {
+                Some(FlagValue::Real(b)) => {
+                    if b {
+                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                    } else {
+                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                    }
+                }
+                Some(FlagValue::Abstract(a)) => {
+                    return Ok(ExecuteReturnType::Select(a, dest.clone(), opt1, opt2));
+                }
+                None => {
+                    return Ok(ExecuteReturnType::Select(
+                        AbstractComparison::new(
+                            "==",
+                            AbstractExpression::Abstract("c_flag".to_string()),
+                            AbstractExpression::Immediate(1),
+                        ),
+                        dest.clone(),
+                        opt1,
+                        opt2,
+                    ));
+                }
+            },
+            "eq" | "ne" => {
+                match self
+                    .zero
+                    .clone()
+                    .expect("reads a zero flag the program never set")
+                {
+                    FlagValue::Real(z) => {
+                        let first = if cond == "ne" { !z } else { z };
+                        if first {
+                            self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                        } else {
+                            self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                        }
+                    }
+                    FlagValue::Abstract(z) => {
+                        let z = if cond == "ne" { z.not() } else { z };
+                        return Ok(ExecuteReturnType::Select(z, dest.clone(), opt1, opt2));
+                    }
+                };
+            }
+            "lt" => match (&self.zero, &self.neg, &self.overflow) {
+                (Some(zero), Some(neg), Some(_)) => match (zero, neg) {
+                    (FlagValue::Real(z), FlagValue::Real(n)) => {
+                        if !*z && *n {
+                            self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                        } else {
+                            self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                        }
+                    }
+                    (zero, neg) => {
+                        let Some((left, right)) = signed_sides(zero, neg) else {
+                            todo!("csel lt needs concrete flags")
+                        };
+                        return Ok(ExecuteReturnType::Select(
+                            generate_comparison("<", left, right),
+                            dest.clone(),
+                            opt1,
+                            opt2,
+                        ));
+                    }
+                },
+                (_, _, _) => {
+                    return Err("csel reads a flag the program never set".to_string());
+                }
+            },
+            "gt" => match (&self.zero, &self.neg, &self.overflow) {
+                (Some(zero), Some(neg), Some(_)) => match (zero, neg) {
+                    (FlagValue::Real(z), FlagValue::Real(n)) => {
+                        if !*z && !*n {
+                            self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                        } else {
+                            self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                        }
+                    }
+                    (zero, neg) => {
+                        let Some((left, right)) = signed_sides(zero, neg) else {
+                            todo!("csel gt needs concrete flags")
+                        };
+                        return Ok(ExecuteReturnType::Select(
+                            generate_comparison(">", left, right),
+                            dest.clone(),
+                            opt1,
+                            opt2,
+                        ));
+                    }
+                },
+                (_, _, _) => {
+                    return Err("csel reads a flag the program never set".to_string());
+                }
+            },
+            "le" | "ge" => {
+                let (Some(zero), Some(neg)) = (&self.zero, &self.neg) else {
+                    return Err("csel reads a flag the program never set".to_string());
+                };
+                let taken = match (cond, zero, neg) {
+                    ("le", FlagValue::Real(z), FlagValue::Real(n)) => Some(*z || *n),
+                    ("ge", _, FlagValue::Real(n)) => Some(!n),
+                    _ => None,
+                };
+                match (taken, zero) {
+                    (Some(true), _) => self.set_register(dest, opt1.kind, opt1.base, opt1.offset),
+                    (Some(false), _) => self.set_register(dest, opt2.kind, opt2.base, opt2.offset),
+                    (None, _) if signed_sides(zero, neg).is_some() => {
+                        let Some((left, right)) = signed_sides(zero, neg) else {
+                            unreachable!()
+                        };
+                        let op = if cond == "le" { "<=" } else { ">=" };
+                        return Ok(ExecuteReturnType::Select(
+                            generate_comparison(op, left, right),
+                            dest.clone(),
+                            opt1,
+                            opt2,
+                        ));
+                    }
+                    (_, _) => todo!("csel {cond} needs concrete flags"),
+                }
+            }
+            other => match self.condition_holds(other) {
+                Some(Ok(true)) => {
+                    self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
+                }
+                Some(Ok(false)) => {
+                    self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
+                }
+                Some(Err(holds)) => {
+                    return Ok(ExecuteReturnType::Select(holds, dest.clone(), opt1, opt2));
+                }
+                None => {
+                    self.set_register(dest, RegisterKind::Number, None, 0);
+                }
+            },
+        }
+        Ok(ExecuteReturnType::Next)
     }
 
     pub fn execute(
@@ -180,8 +448,19 @@ impl ARMCORTEXA {
                 }
                 "ands" => {
                     let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
-                    self.tst_values(r1, r2);
+                    let bits = Self::flag_bits(&instruction.operands[1..]);
+                    self.tst_values_sized(r1, r2, bits);
                     self.arithmetic("&", |x, y| x & y, instruction.operands.clone());
+                }
+                "bics" => {
+                    let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                    let bits = Self::flag_bits(&instruction.operands[1..]);
+                    if r2.kind == RegisterKind::Immediate && r2.base.is_none() {
+                        self.tst_values_sized(r1, immediate(!r2.offset), bits);
+                    } else {
+                        self.set_unknown_flags();
+                    }
+                    self.arithmetic("!&", |x, y: i64| x & !y, instruction.operands.clone());
                 }
                 "adc" => match &self.carry {
                     Some(FlagValue::Real(b)) => {
@@ -380,8 +659,100 @@ impl ARMCORTEXA {
                         (None, None) => self.set_register(dest, RegisterKind::Number, None, 0),
                     }
                 }
-                "umull" | "smull" | "umnegl" | "smnegl" | "smulh" | "udiv" | "sdiv" | "mneg"
-                | "ubfiz" | "sbfiz" | "bfxil" | "ubfm" | "sbfm" => {
+                "udiv" => {
+                    let [dst, dividend, divisor] = instruction.operands.as_slice() else {
+                        return Err("udiv needs three registers".to_string());
+                    };
+                    let (dividend, divisor) =
+                        (self.get_register(dividend), self.get_register(divisor));
+                    let word = matches!(dst, Operand::Register(RePrefix::W, _));
+                    let constant = |v: &RegisterValue| {
+                        (v.kind == RegisterKind::Immediate && v.base.is_none()).then_some(v.offset)
+                    };
+                    let positive = match constant(&divisor) {
+                        Some(d) => d > 0,
+                        None => {
+                            divisor.kind == RegisterKind::RegisterBase
+                                && comparison_to_ast(AbstractComparison::new(
+                                    "<=",
+                                    instruction_aux::full_value(&divisor),
+                                    AbstractExpression::Immediate(0),
+                                ))
+                                .is_some_and(|c| {
+                                    self.solver.check_assumptions(&[c]) == SatResult::Unsat
+                                })
+                        }
+                    };
+                    match (constant(&dividend), constant(&divisor)) {
+                        _ if !word || !positive || dividend.kind == RegisterKind::Number => {
+                            self.set_register(dst, RegisterKind::Number, None, 0);
+                        }
+                        (Some(n), Some(d)) => self.set_register(
+                            dst,
+                            RegisterKind::Immediate,
+                            None,
+                            ((n as u64 & 0xffff_ffff) / d as u64) as i64,
+                        ),
+                        _ => self.set_register(
+                            dst,
+                            RegisterKind::RegisterBase,
+                            Some(generate_expression(
+                                "/",
+                                instruction_aux::full_value(&dividend),
+                                instruction_aux::full_value(&divisor),
+                            )),
+                            0,
+                        ),
+                    }
+                }
+                "ubfiz" | "sbfiz" => {
+                    let [dst, src, Operand::Immediate(lsb), Operand::Immediate(width)] =
+                        instruction.operands.as_slice()
+                    else {
+                        return Err(format!("{} needs an lsb and a width", instruction.opcode));
+                    };
+                    let bits = match dst {
+                        Operand::Register(RePrefix::W, _) => 32,
+                        _ => 64,
+                    };
+                    let signed = instruction.opcode == "sbfiz";
+                    let field =
+                        instruction_aux::extract_bits(self.get_register(src), 0, *width, signed);
+                    let field = self.field_of_unknown(field, *width, signed);
+                    let value = if *lsb < 0 || lsb + width > bits {
+                        RegisterValue::new(RegisterKind::Number, None, 0)
+                    } else {
+                        instruction_aux::shift_imm("lsl".to_string(), field, *lsb)
+                    };
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "bfxil" => {
+                    let [dst, src, Operand::Immediate(lsb), Operand::Immediate(width)] =
+                        instruction.operands.as_slice()
+                    else {
+                        return Err("bfxil needs an lsb and a width".to_string());
+                    };
+                    let bits = match dst {
+                        Operand::Register(RePrefix::W, _) => 32,
+                        _ => 64,
+                    };
+                    let field =
+                        instruction_aux::extract_bits(self.get_register(src), *lsb, *width, false);
+                    let value = instruction_aux::insert_bits(
+                        self.get_register(dst),
+                        field,
+                        0,
+                        *width,
+                        bits,
+                    );
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "crc32b" | "crc32h" | "crc32w" | "crc32x" | "crc32cb" | "crc32ch" | "crc32cw"
+                | "crc32cx" => {
+                    self.set_register(&instruction.operands[0], RegisterKind::Number, None, 0);
+                }
+                "umull" | "smull" | "umnegl" | "smnegl" | "smulh" | "sdiv" | "mneg" | "ubfm"
+                | "sbfm" => {
                     let dest = instruction
                         .operands
                         .first()
@@ -459,12 +830,10 @@ impl ARMCORTEXA {
                     else {
                         return Err(format!("{} needs an lsb and a width", instruction.opcode));
                     };
-                    let value = instruction_aux::extract_bits(
-                        self.get_register(src),
-                        *lsb,
-                        *width,
-                        instruction.opcode == "sbfx",
-                    );
+                    let signed = instruction.opcode == "sbfx";
+                    let value =
+                        instruction_aux::extract_bits(self.get_register(src), *lsb, *width, signed);
+                    let value = self.field_of_unknown(value, *width, signed);
                     self.set_register(dst, value.kind, value.base, value.offset);
                 }
                 "cmp" => {
@@ -479,7 +848,8 @@ impl ARMCORTEXA {
                 }
                 "tst" => {
                     let (r1, r2) = self.flag_operands(&instruction.operands);
-                    self.tst_values(r1, r2);
+                    let bits = Self::flag_bits(&instruction.operands);
+                    self.tst_values_sized(r1, r2, bits);
                 }
                 _ => todo!("Unsupported arithmetic instruction: {:?}", instruction),
             },
@@ -942,281 +1312,26 @@ impl ARMCORTEXA {
                     }
                     panic!("b.cc/lo/blo not invoked correctly");
                 }
-                "cset" => {
-                    let mut reg_iter = instruction.operands.iter();
-
-                    let dest = reg_iter.next().expect("cset register");
-                    let register = register_to_tuple(dest);
-                    let Operand::Label(cond) = reg_iter.next().expect("cset condition code") else {
-                        panic!("not a valid condition code")
+                "cset" | "csetm" => {
+                    let Some(dest) = instruction.operands.first() else {
+                        return Err(format!("{} needs a destination", instruction.opcode));
                     };
-
-                    match cond.as_str() {
-                        "cs" | "hs" => match self
-                            .carry
-                            .clone()
-                            .expect("cset cs reads a carry flag the program never set")
-                        {
-                            FlagValue::Real(b) => {
-                                self.set_register_from_tuple(
-                                    register,
-                                    RegisterKind::Immediate,
-                                    None,
-                                    b as i64,
-                                );
-                            }
-                            FlagValue::Abstract(c) => {
-                                return Ok(ExecuteReturnType::Select(
-                                    c,
-                                    dest.clone(),
-                                    immediate(1),
-                                    immediate(0),
-                                ));
-                            }
-                        },
-                        "cc" | "lo" => {
-                            match self
-                                .carry
-                                .clone()
-                                .expect("cset cc reads a carry flag the program never set")
-                            {
-                                FlagValue::Real(b) => {
-                                    self.set_register_from_tuple(
-                                        register,
-                                        RegisterKind::Immediate,
-                                        None,
-                                        !b as i64,
-                                    );
-                                }
-                                FlagValue::Abstract(c) => {
-                                    return Ok(ExecuteReturnType::Select(
-                                        c.not(),
-                                        dest.clone(),
-                                        immediate(1),
-                                        immediate(0),
-                                    ));
-                                }
-                            }
-                        }
-                        other => return Ok(self.set_on_condition(dest, other, 1)),
-                    }
+                    let Some(Operand::Label(cond)) = instruction.operands.get(1) else {
+                        return Err(format!("{} needs a condition", instruction.opcode));
+                    };
+                    let set = if instruction.opcode == "cset" { 1 } else { -1 };
+                    return self.conditional_select(dest, immediate(set), immediate(0), cond);
                 }
                 "csel" => {
                     let mut reg_iter = instruction.operands.iter();
 
-                    let dest = reg_iter.next().expect("cset register");
+                    let dest = reg_iter.next().expect("csel register");
                     let opt1 = self.get_register(reg_iter.next().expect("csel register"));
                     let opt2 = self.get_register(reg_iter.next().expect("csel register"));
                     let Operand::Label(cond) = reg_iter.next().expect("csel condition code") else {
                         panic!("not a valid condition code")
                     };
-
-                    match cond.as_str() {
-                        "cc" | "lo" => {
-                            match self
-                                .carry
-                                .clone()
-                                .expect("csel cc reads a carry flag the program never set")
-                            {
-                                FlagValue::Real(b) => {
-                                    if b {
-                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                                    } else {
-                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                    }
-                                }
-                                FlagValue::Abstract(a) => {
-                                    return Ok(ExecuteReturnType::Select(
-                                        a.not(),
-                                        dest.clone(),
-                                        opt1,
-                                        opt2,
-                                    ));
-                                }
-                            }
-                        }
-                        "cs" | "hs" => match self.carry.clone() {
-                            Some(FlagValue::Real(b)) => {
-                                if b {
-                                    self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                } else {
-                                    self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                                }
-                            }
-                            Some(FlagValue::Abstract(a)) => {
-                                return Ok(ExecuteReturnType::Select(a, dest.clone(), opt1, opt2));
-                            }
-                            None => {
-                                return Ok(ExecuteReturnType::Select(
-                                    AbstractComparison::new(
-                                        "==",
-                                        AbstractExpression::Abstract("c_flag".to_string()),
-                                        AbstractExpression::Immediate(1),
-                                    ),
-                                    dest.clone(),
-                                    opt1,
-                                    opt2,
-                                ));
-                            }
-                        },
-                        "eq" | "ne" => {
-                            match self
-                                .zero
-                                .clone()
-                                .expect("reads a zero flag the program never set")
-                            {
-                                FlagValue::Real(z) => {
-                                    let first = if cond == "ne" { !z } else { z };
-                                    if first {
-                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                    } else {
-                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                                    }
-                                }
-                                FlagValue::Abstract(z) => {
-                                    let z = if cond == "ne" { z.not() } else { z };
-                                    return Ok(ExecuteReturnType::Select(
-                                        z,
-                                        dest.clone(),
-                                        opt1,
-                                        opt2,
-                                    ));
-                                }
-                            };
-                        }
-                        "lt" => match (&self.zero, &self.neg, &self.overflow) {
-                            (Some(zero), Some(neg), Some(_)) => match (zero, neg) {
-                                (FlagValue::Real(z), FlagValue::Real(n)) => {
-                                    if !*z && *n {
-                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                    } else {
-                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                                    }
-                                }
-                                (zero, neg) => {
-                                    let Some((left, right)) = signed_sides(zero, neg) else {
-                                        todo!("csel lt needs concrete flags")
-                                    };
-                                    return Ok(ExecuteReturnType::Select(
-                                        generate_comparison("<", left, right),
-                                        dest.clone(),
-                                        opt1,
-                                        opt2,
-                                    ));
-                                }
-                            },
-                            (_, _, _) => {
-                                return Err("csel reads a flag the program never set".to_string());
-                            }
-                        },
-                        "gt" => match (&self.zero, &self.neg, &self.overflow) {
-                            (Some(zero), Some(neg), Some(_)) => match (zero, neg) {
-                                (FlagValue::Real(z), FlagValue::Real(n)) => {
-                                    if !*z && !*n {
-                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                    } else {
-                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                                    }
-                                }
-                                (zero, neg) => {
-                                    let Some((left, right)) = signed_sides(zero, neg) else {
-                                        todo!("csel gt needs concrete flags")
-                                    };
-                                    return Ok(ExecuteReturnType::Select(
-                                        generate_comparison(">", left, right),
-                                        dest.clone(),
-                                        opt1,
-                                        opt2,
-                                    ));
-                                }
-                            },
-                            (_, _, _) => {
-                                return Err("csel reads a flag the program never set".to_string());
-                            }
-                        },
-                        "le" | "ge" => {
-                            let (Some(zero), Some(neg)) = (&self.zero, &self.neg) else {
-                                return Err("csel reads a flag the program never set".to_string());
-                            };
-                            let taken = match (cond.as_str(), zero, neg) {
-                                ("le", FlagValue::Real(z), FlagValue::Real(n)) => Some(*z || *n),
-                                ("ge", _, FlagValue::Real(n)) => Some(!n),
-                                _ => None,
-                            };
-                            match (taken, zero) {
-                                (Some(true), _) => {
-                                    self.set_register(dest, opt1.kind, opt1.base, opt1.offset)
-                                }
-                                (Some(false), _) => {
-                                    self.set_register(dest, opt2.kind, opt2.base, opt2.offset)
-                                }
-                                (None, _) if signed_sides(zero, neg).is_some() => {
-                                    let Some((left, right)) = signed_sides(zero, neg) else {
-                                        unreachable!()
-                                    };
-                                    let op = if cond == "le" { "<=" } else { ">=" };
-                                    return Ok(ExecuteReturnType::Select(
-                                        generate_comparison(op, left, right),
-                                        dest.clone(),
-                                        opt1,
-                                        opt2,
-                                    ));
-                                }
-                                (_, _) => todo!("csel {cond} needs concrete flags"),
-                            }
-                        }
-                        other => match self.condition_holds(other) {
-                            Some(Ok(true)) => {
-                                self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                            }
-                            Some(Ok(false)) => {
-                                self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                            }
-                            Some(Err(holds)) => {
-                                return Ok(ExecuteReturnType::Select(
-                                    holds,
-                                    dest.clone(),
-                                    opt1,
-                                    opt2,
-                                ));
-                            }
-                            None => {
-                                self.set_register(dest, RegisterKind::Number, None, 0);
-                            }
-                        },
-                    }
-                }
-                "csetm" => {
-                    let mut reg_iter = instruction.operands.iter();
-
-                    let dest = reg_iter.next().expect("cset register");
-                    let Operand::Label(cond) = reg_iter.next().expect("cset condition code") else {
-                        panic!("not a valid condition code")
-                    };
-
-                    match cond.as_str() {
-                        "eq" | "ne" => match self
-                            .zero
-                            .clone()
-                            .expect("reads a zero flag the program never set")
-                        {
-                            FlagValue::Real(b) => {
-                                let holds = if cond == "ne" { !b } else { b };
-                                let value = if holds { -1 } else { 0 };
-                                self.set_register(dest, RegisterKind::Immediate, None, value);
-                            }
-                            FlagValue::Abstract(a) => {
-                                let a = if cond == "ne" { a.not() } else { a };
-                                return Ok(ExecuteReturnType::Select(
-                                    a,
-                                    dest.clone(),
-                                    immediate(-1),
-                                    immediate(0),
-                                ));
-                            }
-                        },
-                        other => return Ok(self.set_on_condition(dest, other, -1)),
-                    }
+                    return self.conditional_select(dest, opt1, opt2, cond);
                 }
                 "mov" | "movz" | "movk" => {
                     let mut reg_iter = instruction.operands.iter().clone();
@@ -1255,13 +1370,54 @@ impl ARMCORTEXA {
                     });
                 }
                 "cinv" | "cinc" | "cneg" | "csinv" | "csinc" | "csneg" => {
-                    let dest = instruction
-                        .operands
-                        .first()
-                        .expect("conditional operation needs a destination");
-                    self.set_register(dest, RegisterKind::Number, None, 0);
+                    let ops = &instruction.operands;
+                    let (dest, first, second, cond, first_changed) = match ops.as_slice() {
+                        [dest, source, Operand::Label(cond)] => (dest, source, source, cond, true),
+                        [dest, first, second, Operand::Label(cond)] => {
+                            (dest, first, second, cond, false)
+                        }
+                        _ => return Err(format!("{} needs a condition", instruction.opcode)),
+                    };
+                    let change = &instruction.opcode[instruction.opcode.len() - 3..];
+                    let (first, second) = (self.get_register(first), self.get_register(second));
+                    let (taken, otherwise) = if first_changed {
+                        (changed(first, change), second)
+                    } else {
+                        (first, changed(second, change))
+                    };
+                    return self.conditional_select(dest, taken, otherwise, cond);
                 }
-                "ccmp" | "ccmn" => self.set_unknown_flags(),
+                "ccmp" | "ccmn" => {
+                    let [left, right, Operand::Immediate(nzcv), Operand::Label(cond)] =
+                        instruction.operands.as_slice()
+                    else {
+                        return Err(format!(
+                            "{} needs two operands, flags and a condition",
+                            instruction.opcode
+                        ));
+                    };
+                    match self.condition_holds(cond) {
+                        Some(Ok(true)) => {
+                            let bits = Self::flag_bits(&instruction.operands);
+                            let (left, right) = (self.get_register(left), self.get_register(right));
+                            if instruction.opcode == "ccmp" {
+                                self.cmp_values_sized(left, right, bits);
+                            } else {
+                                self.cmn_values_sized(left, right, bits);
+                            }
+                        }
+                        Some(Ok(false)) => {
+                            let (n, v) = (nzcv & 8 != 0, nzcv & 1 != 0);
+                            self.set_flags([
+                                Some(FlagValue::Real(nzcv & 4 != 0)),
+                                Some(FlagValue::Real(n != v)),
+                                Some(FlagValue::Real(nzcv & 2 != 0)),
+                                Some(FlagValue::Real(v)),
+                            ]);
+                        }
+                        _ => self.set_unknown_flags(),
+                    }
+                }
                 _ => todo!(
                     "control flow instruction not yet implemented {:?}",
                     instruction
@@ -1387,6 +1543,7 @@ impl ARMCORTEXA {
                         }
                     }
                 }
+                "prfm" | "prfum" => {}
                 _ => todo!("memory instruction not supported yet {:?}", instruction),
             },
             InstructionType::SIMDArithmetic
@@ -1902,27 +2059,31 @@ impl ARMCORTEXA {
                         "h" => 16,
                         _ => 32,
                     };
-                    let value = instruction_aux::extract_bits(
-                        src,
-                        0,
-                        width,
-                        instruction.opcode.starts_with('s'),
-                    );
+                    let signed = instruction.opcode.starts_with('s');
+                    let value = instruction_aux::extract_bits(src, 0, width, signed);
+                    let value = self.field_of_unknown(value, width, signed);
                     self.set_register(dst, value.kind, value.base, value.offset);
                 }
-                "rev" | "rev32" | "rbit" => {
-                    let mut reg_iter = instruction.operands.iter().clone();
-                    let reg0 = reg_iter.next().expect("Need register output for rev");
-                    let reg1 = reg_iter.next().expect("Need register output for rev");
-
-                    let mut r1 = self.get_register(reg1);
-
-                    if let Some(base) = r1.base {
-                        r1.base = Some(generate_expression("rev", base, AbstractExpression::Empty));
-                    }
-
-                    r1.offset = r1.offset.swap_bytes();
-                    self.set_register(reg0, r1.kind, r1.base, r1.offset);
+                "rev" | "rev16" | "rev32" | "rbit" => {
+                    let [dst, src] = instruction.operands.as_slice() else {
+                        return Err(format!("{} needs two registers", instruction.opcode));
+                    };
+                    let word = matches!(dst, Operand::Register(RePrefix::W, _));
+                    let value = self.get_register(src);
+                    let value = match value.kind {
+                        RegisterKind::Immediate if value.base.is_none() => {
+                            immediate(
+                                permuted(&instruction.opcode, word, value.offset as u64) as i64
+                            )
+                        }
+                        _ if word => self.field_of_unknown(
+                            RegisterValue::new(RegisterKind::Number, None, 0),
+                            32,
+                            false,
+                        ),
+                        _ => RegisterValue::new(RegisterKind::Number, None, 0),
+                    };
+                    self.set_register(dst, value.kind, value.base, value.offset);
                 }
                 "neg" | "mvn" => {
                     let mut reg_iter = instruction.operands.iter().clone();
