@@ -13,7 +13,7 @@ impl AesKey {
     pub fn new() -> Self {
         return Self {
             rd_key: [0x10; 60],
-            rounds: 10,
+            rounds: if cfg!(target_arch = "x86_64") { 9 } else { 10 },
         };
     }
 
@@ -35,19 +35,24 @@ enum AesFunc {
     VpaesCtr32EncryptBlocks,
 }
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-armx.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
 fn aes_hw_set_encrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-armx.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
 fn aes_hw_set_decrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
 
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("aesni-x86_64.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1]))]
 fn aes_hw_encrypt(input: &[u8; 16], output: &mut [u8; 16], keys: &([u32; 60], u32));
 
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("aesni-x86_64.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1]))]
 fn aes_hw_decrypt(input: &[u8; 16], output: &mut [u8; 16], keys: &([u32; 60], u32));
 
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("aesni-x86_64.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()]))]
 fn aes_hw_cbc_encrypt(
     input: &[u8],
     output: &mut [u8],
@@ -56,7 +61,8 @@ fn aes_hw_cbc_encrypt(
     enc: i64,
 );
 
-#[bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1%2==0, input.len()>=16, input.len()%16==0, input.len() == output.len()])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("aesv8-armx.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1%2==0, input.len()>=16, input.len()%16==0, input.len() == output.len()]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("aesni-x86_64.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 9, keys.1 <= 13, keys.1%2==1, input.len()>=16, input.len()%16==0, input.len() == output.len()]))]
 fn aes_hw_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
@@ -64,6 +70,7 @@ fn aes_hw_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() > 64, input.len() % 16 == 0, input.len() == output.len()])]
 fn aes_gcm_enc_kernel(
     input: &[u8],
@@ -74,6 +81,7 @@ fn aes_gcm_enc_kernel(
     htable: &[u128; 16],
 );
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-gcm-armv8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 >= 10, keys.1 <= 14, keys.1 % 2 == 0, input.len() > 64, input.len() % 16 == 0, input.len() == output.len()])]
 fn aes_gcm_dec_kernel(
     input: &[u8],
@@ -84,6 +92,7 @@ fn aes_gcm_dec_kernel(
     htable: &[u128; 16],
 );
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 10, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
 fn aesv8_gcm_8x_enc_128(
     input: &[u8],
@@ -94,6 +103,7 @@ fn aesv8_gcm_8x_enc_128(
     htable: &[u128; 16],
 ) -> usize;
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 10, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
 fn aesv8_gcm_8x_dec_128(
     input: &[u8],
@@ -104,6 +114,7 @@ fn aesv8_gcm_8x_dec_128(
     htable: &[u128; 16],
 ) -> usize;
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 12, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
 fn aesv8_gcm_8x_enc_192(
     input: &[u8],
@@ -114,6 +125,7 @@ fn aesv8_gcm_8x_enc_192(
     htable: &[u128; 16],
 ) -> usize;
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 12, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
 fn aesv8_gcm_8x_dec_192(
     input: &[u8],
@@ -124,6 +136,7 @@ fn aesv8_gcm_8x_dec_192(
     htable: &[u128; 16],
 ) -> usize;
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 14, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
 fn aesv8_gcm_8x_enc_256(
     input: &[u8],
@@ -134,6 +147,7 @@ fn aesv8_gcm_8x_enc_256(
     htable: &[u128; 16],
 ) -> usize;
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("aesv8-gcm-armv8-unroll8.S", input.as_ptr(), input.len()*8, output.as_mut_ptr(), xi.as_mut_ptr(), ivec.as_mut_ptr(), keys as *const _, htable.as_ptr(), [keys.1 == 14, input.len() > 128, input.len() % 16 == 0, input.len() == output.len()])]
 fn aesv8_gcm_8x_dec_256(
     input: &[u8],
@@ -144,13 +158,16 @@ fn aesv8_gcm_8x_dec_256(
     htable: &[u128; 16],
 ) -> usize;
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("vpaes-armv8.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
 fn vpaes_set_encrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
 
+#[cfg(target_arch = "aarch64")]
 #[bums_macros::check_mem_safe("vpaes-armv8.S", user_key.as_ptr(), bits, key.as_mut_ptr(), [bits >= 128, bits <= 256, bits % 64 == 0, user_key.len() * 8 >= bits])]
 fn vpaes_set_decrypt_key(user_key: &[u8], bits: usize, key: &mut [u32; 61]) -> bool;
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("vpaes-x86_64.S", input.as_ptr(), output.as_mut_ptr(), input.len(), keys as *const _, ivec.as_mut_ptr(), enc, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len() >= 16, input.len() % 16 == 0, input.len() == output.len()]))]
 fn vpaes_cbc_encrypt(
     input: &[u8],
     output: &mut [u8],
@@ -159,7 +176,8 @@ fn vpaes_cbc_encrypt(
     enc: i64,
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1,input.len()>=16, input.len()%16==0, input.len() == output.len()])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1,input.len()>=16, input.len()%16==0, input.len() == output.len()]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("vpaes-x86_64.S", input.as_ptr(), output.as_mut_ptr(), input.len()/16, keys as *const _, ivec.as_mut_ptr(), [keys.1 >= 9, keys.1 <= 13, keys.1%2==1, input.len()>=16, input.len()%16==0, input.len() == output.len()]))]
 fn vpaes_ctr32_encrypt_blocks(
     input: &[u8],
     output: &mut [u8],
@@ -167,10 +185,12 @@ fn vpaes_ctr32_encrypt_blocks(
     ivec: &mut [u8; 16],
 );
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("vpaes-x86_64.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1]))]
 fn vpaes_decrypt(input: &[u8; 16], output: &mut [u8; 16], keys: &([u32; 60], u32));
 
-#[bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len()>= 16,input.len() == output.len()])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("vpaes-armv8.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len()>= 16,input.len() == output.len()]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("vpaes-x86_64.S", input.as_ptr(), output.as_mut_ptr(), keys as *const _, [keys.1 >= 9, keys.1 <= 13, keys.1 % 2 == 1, input.len()>= 16,input.len() == output.len()]))]
 fn vpaes_encrypt(input: &[u8], output: &mut [u8], keys: &([u32; 60], u32));
 
 #[allow(non_snake_case)]
@@ -207,7 +227,7 @@ fn aes_ctr128_encrypt(
     block_buffer: &mut [u8; 16],
     num: &mut u32,
 ) -> Result<(), ()> {
-    if std::arch::is_aarch64_feature_detected!("aes") {
+    if cpu_has_aes() {
         crypto_ctr128_encrypt_ctr32(
             input,
             out,
@@ -218,8 +238,8 @@ fn aes_ctr128_encrypt(
             num,
             AesFunc::AesHwCtr32EncryptBlocks,
         );
-    } else if std::arch::is_aarch64_feature_detected!("sve2-bitperm") {
-        if std::arch::is_aarch64_feature_detected!("neon") {
+    } else if cpu_has_vector_permute() {
+        if cpu_has_simd() {
             crypto_ctr128_encrypt_ctr32(
                 input,
                 out,
@@ -238,6 +258,36 @@ fn aes_ctr128_encrypt(
     }
 
     Ok(())
+}
+
+#[cfg(target_arch = "aarch64")]
+fn cpu_has_aes() -> bool {
+    std::arch::is_aarch64_feature_detected!("aes")
+}
+
+#[cfg(target_arch = "aarch64")]
+fn cpu_has_vector_permute() -> bool {
+    std::arch::is_aarch64_feature_detected!("sve2-bitperm")
+}
+
+#[cfg(target_arch = "aarch64")]
+fn cpu_has_simd() -> bool {
+    std::arch::is_aarch64_feature_detected!("neon")
+}
+
+#[cfg(target_arch = "x86_64")]
+fn cpu_has_aes() -> bool {
+    std::arch::is_x86_feature_detected!("aes")
+}
+
+#[cfg(target_arch = "x86_64")]
+fn cpu_has_vector_permute() -> bool {
+    std::arch::is_x86_feature_detected!("ssse3")
+}
+
+#[cfg(target_arch = "x86_64")]
+fn cpu_has_simd() -> bool {
+    true
 }
 
 fn crypto_ctr128_encrypt(
@@ -403,7 +453,7 @@ fn ctr128_inc(counter: &mut [u8]) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_arch = "aarch64"))]
 mod tests {
     use super::*;
     mod cipher;

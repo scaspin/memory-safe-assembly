@@ -19,8 +19,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut seen = std::collections::HashSet::new();
-    for subdir in ["fipsmodule", "chacha", "cipher_extra"] {
-        let dir = format!("generated-asm/{}-{}/crypto/{}", os, arch, subdir);
+    let mut dirs: Vec<String> = ["fipsmodule", "chacha", "cipher_extra"]
+        .iter()
+        .map(|subdir| format!("generated-asm/{}-{}/crypto/{}", os, arch, subdir))
+        .collect();
+    dirs.push(format!("extra-asm/{}-{}", os, arch));
+    for dir in dirs {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };

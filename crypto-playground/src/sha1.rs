@@ -106,14 +106,26 @@ fn sha1_final(out: &mut [u8], ctx: &mut Sha1Context) -> Result<(), ()> {
     Ok(())
 }
 
-#[bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("sha1-x86_64.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64]))]
 fn sha1_block_data_order_hw(context: &mut [u32; 5], input: &[u8]);
 
-#[bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("sha1-armv8.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("sha1-x86_64.S", context.as_mut_ptr(), input.as_ptr(), input.len() / 64, [input.len() >= 64]))]
 fn sha1_block_data_order_nohw(context: &mut [u32; 5], input: &[u8]);
 
+#[cfg(target_arch = "aarch64")]
+fn cpu_has_sha() -> bool {
+    std::arch::is_aarch64_feature_detected!("sha2")
+}
+
+#[cfg(target_arch = "x86_64")]
+fn cpu_has_sha() -> bool {
+    std::arch::is_x86_feature_detected!("sha")
+}
+
 fn sha1_block_data_order(context: &mut [u32; 5], input: &[u8]) {
-    if std::arch::is_aarch64_feature_detected!("sha2") {
+    if cpu_has_sha() {
         sha1_block_data_order_hw(context, input)
     } else {
         sha1_block_data_order_nohw(context, input)
