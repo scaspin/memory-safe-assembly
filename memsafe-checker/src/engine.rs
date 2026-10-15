@@ -5668,6 +5668,147 @@ impl<M: Machine> Engine<M> {
     }
 }
 
+#[derive(Clone)]
+pub enum AnyEngine {
+    Aarch64(Box<ExecutionEngine>),
+    X86_64(Box<crate::x86::engine::ExecutionEngine>),
+}
+
+macro_rules! forward {
+    ($self:ident, $engine:ident => $call:expr) => {
+        match $self {
+            AnyEngine::Aarch64($engine) => $call,
+            AnyEngine::X86_64($engine) => $call,
+        }
+    };
+}
+
+impl AnyEngine {
+    pub fn new<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> AnyEngine {
+        let lines: Vec<String> = lines.into_iter().map(Into::into).collect();
+        match Isa::detect(&lines) {
+            Isa::Aarch64 => AnyEngine::Aarch64(Box::new(ExecutionEngine::new(lines))),
+            Isa::X86_64 => {
+                AnyEngine::X86_64(Box::new(crate::x86::engine::ExecutionEngine::new(lines)))
+            }
+        }
+    }
+
+    pub fn isa(&self) -> Isa {
+        match self {
+            AnyEngine::Aarch64(_) => Isa::Aarch64,
+            AnyEngine::X86_64(_) => Isa::X86_64,
+        }
+    }
+
+    pub fn add_region(
+        &mut self,
+        ty: RegionType,
+        base: impl Into<String>,
+        length: AbstractExpression,
+    ) {
+        forward!(self, e => e.add_region(ty, base, length))
+    }
+
+    pub fn add_immediate(&mut self, register: impl Into<String>, value: usize) {
+        forward!(self, e => e.add_immediate(register, value))
+    }
+
+    pub fn add_abstract(&mut self, register: impl Into<String>, value: AbstractExpression) {
+        forward!(self, e => e.add_abstract(register, value))
+    }
+
+    pub fn add_abstract_to_memory(
+        &mut self,
+        region: impl Into<String>,
+        address: i64,
+        value: AbstractExpression,
+    ) {
+        forward!(self, e => e.add_abstract_to_memory(region, address, value))
+    }
+
+    pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
+        forward!(self, e => e.add_abstract_expression_from(register, value))
+    }
+
+    pub fn add_abstract_from(&mut self, register: usize, value: impl Into<String>) {
+        forward!(self, e => e.add_abstract_from(register, value))
+    }
+
+    pub fn add_element_fact(
+        &mut self,
+        region: impl Into<String>,
+        index: i64,
+        element_size: i64,
+        symbol: impl Into<String>,
+    ) {
+        forward!(self, e => e.add_element_fact(region, index, element_size, symbol))
+    }
+
+    pub fn add_pointer_elements(&mut self, region: impl Into<String>, target: impl Into<String>) {
+        forward!(self, e => e.add_pointer_elements(region, target))
+    }
+
+    pub fn add_element_range(
+        &mut self,
+        region: impl Into<String>,
+        element_size: i64,
+        signed: bool,
+        op: &str,
+        bound: AbstractExpression,
+    ) {
+        forward!(self, e => e.add_element_range(region, element_size, signed, op, bound))
+    }
+
+    pub fn unread_element_facts(&self) -> Vec<String> {
+        forward!(self, e => e.unread_element_facts())
+    }
+
+    pub fn allow_red_zone(&mut self, bytes: i64) {
+        forward!(self, e => e.allow_red_zone(bytes))
+    }
+
+    pub fn findings(&self) -> Vec<String> {
+        forward!(self, e => e.findings())
+    }
+
+    pub fn get_register_output(&self, register: usize) -> RegisterValue {
+        forward!(self, e => e.get_register_output(register))
+    }
+
+    pub fn address_of(&self, name: &str) -> Option<i64> {
+        forward!(self, e => e.address_of(name))
+    }
+
+    pub fn line_for_address(&self, address: i64) -> Option<usize> {
+        forward!(self, e => e.line_for_address(address))
+    }
+
+    pub fn set_step_budget(&mut self, steps: usize) {
+        forward!(self, e => e.set_step_budget(steps))
+    }
+
+    pub fn dont_fail_fast(&mut self) {
+        forward!(self, e => e.dont_fail_fast())
+    }
+
+    pub fn change_alignment(&mut self, value: i64) {
+        forward!(self, e => e.change_alignment(value))
+    }
+
+    pub fn pin(&mut self, symbol: &str, value: i64) {
+        forward!(self, e => e.pin(symbol, value))
+    }
+
+    pub fn add_invariant(&self, constraint: AbstractComparison) {
+        forward!(self, e => e.add_invariant(constraint))
+    }
+
+    pub fn start(&mut self, start: impl Into<String>) -> std::io::Result<()> {
+        forward!(self, e => e.start(start))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -579,3 +579,69 @@ pub fn substituted(e: &AbstractExpression, symbol: &str, value: i64) -> Abstract
         other => other.clone(),
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Isa {
+    Aarch64,
+    X86_64,
+}
+
+impl Isa {
+    pub fn detect<S: AsRef<str>>(lines: &[S]) -> Isa {
+        const X86_REGISTERS: [&str; 12] = [
+            "%rax", "%rsp", "%rdi", "%rsi", "%eax", "%rip", "%xmm", "%ymm", "%r8", "%rbp", "%rcx",
+            "%rdx",
+        ];
+        let is_arm_register = |word: &str| {
+            let word = word.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+            word.len() >= 2
+                && (word.starts_with('x') || word.starts_with('w'))
+                && word[1..].parse::<u8>().is_ok_and(|n| n <= 30)
+        };
+        let (mut x86, mut arm) = (0usize, 0usize);
+        for line in lines {
+            let line = line.as_ref().trim();
+            if line.starts_with('#') || line.starts_with("//") || line.starts_with("/*") {
+                continue;
+            }
+            let code = line.split("//").next().unwrap_or_default();
+            let code = code.split("##").next().unwrap_or_default();
+            if X86_REGISTERS.iter().any(|r| code.contains(r)) {
+                x86 += 1;
+            }
+            if code.split([' ', ',', '\t', '[', ']']).any(is_arm_register) {
+                arm += 1;
+            }
+        }
+        if x86 > arm { Isa::X86_64 } else { Isa::Aarch64 }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_att_x86() {
+        assert_eq!(Isa::detect(&["movq %rdi,%rax", "ret"]), Isa::X86_64);
+    }
+
+    #[test]
+    fn detects_aarch64() {
+        assert_eq!(
+            Isa::detect(&["add x0,x1,x2", "ldr w3,[x0]", "ret"]),
+            Isa::Aarch64
+        );
+    }
+
+    #[test]
+    fn x86_registers_in_comments_do_not_make_aarch64_x86() {
+        let lines = [
+            "## AES-encrypt %xmm0.",
+            "## %xmm0 = input",
+            "ld1 {v0.16b}, [x0]",
+            "add x1, x1, #16 // %rsi in the x86 version",
+        ];
+        assert_eq!(Isa::detect(&lines), Isa::Aarch64);
+    }
+}

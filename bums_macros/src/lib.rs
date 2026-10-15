@@ -1090,7 +1090,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut failures: Vec<String> = Vec::new();
     let mut findings: Vec<String> = Vec::new();
     for chosen in &combinations {
-        let mut engine = bums::engine::ExecutionEngine::new(program.clone());
+        let mut engine = bums::engine::AnyEngine::new(program.clone());
         if let Some(bytes) = &attributes.red_zone {
             engine.allow_red_zone(bytes.base10_parse().unwrap_or_else(|e| abort!(bytes, e)));
         }
