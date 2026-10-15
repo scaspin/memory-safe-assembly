@@ -12,11 +12,22 @@ BUMS supports resolving constant-step loops over potentially unbounded input buf
 BUMS specifically targets cryptographic code, which is written for constant-time and includes little to no branching on input, thus simplifying symbolic execution.
 BUMS achieves quick verification times by discarding information about program state that could not lead to safe memory accesses, such as the result of a computation over two unspecified input values.
 
+BUMS checks both AArch64 and x86-64 (AT&T syntax) assembly. The macro reads the assembly
+file it is given and picks the instruction set from it, so an annotation looks the same for
+either; case studies annotate each function once per architecture with
+`#[cfg_attr(target_arch = "...", ...)]`. The analysis runs on the machine doing the build,
+so x86-64 assembly can be checked from an Apple Silicon Mac with
+`cargo build --release --target x86_64-apple-darwin` (after
+`rustup target add x86_64-apple-darwin`), and the resulting tests run under Rosetta 2.
+Verification results are only reported by `--release` builds: in debug builds a failed check
+is a proc-macro warning, which stable Rust does not display.
+
 Repository structure:
 -  [memsafe-checker](memsafe-checker) is the ```bums``` symbex engine
 -  [bums_macros](bums_macros) exposes the macro
 -  [crypto-playground](crypto-playground) has macro examples on cryptography from [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 -  [rav1d-playground](rav1d-playground) has macro examples on video decoding code from [rav1d](https://github.com/memorysafety/rav1d)
+-  [openblas-playground](openblas-playground) has macro examples on the hand-written AArch64 and x86-64 BLAS kernels of [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS)
 -  [asm-files](asm-files) assembly files for cryptographic algorithms collected from various crypto libraries
 -  [scrape-asm](scrape-asm) contains code for searching for assembly in top crates from crates.io
 
