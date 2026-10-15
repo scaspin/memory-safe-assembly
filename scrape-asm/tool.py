@@ -1,6 +1,7 @@
 import requests
 import os
 import subprocess
+import glob
 import pandas as pd
 import argparse
 
@@ -59,6 +60,50 @@ def measure_loc(crate_name, language):
     if len(result) > 1:
         return result
 
+def search_inline_asm(crate_name):
+    """Search source files for asm! and global_asm! macro invocations."""
+    path = f"./crates/{crate_name}"
+    results = {}
+    for pattern in ['asm!', 'global_asm!']:
+        try:
+            result = subprocess.run(
+                ['grep', '-r', '--include=*.rs', '-l', pattern, path],
+                capture_output=True, encoding='utf-8'
+            )
+            files = [f for f in result.stdout.strip().split('\n') if f]
+            count_result = subprocess.run(
+                ['grep', '-r', '--include=*.rs', '-c', pattern, path],
+                capture_output=True, encoding='utf-8'
+            )
+            total = sum(
+                int(line.split(':')[-1])
+                for line in count_result.stdout.strip().split('\n')
+                if line and ':' in line
+            )
+            results[pattern] = {'files': len(files), 'occurrences': total}
+        except Exception:
+            results[pattern] = {'files': 0, 'occurrences': 0}
+    return results
+
+def measure_generated_asm(crate_name):
+    """Count assembly files (.s, .S, .asm) generated in the build directory."""
+    build_path = f"./crates/{crate_name}/target/debug/build"
+    if not os.path.isdir(build_path):
+        return None
+    asm_files = []
+    for ext in ('*.s', '*.S', '*.asm'):
+        asm_files.extend(glob.glob(os.path.join(build_path, '**', ext), recursive=True))
+    if not asm_files:
+        return None
+    total_lines = 0
+    for f in asm_files:
+        try:
+            with open(f, 'r', errors='ignore') as fh:
+                total_lines += sum(1 for _ in fh)
+        except Exception:
+            pass
+    return {'files': len(asm_files), 'lines': total_lines}
+
 def measure_loc_in_build(crate_name, language):
     path = f"./crates/{crate_name}/target/debug/build"
     cmd = ['loc', path]
@@ -89,6 +134,8 @@ if __name__ == "__main__":
 
     crates = []
     built_crates = []
+    inline_asm_crates = []
+    generated_asm_crates = []
 
     print("Iterating through fetched crates...")
     for crate in top_crates:
@@ -98,11 +145,29 @@ if __name__ == "__main__":
         if result is not None:
             print(f'Assembly found in {crate[0]}')
             crates = crates + [ [crate[0]] + result[0].split()]
-        
+
+        # Search for inline assembly macros in source
+        inline = search_inline_asm(crate[0])
+        asm_files = inline['asm!']['files']
+        asm_occ = inline['asm!']['occurrences']
+        gasm_files = inline['global_asm!']['files']
+        gasm_occ = inline['global_asm!']['occurrences']
+        if asm_occ > 0 or gasm_occ > 0:
+            print(f'Inline asm in {crate[0]}: asm!={asm_occ} global_asm!={gasm_occ}')
+            inline_asm_crates.append([
+                crate[0], asm_files, asm_occ, gasm_files, gasm_occ
+            ])
+
         result = measure_loc_in_build(crate[0], 'Assembly')
         if result is not None:
             print(f'Assembly found in build of {crate[0]}')
             built_crates = built_crates + [ [crate[0]] + result[0].split()]
+
+        # Measure generated .s/.S/.asm files in build output
+        gen = measure_generated_asm(crate[0])
+        if gen is not None:
+            print(f'Generated asm in build of {crate[0]}: {gen["files"]} files, {gen["lines"]} lines')
+            generated_asm_crates.append([crate[0], gen['files'], gen['lines']])
 
         if args.delete:
             subprocess.run(['rm', '-rf', f'./crates/{crate[0]}'])
@@ -110,10 +175,17 @@ if __name__ == "__main__":
     if args.delete:
         print("Downloaded crates deleted from crates/")
 
-    print(f'Done iterating, building df and saving to data/top-{len(top_crates)}')
+    out = f'./data/top-{len(top_crates)}'
+    print(f'Done iterating, building df and saving to {out}')
     df1 = pd.DataFrame(crates, columns=['Crate', 'Language', 'Files', 'Lines', 'Blank', 'Comment', 'Code' ])
-    df1.to_csv(f'./data/top-{len(top_crates)}/loc-code.csv')
+    df1.to_csv(f'{out}/loc-code.csv')
 
     df2 = pd.DataFrame(built_crates, columns=['Crate', 'Language', 'Files', 'Lines', 'Blank', 'Comment', 'Code' ])
-    df2.to_csv(f'./data/top-{len(top_crates)}/loc-build.csv')
+    df2.to_csv(f'{out}/loc-build.csv')
+
+    df3 = pd.DataFrame(inline_asm_crates, columns=['Crate', 'asm!_files', 'asm!_occurrences', 'global_asm!_files', 'global_asm!_occurrences'])
+    df3.to_csv(f'{out}/inline-asm.csv')
+
+    df4 = pd.DataFrame(generated_asm_crates, columns=['Crate', 'Generated_asm_files', 'Generated_asm_lines'])
+    df4.to_csv(f'{out}/generated-asm.csv')
     
