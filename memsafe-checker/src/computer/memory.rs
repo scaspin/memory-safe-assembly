@@ -195,7 +195,7 @@ impl ARMCORTEXA {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let register = self.get_register(&register);
-                self.write_cell(&MemoryCell { region, offset }, register);
+                self.store_cell(&MemoryCell { region, offset }, register, width);
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -214,6 +214,7 @@ impl ARMCORTEXA {
                     address
                 );
                 let base = address.base.expect("Need base");
+                self.forget_where_written(&base, address.offset, width);
                 if base.contains("sp") {
                     self.blind_stack_writes
                         .push((base.clone(), address.offset, width));
@@ -249,7 +250,7 @@ impl ARMCORTEXA {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let register = self.get_register(&register);
-                self.write_cell(&MemoryCell { region, offset }, register);
+                self.store_cell(&MemoryCell { region, offset }, register, width);
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -268,6 +269,7 @@ impl ARMCORTEXA {
                     address
                 );
                 let base = address.base.expect("Need base");
+                self.forget_where_written(&base, address.offset, width);
                 if base.contains("sp") {
                     self.blind_stack_writes
                         .push((base.clone(), address.offset, width));

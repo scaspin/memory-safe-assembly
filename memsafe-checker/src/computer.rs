@@ -59,6 +59,7 @@ pub struct MemoryCell {
 pub struct CellWrite {
     pub cell: MemoryCell,
     pub previous: Option<RegisterValue>,
+    pub previous_width: Option<i64>,
 }
 
 #[derive(Clone)]
@@ -238,11 +239,90 @@ impl ARMCORTEXA {
             return;
         };
         let previous = region.content.get(&cell.offset).cloned();
+        let previous_width = region.width_at(cell.offset);
         region.insert(cell.offset, value);
         self.write_journal.push(CellWrite {
             cell: cell.clone(),
             previous,
+            previous_width,
         });
+    }
+
+    fn forget_cell(&mut self, region_name: &str, offset: i64) {
+        let Some(region) = self.memory.get_mut(region_name) else {
+            return;
+        };
+        let previous = region.content.get(&offset).cloned();
+        let previous_width = region.width_at(offset);
+        region.put(offset, None);
+        self.write_journal.push(CellWrite {
+            cell: MemoryCell {
+                region: region_name.to_string(),
+                offset,
+            },
+            previous,
+            previous_width,
+        });
+    }
+
+    pub fn store_cell(&mut self, cell: &MemoryCell, value: RegisterValue, width: i64) {
+        let Some(region) = self.memory.get(&cell.region) else {
+            return;
+        };
+        for k in region.overlapping(cell.offset, width) {
+            self.forget_cell(&cell.region, k);
+        }
+        let Some(region) = self.memory.get_mut(&cell.region) else {
+            return;
+        };
+        region.put(cell.offset, Some((value, Some(width))));
+        region.mark_written(cell.offset, width);
+        self.write_journal.push(CellWrite {
+            cell: cell.clone(),
+            previous: None,
+            previous_width: None,
+        });
+    }
+
+    pub fn forget_where_written(&mut self, base: &AbstractExpression, offset: i64, width: i64) {
+        let named = base.get_abstracts();
+        let regions: Vec<String> = self
+            .memory
+            .keys()
+            .filter(|name| {
+                named.contains(name)
+                    || (*name == "memory"
+                        && named.iter().any(|n| self.memory_labels.contains_key(n)))
+            })
+            .cloned()
+            .collect();
+        let start = expression_to_ast(base.clone())
+            .map(|b| ast::Int::add(&[&b, &ast::Int::from_i64(offset)]));
+        for name in regions {
+            let slots: Vec<(i64, i64)> = self.memory[&name]
+                .content
+                .keys()
+                .map(|k| (*k, self.memory[&name].width_at(*k).unwrap_or(8)))
+                .collect();
+            for (k, slot_width) in slots {
+                let apart = start.as_ref().is_some_and(|start| {
+                    let slot_start = ast::Int::add(&[
+                        &ast::Int::new_const(name.clone()),
+                        &ast::Int::from_i64(k),
+                    ]);
+                    let slot_end = ast::Int::add(&[&slot_start, &ast::Int::from_i64(slot_width)]);
+                    let end = ast::Int::add(&[start, &ast::Int::from_i64(width)]);
+                    let overlap = ast::Bool::and(&[&start.lt(&slot_end), &slot_start.lt(&end)]);
+                    self.solver.check_assumptions(&[overlap]) == SatResult::Unsat
+                });
+                if !apart {
+                    self.forget_cell(&name, k);
+                }
+            }
+            if let Some(region) = self.memory.get_mut(&name) {
+                region.renew_unwritten();
+            }
+        }
     }
 
     pub fn cell_content(&self, cell: &MemoryCell) -> RegisterValue {
@@ -260,14 +340,10 @@ impl ARMCORTEXA {
             let Some(region) = self.memory.get_mut(&write.cell.region) else {
                 continue;
             };
-            match write.previous {
-                Some(value) => {
-                    region.content.insert(write.cell.offset, value);
-                }
-                None => {
-                    region.content.remove(&write.cell.offset);
-                }
-            }
+            region.put(
+                write.cell.offset,
+                write.previous.map(|value| (value, write.previous_width)),
+            );
         }
     }
 

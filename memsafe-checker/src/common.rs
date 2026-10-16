@@ -927,6 +927,45 @@ impl MemorySafeRegion {
         self.content.insert(address, value);
     }
 
+    pub fn width_at(&self, address: i64) -> Option<i64> {
+        self.widths.get(&address).copied()
+    }
+
+    pub fn overlapping(&self, address: i64, width: i64) -> Vec<i64> {
+        self.content
+            .keys()
+            .copied()
+            .filter(|k| {
+                *k < address.saturating_add(width)
+                    && k + self.widths.get(k).copied().unwrap_or(8) > address
+            })
+            .collect()
+    }
+
+    pub fn put(&mut self, address: i64, entry: Option<(RegisterValue, Option<i64>)>) {
+        match entry {
+            Some((value, width)) => {
+                self.content.insert(address, value);
+                match width {
+                    Some(w) => self.widths.insert(address, w),
+                    None => self.widths.remove(&address),
+                };
+            }
+            None => {
+                self.content.remove(&address);
+                self.widths.remove(&address);
+            }
+        }
+    }
+
+    pub fn mark_written(&mut self, address: i64, width: i64) {
+        self.written.push((address, address.saturating_add(width)));
+    }
+
+    pub fn renew_unwritten(&mut self) {
+        self.epoch += 1;
+    }
+
     pub fn grow_to(&mut self, end: i64) {
         if let AbstractExpression::Immediate(l) = self.length
             && l < end
