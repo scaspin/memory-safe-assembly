@@ -391,6 +391,12 @@ impl ARMCORTEXA {
         pc: usize,
         instruction: &Instruction,
     ) -> Result<ExecuteReturnType, String> {
+        if !matches!(instruction.ty, InstructionType::Label | InstructionType::Def)
+            && is_floating_point(&instruction.opcode)
+        {
+            self.floating_point(instruction);
+            return Ok(ExecuteReturnType::Next);
+        }
         match instruction.ty {
             InstructionType::Arithmetic => match instruction.opcode.as_str() {
                 "add" => {
@@ -2126,4 +2132,29 @@ impl ARMCORTEXA {
 
         Ok(ExecuteReturnType::Next)
     }
+
+    fn floating_point(&mut self, instruction: &Instruction) {
+        if matches!(
+            instruction.opcode.as_str(),
+            "fcmp" | "fcmpe" | "fccmp" | "fccmpe"
+        ) {
+            self.set_unknown_flags();
+            return;
+        }
+        match instruction.operands.first() {
+            Some(
+                dst @ (Operand::Vector(..)
+                | Operand::VectorRegister(..)
+                | Operand::VectorAccess(..)),
+            ) => self.vector_unknown(dst),
+            Some(dst @ Operand::Register(..)) => {
+                self.set_register(dst, RegisterKind::Number, None, 0)
+            }
+            _ => (),
+        }
+    }
+}
+
+fn is_floating_point(opcode: &str) -> bool {
+    opcode.starts_with('f') || matches!(opcode, "scvtf" | "ucvtf")
 }
