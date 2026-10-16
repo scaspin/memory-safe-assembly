@@ -2954,3 +2954,26 @@ fn a_shift_beside_a_loop_that_counts_something_else_bounds_nothing() {
         .expect_err("a hundred reads leave an eight-byte region");
     assert!(err.to_string().contains("not provably within"), "{err}");
 }
+
+const SPLIT_STEP: [&str; 2] = ["add x4,x4,x3", "add x4,x4,#16"];
+
+fn analyze_with_aux(program: Vec<String>) -> Result<(), String> {
+    init();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", abstract_of("length"));
+    engine.add_abstract_from(1, "length");
+    engine.add_abstract_from(3, "stride");
+    engine.add_abstract_from(4, "aux");
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_split_step_beside_the_walk_still_catches_an_out_of_bounds_read() {
+    let mut body = SPLIT_STEP.to_vec();
+    body.push("ldr x5,[x0,#100000]");
+    assert!(
+        analyze_with_aux(walking_loop(4, &body)).is_err(),
+        "proved an out of bounds read"
+    );
+}
