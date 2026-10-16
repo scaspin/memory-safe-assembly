@@ -237,6 +237,7 @@ struct Summary {
     flags: [Option<FlagValue>; 4],
     facts: Vec<AbstractComparison>,
     exit_facts: Vec<AbstractComparison>,
+    landings: Vec<(AbstractComparison, AbstractComparison)>,
     exits: Vec<(usize, bool)>,
     ranges: Vec<(String, i64)>,
     ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
@@ -474,6 +475,10 @@ where
         AbstractExpression::Expression(op, a, _) if op == "%" && is_narrowed(e) => {
             expression_step(a, register_step)
         }
+        AbstractExpression::Expression(..) if is_unsigned(e) => match e {
+            AbstractExpression::Expression(_, a, _) => expression_step(a, register_step),
+            _ => None,
+        },
         AbstractExpression::Expression(op, a, b) => {
             let left = expression_step(a, register_step)?;
             let right = expression_step(b, register_step)?;
@@ -490,24 +495,31 @@ where
     }
 }
 
+fn step_at_exit(
+    r: &RegisterValue,
+    (at_exit, ghosts): (&[RegisterValue], &[Ghost]),
+    invariants: &[LoopInvariant],
+) -> AbstractExpression {
+    match ghost_step(ghosts, r) {
+        Some(step) => AbstractExpression::Immediate(step),
+        None => step_at(at_exit.iter().position(|c| c == r), invariants),
+    }
+}
+
 fn anchored_at_exit(
     e: &AbstractExpression,
-    at_exit: &[RegisterValue],
+    states: (&[RegisterValue], &[Ghost]),
     invariants: &[LoopInvariant],
 ) -> AbstractExpression {
     match e {
-        AbstractExpression::Register(r) => match at_exit
-            .iter()
-            .position(|c| c == &**r)
-            .and_then(|i| invariants.get(i))
-        {
-            Some(LoopInvariant::Linear(step)) => rewind(value_of(r), SUMMARY_ITERATION - 1, step),
-            _ => value_of(r),
+        AbstractExpression::Register(r) => match step_at_exit(r, states, invariants) {
+            AbstractExpression::Immediate(0) => value_of(r),
+            step => rewind(value_of(r), SUMMARY_ITERATION - 1, &step),
         },
         AbstractExpression::Expression(op, a, b) => generate_expression(
             op,
-            anchored_at_exit(a, at_exit, invariants),
-            anchored_at_exit(b, at_exit, invariants),
+            anchored_at_exit(a, states, invariants),
+            anchored_at_exit(b, states, invariants),
         ),
         other => other.clone(),
     }
@@ -711,6 +723,203 @@ fn is_ordered(op: &str) -> bool {
     matches!(op, "<" | "<=" | ">" | ">=")
 }
 
+fn landing_requirement(
+    op: &str,
+    distance: &AbstractExpression,
+    step: &AbstractExpression,
+) -> Option<AbstractComparison> {
+    if is_ordered(op) && bound_toward(step).is_some() {
+        return None;
+    }
+    let modulus = match step {
+        AbstractExpression::Immediate(0) => return None,
+        AbstractExpression::Immediate(n) => AbstractExpression::Immediate(n.abs()),
+        other => other.clone(),
+    };
+    Some(AbstractComparison::new(
+        "==",
+        generate_expression("%", distance.clone(), modulus),
+        AbstractExpression::Immediate(0),
+    ))
+}
+
+fn is_unsigned(e: &AbstractExpression) -> bool {
+    matches!(e, AbstractExpression::Expression(op, _, width)
+        if op == "zext" && **width == AbstractExpression::Immediate(64))
+}
+
+fn peel_unsigned(e: &AbstractExpression) -> &AbstractExpression {
+    match e {
+        AbstractExpression::Expression(_, inner, _) if is_unsigned(e) => inner,
+        _ => e,
+    }
+}
+
+fn unwrapped_requirements(
+    condition: &AbstractComparison,
+    continues_when: bool,
+    (exit, walker, step): (
+        &AbstractExpression,
+        &AbstractExpression,
+        &AbstractExpression,
+    ),
+    distance: &AbstractExpression,
+) -> Vec<AbstractComparison> {
+    if !is_unsigned(walker) {
+        return Vec::new();
+    }
+    let present = AbstractComparison::new(
+        ">=",
+        peel_unsigned(walker).clone(),
+        AbstractExpression::Immediate(0),
+    );
+    match crossing_requirement(condition, continues_when, (exit, walker, step), distance) {
+        Some(crossing) => vec![present, crossing],
+        None => vec![present],
+    }
+}
+
+fn crossing_requirement(
+    condition: &AbstractComparison,
+    continues_when: bool,
+    (exit, walker, step): (
+        &AbstractExpression,
+        &AbstractExpression,
+        &AbstractExpression,
+    ),
+    distance: &AbstractExpression,
+) -> Option<AbstractComparison> {
+    if !is_ordered(&condition.op) {
+        return None;
+    }
+    let continuing = if continues_when {
+        condition.clone()
+    } else {
+        condition.not()
+    };
+    let op = match (*continuing.left == *walker, continuing.op.as_str()) {
+        (true, op) => op.to_string(),
+        (false, "<") => ">".to_string(),
+        (false, ">") => "<".to_string(),
+        (false, "<=") => ">=".to_string(),
+        (false, _) => "<=".to_string(),
+    };
+    let never = AbstractComparison::new(
+        "<",
+        AbstractExpression::Immediate(0),
+        AbstractExpression::Immediate(0),
+    );
+    let AbstractExpression::Immediate(stride) = step else {
+        return Some(never);
+    };
+    let at_least =
+        |n: i64| AbstractComparison::new(">=", exit.clone(), AbstractExpression::Immediate(n));
+    Some(match (*stride < 0, op.as_str()) {
+        (true, ">=") => at_least(stride.abs()),
+        (true, ">") => {
+            let clearance = generate_expression(
+                "-",
+                exit.clone(),
+                AbstractExpression::Immediate(stride.abs() - 1),
+            );
+            let misses = generate_expression(
+                "-",
+                AbstractExpression::Immediate(0),
+                generate_expression(
+                    "%",
+                    distance.clone(),
+                    AbstractExpression::Immediate(stride.abs()),
+                ),
+            );
+            AbstractComparison::new(
+                ">=",
+                generate_expression("atleast", clearance, misses),
+                AbstractExpression::Immediate(0),
+            )
+        }
+        (false, "<" | "<=") => {
+            AbstractComparison::new("<=", exit.clone(), AbstractExpression::Immediate(1 << 62))
+        }
+        _ => never,
+    })
+}
+
+fn constant_of(e: &AbstractExpression) -> Option<i64> {
+    match e {
+        AbstractExpression::Immediate(n) => Some(*n),
+        AbstractExpression::Register(r) if r.base.is_none() => Some(r.offset),
+        _ => None,
+    }
+}
+
+fn sign_extended_word(e: &AbstractExpression) -> Option<(&AbstractExpression, i64)> {
+    match e {
+        AbstractExpression::Expression(op, inner, width)
+            if op == "sext" && **width == AbstractExpression::Immediate(32) =>
+        {
+            Some((inner, 0))
+        }
+        AbstractExpression::Expression(op, word, offset) if op == "+" || op == "-" => {
+            let (inner, base) = sign_extended_word(word)?;
+            let n = constant_of(offset)?;
+            let shift = if op == "+" { n } else { n.checked_neg()? };
+            Some((inner, base.checked_add(shift)?))
+        }
+        _ => None,
+    }
+}
+
+fn iterations_before_leaving(op: &str, step: i64, bound: i64) -> Option<i64> {
+    const HALF: i64 = 1 << 31;
+    if !(-HALF..HALF).contains(&bound) {
+        return None;
+    }
+    let span = match (op, step) {
+        (">" | ">=", i64::MIN..0) => HALF - 1 - bound,
+        ("<" | "<=", 1..) => bound + HALF,
+        _ => return None,
+    };
+    Some(span / step.abs() + 1)
+}
+
+fn word_counter_bound<F>(
+    condition: &AbstractComparison,
+    continues_when: bool,
+    register_step: &F,
+) -> Option<i64>
+where
+    F: Fn(&RegisterValue) -> AbstractExpression,
+{
+    let continuing = if continues_when {
+        condition.clone()
+    } else {
+        condition.not()
+    };
+    let (word, other, op) = match (
+        sign_extended_word(&continuing.left),
+        sign_extended_word(&continuing.right),
+    ) {
+        (Some(word), None) => (word, &continuing.right, continuing.op.clone()),
+        (None, Some(word)) => {
+            let flipped = match continuing.op.as_str() {
+                "<" => ">",
+                ">" => "<",
+                "<=" => ">=",
+                ">=" => "<=",
+                other => other,
+            };
+            (word, &continuing.left, flipped.to_string())
+        }
+        _ => return None,
+    };
+    let (inner, shift) = word;
+    let bound = constant_of(other)?;
+    let AbstractExpression::Immediate(step) = expression_step(inner, register_step)? else {
+        return None;
+    };
+    iterations_before_leaving(&op, step, bound.checked_sub(shift)?)
+}
+
 fn trip_facts(
     op: &str,
     inclusive: bool,
@@ -786,14 +995,15 @@ fn summary_fact_to_ast(fact: &AbstractComparison) -> ast::Bool {
 }
 
 fn facts_for_exit(
-    record: &JumpRecord,
+    (record, ghosts): (&JumpRecord, &[Ghost]),
     counter: &LoopCounter,
     invariants: &[LoopInvariant],
     bounded: bool,
+    landings: &mut Vec<(AbstractComparison, AbstractComparison)>,
 ) -> Vec<AbstractComparison> {
-    let at_exit = &record.point.state;
+    let states = (record.point.state.0.as_slice(), ghosts);
     let branch = &record.point.condition;
-    let exit_step = |r: &RegisterValue| step_at(at_exit.0.iter().position(|c| c == r), invariants);
+    let exit_step = |r: &RegisterValue| step_at_exit(r, states, invariants);
     let Some((exit, walker, step)) = trip_of(branch, &exit_step) else {
         return Vec::new();
     };
@@ -807,10 +1017,15 @@ fn facts_for_exit(
     let trips = counter.total_for(record.point.pc);
     let distance = generate_expression(
         "-",
-        anchored_at_exit(exit, &at_exit.0, invariants),
-        anchored_at_exit(walker, &at_exit.0, invariants),
+        anchored_at_exit(exit, states, invariants),
+        anchored_at_exit(peel_unsigned(walker), states, invariants),
     );
+    let requirement = landing_requirement(&branch.op, &distance, &step);
+    let unwrapped = unwrapped_requirements(branch, record.taken, (exit, walker, &step), &distance);
     let mut facts = trip_facts(&branch.op, at_equality, distance, trips.clone(), &step);
+    if let (Some(requirement), Some(landing)) = (requirement, facts.first()) {
+        landings.push((requirement, landing.clone()));
+    }
     let reached = generate_expression(
         "+",
         counter.expression(),
@@ -821,7 +1036,100 @@ fn facts_for_exit(
         generate_expression("*", reached, step.clone()),
         generate_expression("*", trips, step),
     ));
+    for requirement in unwrapped {
+        landings.extend(facts.iter().map(|fact| (requirement.clone(), fact.clone())));
+    }
     facts
+}
+
+fn leaf_path(condition: &AbstractComparison, target: &RegisterValue) -> Option<Vec<bool>> {
+    fn search(e: &AbstractExpression, target: &RegisterValue, path: &mut Vec<bool>) -> bool {
+        match e {
+            AbstractExpression::Register(r) => **r == *target,
+            AbstractExpression::Expression(_, a, b) => {
+                for (side, child) in [(true, a), (false, b)] {
+                    path.push(side);
+                    if search(child, target, path) {
+                        return true;
+                    }
+                    path.pop();
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+    for (side, e) in [(true, &condition.left), (false, &condition.right)] {
+        let mut path = vec![side];
+        if search(e, target, &mut path) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+type GhostedRecord = (JumpRecord, Vec<Ghost>);
+
+fn branches_walked(loop_pc: usize, cycle: &[JumpRecord]) -> Vec<JumpRecord> {
+    let mut walked: Vec<JumpRecord> = Vec::new();
+    for record in cycle {
+        let pc = record.point.pc;
+        if pc == loop_pc
+            || walked.iter().any(|r| r.point.pc == pc)
+            || cycle
+                .iter()
+                .any(|other| other.point.pc == pc && other.taken != record.taken)
+        {
+            continue;
+        }
+        walked.push(record.clone());
+    }
+    walked
+}
+
+fn held_on_the_cycle(
+    (record, ghosts): (&JumpRecord, &[Ghost]),
+    counter: &LoopCounter,
+    invariants: &[LoopInvariant],
+    landings: &mut Vec<(AbstractComparison, AbstractComparison)>,
+) -> Option<AbstractComparison> {
+    let states = (record.point.state.0.as_slice(), ghosts);
+    let branch = &record.point.condition;
+    let exit_step = |r: &RegisterValue| step_at_exit(r, states, invariants);
+    let (exit, walker, step) = trip_of(branch, &exit_step)?;
+    if !is_unsigned(walker) {
+        return None;
+    }
+    let exit_anchor = anchored_at_exit(exit, states, invariants);
+    let walker_anchor = anchored_at_exit(peel_unsigned(walker), states, invariants);
+    let distance = generate_expression("-", exit_anchor.clone(), walker_anchor.clone());
+    let requirements =
+        unwrapped_requirements(branch, record.taken, (exit, walker, &step), &distance);
+    let last = generate_expression(
+        "+",
+        walker_anchor,
+        generate_expression(
+            "*",
+            generate_expression("-", counter.expression(), AbstractExpression::Immediate(1)),
+            step,
+        ),
+    );
+    let continuing = if record.taken {
+        branch.clone()
+    } else {
+        branch.not()
+    };
+    let fact = if *continuing.left == *walker {
+        AbstractComparison::new(&continuing.op, last, exit_anchor)
+    } else {
+        AbstractComparison::new(&continuing.op, exit_anchor, last)
+    };
+    landings.extend(
+        requirements
+            .into_iter()
+            .map(|requirement| (requirement, fact.clone())),
+    );
+    Some(fact)
 }
 
 fn stepped_by_the_counter(
@@ -878,10 +1186,15 @@ fn summarize(
     guard: (&AbstractComparison, &[Ghost]),
     continues_when: bool,
     invariants: Vec<LoopInvariant>,
-    states: (&ComputerState, &ComputerState, &[JumpRecord]),
+    states: (
+        &ComputerState,
+        &ComputerState,
+        &[GhostedRecord],
+        &[GhostedRecord],
+    ),
 ) -> Summary {
     let (condition, ghosts) = guard;
-    let (previous, current, cycle) = states;
+    let (previous, current, cycle, walked) = states;
     let counter = LoopCounter::for_loop(id);
     let name = counter.name().to_string();
 
@@ -1044,6 +1357,7 @@ fn summarize(
     let trip = trip_of(condition, &register_step);
 
     let mut exit_facts = Vec::new();
+    let mut landings = Vec::new();
     let bounded = is_ordered(&condition.op)
         && trip
             .as_ref()
@@ -1052,8 +1366,17 @@ fn summarize(
         let distance = generate_expression(
             "-",
             anchored(exit, &current.0, &previous.0, &invariants, ghosts),
-            anchored(walker, &current.0, &previous.0, &invariants, ghosts),
+            anchored(
+                peel_unsigned(walker),
+                &current.0,
+                &previous.0,
+                &invariants,
+                ghosts,
+            ),
         );
+        let requirement = landing_requirement(&condition.op, &distance, &step);
+        let unwrapped =
+            unwrapped_requirements(condition, continues_when, (exit, walker, &step), &distance);
         let totals = trip_facts(
             &condition.op,
             continues_at_equality(&condition.op, continues_when),
@@ -1061,6 +1384,16 @@ fn summarize(
             counter.total(),
             &step,
         );
+        if let (Some(requirement), Some(landing)) = (requirement, totals.first()) {
+            landings.push((requirement, landing.clone()));
+        }
+        for requirement in &unwrapped {
+            landings.extend(
+                totals
+                    .iter()
+                    .map(|fact| (requirement.clone(), fact.clone())),
+            );
+        }
         facts.extend(totals.iter().cloned());
         exit_facts.extend(totals);
         if let Some(op) = bound_toward(&step) {
@@ -1075,17 +1408,35 @@ fn summarize(
                     },
                 ),
             );
-            facts.push(AbstractComparison::new(
+            let fact = AbstractComparison::new(
                 op,
                 generate_expression("*", reached, step.clone()),
                 generate_expression("*", counter.total(), step),
-            ));
+            );
+            for requirement in unwrapped {
+                landings.push((requirement, fact.clone()));
+            }
+            facts.push(fact);
         }
     }
 
-    let exits = cycle.iter().map(|r| (r.point.pc, r.taken)).collect();
-    for record in cycle {
-        facts.extend(facts_for_exit(record, &counter, &invariants, bounded));
+    let exits = cycle.iter().map(|(r, _)| (r.point.pc, r.taken)).collect();
+    for (record, exit_ghosts) in cycle {
+        facts.extend(facts_for_exit(
+            (record, exit_ghosts),
+            &counter,
+            &invariants,
+            bounded,
+            &mut landings,
+        ));
+    }
+    for (record, branch_ghosts) in walked {
+        facts.extend(held_on_the_cycle(
+            (record, branch_ghosts),
+            &counter,
+            &invariants,
+            &mut landings,
+        ));
     }
 
     let side_at_summary = |on_left: bool, side: &AbstractExpression| {
@@ -1103,6 +1454,13 @@ fn summarize(
         side_at_summary(false, &condition.right),
     );
     let continuing = if continues_when { held } else { held.not() };
+    if let Some(most) = word_counter_bound(condition, continues_when, &register_step) {
+        facts.push(AbstractComparison::new(
+            "<=",
+            counter.expression(),
+            AbstractExpression::Immediate(most + SUMMARY_ITERATION),
+        ));
+    }
     facts.push(continuing.clone());
     let ghost_checks = ghosts
         .iter()
@@ -1119,6 +1477,7 @@ fn summarize(
         flags,
         facts,
         exit_facts,
+        landings,
         exits,
         ranges,
         ghost_checks,
@@ -2948,7 +3307,16 @@ impl ExecutionEngine {
             (
                 &entry_state,
                 &current_state,
-                &self.loop_exits(pc, branch_decision, &history[index + 1..]),
+                &self.exit_ghosts(
+                    self.loop_exits(pc, branch_decision, &history[index + 1..]),
+                    &history[..index],
+                    (pc, &entry_state.0, &attempt.invariants),
+                ),
+                &self.exit_ghosts(
+                    branches_walked(pc, &history[index + 1..]),
+                    &history[..index],
+                    (pc, &entry_state.0, &attempt.invariants),
+                ),
             ),
         );
         let continuing_now = if branch_decision {
@@ -2983,6 +3351,25 @@ impl ExecutionEngine {
         }
         let round = attempt.rounds;
         self.loop_attempts.insert(pc, attempt);
+
+        let unjustified: Vec<AbstractComparison> = summary
+            .landings
+            .iter()
+            .filter(|(requirement, _)| {
+                self.computer
+                    .solver
+                    .check_assumptions(&[summary_fact_to_ast(requirement).not()])
+                    != SatResult::Unsat
+            })
+            .map(|(_, landing)| landing.clone())
+            .collect();
+        for landing in &unjustified {
+            log::info!("{id} at line {pc} may step over its bound, dropping {landing}");
+        }
+        summary.facts.retain(|fact| !unjustified.contains(fact));
+        summary
+            .exit_facts
+            .retain(|fact| !unjustified.contains(fact));
 
         let scope_id = self.push_scope();
         for fact in &summary.facts {
@@ -3110,7 +3497,12 @@ impl ExecutionEngine {
         entry: &[RegisterValue],
         current: &[RegisterValue],
     ) -> Vec<LoopInvariant> {
-        let unstable = self.unstable_registers.borrow().get(&pc).cloned().unwrap_or_default();
+        let unstable = self
+            .unstable_registers
+            .borrow()
+            .get(&pc)
+            .cloned()
+            .unwrap_or_default();
         invariants
             .iter()
             .zip(entry.iter().zip(current.iter()))
@@ -3926,6 +4318,82 @@ impl ExecutionEngine {
             }
         }
         false
+    }
+
+    fn flag_source(&self, branch_pc: usize) -> Option<usize> {
+        let mut pc = branch_pc;
+        loop {
+            pc = pc.checked_sub(1)?;
+            let instruction = self.program.code.get(pc)?;
+            if matches!(
+                instruction.ty,
+                InstructionType::Label | InstructionType::ControlFlow
+            ) {
+                return None;
+            }
+            let source = match instruction.opcode.as_str() {
+                "subs" | "adds" => instruction.operands.get(1),
+                "cmp" | "cmn" => instruction.operands.first(),
+                op if op.ends_with('s') || op == "tst" || op == "ccmp" || op == "ccmn" => {
+                    return None;
+                }
+                _ => continue,
+            };
+            return match source {
+                Some(Operand::Register(RePrefix::X, n)) => Some(*n),
+                _ => None,
+            };
+        }
+    }
+
+    fn exit_ghosts(
+        &self,
+        exits: Vec<JumpRecord>,
+        before: &[JumpRecord],
+        (loop_pc, entry, steps): (usize, &[RegisterValue], &[LoopInvariant]),
+    ) -> Vec<GhostedRecord> {
+        let iteration_start = before.iter().rposition(|r| r.point.pc == loop_pc);
+        exits
+            .into_iter()
+            .map(|record| {
+                let earlier = iteration_start.and_then(|start| {
+                    before[start + 1..]
+                        .iter()
+                        .rev()
+                        .find(|r| r.point.pc == record.point.pc && r.taken == record.taken)
+                });
+                let ghosts = earlier.map_or_else(Vec::new, |earlier| {
+                    ghost_operands(
+                        &earlier.point.condition,
+                        &record.point.condition,
+                        &earlier.point.state.0,
+                        &record.point.state.0,
+                        |_| None,
+                    )
+                });
+                let ghosts = match (earlier, self.flag_source(record.point.pc)) {
+                    (None, Some(n)) => entry
+                        .get(n)
+                        .zip(steps.get(n))
+                        .and_then(|(value, step)| match step {
+                            LoopInvariant::Linear(AbstractExpression::Immediate(step))
+                                if *step != 0 =>
+                            {
+                                leaf_path(&record.point.condition, value).map(|path| Ghost {
+                                    path,
+                                    value: value.clone(),
+                                    step: *step,
+                                })
+                            }
+                            _ => None,
+                        })
+                        .into_iter()
+                        .collect(),
+                    _ => ghosts,
+                };
+                (record, ghosts)
+            })
+            .collect()
     }
 
     fn loop_exits(&self, loop_pc: usize, continues: bool, cycle: &[JumpRecord]) -> Vec<JumpRecord> {

@@ -1213,7 +1213,7 @@ fn arms_advancing_the_pointer_differently_do_not_close_the_loop() {
         "end:".to_string(),
         "ret".to_string(),
     ];
-    assert_out_of_bounds(analyze_accelerated(program, 4, 4), 8);
+    assert_rejected_access(analyze_accelerated(program, 4, 4));
 }
 
 fn rotated_loop(stride: i64, body: &[&str]) -> Vec<String> {
