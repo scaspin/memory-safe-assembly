@@ -73,6 +73,8 @@ fn calculate_size_of(ty: String) -> usize {
         "u32" => std::mem::size_of::<u32>(),
         "u64" => std::mem::size_of::<u64>(),
         "u128" => std::mem::size_of::<u128>(),
+        "f32" => std::mem::size_of::<f32>(),
+        "f64" => std::mem::size_of::<f64>(),
         "usize" => std::mem::size_of::<usize>(),
         "isize" => std::mem::size_of::<isize>(),
         p => {
@@ -140,6 +142,7 @@ fn calculate_type_of_array_ptr(a: &TypeArray) -> String {
 fn calculate_type_of_slice_ptr(a: &TypeSlice) -> String {
     match &*a.elem {
         Type::Path(b) => b.path.segments[0].ident.to_string(),
+        Type::Ptr(_) | Type::Reference(_) => "usize".to_string(),
         _ => todo!("calculate type of slice"),
     }
 }
@@ -312,6 +315,122 @@ fn pointer_contents(
     ))
 }
 
+fn pointer_array_shape(input: &ExprBinary) -> Option<(String, String, Expr, Expr)> {
+    if !matches!(input.op, BinOp::Eq(_)) {
+        return None;
+    }
+    let Expr::Path(array) = &*input.left else {
+        return None;
+    };
+    let Expr::Repeat(rows) = &*input.right else {
+        return None;
+    };
+    let Expr::Reference(row) = &*rows.expr else {
+        return None;
+    };
+    let Expr::Repeat(row) = &*row.expr else {
+        return None;
+    };
+    let Expr::Path(element) = &*row.expr else {
+        return None;
+    };
+    Some((
+        array.path.segments[0].ident.to_string(),
+        element.path.segments[0].ident.to_string(),
+        (*row.len).clone(),
+        (*rows.len).clone(),
+    ))
+}
+
+fn element_range_array(input: &ExprBinary) -> Option<String> {
+    let Expr::Index(indexed) = &*input.left else {
+        return None;
+    };
+    let Expr::Range(range) = &*indexed.index else {
+        return None;
+    };
+    let Expr::Path(path) = &*indexed.expr else {
+        return None;
+    };
+    (range.start.is_none() && range.end.is_none()).then(|| path.path.segments[0].ident.to_string())
+}
+
+fn row_pointer_type(ty: &Type) -> Option<(Type, bool)> {
+    let Type::Reference(reference) = ty else {
+        return None;
+    };
+    let Type::Slice(slice) = &*reference.elem else {
+        return None;
+    };
+    match &*slice.elem {
+        Type::Ptr(pointer) => Some((Type::Ptr(pointer.clone()), false)),
+        Type::Reference(row) => match &*row.elem {
+            Type::Slice(row) => {
+                let element = &row.elem;
+                Some((parse_quote! { *const #element }, true))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn conjuncts(e: &Expr, out: &mut Vec<AbstractComparison>) {
+    match e {
+        Expr::Paren(p) => conjuncts(&p.expr, out),
+        Expr::Binary(b) if matches!(b.op, BinOp::And(_)) => {
+            conjuncts(&b.left, out);
+            conjuncts(&b.right, out);
+        }
+        Expr::Binary(b) => out.push(binary_to_abstract_comparison(b)),
+        _ => emit_call_site_error!("a precondition must be a comparison"),
+    }
+}
+
+fn disjuncts(e: &Expr, out: &mut Vec<Vec<AbstractComparison>>) {
+    match e {
+        Expr::Paren(p) => disjuncts(&p.expr, out),
+        Expr::Binary(b) if matches!(b.op, BinOp::Or(_)) => {
+            disjuncts(&b.left, out);
+            disjuncts(&b.right, out);
+        }
+        _ => {
+            let mut all = Vec::new();
+            conjuncts(e, &mut all);
+            out.push(all);
+        }
+    }
+}
+
+fn casts_keep_their_values(e: &Expr) -> proc_macro2::TokenStream {
+    let inner: Vec<&Expr> = match e {
+        Expr::Cast(cast) => {
+            let integer = matches!(&*cast.ty, Type::Path(p) if p.path.get_ident().is_some_and(|t| {
+                ["i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize"]
+                    .contains(&t.to_string().as_str())
+            }));
+            let nested = casts_keep_their_values(&cast.expr);
+            if !integer {
+                return nested;
+            }
+            let (ty, value) = (&cast.ty, &cast.expr);
+            return quote! { #nested assert!(((#value) as #ty) as i128 == (#value) as i128); };
+        }
+        Expr::Binary(b) => vec![&b.left, &b.right],
+        Expr::Unary(u) => vec![&u.expr],
+        Expr::Paren(p) => vec![&p.expr],
+        Expr::Group(g) => vec![&g.expr],
+        Expr::Index(i) => vec![&i.expr, &i.index],
+        Expr::Reference(r) => vec![&r.expr],
+        Expr::Repeat(r) => vec![&r.expr, &r.len],
+        Expr::Array(a) => a.elems.iter().collect(),
+        Expr::Call(c) => c.args.iter().collect(),
+        Expr::MethodCall(m) => std::iter::once(&*m.receiver).chain(&m.args).collect(),
+        _ => Vec::new(),
+    };
+    inner.into_iter().map(casts_keep_their_values).collect()
+}
+
 fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
     let left_expr = syn_expr_to_abstract_expression(&input.left);
     let right_expr = syn_expr_to_abstract_expression(&input.right);
@@ -439,11 +558,44 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut element_bounds: Vec<(String, i64, ExprBinary)> = Vec::new();
     let mut pointer_values: Vec<(String, i64, String, &'static str, Option<(bool, Expr)>)> =
         Vec::new();
+    let mut element_ranges: Vec<(String, ExprBinary)> = Vec::new();
+    let mut pointer_arrays: Vec<(String, String, Expr, Expr)> = Vec::new();
+    let mut disjunctions: Vec<Vec<Vec<AbstractComparison>>> = Vec::new();
     let mut asserts = quote! {};
     let argument_list = attributes.argument_list.clone();
     if let Some(Expr::Array(a)) = argument_list.last() {
         for e in &a.elems {
+            let checks = casts_keep_their_values(e);
+            asserts = quote! { #asserts #checks };
             if let Expr::Binary(b) = e {
+                if let Some(shape) = pointer_array_shape(b) {
+                    pointer_arrays.push(shape);
+                    continue;
+                }
+                if matches!(b.op, BinOp::Or(_)) {
+                    let mut alternatives = Vec::new();
+                    disjuncts(e, &mut alternatives);
+                    disjunctions.push(alternatives);
+                    asserts = quote! { #asserts assert!(#e); };
+                    continue;
+                }
+                if matches!(b.op, BinOp::And(_)) {
+                    conjuncts(e, &mut invariants);
+                    asserts = quote! { #asserts assert!(#e); };
+                    continue;
+                }
+                if let Some(array) = element_range_array(b) {
+                    let Expr::Index(indexed) = &*b.left else {
+                        unreachable!()
+                    };
+                    let (collection, op, bound) = (&indexed.expr, &b.op, &b.right);
+                    asserts = quote! {
+                        #asserts
+                        assert!(#collection.iter().all(|e| (*e as i128) #op ((#bound) as i128)));
+                    };
+                    element_ranges.push((array, b.clone()));
+                    continue;
+                }
                 if let Some(value) = pointer_contents(b, &attributes.argument_list) {
                     let stored = &*b.left;
                     let source = match &*b.right {
@@ -459,7 +611,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                         other => other.clone(),
                     };
-                    asserts = quote! { #asserts assert!(#stored == #source as usize); };
+                    asserts = quote! { #asserts assert!((#stored) as usize == #source as usize); };
                     pointer_values.push(value);
                     continue;
                 }
@@ -604,9 +756,38 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         parse_quote! {&#real_struct_name { #fields } as *const #real_struct_name},
                     )
                 }
+            } else if let Expr::MethodCall(call) = i
+                && call.method == "as_ptr"
+                && let Expr::Path(receiver) = &*call.receiver
+                && let Some(ty) = input_types.get(&receiver.path.segments[0].ident.to_string())
+                && let Some((row, true)) = row_pointer_type(ty)
+            {
+                let rows = &call.receiver;
+                arguments_to_pass.push(parse_quote! {
+                    #rows.iter().map(|row| row.as_ptr()).collect::<Vec<#row>>().as_ptr()
+                });
             } else {
                 arguments_to_pass.push(i.clone());
             }
+        }
+    }
+
+    let mut unchecked_rows = Vec::new();
+    for (array, _, len, count) in &pointer_arrays {
+        let rows = Ident::new(array, proc_macro2::Span::call_site());
+        asserts = quote! { #asserts assert!(#rows.len() == (#count) as usize); };
+        match input_types.get(array).and_then(|ty| row_pointer_type(ty)) {
+            Some((_, true)) => {
+                asserts = quote! {
+                    #asserts
+                    assert!(#rows.iter().all(|row| row.len() == (#len) as usize));
+                };
+            }
+            Some((_, false)) => unchecked_rows.push(array.clone()),
+            None => emit_call_site_error!(
+                "{} must be a slice of row references or raw pointers",
+                array
+            ),
         }
     }
 
@@ -681,7 +862,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                         "as_ptr" => {
                             let n = Ident::new(&(var_name.clone() + "_as_ptr"), span);
-                            if let Some(size) = pointer_sizes.get(&var_name) {
+                            if let Some((row, _)) = input_types
+                                .get(&var_name)
+                                .and_then(|ty| row_pointer_type(ty))
+                            {
+                                new_args.push(parse_quote! {#n: *const #row});
+                            } else if let Some(size) = pointer_sizes.get(&var_name) {
                                 let element: Type =
                                     syn::parse_str(size).expect("pointer element type");
                                 new_args.push(parse_quote! {#n: *const #element});
@@ -886,101 +1072,230 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         program.push(line.unwrap_or(String::from("")));
     }
 
-    let mut engine = bums::engine::ExecutionEngine::new(program);
-    if let Some(bytes) = &attributes.red_zone {
-        engine.allow_red_zone(bytes.base10_parse().unwrap_or_else(|e| abort!(bytes, e)));
+    let mut combinations: Vec<Vec<AbstractComparison>> = vec![Vec::new()];
+    for alternatives in &disjunctions {
+        combinations = combinations
+            .iter()
+            .flat_map(|chosen| {
+                alternatives.iter().map(move |alternative| {
+                    let mut chosen = chosen.clone();
+                    chosen.extend(alternative.iter().cloned());
+                    chosen
+                })
+            })
+            .collect();
     }
+    let label = vars.item_fn.ident.to_string();
+    let _ = env_logger::try_init();
+    let mut failures: Vec<String> = Vec::new();
+    let mut findings: Vec<String> = Vec::new();
+    for chosen in &combinations {
+        let mut engine = bums::engine::ExecutionEngine::new(program.clone());
+        if let Some(bytes) = &attributes.red_zone {
+            engine.allow_red_zone(bytes.base10_parse().unwrap_or_else(|e| abort!(bytes, e)));
+        }
 
-    for (i, a) in arguments_to_memory_safe_regions.iter().enumerate() {
-        let name;
+        for (i, a) in arguments_to_memory_safe_regions.iter().enumerate() {
+            let name;
 
-        match a {
-            FnArg::Typed(pat_type) => {
-                match &*pat_type.pat {
-                    Pat::Ident(b) => {
-                        name = b.ident.clone().to_string();
-                    }
-                    Pat::Lit(l) => match &l.lit {
-                        Lit::Str(s) => name = s.value(),
-                        Lit::Int(i) => name = i.base10_digits().to_string(),
-                        _ => todo!("Regions literal pattern {:?}", l),
-                    },
-                    _ => todo!("Regions pattern pattern"),
-                }
-                match &*pat_type.ty {
-                    Type::Path(p) => {
-                        if ["usize", "u64", "u32", "u16", "u8"]
-                            .iter()
-                            .any(|unsigned| p.path.is_ident(unsigned))
-                            && !input_expressions.contains_key(&name)
-                        {
-                            engine.add_invariant(AbstractComparison::new(
-                                ">=",
-                                AbstractExpression::Abstract(name.clone()),
-                                AbstractExpression::Immediate(0),
-                            ));
+            match a {
+                FnArg::Typed(pat_type) => {
+                    match &*pat_type.pat {
+                        Pat::Ident(b) => {
+                            name = b.ident.clone().to_string();
                         }
-                        if let Some(binary) = input_expressions.get(&name) {
-                            match binary {
-                                Expr::Binary(b) => {
-                                    engine.add_abstract_expression_from(
-                                        i,
-                                        binary_to_abstract_expression(b),
-                                    );
-                                }
-                                _ => {
-                                    engine.add_abstract_expression_from(
-                                        i,
-                                        syn_expr_to_abstract_expression(binary),
-                                    );
-                                }
-                            }
-                        } else {
-                            engine.add_abstract_from(i, name.clone());
-                        }
+                        Pat::Lit(l) => match &l.lit {
+                            Lit::Str(s) => name = s.value(),
+                            Lit::Int(i) => name = i.base10_digits().to_string(),
+                            _ => todo!("Regions literal pattern {:?}", l),
+                        },
+                        _ => todo!("Regions pattern pattern"),
                     }
-                    Type::Array(a) => {
-                        let size = calculate_size_of_array(a);
-                        engine.add_abstract_from(i, name.clone());
-                        engine.add_region(
-                            RegionType::RW,
-                            name.clone(),
-                            AbstractExpression::Immediate(size as i64),
-                        );
-                    }
-                    Type::Ptr(a) => {
-                        engine.add_abstract_from(i, name.clone());
-
-                        let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
-                        let no_range = name.strip_suffix("_end_ptr_range").unwrap_or(no_mut_name);
-                        let no_suffix = no_range.strip_suffix("_as_ptr").unwrap_or(no_range);
-
-                        if let Some((scaled, expression)) = pointer_offsets.get(no_suffix) {
-                            let mut offset = syn_expr_to_abstract_expression(expression);
-                            if *scaled {
-                                if let Some(ty) = pointer_sizes.get(no_suffix) {
-                                    offset = generate_expression(
-                                        "*",
-                                        offset,
-                                        AbstractExpression::Immediate(
-                                            calculate_size_of(ty.clone()) as i64,
-                                        ),
-                                    );
-                                }
-                            }
-                            engine.add_abstract_expression_from(
-                                i,
-                                generate_expression(
-                                    "+",
+                    match &*pat_type.ty {
+                        Type::Path(p) => {
+                            if ["usize", "u64", "u32", "u16", "u8"]
+                                .iter()
+                                .any(|unsigned| p.path.is_ident(unsigned))
+                                && !input_expressions.contains_key(&name)
+                            {
+                                engine.add_invariant(AbstractComparison::new(
+                                    ">=",
                                     AbstractExpression::Abstract(name.clone()),
-                                    offset,
-                                ),
+                                    AbstractExpression::Immediate(0),
+                                ));
+                            }
+                            if let Some(binary) = input_expressions.get(&name) {
+                                match binary {
+                                    Expr::Binary(b) => {
+                                        engine.add_abstract_expression_from(
+                                            i,
+                                            binary_to_abstract_expression(b),
+                                        );
+                                    }
+                                    _ => {
+                                        engine.add_abstract_expression_from(
+                                            i,
+                                            syn_expr_to_abstract_expression(binary),
+                                        );
+                                    }
+                                }
+                            } else {
+                                engine.add_abstract_from(i, name.clone());
+                            }
+                        }
+                        Type::Array(a) => {
+                            let size = calculate_size_of_array(a);
+                            engine.add_abstract_from(i, name.clone());
+                            engine.add_region(
+                                RegionType::RW,
+                                name.clone(),
+                                AbstractExpression::Immediate(size as i64),
                             );
                         }
+                        Type::Ptr(a) => {
+                            engine.add_abstract_from(i, name.clone());
 
-                        match &*a.elem {
-                            Type::Path(p) => {
-                                if p.path.segments[0].ident.to_string().contains("struct") {
+                            let no_mut_name = name.strip_suffix("_as_mut_ptr").unwrap_or(&name);
+                            let no_range =
+                                name.strip_suffix("_end_ptr_range").unwrap_or(no_mut_name);
+                            let no_suffix = no_range.strip_suffix("_as_ptr").unwrap_or(no_range);
+
+                            if let Some((scaled, expression)) = pointer_offsets.get(no_suffix) {
+                                let mut offset = syn_expr_to_abstract_expression(expression);
+                                if *scaled {
+                                    if let Some(ty) = pointer_sizes.get(no_suffix) {
+                                        offset = generate_expression(
+                                            "*",
+                                            offset,
+                                            AbstractExpression::Immediate(calculate_size_of(
+                                                ty.clone(),
+                                            )
+                                                as i64),
+                                        );
+                                    }
+                                }
+                                engine.add_abstract_expression_from(
+                                    i,
+                                    generate_expression(
+                                        "+",
+                                        AbstractExpression::Abstract(name.clone()),
+                                        offset,
+                                    ),
+                                );
+                            }
+
+                            match &*a.elem {
+                                Type::Path(p) => {
+                                    if p.path.segments[0].ident.to_string().contains("struct") {
+                                        if let Some(bound) = input_sizes.get(no_suffix) {
+                                            if a.mutability.is_some() {
+                                                engine.add_region(
+                                                    RegionType::WRITE,
+                                                    name.clone(),
+                                                    AbstractExpression::Immediate(*bound as i64),
+                                                );
+                                            } else {
+                                                engine.add_region(
+                                                    RegionType::READ,
+                                                    name.clone(),
+                                                    AbstractExpression::Immediate(*bound as i64),
+                                                );
+                                            }
+                                        }
+
+                                        let s = new_structs
+                                            .get(no_suffix)
+                                            .expect("Need well defined struct");
+                                        let fields: Vec<&Field> = s.fields.iter().collect();
+                                        let (offsets, _) =
+                                            tuple_layout(fields.iter().map(|f| &f.ty));
+                                        let field_name = |f: &Field| {
+                                            f.ident
+                                                .clone()
+                                                .expect("tuple fields are named")
+                                                .to_string()
+                                        };
+                                        for (k, (field, offset)) in
+                                            fields.iter().zip(offsets.iter()).enumerate()
+                                        {
+                                            let value =
+                                                AbstractExpression::Abstract(field_name(field));
+                                            match &field.ty {
+                                                Type::Path(_) => {
+                                                    engine.add_abstract_to_memory(
+                                                        name.clone(),
+                                                        *offset as i64,
+                                                        value,
+                                                    );
+                                                }
+                                                Type::Ptr(pointer) => {
+                                                    let Some(length_field) = fields.get(k + 1)
+                                                    else {
+                                                        abort_call_site!(
+                                                            "a pointer field must be followed by its usize length"
+                                                        );
+                                                    };
+                                                    let element = match &*pointer.elem {
+                                                        Type::Path(p) => {
+                                                            p.path.segments[0].ident.to_string()
+                                                        }
+                                                        _ => {
+                                                            todo!(
+                                                                "pointer field to {:?}",
+                                                                pointer.elem
+                                                            )
+                                                        }
+                                                    };
+                                                    engine.add_abstract_to_memory(
+                                                        name.clone(),
+                                                        *offset as i64,
+                                                        value,
+                                                    );
+                                                    engine.add_region(
+                                                        if pointer.mutability.is_some() {
+                                                            RegionType::WRITE
+                                                        } else {
+                                                            RegionType::READ
+                                                        },
+                                                        field_name(field),
+                                                        byte_length(
+                                                            &field_name(length_field),
+                                                            Some(&element),
+                                                        ),
+                                                    );
+                                                }
+                                                Type::Array(_) => {}
+                                                _ => todo!("unsupported tuple type {:?}", field),
+                                            }
+                                        }
+                                        continue;
+                                    }
+
+                                    if name.contains("_end_ptr_range") {
+                                        let length = byte_length(
+                                            &(no_suffix.to_owned() + "_len"),
+                                            pointer_sizes.get(no_suffix),
+                                        );
+                                        let pointer_name = no_suffix.to_owned() + "_as_ptr";
+
+                                        engine.add_region(
+                                            RegionType::READ,
+                                            pointer_name.clone(),
+                                            length.clone(),
+                                        );
+
+                                        engine.add_abstract_expression_from(
+                                            i,
+                                            generate_expression(
+                                                "+",
+                                                AbstractExpression::Abstract(pointer_name),
+                                                length,
+                                            ),
+                                        );
+
+                                        continue;
+                                    }
+
                                     if let Some(bound) = input_sizes.get(no_suffix) {
                                         if a.mutability.is_some() {
                                             engine.add_region(
@@ -995,253 +1310,249 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
                                                 AbstractExpression::Immediate(*bound as i64),
                                             );
                                         }
+                                        continue;
                                     }
 
-                                    let s = new_structs
-                                        .get(no_suffix)
-                                        .expect("Need well defined struct");
-                                    let fields: Vec<&Field> = s.fields.iter().collect();
-                                    let (offsets, _) = tuple_layout(fields.iter().map(|f| &f.ty));
-                                    let field_name = |f: &Field| {
-                                        f.ident.clone().expect("tuple fields are named").to_string()
-                                    };
-                                    for (k, (field, offset)) in
-                                        fields.iter().zip(offsets.iter()).enumerate()
-                                    {
-                                        let value = AbstractExpression::Abstract(field_name(field));
-                                        match &field.ty {
-                                            Type::Path(_) => {
-                                                engine.add_abstract_to_memory(
-                                                    name.clone(),
-                                                    *offset as i64,
-                                                    value,
-                                                );
-                                            }
-                                            Type::Ptr(pointer) => {
-                                                let Some(length_field) = fields.get(k + 1) else {
-                                                    abort_call_site!(
-                                                        "a pointer field must be followed by its usize length"
-                                                    );
-                                                };
-                                                let element = match &*pointer.elem {
-                                                    Type::Path(p) => {
-                                                        p.path.segments[0].ident.to_string()
-                                                    }
-                                                    _ => {
-                                                        todo!("pointer field to {:?}", pointer.elem)
-                                                    }
-                                                };
-                                                engine.add_abstract_to_memory(
-                                                    name.clone(),
-                                                    *offset as i64,
-                                                    value,
-                                                );
-                                                engine.add_region(
-                                                    if pointer.mutability.is_some() {
-                                                        RegionType::WRITE
-                                                    } else {
-                                                        RegionType::READ
-                                                    },
-                                                    field_name(field),
-                                                    byte_length(
-                                                        &field_name(length_field),
-                                                        Some(&element),
-                                                    ),
-                                                );
-                                            }
-                                            Type::Array(_) => {}
-                                            _ => todo!("unsupported tuple type {:?}", field),
-                                        }
+                                    let bound = no_suffix.to_owned() + "_len";
+                                    let length = byte_length(&bound, pointer_sizes.get(no_suffix));
+                                    if a.mutability.is_some() {
+                                        engine.add_region(RegionType::WRITE, name.clone(), length);
+                                    } else {
+                                        engine.add_region(RegionType::READ, name.clone(), length);
                                     }
-                                    continue;
                                 }
-
-                                if name.contains("_end_ptr_range") {
+                                Type::Ptr(_) => {
                                     let length = byte_length(
                                         &(no_suffix.to_owned() + "_len"),
-                                        pointer_sizes.get(no_suffix),
+                                        Some(&"usize".to_string()),
                                     );
-                                    let pointer_name = no_suffix.to_owned() + "_as_ptr";
-
-                                    engine.add_region(
-                                        RegionType::READ,
-                                        pointer_name.clone(),
-                                        length.clone(),
-                                    );
-
-                                    engine.add_abstract_expression_from(
-                                        i,
-                                        generate_expression(
-                                            "+",
-                                            AbstractExpression::Abstract(pointer_name),
-                                            length,
-                                        ),
-                                    );
-
-                                    continue;
-                                }
-
-                                if let Some(bound) = input_sizes.get(no_suffix) {
-                                    if a.mutability.is_some() {
-                                        engine.add_region(
-                                            RegionType::WRITE,
-                                            name.clone(),
-                                            AbstractExpression::Immediate(*bound as i64),
-                                        );
+                                    let kind = if a.mutability.is_some() {
+                                        RegionType::WRITE
                                     } else {
-                                        engine.add_region(
-                                            RegionType::READ,
-                                            name.clone(),
-                                            AbstractExpression::Immediate(*bound as i64),
-                                        );
-                                    }
-                                    continue;
+                                        RegionType::READ
+                                    };
+                                    engine.add_region(kind, name.clone(), length);
                                 }
-
-                                let bound = no_suffix.to_owned() + "_len";
-                                let length = byte_length(&bound, pointer_sizes.get(no_suffix));
-                                if a.mutability.is_some() {
-                                    engine.add_region(RegionType::WRITE, name.clone(), length);
-                                } else {
-                                    engine.add_region(RegionType::READ, name.clone(), length);
-                                }
+                                _ => todo!("unsupported pointer type to pass to asm {:?}", a.elem),
                             }
-                            _ => todo!("unsupported pointer type to pass to asm {:?}", a.elem),
                         }
+                        _ => todo!("yet unsupported type: {:?}", pat_type.ty),
                     }
-                    _ => todo!("yet unsupported type: {:?}", pat_type.ty),
                 }
+                _ => todo!("lib"),
             }
-            _ => todo!("lib"),
         }
-    }
 
-    for (region, offset, slice, suffix, step) in pointer_values {
-        let base = format!("{}{}", slice, suffix);
-        if passed_pointer(&slice, &argument_list).is_none() {
-            let kind = if suffix == "_as_mut_ptr" {
-                RegionType::RW
-            } else {
-                RegionType::READ
-            };
-            engine.add_region(
-                kind,
-                base.clone(),
-                byte_length(&(slice.clone() + "_len"), pointer_sizes.get(&slice)),
-            );
+        for (region, offset, slice, suffix, step) in pointer_values.iter().cloned() {
+            let base = format!("{}{}", slice, suffix);
+            if passed_pointer(&slice, &argument_list).is_none() {
+                let kind = if suffix == "_as_mut_ptr" {
+                    RegionType::RW
+                } else {
+                    RegionType::READ
+                };
+                engine.add_region(
+                    kind,
+                    base.clone(),
+                    byte_length(&(slice.clone() + "_len"), pointer_sizes.get(&slice)),
+                );
+            }
+            let mut value = AbstractExpression::Abstract(base);
+            if let Some((scaled, expression)) = step {
+                let mut step = syn_expr_to_abstract_expression(&expression);
+                if scaled {
+                    if let Some(ty) = pointer_sizes.get(&slice) {
+                        step = generate_expression(
+                            "*",
+                            step,
+                            AbstractExpression::Immediate(calculate_size_of(ty.clone()) as i64),
+                        );
+                    }
+                }
+                value = generate_expression("+", value, step);
+            }
+            engine.add_abstract_to_memory(region, offset, value);
         }
-        let mut value = AbstractExpression::Abstract(base);
-        if let Some((scaled, expression)) = step {
-            let mut step = syn_expr_to_abstract_expression(&expression);
-            if scaled {
-                if let Some(ty) = pointer_sizes.get(&slice) {
-                    step = generate_expression(
-                        "*",
-                        step,
-                        AbstractExpression::Immediate(calculate_size_of(ty.clone()) as i64),
-                    );
+        for (name, ty) in &input_types {
+            if let Type::Path(p) = ty {
+                if ["usize", "u64", "u32", "u16", "u8"]
+                    .iter()
+                    .any(|unsigned| p.path.is_ident(unsigned))
+                {
+                    engine.add_invariant(AbstractComparison::new(
+                        ">=",
+                        AbstractExpression::Abstract(name.clone()),
+                        AbstractExpression::Immediate(0),
+                    ));
                 }
             }
-            value = generate_expression("+", value, step);
-        }
-        engine.add_abstract_to_memory(region, offset, value);
-    }
-    for (name, ty) in &input_types {
-        if let Type::Path(p) = ty {
-            if ["usize", "u64", "u32", "u16", "u8"]
-                .iter()
-                .any(|unsigned| p.path.is_ident(unsigned))
+            if let Type::Reference(r) = ty
+                && let Type::Slice(sl) = &*r.elem
             {
                 engine.add_invariant(AbstractComparison::new(
-                    ">=",
-                    AbstractExpression::Abstract(name.clone()),
-                    AbstractExpression::Immediate(0),
+                    "<=",
+                    byte_length(
+                        &(name.clone() + "_len"),
+                        Some(&calculate_type_of_slice_ptr(sl)),
+                    ),
+                    AbstractExpression::Immediate(isize::MAX as i64),
                 ));
             }
         }
-        if let Type::Reference(r) = ty
-            && let Type::Slice(sl) = &*r.elem
-        {
+        for (array, index, comparison) in &element_bounds {
+            let Some((suffix, _)) = passed_pointer(array, &argument_list) else {
+                emit_call_site_error!("{} is not passed as a pointer", array);
+                continue;
+            };
+            let region = array.clone() + suffix;
+            let element = input_types
+                .get(array)
+                .and_then(|ty| match ty {
+                    Type::Reference(r) => match &*r.elem {
+                        Type::Slice(sl) => Some(calculate_type_of_slice_ptr(sl)),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    emit_call_site_error!("{} is not a slice, so it has no element size", array);
+                    "u8".to_string()
+                });
+            let width = calculate_size_of(element.clone()) as i64;
+            let symbol = format!("{region}[{index}]");
+            engine.add_element_fact(region, *index, width, symbol.clone());
+            if element.starts_with('u') {
+                engine.add_invariant(AbstractComparison::new(
+                    ">=",
+                    AbstractExpression::Abstract(symbol.clone()),
+                    AbstractExpression::Immediate(0),
+                ));
+            }
             engine.add_invariant(AbstractComparison::new(
-                "<=",
-                byte_length(
-                    &(name.clone() + "_len"),
-                    Some(&calculate_type_of_slice_ptr(sl)),
-                ),
-                AbstractExpression::Immediate(isize::MAX as i64),
+                operator_of(&comparison.op),
+                AbstractExpression::Abstract(symbol),
+                syn_expr_to_abstract_expression(&comparison.right),
             ));
+        }
+        for (array, comparison) in &element_ranges {
+            let suffix =
+                passed_pointer(array, &argument_list).map_or("_as_ptr", |(suffix, _)| suffix);
+            let element = input_types
+                .get(array)
+                .and_then(|ty| match ty {
+                    Type::Reference(r) => match &*r.elem {
+                        Type::Slice(sl) => Some(calculate_type_of_slice_ptr(sl)),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    emit_call_site_error!("{} is not a slice, so it has no element size", array);
+                    "u8".to_string()
+                });
+            if element.starts_with('f') {
+                emit_call_site_error!("an element range needs integer elements, not {}", element);
+            }
+            engine.add_element_range(
+                array.clone() + suffix,
+                calculate_size_of(element.clone()) as i64,
+                element.starts_with('i'),
+                operator_of(&comparison.op),
+                syn_expr_to_abstract_expression(&comparison.right),
+            );
+        }
+        for (array, element, len, count) in &pointer_arrays {
+            let Some((suffix, _)) = passed_pointer(array, &argument_list) else {
+                emit_call_site_error!("{} is not passed as a pointer", array);
+                continue;
+            };
+            engine.add_invariant(AbstractComparison::new(
+                "==",
+                AbstractExpression::Abstract(array.clone() + "_len"),
+                syn_expr_to_abstract_expression(count),
+            ));
+            let row = array.clone() + "_row";
+            engine.add_region(
+                RegionType::READ,
+                row.clone(),
+                generate_expression(
+                    "*",
+                    syn_expr_to_abstract_expression(len),
+                    AbstractExpression::Immediate(calculate_size_of(element.clone()) as i64),
+                ),
+            );
+            engine.add_pointer_elements(array.clone() + suffix, row);
+        }
+        for i in invariants.iter().cloned() {
+            engine.add_invariant(i);
+        }
+        for c in chosen {
+            match (c.op.as_str(), &*c.left, &*c.right) {
+                (
+                    "==",
+                    AbstractExpression::Abstract(name),
+                    AbstractExpression::Immediate(value),
+                )
+                | (
+                    "==",
+                    AbstractExpression::Immediate(value),
+                    AbstractExpression::Abstract(name),
+                ) => engine.pin(name, *value),
+                _ => engine.add_invariant(c.clone()),
+            }
+        }
+        if let ReturnType::Type(_, ty) = output
+            && let Type::Array(a) = &**ty
+        {
+            let result = format!("{fn_name}_result");
+            engine.add_abstract("x8", AbstractExpression::Abstract(result.clone()));
+            engine.add_region(
+                RegionType::WRITE,
+                result,
+                AbstractExpression::Immediate(calculate_size_of_array(a) as i64),
+            );
+        }
+        log::info!(target: "bums_macros", "checking {label}");
+        let started = std::time::Instant::now();
+        let res = engine.start(label.clone());
+        log::info!(target: "bums_macros", "{label}: {:.1}s, {}", started.elapsed().as_secs_f64(), if res.is_ok() { "verified" } else { "failed" });
+        let res = res.and_then(|ok| {
+            let unread = engine.unread_element_facts();
+            if unread.is_empty() {
+                Ok(ok)
+            } else {
+                Err(std::io::Error::other(format!(
+                    "{}: element precondition never read by the assembly: {}",
+                    label,
+                    unread.join(", ")
+                )))
+            }
+        });
+        if let Err(error) = res {
+            failures.push(if combinations.len() > 1 {
+                let assumed: Vec<String> = chosen.iter().map(|c| c.to_string()).collect();
+                format!("assuming {}: {error}", assumed.join(" && "))
+            } else {
+                error.to_string()
+            });
+        }
+        for finding in engine.findings() {
+            if !findings.contains(&finding) {
+                findings.push(finding);
+            }
         }
     }
-    for (array, index, comparison) in &element_bounds {
-        let Some((suffix, _)) = passed_pointer(array, &argument_list) else {
-            emit_call_site_error!("{} is not passed as a pointer", array);
-            continue;
-        };
-        let region = array.clone() + suffix;
-        let element = input_types
-            .get(array)
-            .and_then(|ty| match ty {
-                Type::Reference(r) => match &*r.elem {
-                    Type::Slice(sl) => Some(calculate_type_of_slice_ptr(sl)),
-                    _ => None,
-                },
-                _ => None,
-            })
-            .unwrap_or_else(|| {
-                emit_call_site_error!("{} is not a slice, so it has no element size", array);
-                "u8".to_string()
-            });
-        let width = calculate_size_of(element.clone()) as i64;
-        let symbol = format!("{region}[{index}]");
-        engine.add_element_fact(region, *index, width, symbol.clone());
-        if element.starts_with('u') {
-            engine.add_invariant(AbstractComparison::new(
-                ">=",
-                AbstractExpression::Abstract(symbol.clone()),
-                AbstractExpression::Immediate(0),
-            ));
-        }
-        engine.add_invariant(AbstractComparison::new(
-            operator_of(&comparison.op),
-            AbstractExpression::Abstract(symbol),
-            syn_expr_to_abstract_expression(&comparison.right),
+    for array in &unchecked_rows {
+        findings.push(format!(
+            "the rows of {array} are raw pointers, so their length is not checked at run time"
         ));
     }
-    for i in invariants {
-        engine.add_invariant(i);
-    }
-    if let ReturnType::Type(_, ty) = output
-        && let Type::Array(a) = &**ty
-    {
-        let result = format!("{fn_name}_result");
-        engine.add_abstract("x8", AbstractExpression::Abstract(result.clone()));
-        engine.add_region(
-            RegionType::WRITE,
-            result,
-            AbstractExpression::Immediate(calculate_size_of_array(a) as i64),
-        );
-    }
-    let label = vars.item_fn.ident.to_string();
-    let _ = env_logger::try_init();
-    log::info!(target: "bums_macros", "checking {label}");
-    let started = std::time::Instant::now();
-    let res = engine.start(label.clone());
-    log::info!(target: "bums_macros", "{label}: {:.1}s, {}", started.elapsed().as_secs_f64(), if res.is_ok() { "verified" } else { "failed" });
+    let res: std::result::Result<(), String> = if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
+    };
 
-    let res = res.and_then(|ok| {
-        let unread = engine.unread_element_facts();
-        if unread.is_empty() {
-            Ok(ok)
-        } else {
-            Err(std::io::Error::other(format!(
-                "{}: element precondition never read by the assembly: {}",
-                label,
-                unread.join(", ")
-            )))
-        }
-    });
-
-    let findings = engine.findings();
     let token_stream: TokenStream = if findings.is_empty() {
         token_stream
     } else {
