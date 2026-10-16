@@ -254,6 +254,13 @@ impl ARMCORTEXA {
             }
         };
 
+        let shifted_reg = match (op, reg3, reg2) {
+            ("lsr", Operand::Immediate(k), Operand::Register(prefix, _)) if *k > 0 => {
+                let bits = if *prefix == RePrefix::W { 32 } else { 64 };
+                self.field_of_unknown(shifted_reg, bits - k, false)
+            }
+            _ => shifted_reg,
+        };
         self.set_register(reg1, shifted_reg.kind, shifted_reg.base, shifted_reg.offset);
     }
 
@@ -433,6 +440,13 @@ impl ARMCORTEXA {
                     }
                 }
                 RegisterKind::Number => self.set_unknown_flags(),
+                RegisterKind::Immediate if bits == 32 => {
+                    let (a, b) = (r1.offset as i32, r2.offset as i32);
+                    self.neg = Some(FlagValue::Real(a < b));
+                    self.zero = Some(FlagValue::Real(a == b));
+                    self.carry = Some(FlagValue::Real((a as u32) >= (b as u32)));
+                    self.overflow = Some(FlagValue::Real(a.overflowing_sub(b).1));
+                }
                 RegisterKind::Immediate => {
                     self.neg = if r1.offset < r2.offset {
                         Some(FlagValue::Real(true))
@@ -563,6 +577,13 @@ impl ARMCORTEXA {
                     self.overflow = overflow;
                 }
                 RegisterKind::Number => self.set_unknown_flags(),
+                RegisterKind::Immediate if bits == 32 => {
+                    let (a, b) = (r1.offset as i32, r2.offset as i32);
+                    self.neg = Some(FlagValue::Real((a as i64 + b as i64) < 0));
+                    self.zero = Some(FlagValue::Real(a.wrapping_add(b) == 0));
+                    self.carry = Some(FlagValue::Real((a as u32).overflowing_add(b as u32).1));
+                    self.overflow = Some(FlagValue::Real(a.overflowing_add(b).1));
+                }
                 RegisterKind::Immediate => {
                     let (sum, signed_overflow) = r1.offset.overflowing_add(r2.offset);
                     self.neg = Some(FlagValue::Real((r1.offset as i128 + r2.offset as i128) < 0));
