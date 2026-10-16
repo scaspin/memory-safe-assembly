@@ -195,8 +195,8 @@ bl              Ledwards25519_scalarmuldouble_alt_epdouble
 mov             x19, #252
 ldr             x0, [sp, #((1*32)+24)]
 lsr             x20, x0, #60
-adrp            x14, {4}@PAGE
-add             x14, x14, {4}@PAGEOFF
+adrp            x14, edwards25519_scalarmuldouble_alt_constant@PAGE
+add             x14, x14, edwards25519_scalarmuldouble_alt_constant@PAGEOFF
 mov             x0, #1
 mov             x1, xzr
 mov             x2, xzr
@@ -625,8 +625,8 @@ and             x0, x3, #15
 subs            x20, x0, #8
 cneg            x20, x20, cc
 csetm           x21, cc
-adrp            x14, {4}@PAGE
-add             x14, x14, {4}@PAGEOFF
+adrp            x14, edwards25519_scalarmuldouble_alt_constant@PAGE
+add             x14, x14, edwards25519_scalarmuldouble_alt_constant@PAGEOFF
 mov             x0, #1
 mov             x1, xzr
 mov             x2, xzr
@@ -5554,3 +5554,103 @@ add             sp, sp, #(6*32+0)
 ret
 hoist_finish:
 ret
+
+.data
+.size edwards25519_scalarmuldouble_alt_constant, 768
+edwards25519_scalarmuldouble_alt_constant:
+	.quad	0x9d103905d740913e
+	.quad	0xfd399f05d140beb3
+	.quad	0xa5c18434688f8a09
+	.quad	0x44fd2f9298f81267
+	.quad	0x2fbc93c6f58c3b85
+	.quad	0xcf932dc6fb8c0e19
+	.quad	0x270b4898643d42c2
+	.quad	0x7cf9d3a33d4ba65
+	.quad	0xabc91205877aaa68
+	.quad	0x26d9e823ccaac49e
+	.quad	0x5a1b7dcbdd43598c
+	.quad	0x6f117b689f0c65a8
+	.quad	0x8a99a56042b4d5a8
+	.quad	0x8f2b810c4e60acf6
+	.quad	0xe09e236bb16e37aa
+	.quad	0x6bb595a669c92555
+	.quad	0x9224e7fc933c71d7
+	.quad	0x9f469d967a0ff5b5
+	.quad	0x5aa69a65e1d60702
+	.quad	0x590c063fa87d2e2e
+	.quad	0x43faa8b3a59b7a5f
+	.quad	0x36c16bdd5d9acf78
+	.quad	0x500fa0840b3d6a31
+	.quad	0x701af5b13ea50b73
+	.quad	0x56611fe8a4fcd265
+	.quad	0x3bd353fde5c1ba7d
+	.quad	0x8131f31a214bd6bd
+	.quad	0x2ab91587555bda62
+	.quad	0xaf25b0a84cee9730
+	.quad	0x25a8430e8864b8a
+	.quad	0xc11b50029f016732
+	.quad	0x7a164e1b9a80f8f4
+	.quad	0x14ae933f0dd0d889
+	.quad	0x589423221c35da62
+	.quad	0xd170e5458cf2db4c
+	.quad	0x5a2826af12b9b4c6
+	.quad	0x95fe050a056818bf
+	.quad	0x327e89715660faa9
+	.quad	0xc3e8e3cd06a05073
+	.quad	0x27933f4c7445a49a
+	.quad	0x287351b98efc099f
+	.quad	0x6765c6f47dfd2538
+	.quad	0xca348d3dfb0a9265
+	.quad	0x680e910321e58727
+	.quad	0x5a13fbe9c476ff09
+	.quad	0x6e9e39457b5cc172
+	.quad	0x5ddbdcf9102b4494
+	.quad	0x7f9d0cbf63553e2b
+	.quad	0x7f9182c3a447d6ba
+	.quad	0xd50014d14b2729b7
+	.quad	0xe33cf11cb864a087
+	.quad	0x154a7e73eb1b55f3
+	.quad	0xa212bc4408a5bb33
+	.quad	0x8d5048c3c75eed02
+	.quad	0xdd1beb0c5abfec44
+	.quad	0x2945ccf146e206eb
+	.quad	0xbcbbdbf1812a8285
+	.quad	0x270e0807d0bdd1fc
+	.quad	0xb41b670b1bbda72d
+	.quad	0x43aabe696b3bb69a
+	.quad	0x499806b67b7d8ca4
+	.quad	0x575be28427d22739
+	.quad	0xbb085ce7204553b9
+	.quad	0x38b64c41ae417884
+	.quad	0x3a0ceeeb77157131
+	.quad	0x9b27158900c8af88
+	.quad	0x8065b668da59a736
+	.quad	0x51e57bb6a2cc38bd
+	.quad	0x85ac326702ea4b71
+	.quad	0xbe70e00341a1bb01
+	.quad	0x53e4a24b083bc144
+	.quad	0x10b8e91a9f0d61e3
+	.quad	0xba6f2c9aaa3221b1
+	.quad	0x6ca021533bba23a7
+	.quad	0x9dea764f92192c3a
+	.quad	0x1d6edd5d2e5317e0
+	.quad	0x6b1a5cd0944ea3bf
+	.quad	0x7470353ab39dc0d2
+	.quad	0x71b2528228542e49
+	.quad	0x461bea69283c927e
+	.quad	0xf1836dc801b8b3a2
+	.quad	0xb3035f47053ea49a
+	.quad	0x529c41ba5877adf3
+	.quad	0x7a9fbb1c6a0f90a7
+	.quad	0xe2a75dedf39234d9
+	.quad	0x963d7680e1b558f9
+	.quad	0x2c2741ac6e3c23fb
+	.quad	0x3a9024a1320e01c3
+	.quad	0x59b7596604dd3e8f
+	.quad	0x6cb30377e288702c
+	.quad	0xb1339c665ed9c323
+	.quad	0x915e76061bce52f
+	.quad	0xe7c1f5d9c9a2911a
+	.quad	0xb8a371788bcca7d7
+	.quad	0x636412190eb62a32
+	.quad	0x26907c5c2ecc4e95

@@ -31,6 +31,27 @@ was ported from, unique per function by construction), which the checker's
 plain name-indexed label lookup already handles -- the same reason s2n-
 bignum's own named labels already worked against it elsewhere.
 
+A few functions address a `static` Rust array (a precomputed table) via a
+`sym` operand to the `asm!` call rather than a register. The expanded
+template text leaves these as a bare `{N}@PAGE`/`{N}@PAGEOFF` placeholder
+-- `N` the operand's position, counting from zero after the template
+string -- because unlike a register operand (which the compiler can and
+does substitute textually at this same macro-expansion stage), a symbol's
+address is only known at link time. This script resolves `{N}` back to
+that operand's symbol name by parsing the `asm!` call's own operand list
+(looking for a bare or named `sym IDENT` at position N), the same way the
+compiler will when it actually lowers the asm block. Having the real name
+back, it then looks for a `static IDENT: [uN; LEN] = [...]` (or `iN`) item
+of that name anywhere in the same module -- `cargo expand`'s module-level
+output already contains it, being the same file -- parses its flat
+element list, and appends it to the `.S` file as a GAS `.data` section
+(`.size`, a label, and one directive line per element), which is exactly
+the shape the checker's loader already knows how to lay out and size a
+region from (s2n-bignum's own extracted `.S` files carry their constant
+tables the identical way; see loader.rs). A referenced static this can't
+find or can't parse as a flat numeric array is reported, not silently
+skipped, since nothing here is specific to any one function or table.
+
 Setup (once per graviola clone):
     git clone https://github.com/ctz/graviola <path>
     rustup toolchain install nightly   # cargo-expand needs it
@@ -132,9 +153,9 @@ def unescape_rust_string(body: str) -> str:
     return "".join(out)
 
 
-def extract_first_string_literal(text: str, start: int) -> str:
-    """The Rust string literal beginning at the first `"` at or after
-    `start`, as its unescaped contents."""
+def find_string_literal_span(text: str, start: int) -> tuple[int, int]:
+    """The (opening quote index, closing quote index) of the Rust string
+    literal beginning at the first `"` at or after `start`."""
     i = text.index('"', start)
     j = i + 1
     while True:
@@ -144,10 +165,163 @@ def extract_first_string_literal(text: str, start: int) -> str:
         if text[j] == '"':
             break
         j += 1
+    return i, j
+
+
+def extract_first_string_literal(text: str, start: int) -> str:
+    """The Rust string literal beginning at the first `"` at or after
+    `start`, as its unescaped contents."""
+    i, j = find_string_literal_span(text, start)
     return unescape_rust_string(text[i + 1 : j])
 
 
-def parse_expanded(expanded: str, name: str) -> list[str]:
+def find_matching_delimiter(text: str, open_index: int) -> int:
+    """Index of the `)`/`]`/`}` matching the opening delimiter at
+    `open_index`, skipping over nested delimiter groups and "..." string
+    literals (so a bracket or comma inside one of those doesn't confuse
+    the count)."""
+    depth = 0
+    i = open_index
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    raise ValueError("unbalanced delimiters")
+
+
+def split_top_level(text: str) -> list[str]:
+    """`text` split on commas that sit outside any nested (), [], {} group
+    or "..." string literal."""
+    pieces = []
+    depth = 0
+    start = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            pieces.append(text[start:i])
+            start = i + 1
+        i += 1
+    pieces.append(text[start:i])
+    return [p.strip() for p in pieces if p.strip()]
+
+
+SYM_OPERAND_RE = re.compile(r"^(?:[\w:]+\s*=\s*)?sym\s+([\w:]+)$")
+
+
+def parse_sym_operands(expanded: str, asm_at: int) -> dict[int, str]:
+    """Maps each `asm!` operand's position (0-based, counting from the
+    first operand after the template string) to the symbol name of every
+    bare or named `sym IDENT` operand in this call."""
+    open_paren = asm_at + len("asm!")
+    close_paren = find_matching_delimiter(expanded, open_paren)
+    _, str_end = find_string_literal_span(expanded, open_paren)
+    operands = split_top_level(expanded[str_end + 1 : close_paren])
+    syms = {}
+    for i, operand in enumerate(operands):
+        m = SYM_OPERAND_RE.match(operand)
+        if m:
+            syms[i] = m.group(1)
+    return syms
+
+
+def substitute_sym_placeholders(raw: str, syms: dict[int, str]) -> tuple[str, set[str]]:
+    """Replaces every `{N}` in `raw` that refers to a `sym` operand with
+    that operand's symbol name, leaving any surrounding text (a `@PAGE`/
+    `@PAGEOFF` suffix, a `:lo12:` prefix) untouched. Returns the rewritten
+    text and the set of symbol names actually referenced, so the caller
+    knows which tables to go find."""
+    used: set[str] = set()
+
+    def repl(m: re.Match) -> str:
+        index = int(m.group(1))
+        name = syms.get(index)
+        if name is None:
+            return m.group(0)
+        used.add(name)
+        return name
+
+    return re.sub(r"\{(\d+)\}", repl, raw), used
+
+
+WIDTH_FOR_TYPE = {"u8": 1, "i8": 1, "u16": 2, "i16": 2, "u32": 4, "i32": 4, "u64": 8, "i64": 8}
+DIRECTIVE_FOR_WIDTH = {1: ".byte", 2: ".hword", 4: ".word", 8: ".quad"}
+
+
+def parse_rust_int(token: str) -> int:
+    token = token.strip().replace("_", "")
+    negative = token.startswith("-")
+    if negative:
+        token = token[1:]
+    m = re.match(r"0[xX][0-9a-fA-F]+|\d+", token)
+    if not m:
+        raise ValueError(f"not a numeric literal: {token!r}")
+    text = m.group(0)
+    value = int(text, 16) if text.lower().startswith("0x") else int(text)
+    return -value if negative else value
+
+
+def find_static_array(expanded: str, name: str) -> tuple[str, list[int]] | None:
+    """The element type and flat value list of `static NAME: [uN/iN; LEN]
+    = [...]` in `expanded`, or None if no such item is there (it is looked
+    for only in the already-expanded module text, which holds every item
+    of the module cargo-expand was pointed at -- not, for instance, a
+    table defined in some other module and merely `use`d here)."""
+    m = re.search(
+        rf"\bstatic\s+{re.escape(name)}\s*:\s*\[\s*([iu](?:8|16|32|64))\s*;\s*(\d+)\s*\]\s*=\s*\[",
+        expanded,
+    )
+    if not m:
+        return None
+    elem_type, declared_len = m.group(1), int(m.group(2))
+    body_start = m.end() - 1
+    body_end = find_matching_delimiter(expanded, body_start)
+    body = re.sub(r"//[^\n]*", "", expanded[body_start + 1 : body_end])
+    values = [parse_rust_int(tok) for tok in body.split(",") if tok.strip()]
+    if len(values) != declared_len:
+        sys.exit(
+            f"static {name}: [..; {declared_len}] has {len(values)} elements "
+            "after parsing -- the array literal is not a flat list of numeric "
+            "literals this script understands"
+        )
+    return elem_type, values
+
+
+def emit_data_section(name: str, elem_type: str, values: list[int]) -> str:
+    width = WIDTH_FOR_TYPE[elem_type]
+    directive = DIRECTIVE_FOR_WIDTH[width]
+    lines = [".data", f".size {name}, {width * len(values)}", f"{name}:"]
+    lines += [f"\t{directive}\t{hex(v) if v >= 0 else str(v)}" for v in values]
+    return "\n".join(lines) + "\n"
+
+
+def parse_expanded(expanded: str, name: str) -> tuple[list[str], list[str]]:
+    """The normalized instruction lines for `fn name`, plus any `.data`
+    section text (one block per table it addresses via a `sym` operand) to
+    append after them."""
     fn_marker = re.search(rf"\bfn\s+{re.escape(name)}\s*\(", expanded)
     if not fn_marker:
         sys.exit(f"could not find `fn {name}(` in the expanded output")
@@ -155,11 +329,26 @@ def parse_expanded(expanded: str, name: str) -> list[str]:
     if asm_at == -1:
         sys.exit(f"no asm! call found after fn {name}(")
     raw = extract_first_string_literal(expanded, asm_at)
+
+    syms = parse_sym_operands(expanded, asm_at)
+    raw, used = substitute_sym_placeholders(raw, syms)
+    data_blocks = []
+    for table_name in sorted(used):
+        found = find_static_array(expanded, table_name)
+        if found is None:
+            sys.exit(
+                f"fn {name} addresses `{table_name}` via a sym operand, but no "
+                f"`static {table_name}: [uN; LEN] = [...]` was found in the "
+                "expanded module text to extract its contents from"
+            )
+        elem_type, values = found
+        data_blocks.append(emit_data_section(table_name, elem_type, values))
+
     # A handful of functions write each instruction with a trailing `;`
     # (harmless, surplus punctuation -- the newline it precedes already
     # separates one instruction from the next).
     lines = [normalize(line.strip().rstrip(";").strip()) for line in raw.split("\n")]
-    return [line for line in lines if line]
+    return [line for line in lines if line], data_blocks
 
 
 BARE_IMMEDIATE_RE = re.compile(r"-?(0x[0-9a-fA-F]+|[0-9]+)")
@@ -212,13 +401,16 @@ def main():
         # 5th argument when it differs from the module/output name.
         fn_name = sys.argv[5] if len(sys.argv) > 5 else module
         expanded = run_cargo_expand(root, module)
-        instructions = parse_expanded(expanded, fn_name)
+        instructions, data_blocks = parse_expanded(expanded, fn_name)
         with open(dst, "w") as f:
             f.write(f"{module}:\n")
             for line in instructions:
                 f.write(line + "\n")
             f.write("ret\n")
-        print(f"{module}: {len(instructions)} instructions -> {dst}")
+            for block in data_blocks:
+                f.write("\n" + block)
+        tables = f", {len(data_blocks)} table(s)" if data_blocks else ""
+        print(f"{module}: {len(instructions)} instructions{tables} -> {dst}")
         return
 
     sys.exit(__doc__)

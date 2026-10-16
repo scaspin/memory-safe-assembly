@@ -1333,6 +1333,10 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 "^" => {
                     if old1 == old2 {
                         Some(ast::Int::from_i64(0))
+                    } else if matches!(*old2, AbstractExpression::Immediate(-1)) {
+                        Some(ast::Int::sub(&[&ast::Int::from_i64(-1), &new1]))
+                    } else if matches!(*old1, AbstractExpression::Immediate(-1)) {
+                        Some(ast::Int::sub(&[&ast::Int::from_i64(-1), &new2]))
                     } else if let Some(flipped) = flip_mask(&new1, &old2) {
                         Some(flipped)
                     } else if let Some(flipped) = flip_mask(&new2, &old1) {
@@ -1493,6 +1497,14 @@ mod tests {
         assert!(equals(&xored(200, 48), 200 ^ 48));
         assert!(equals(&xored(0, 0), 0));
         assert!(equals(&xored(255, 255), 0));
+    }
+
+    #[test]
+    fn xor_by_minus_one_is_bitwise_not() {
+        for value in [0, 1, -1, 0b1101, 200, i64::MIN + 9, i64::MAX - 1] {
+            assert!(equals(&xored(value, -1), !value), "{value:#x}");
+            assert!(equals(&xored(-1, value), !value), "{value:#x}");
+        }
     }
 
     #[test]

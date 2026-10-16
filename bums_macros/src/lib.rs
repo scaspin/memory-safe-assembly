@@ -381,6 +381,7 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
             AbstractExpression::Abstract(var_name)
         }
         Expr::Path(p) => AbstractExpression::Abstract(p.path.segments[0].ident.to_string()),
+        Expr::Cast(c) => syn_expr_to_abstract_expression(&c.expr),
         Expr::Field(f) => {
             let base = match &*f.base {
                 Expr::Path(p) => p.clone().path.segments[0].ident.to_string(),

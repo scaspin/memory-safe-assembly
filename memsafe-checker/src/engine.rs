@@ -1914,6 +1914,60 @@ impl ExecutionEngine {
         Ok(line + (parsed_offset / 4))
     }
 
+    fn is_boolean_mask(&self, expr: &AbstractExpression) -> bool {
+        match expr {
+            AbstractExpression::Immediate(-1) | AbstractExpression::Immediate(0) => true,
+            AbstractExpression::Abstract(name) => matches!(
+                self.computer
+                    .select_definitions
+                    .get(name)
+                    .map(|(_, a, b)| (a, b)),
+                Some((AbstractExpression::Immediate(-1), AbstractExpression::Immediate(0)))
+                    | Some((AbstractExpression::Immediate(0), AbstractExpression::Immediate(-1)))
+            ),
+            _ => false,
+        }
+    }
+
+    fn resolve_boolean_mask_xor(&self, expr: &AbstractExpression) -> AbstractExpression {
+        match expr {
+            AbstractExpression::Expression(op, left, right) => {
+                let left = self.resolve_boolean_mask_xor(left);
+                let right = self.resolve_boolean_mask_xor(right);
+                if op.as_str() == "^" && (self.is_boolean_mask(&left) || self.is_boolean_mask(&right))
+                {
+                    generate_expression(
+                        "+",
+                        generate_expression("+", left.clone(), right.clone()),
+                        generate_expression(
+                            "*",
+                            AbstractExpression::Immediate(2),
+                            generate_expression("*", left, right),
+                        ),
+                    )
+                } else {
+                    generate_expression(op.as_str(), left, right)
+                }
+            }
+            AbstractExpression::Register(reg) => {
+                let mut reg = (**reg).clone();
+                if let Some(base) = reg.base.take() {
+                    reg.base = Some(self.resolve_boolean_mask_xor(&base));
+                }
+                AbstractExpression::Register(Box::new(reg))
+            }
+            other => other.clone(),
+        }
+    }
+
+    fn resolve_boolean_mask_xors_in(&self, condition: &AbstractComparison) -> AbstractComparison {
+        AbstractComparison::new(
+            &condition.op,
+            self.resolve_boolean_mask_xor(&condition.left),
+            self.resolve_boolean_mask_xor(&condition.right),
+        )
+    }
+
     fn take_select(
         &mut self,
         pc: usize,
@@ -1923,10 +1977,17 @@ impl ExecutionEngine {
         option2: RegisterValue,
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
-        let take = comparison_to_ast(condition.clone())
-            .ok_or_else(|| Error::other("select condition uses an operation the engine does not model"))?;
+        let condition = self.resolve_boolean_mask_xors_in(&condition);
+        let take = comparison_to_ast(condition.clone()).ok_or_else(|| {
+            Error::other(format!(
+                "select condition uses an operation the engine does not model: {condition}"
+            ))
+        })?;
         let skip = comparison_to_ast(condition.clone().not()).ok_or_else(|| {
-            Error::other("negated select condition uses an operation the engine does not model")
+            Error::other(format!(
+                "negated select condition uses an operation the engine does not model: {}",
+                condition.clone().not()
+            ))
         })?;
         match (
             self.computer.solver.check_assumptions(&[take]),
