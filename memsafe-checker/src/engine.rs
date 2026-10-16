@@ -67,7 +67,33 @@ fn branch_label(instruction: &Instruction) -> Option<&str> {
     })
 }
 
-fn label_line(labels: &[(String, usize)], label: &str) -> Option<usize> {
+fn local_label_reference(label: &str) -> Option<(&str, bool)> {
+    let (digits, direction) = label.split_at(label.len().checked_sub(1)?);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    match direction {
+        "f" => Some((digits, true)),
+        "b" => Some((digits, false)),
+        _ => None,
+    }
+}
+
+fn label_line(labels: &[(String, usize)], label: &str, pc: usize) -> Option<usize> {
+    if let Some((number, forward)) = local_label_reference(label) {
+        let candidates = labels.iter().filter(|(name, _)| name == number);
+        return if forward {
+            candidates
+                .filter(|(_, line)| *line > pc)
+                .map(|(_, line)| *line)
+                .min()
+        } else {
+            candidates
+                .filter(|(_, line)| *line <= pc)
+                .map(|(_, line)| *line)
+                .max()
+        };
+    }
     let prefixed = format!("_{label}");
     labels
         .iter()
@@ -78,7 +104,7 @@ fn label_line(labels: &[(String, usize)], label: &str) -> Option<usize> {
 fn loop_ends_of(code: &[Instruction], labels: &[(String, usize)]) -> HashMap<usize, usize> {
     let mut ends: HashMap<usize, usize> = HashMap::new();
     for (pc, instruction) in code.iter().enumerate() {
-        if let Some(target) = branch_label(instruction).and_then(|l| label_line(labels, l))
+        if let Some(target) = branch_label(instruction).and_then(|l| label_line(labels, l, pc))
             && target <= pc
         {
             let end = ends.entry(target).or_insert(pc);
@@ -1508,7 +1534,9 @@ impl ExecutionEngine {
 
     pub fn start(&mut self, start: impl Into<String>) -> std::io::Result<()> {
         let start: String = start.into();
-        let pc = match self.get_linenumber_of_label(start.trim_matches(|c| c == ':').to_string()) {
+        let pc = match self
+            .get_linenumber_of_label(start.trim_matches(|c| c == ':').to_string(), 0)
+        {
             Some(n) => n,
             None => return Err(Error::other("Start label not found in program")),
         };
@@ -1721,7 +1749,7 @@ impl ExecutionEngine {
                         if &label == "return" {
                             return Ok(Step::Done);
                         }
-                        match self.get_linenumber_of_label(label.clone()) {
+                        match self.get_linenumber_of_label(label.clone(), pc) {
                             Some(n) => {
                                 log::info!("jumping to: {}", n);
                                 Self::note_unconditional_jump(unconditional_visits, n)?;
@@ -1747,7 +1775,7 @@ impl ExecutionEngine {
                     }
                     ExecuteReturnType::ConditionalJumpLabel(condition, label) => {
                         self.check_not_stuck(pc, &format!("loop at {label}"))?;
-                        let jump_dest = self.resolve_jump_target(&label)?;
+                        let jump_dest = self.resolve_jump_target(&label, pc)?;
                         Ok(
                             match self.take_conditional_branch(pc, condition, jump_dest, depth)? {
                                 BranchOutcome::BothExplored => Step::Stop,
@@ -1781,7 +1809,7 @@ impl ExecutionEngine {
                     ExecuteReturnType::JumpIndirect(target) => {
                         match (target.base, target.offset) {
                             (Some(AbstractExpression::Abstract(label)), 0) => {
-                                match self.get_linenumber_of_label(label.clone()) {
+                                match self.get_linenumber_of_label(label.clone(), pc) {
                                     Some(n) => {
                                         Self::note_unconditional_jump(unconditional_visits, n)?;
                                         Ok(Step::Continue(n))
@@ -1827,7 +1855,25 @@ impl ExecutionEngine {
             .map(|(name, _)| name.clone())
     }
 
-    fn get_linenumber_of_label(&self, label: String) -> Option<usize> {
+    fn get_linenumber_of_label(&self, label: String, pc: usize) -> Option<usize> {
+        if let Some((number, forward)) = local_label_reference(&label) {
+            let candidates = self
+                .program
+                .labels
+                .iter()
+                .filter(|(name, _)| name == number);
+            return if forward {
+                candidates
+                    .filter(|(_, line)| *line > pc)
+                    .map(|(_, line)| *line)
+                    .min()
+            } else {
+                candidates
+                    .filter(|(_, line)| *line <= pc)
+                    .map(|(_, line)| *line)
+                    .max()
+            };
+        }
         let prefixed = format!("_{label}");
         self.program
             .labels
@@ -1853,15 +1899,15 @@ impl ExecutionEngine {
         Ok(())
     }
 
-    fn resolve_jump_target(&self, label: &str) -> std::io::Result<usize> {
-        if let Some(i) = self.get_linenumber_of_label(label.to_string()) {
+    fn resolve_jump_target(&self, label: &str, pc: usize) -> std::io::Result<usize> {
+        if let Some(i) = self.get_linenumber_of_label(label.to_string(), pc) {
             return Ok(i);
         }
         let (base, offset) = label
             .split_once('+')
             .ok_or_else(|| Error::other(format!("No label found: {:?}", label)))?;
         let line = self
-            .get_linenumber_of_label(base.to_string())
+            .get_linenumber_of_label(base.to_string(), pc)
             .ok_or_else(|| Error::other(format!("No label found: {:?}", base)))?;
         let parsed_offset = usize::from_str_radix(offset.trim_start_matches("0x"), 16)
             .expect("unable to parse label offset");
@@ -2081,7 +2127,7 @@ impl ExecutionEngine {
                 conditional_branches += 1;
             }
             if let Some(label) = branch_label(instruction) {
-                let target = self.resolve_jump_target(label).ok()?;
+                let target = self.resolve_jump_target(label, pc).ok()?;
                 if (target < header || target > end) && !exits.contains(&target) {
                     exits.push(target);
                 }
@@ -2141,7 +2187,7 @@ impl ExecutionEngine {
                     let Some(Operand::Label(label)) = instruction.operands.first() else {
                         return None;
                     };
-                    return self.resolve_jump_target(label).ok();
+                    return self.resolve_jump_target(label, pc).ok();
                 }
                 _ => return None,
             }
@@ -2425,7 +2471,7 @@ impl ExecutionEngine {
         let Some(Operand::Label(label)) = instruction.operands.get(1) else {
             return None;
         };
-        if self.get_linenumber_of_label(label.clone())? > pc {
+        if self.get_linenumber_of_label(label.clone(), pc)? > pc {
             return None;
         }
         let tested = self.computer.get_register(&instruction.operands[0]);
@@ -3055,7 +3101,7 @@ impl ExecutionEngine {
     fn static_successors(&self, pc: usize) -> Option<Vec<usize>> {
         let instruction = self.program.code.get(pc)?;
         let label_at = |i: usize| match instruction.operands.get(i) {
-            Some(Operand::Label(label)) => self.resolve_jump_target(label).ok(),
+            Some(Operand::Label(label)) => self.resolve_jump_target(label, pc).ok(),
             _ => None,
         };
         let next = pc + 1;
