@@ -54,6 +54,17 @@ pub struct ARMCORTEXA {
     pub write_journal: Vec<CellWrite>,
     pub blind_stack_writes: Vec<(AbstractExpression, i64, i64)>,
     pub symbolic_slots: Vec<SymbolicSlot>,
+    pointer_elements: HashMap<String, String>,
+    element_ranges: HashMap<String, Vec<ElementRange>>,
+    pristine_read: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ElementRange {
+    pub width: i64,
+    pub signed: bool,
+    pub op: String,
+    pub bound: AbstractExpression,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -225,6 +236,9 @@ impl ARMCORTEXA {
             write_journal: Vec::new(),
             blind_stack_writes: Vec::new(),
             symbolic_slots: Vec::new(),
+            pointer_elements: HashMap::new(),
+            element_ranges: HashMap::new(),
+            pristine_read: None,
             solver,
         }
     }
@@ -372,6 +386,71 @@ impl ARMCORTEXA {
                 region.renew_unwritten();
             }
         }
+    }
+
+    pub fn substitute_symbol(&mut self, symbol: &str, value: i64) {
+        fn replaced(e: &AbstractExpression, symbol: &str, value: i64) -> AbstractExpression {
+            match e {
+                AbstractExpression::Abstract(name) if name == symbol => {
+                    AbstractExpression::Immediate(value)
+                }
+                AbstractExpression::Register(r) => {
+                    AbstractExpression::Register(Box::new(RegisterValue {
+                        base: r.base.as_ref().map(|b| replaced(b, symbol, value)),
+                        ..(**r).clone()
+                    }))
+                }
+                AbstractExpression::Expression(op, a, b) => {
+                    generate_expression(op, replaced(a, symbol, value), replaced(b, symbol, value))
+                }
+                other => other.clone(),
+            }
+        }
+        let respelled = |register: &RegisterValue| {
+            let base = register.base.as_ref()?;
+            if register.kind != RegisterKind::RegisterBase
+                || !base.get_abstracts().iter().any(|name| name == symbol)
+            {
+                return None;
+            }
+            let value = RegisterValue {
+                base: Some(replaced(base, symbol, value)),
+                ..register.clone()
+            };
+            Some(match crate::widening::Affine::of_register(&value) {
+                Some(form) if form.terms.is_empty() => RegisterValue::new_imm(form.constant),
+                _ => value,
+            })
+        };
+        for i in 0..self.registers.len() {
+            if let Some(register) = respelled(&self.registers[i]) {
+                self.registers[i] = register;
+            }
+        }
+        for slot in self.symbolic_slots.iter_mut() {
+            slot.base = replaced(&slot.base, symbol, value);
+            if let Some(register) = respelled(&slot.value) {
+                slot.value = register;
+            }
+        }
+        self.canonical_stack_pointer();
+    }
+
+    pub fn add_pointer_elements(&mut self, region: &str, target: &str) {
+        match self.memory.get(target) {
+            Some(rows) if rows.kind == RegionType::READ => {
+                self.pointer_elements
+                    .insert(region.to_string(), target.to_string());
+            }
+            _ => panic!("pointer elements need a read-only region {target} to point into"),
+        }
+    }
+
+    pub fn add_element_range(&mut self, region: &str, range: ElementRange) {
+        self.element_ranges
+            .entry(region.to_string())
+            .or_default()
+            .push(range);
     }
 
     pub fn remember_slot(

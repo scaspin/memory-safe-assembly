@@ -174,10 +174,9 @@ impl ARMCORTEXA {
         };
         let (left, right) = (compared(&left)?, compared(&right)?);
         let in_order = *opt1 == left && *opt2 == right;
-        if !in_order && !(*opt1 == right && *opt2 == left) {
-            return None;
-        }
-        if opt1.kind == RegisterKind::Number || opt2.kind == RegisterKind::Number {
+        let swapped = *opt1 == right && *opt2 == left;
+        let known = opt1.kind != RegisterKind::Number && opt2.kind != RegisterKind::Number;
+        if !(in_order || swapped) || !known {
             return None;
         }
         let extreme = if in_order == (cond == "ls") {
@@ -1449,6 +1448,9 @@ impl ARMCORTEXA {
                                 return Err(e.to_string());
                             }
                             self.extend_loaded(dst, &instruction.opcode, width);
+                            let signed = instruction.opcode.starts_with("ldrs")
+                                || instruction.opcode.starts_with("ldurs");
+                            self.bound_loaded_element(dst, width, signed);
 
                             self.write_back(w, *reg_num, writeback);
                         }
@@ -1472,13 +1474,10 @@ impl ARMCORTEXA {
                             let width = access_width(&instruction.opcode, dst1);
                             let mut second = address.clone();
                             second.offset += width;
-                            let res1 = self.load(dst1.clone(), address, width);
-                            let res2 = self.load(dst2.clone(), second, width);
-                            if let Err(e) = res1 {
-                                return Err(e.to_string());
-                            }
-                            if let Err(e) = res2 {
-                                return Err(e.to_string());
+                            for (dst, at) in [(dst1, address), (dst2, second)] {
+                                self.load(dst.clone(), at, width)
+                                    .map_err(|e| e.to_string())?;
+                                self.bound_loaded_element(dst, width, false);
                             }
 
                             self.write_back(w, *reg_num, writeback);

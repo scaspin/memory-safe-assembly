@@ -83,19 +83,32 @@ impl ARMCORTEXA {
         );
 
         if res.is_ok() {
-            if let Some(AbstractExpression::Abstract(base)) = address.base {
+            if let Some(AbstractExpression::Abstract(base)) = address.base.clone() {
                 let (region_name, offset) = self.get_memory_pointer(base.clone(), address.offset);
                 let region = self
                     .memory
                     .get(&region_name)
                     .unwrap_or_else(|| panic!("Need memory region to load from {:?}", region_name));
+                let pristine = region.epoch == 0;
                 let value = match region.read(offset, width) {
                     Some(v) => {
                         self.note_element_read(&region_name, offset);
+                        self.pristine_read = None;
                         Some(v)
                     }
-                    None if region.overwritten(offset, width) => Some(self.unknown_load(width)),
-                    None => Some(content_symbol(&region_name, offset, width, region.epoch)),
+                    None if region.overwritten(offset, width) => {
+                        self.pristine_read = None;
+                        Some(self.unknown_load(width))
+                    }
+                    None => {
+                        let unwritten = content_symbol(&region_name, offset, width, region.epoch);
+                        self.pristine_read = pristine.then(|| region_name.clone());
+                        Some(
+                            self.element_pointer(&region_name, &address, width)
+                                .filter(|_| pristine)
+                                .unwrap_or(unwritten),
+                        )
+                    }
                 };
                 match value {
                     Some(v) => {
@@ -123,10 +136,20 @@ impl ARMCORTEXA {
                     "Loading from an abstract but safe region of memory {:?}",
                     address
                 );
-                let base = address.base.expect("Need base");
-                let value = self
-                    .recall_slot(&base, address.offset, width)
-                    .unwrap_or_else(|| self.unknown_load(width));
+                let base = address.base.clone().expect("Need base");
+                let pristine = self
+                    .region_of(&base)
+                    .map(|(region, ..)| region)
+                    .filter(|region| self.memory.get(region).is_some_and(|r| r.pristine()));
+                let value = match &pristine {
+                    Some(region) => self
+                        .element_pointer(region, &address, width)
+                        .unwrap_or_else(|| self.unknown_load(width)),
+                    None => self
+                        .recall_slot(&base, address.offset, width)
+                        .unwrap_or_else(|| self.unknown_load(width)),
+                };
+                self.pristine_read = pristine;
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
                     base,
@@ -139,6 +162,73 @@ impl ARMCORTEXA {
         } else {
             res
         }
+    }
+
+    fn element_pointer(
+        &self,
+        region: &str,
+        address: &RegisterValue,
+        width: i64,
+    ) -> Option<RegisterValue> {
+        let target = self.pointer_elements.get(region)?;
+        if width != 8 {
+            return None;
+        }
+        let within = generate_expression(
+            "-",
+            instruction_aux::full_value(address),
+            AbstractExpression::Abstract(region.to_string()),
+        );
+        let misaligned = comparison_to_ast(AbstractComparison::new(
+            "!=",
+            generate_expression("%", within, AbstractExpression::Immediate(8)),
+            AbstractExpression::Immediate(0),
+        ))?;
+        (self.solver.check_assumptions(&[misaligned]) == SatResult::Unsat).then(|| {
+            RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(target.clone())),
+                0,
+            )
+        })
+    }
+
+    pub(crate) fn bound_loaded_element(&mut self, dst: &Operand, width: i64, signed: bool) {
+        let Some(region) = self.pristine_read.take() else {
+            return;
+        };
+        let Some(ranges) = self.element_ranges.get(&region).cloned() else {
+            return;
+        };
+        let value = self.get_register(dst);
+        if value.kind != RegisterKind::RegisterBase {
+            return;
+        }
+        let mut bounded = instruction_aux::full_value(&value);
+        for range in ranges
+            .iter()
+            .filter(|r| r.width == width && (width == 8 || r.signed == signed))
+        {
+            let one = AbstractExpression::Immediate(1);
+            bounded = match range.op.as_str() {
+                "<" => generate_expression(
+                    "atmost",
+                    bounded,
+                    generate_expression("-", range.bound.clone(), one),
+                ),
+                "<=" => generate_expression("atmost", bounded, range.bound.clone()),
+                ">" => generate_expression(
+                    "atleast",
+                    bounded,
+                    generate_expression("+", range.bound.clone(), one),
+                ),
+                ">=" => generate_expression("atleast", bounded, range.bound.clone()),
+                "==" => range.bound.clone(),
+                _ => bounded,
+            };
+        }
+        self.set_register(dst, RegisterKind::RegisterBase, Some(bounded), 0);
+        self.mark_loaded(dst);
     }
 
     fn unknown_load(&mut self, width: i64) -> RegisterValue {

@@ -191,6 +191,7 @@ fn operand_mentions(operand: &Operand, register: usize) -> bool {
                     .as_ref()
                     .is_some_and(|index| operand_mentions(index, register))
         }
+        Operand::ShiftedRegister(inner, ..) => operand_mentions(inner, register),
         _ => false,
     }
 }
@@ -1953,6 +1954,30 @@ impl ExecutionEngine {
             .add_element_fact(&region, index * element_size, element_size, &symbol.into());
     }
 
+    pub fn add_pointer_elements(&mut self, region: impl Into<String>, target: impl Into<String>) {
+        self.computer
+            .add_pointer_elements(&region.into(), &target.into());
+    }
+
+    pub fn add_element_range(
+        &mut self,
+        region: impl Into<String>,
+        element_size: i64,
+        signed: bool,
+        op: &str,
+        bound: AbstractExpression,
+    ) {
+        self.computer.add_element_range(
+            &region.into(),
+            ElementRange {
+                width: element_size,
+                signed,
+                op: op.to_string(),
+                bound,
+            },
+        );
+    }
+
     pub fn unread_element_facts(&self) -> Vec<String> {
         self.computer.unread_element_facts()
     }
@@ -2029,6 +2054,7 @@ impl ExecutionEngine {
             let mut branch = self.fork();
             let pinned = ast::Int::new_const(symbol.to_string()).eq(ast::Int::from_i64(*value));
             branch.computer.solver.assert(&pinned);
+            branch.computer.substitute_symbol(symbol, *value);
             if let Err(e) = branch.run(pc, depth + 1) {
                 let text = e.to_string();
                 if !failures.contains(&text) {
@@ -2868,6 +2894,46 @@ impl ExecutionEngine {
         };
         let c = c.simplify();
         self.assert_in_scope(if decision { c } else { c.not() });
+        if matches!((shown.op.as_str(), decision), ("==", true) | ("!=", false)) {
+            self.substitute_decided_symbol(&shown);
+        }
+    }
+
+    fn substitute_decided_symbol(&mut self, equality: &AbstractComparison) {
+        let spelled =
+            |e: &AbstractExpression| peel_narrowing(&without_registers(e).unwrap_or(e.clone()));
+        let Some(difference) = linear_form(&generate_expression(
+            "-",
+            spelled(&equality.left),
+            spelled(&equality.right),
+        )) else {
+            return;
+        };
+        let [(symbol, &coefficient)] = difference.terms.iter().collect::<Vec<_>>()[..] else {
+            return;
+        };
+        if difference.constant % coefficient != 0 {
+            return;
+        }
+        let value = -difference.constant / coefficient;
+        let symbol = symbol.clone();
+        if self.proves(AbstractComparison::new(
+            "==",
+            AbstractExpression::Abstract(symbol.clone()),
+            AbstractExpression::Immediate(value),
+        )) {
+            log::info!("{symbol} is {value} on this path");
+            self.computer.substitute_symbol(&symbol, value);
+        }
+    }
+
+    pub fn pin(&mut self, symbol: &str, value: i64) {
+        self.add_invariant(AbstractComparison::new(
+            "==",
+            AbstractExpression::Abstract(symbol.to_string()),
+            AbstractExpression::Immediate(value),
+        ));
+        self.computer.substitute_symbol(symbol, value);
     }
 
     fn order_a_monotone_guard(&mut self, pc: usize, condition: &AbstractComparison, taken: bool) {

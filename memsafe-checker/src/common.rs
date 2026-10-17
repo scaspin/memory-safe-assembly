@@ -916,6 +916,10 @@ impl MemorySafeRegion {
         self.widths.insert(address, width);
     }
 
+    pub fn pristine(&self) -> bool {
+        self.written.is_empty() && self.epoch == 0
+    }
+
     pub fn clobber(&mut self) {
         self.content.clear();
         self.widths.clear();
