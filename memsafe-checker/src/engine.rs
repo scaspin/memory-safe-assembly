@@ -2519,8 +2519,8 @@ impl ExecutionEngine {
             ))
         })?;
         match (
-            self.computer.solver.check_assumptions(&[take]),
-            self.computer.solver.check_assumptions(&[skip]),
+            check(&self.computer.solver, &[take]),
+            check(&self.computer.solver, &[skip]),
         ) {
             (SatResult::Sat, SatResult::Unsat) => {
                 self.add_constraint(condition, true);
@@ -3285,7 +3285,7 @@ impl ExecutionEngine {
         let under = |c: ast::Bool| {
             let mut assuming = defined.clone();
             assuming.push(c);
-            self.computer.solver.check_assumptions(&assuming)
+            check(&self.computer.solver, &assuming)
         };
         match (under(holds), under(fails)) {
             (SatResult::Unsat, SatResult::Unsat) => Decision::Unreachable,

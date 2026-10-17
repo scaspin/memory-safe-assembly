@@ -5,6 +5,68 @@ use z3::*;
 
 use crate::instruction_parser::{self, Arrangement};
 
+const PATH_RESOURCE_LIMIT: u32 = 2_000_000;
+const ESCALATION: [(ArithmeticEngine, u32); 5] = [
+    (ArithmeticEngine::Legacy, 5_000_000),
+    (ArithmeticEngine::Default, 20_000_000),
+    (ArithmeticEngine::Legacy, 50_000_000),
+    (ArithmeticEngine::Default, 200_000_000),
+    (ArithmeticEngine::Legacy, 500_000_000),
+];
+const UNLIMITED: u32 = 0;
+const LEGACY_ARITHMETIC_ENGINE: u32 = 2;
+
+#[derive(Clone, Copy)]
+enum ArithmeticEngine {
+    Default,
+    Legacy,
+}
+
+impl ArithmeticEngine {
+    fn solver(self) -> Solver {
+        match self {
+            ArithmeticEngine::Default => Solver::new(),
+            ArithmeticEngine::Legacy => {
+                let mut params = Params::new();
+                params.set_u32("arith.solver", LEGACY_ARITHMETIC_ENGINE);
+                Tactic::new("smt").with(&params).solver()
+            }
+        }
+    }
+}
+
+pub fn check(solver: &Solver, assumptions: &[ast::Bool]) -> SatResult {
+    set_resource_limit(solver, PATH_RESOURCE_LIMIT);
+    let decided = solver.check_assumptions(assumptions);
+    set_resource_limit(solver, UNLIMITED);
+    if decided != SatResult::Unknown {
+        return decided;
+    }
+    let facts: Vec<ast::Bool> = solver
+        .get_assertions()
+        .into_iter()
+        .chain(assumptions.iter().cloned())
+        .collect();
+    for (engine, units) in ESCALATION {
+        let fresh = engine.solver();
+        set_resource_limit(&fresh, units);
+        for fact in &facts {
+            fresh.assert(fact);
+        }
+        let decided = fresh.check();
+        if decided != SatResult::Unknown {
+            return decided;
+        }
+    }
+    solver.check_assumptions(assumptions)
+}
+
+fn set_resource_limit(solver: &Solver, units: u32) {
+    let mut params = Params::new();
+    params.set_u32("rlimit", units);
+    solver.set_params(&params);
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RegisterKind {
     RegisterBase,

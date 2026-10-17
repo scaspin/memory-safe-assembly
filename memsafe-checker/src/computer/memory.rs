@@ -864,11 +864,11 @@ impl ARMCORTEXA {
         };
 
         match (
-            self.solver.check_assumptions(&with(&l)),
-            self.solver.check_assumptions(&with(&u)),
+            check(&self.solver, &with(&l)),
+            check(&self.solver, &with(&u)),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
-                if let Some(why) = unproved_reason(self.solver.check_assumptions(&selects)) {
+                if let Some(why) = unproved_reason(check(&self.solver, &selects)) {
                     return Err(MemorySafetyError::new(&format!(
                         "{ty} of {width} bytes at {} unprovable: {why}",
                         format_address(&base_expr, offset)
