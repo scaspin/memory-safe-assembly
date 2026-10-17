@@ -133,9 +133,9 @@ impl ARMCORTEXA {
                 RegisterKind::RegisterBase => {
                     let base = match r1.clone().base {
                         Some(reg1base) => match r2.clone().base {
-                            Some(reg2base) => {
-                                Some(generate_expression(op_string, reg1base, reg2base))
-                            }
+                            Some(reg2base) => Some(
+                                self.capped(generate_expression(op_string, reg1base, reg2base)),
+                            ),
                             None => Some(reg1base),
                         },
                         None => Self::carried_base(r2.clone().base, op_string),
@@ -174,7 +174,9 @@ impl ARMCORTEXA {
         } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
             let base = match r2.clone().base {
                 Some(reg1base) => match r1.clone().base {
-                    Some(reg2base) => Some(generate_expression(op_string, reg1base, reg2base)),
+                    Some(reg2base) => {
+                        Some(self.capped(generate_expression(op_string, reg1base, reg2base)))
+                    }
                     None => Some(reg1base),
                 },
                 None => r1.clone().base,
