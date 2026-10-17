@@ -262,3 +262,33 @@ fn a_bound_the_loop_does_not_keep_proves_nothing() {
     let lines: Vec<&str> = ahead.iter().map(|s| s.as_str()).collect();
     assert!(!accepts_n_doubles(&lines));
 }
+
+#[test]
+fn paths_that_rejoin_in_different_states_are_both_checked() {
+    let body = [
+        "mov x2, #0",
+        "fcmp d0, d1",
+        "b.eq join",
+        "mov x2, #8",
+        "join:",
+        "add x5, x1, x2",
+        "ldr x4, [x5]",
+    ];
+    assert!(!accepts(&body, 8, &[]));
+    assert!(accepts(&body, 16, &[]));
+}
+
+#[test]
+fn paths_that_rejoin_in_the_same_state_are_merged() {
+    let mut body = Vec::new();
+    for i in 0..30 {
+        body.push("fcmp d0, d1".to_string());
+        body.push(format!("b.eq join{i}"));
+        body.push("fadd d0, d0, d1".to_string());
+        body.push(format!("join{i}:"));
+    }
+    body.push("ldr x4, [x1]".to_string());
+    let lines: Vec<&str> = body.iter().map(|s| s.as_str()).collect();
+    assert!(accepts(&lines, 8, &[]));
+    assert!(!accepts(&lines, 4, &[]));
+}

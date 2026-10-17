@@ -88,7 +88,7 @@ pub struct CellWrite {
     pub previous_width: Option<i64>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LaneBounds {
     pub bytes: [[u8; 16]; 32],
     pub scalar: [Option<u64>; 32],
@@ -553,6 +553,41 @@ impl ARMCORTEXA {
             self.carry.clone(),
             self.overflow.clone(),
         )
+    }
+
+    pub fn fingerprint(&self, with_flags: bool) -> String {
+        use std::fmt::Write;
+        let mut out = format!(
+            "{:?}|{:?}|{:?}|",
+            self.registers, self.loaded, self.simd_registers
+        );
+        if with_flags {
+            let _ = write!(
+                out,
+                "{:?}{:?}{:?}{:?}|",
+                self.zero, self.neg, self.carry, self.overflow
+            );
+        }
+        let _ = write!(
+            out,
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            self.memory,
+            self.select_definitions,
+            self.symbols_bounding_counter,
+            self.pointer_elements,
+            self.element_ranges,
+            self.rw_queue,
+            self.stack_arguments,
+            self.red_zone,
+            self.alignment,
+            self.flag_counter,
+            self.lane_bounds,
+            self.write_journal,
+            self.blind_stack_writes,
+            self.symbolic_slots,
+            self.pristine_read,
+        );
+        out
     }
 
     pub fn set_state(&mut self, state: ComputerState) {

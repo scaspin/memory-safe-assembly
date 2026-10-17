@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Error;
 use std::rc::Rc;
 
@@ -44,6 +44,116 @@ enum Step {
     Continue(usize),
     Stop,
     Done,
+}
+
+const MAX_EXPLORED_KEY_BYTES: usize = 256 << 20;
+
+fn flags_dead(code: &[Instruction], pc: usize) -> bool {
+    for instruction in code.iter().skip(pc) {
+        let opcode = instruction.opcode.as_str();
+        if instruction.is_label()
+            || matches!(
+                opcode,
+                "nop" | "hint" | "mov" | "movz" | "movk" | "movn" | "mvn" | "adr" | "adrp"
+            )
+        {
+            continue;
+        }
+        if matches!(
+            opcode,
+            "cmp" | "cmn" | "tst" | "subs" | "adds" | "ands" | "bics" | "negs" | "fcmp" | "fcmpe"
+        ) {
+            return true;
+        }
+        let reads_flags = matches!(
+            opcode,
+            "adc"
+                | "adcs"
+                | "sbc"
+                | "sbcs"
+                | "ngc"
+                | "ngcs"
+                | "csel"
+                | "csinc"
+                | "csinv"
+                | "csneg"
+                | "cset"
+                | "csetm"
+                | "cinc"
+                | "cinv"
+                | "cneg"
+                | "ccmp"
+                | "ccmn"
+                | "fcsel"
+                | "fccmp"
+                | "fccmpe"
+        );
+        let straight_line = matches!(
+            instruction.ty,
+            InstructionType::Arithmetic
+                | InstructionType::Memory
+                | InstructionType::SIMDArithmetic
+                | InstructionType::SIMDManagement
+        );
+        if reads_flags || !straight_line {
+            return false;
+        }
+    }
+    false
+}
+
+fn symbols_of(fact: &str) -> impl Iterator<Item = &str> {
+    const KEYWORDS: [&str; 20] = [
+        "and", "or", "not", "ite", "=", "<=", ">=", "<", ">", "+", "-", "*", "div", "mod", "^",
+        "to_int", "to_real", "true", "false", "=>",
+    ];
+    fact.split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+        .filter(|token| {
+            !token.is_empty()
+                && !KEYWORDS.contains(token)
+                && !token.chars().all(|c| c.is_ascii_digit() || c == '.')
+        })
+}
+
+fn is_fresh_flag(symbol: &str) -> bool {
+    symbol.rsplit_once('_').is_some_and(|(prefix, n)| {
+        !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) && prefix.ends_with("_flag")
+    })
+}
+
+fn facts_about_live_symbols(facts: Vec<String>, state: &str) -> Vec<String> {
+    let mut live: Vec<&str> = Vec::new();
+    let mut kept = vec![false; facts.len()];
+    loop {
+        let mut grew = false;
+        for (fact, kept) in facts.iter().zip(kept.iter_mut()) {
+            if *kept {
+                continue;
+            }
+            let keeps = symbols_of(fact).any(|symbol| {
+                !is_fresh_flag(symbol) || live.contains(&symbol) || state.contains(symbol)
+            });
+            if keeps {
+                *kept = true;
+                live.extend(symbols_of(fact));
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    facts
+        .into_iter()
+        .zip(kept)
+        .filter_map(|(fact, kept)| kept.then_some(fact))
+        .collect()
+}
+
+#[derive(Default)]
+struct Explored {
+    finished: BTreeMap<String, bool>,
+    bytes: usize,
 }
 
 fn join_branch_errors(e1: Error, e2: Error) -> String {
@@ -1807,14 +1917,14 @@ struct ActiveLoop {
     bounds: Vec<Bound>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct RoundEntry {
     exit: usize,
     state: ComputerState,
     generalization: Option<Generalization>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Generalization {
     steps: Vec<(usize, i64)>,
     free_registers: Vec<usize>,
@@ -1848,6 +1958,7 @@ pub struct ExecutionEngine {
     counted_failures: Rc<RefCell<HashSet<(usize, LoopId, usize)>>>,
     next_loop_id: Rc<Cell<usize>>,
     steps_left: Rc<Cell<usize>>,
+    explored: Rc<RefCell<Explored>>,
     scopes: Vec<Scope>,
     next_scope_id: usize,
     round_entries: HashMap<usize, RoundEntry>,
@@ -1856,7 +1967,7 @@ pub struct ExecutionEngine {
     suspended: Vec<SuspendedCall>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct SuspendedCall {
     resume: usize,
     loops: Vec<ActiveLoop>,
@@ -1946,6 +2057,7 @@ impl ExecutionEngine {
             counted_failures: Rc::new(RefCell::new(HashSet::new())),
             next_loop_id: Rc::new(Cell::new(0)),
             steps_left: Rc::new(Cell::new(limit_from_env("BUMS_MAX_STEPS", MAX_STEPS))),
+            explored: Rc::default(),
             loop_attempts: HashMap::new(),
             scopes: Vec::new(),
             next_scope_id: 0,
@@ -2274,11 +2386,26 @@ impl ExecutionEngine {
                 max_branch_depth()
             )));
         }
+        let mut reached = Vec::new();
+        let result = self.run_path(start_pc, depth, &mut reached);
+        let mut explored = self.explored.borrow_mut();
+        for key in reached {
+            explored.finished.insert(key, true);
+        }
+        result
+    }
+
+    fn run_path(
+        &mut self,
+        start_pc: usize,
+        depth: usize,
+        reached: &mut Vec<String>,
+    ) -> std::io::Result<()> {
         let mut pc = start_pc;
         let mut unconditional_visits: HashMap<usize, usize> = HashMap::new();
         let length = self.program.code.len();
         while pc < length {
-            match self.step(pc, depth, &mut unconditional_visits)? {
+            match self.step(pc, depth, &mut unconditional_visits, reached)? {
                 Step::Continue(next) => pc = next,
                 Step::Stop => return Ok(()),
                 Step::Done => break,
@@ -2288,11 +2415,59 @@ impl ExecutionEngine {
         Ok(())
     }
 
+    fn merge_key(&self, pc: usize) -> String {
+        let mut state = format!(
+            "{pc}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            self.computer
+                .fingerprint(!flags_dead(&self.program.code, pc)),
+            self.active_loops,
+            self.loop_attempts,
+            self.concrete_decisions,
+            self.closed_counters,
+            self.concrete_latch_visits,
+            self.costly_latches,
+            self.value_ranges,
+            self.round_entries,
+            self.left_through,
+            self.suspended,
+            self.scopes.iter().map(|scope| scope.id).collect::<Vec<_>>(),
+        );
+        let facts = self
+            .computer
+            .solver
+            .get_assertions()
+            .iter()
+            .map(|fact| fact.to_string())
+            .collect();
+        for fact in facts_about_live_symbols(facts, &state) {
+            state.push('|');
+            state.push_str(&fact);
+        }
+        state
+    }
+
+    fn already_explored(&self, pc: usize, reached: &mut Vec<String>) -> bool {
+        let key = self.merge_key(pc);
+        let mut explored = self.explored.borrow_mut();
+        match explored.finished.get(&key) {
+            Some(finished) => *finished,
+            None => {
+                if explored.bytes + key.len() <= MAX_EXPLORED_KEY_BYTES {
+                    explored.bytes += key.len();
+                    explored.finished.insert(key.clone(), false);
+                    reached.push(key);
+                }
+                false
+            }
+        }
+    }
+
     fn step(
         &mut self,
         mut pc: usize,
         depth: usize,
         unconditional_visits: &mut HashMap<usize, usize>,
+        reached: &mut Vec<String>,
     ) -> std::io::Result<Step> {
         let Some(steps_left) = self.steps_left.get().checked_sub(1) else {
             return Err(Error::other(format!(
@@ -2309,12 +2484,18 @@ impl ExecutionEngine {
         {
             let mut instruction = self.program.code[pc].clone();
 
+            let block_start = instruction.is_label();
             while instruction.is_label() {
                 pc += 1;
                 if pc >= self.program.code.len() {
                     return Ok(Step::Done);
                 }
                 instruction = self.program.code[pc].clone();
+            }
+
+            if block_start && self.already_explored(pc, reached) {
+                log::info!("line {pc}: reached again in an explored state; merged");
+                return Ok(Step::Stop);
             }
 
             log::info!("{:?}: {:?}", pc, instruction);
