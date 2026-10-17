@@ -1671,7 +1671,7 @@ pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
         ">" => Some(left.gt(&right)),
         ">=" => Some(left.ge(&right)),
         "<=" => Some(left.le(&right)),
-        "==" => Some(ast::Bool::and(&[&left.le(&right), &left.ge(&right)])),
+        "==" => Some(left.eq(&right)),
         "!=" => Some(ast::Bool::or(&[&left.lt(&right), &left.gt(&right)])),
         _ => todo!("unsupported op {:?}", expression.op),
     }
