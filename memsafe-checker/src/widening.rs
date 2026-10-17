@@ -411,10 +411,43 @@ pub fn invariant_of(prev: &AbstractExpression, cur: &AbstractExpression) -> Loop
     }
 }
 
+fn split_constant(e: &AbstractExpression) -> Option<(&AbstractExpression, i64)> {
+    match e {
+        AbstractExpression::Expression(op, core, constant) if op == "+" || op == "-" => {
+            let AbstractExpression::Immediate(c) = **constant else {
+                return Some((e, 0));
+            };
+            let (core, k) = split_constant(core)?;
+            let c = if op == "+" { c } else { c.checked_neg()? };
+            Some((core, k.checked_add(c)?))
+        }
+        _ => Some((e, 0)),
+    }
+}
+
+fn narrowed_step(prev: &AbstractExpression, cur: &AbstractExpression) -> Option<i64> {
+    let (
+        AbstractExpression::Expression(_, prev_inner, _),
+        AbstractExpression::Expression(_, cur_inner, _),
+    ) = (prev, cur)
+    else {
+        return None;
+    };
+    if !is_narrowed(prev) || !is_narrowed(cur) {
+        return None;
+    }
+    let (prev_core, prev_constant) = split_constant(prev_inner)?;
+    let (cur_core, cur_constant) = split_constant(cur_inner)?;
+    (prev_core == cur_core).then_some(cur_constant.checked_sub(prev_constant)?)
+}
+
 fn symbolic_step(
     prev: &AbstractExpression,
     cur: &AbstractExpression,
 ) -> Option<AbstractExpression> {
+    if let Some(step) = narrowed_step(prev, cur) {
+        return Some(AbstractExpression::Immediate(step));
+    }
     let cur = match cur {
         AbstractExpression::Expression(op, inner, _) if op == "%" && is_narrowed(cur) => &**inner,
         other => other,
@@ -566,6 +599,36 @@ mod tests {
         assert_eq!(
             invariant_of(&base(), &cur),
             LoopInvariant::Linear(AbstractExpression::Immediate(4))
+        );
+    }
+
+    #[test]
+    fn a_narrowed_counter_spelled_differently_each_round_still_steps() {
+        let masked = generate_expression("&", base(), AbstractExpression::Immediate(0xffff_fffc));
+        let word = |op: &str, c: i64| RegisterValue {
+            kind: RegisterKind::RegisterBase,
+            base: Some(generate_expression(
+                "%",
+                generate_expression(op, masked.clone(), AbstractExpression::Immediate(c)),
+                AbstractExpression::Immediate(1 << 32),
+            )),
+            offset: -4,
+        };
+        assert_eq!(
+            invariant_of_register(&word("+", -4), &word("-", 8)),
+            LoopInvariant::Linear(AbstractExpression::Immediate(-4))
+        );
+        let other = RegisterValue {
+            base: Some(generate_expression(
+                "%",
+                generate_expression("-", base(), AbstractExpression::Immediate(8)),
+                AbstractExpression::Immediate(1 << 32),
+            )),
+            ..word("-", 8)
+        };
+        assert_eq!(
+            invariant_of_register(&word("+", -4), &other),
+            LoopInvariant::Unknown
         );
     }
 
