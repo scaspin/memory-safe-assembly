@@ -250,6 +250,13 @@ fn running_choice(chosen: &str) -> Vec<String> {
 }
 
 #[test]
+fn a_select_on_data_keeps_a_bound_on_the_chosen_value() {
+    let safe = running_choice("csel x3, x3, x4, ge");
+    let lines: Vec<&str> = safe.iter().map(|s| s.as_str()).collect();
+    assert!(accepts_n_doubles(&lines));
+}
+
+#[test]
 fn a_bound_the_loop_does_not_keep_proves_nothing() {
     let ahead = running_choice("csel x3, x3, x8, ge");
     let lines: Vec<&str> = ahead.iter().map(|s| s.as_str()).collect();

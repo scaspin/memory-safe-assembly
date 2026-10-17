@@ -1706,6 +1706,76 @@ struct LoopAttempt {
     invariants: Vec<LoopInvariant>,
     rounds: usize,
     widened: bool,
+    rejected_bounds: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Bound {
+    register: usize,
+    op: &'static str,
+    other: Option<usize>,
+    offset: i64,
+    anchor: Option<AbstractExpression>,
+}
+
+impl Bound {
+    fn at(&self, registers: &[RegisterValue]) -> AbstractComparison {
+        let right = match (&self.other, &self.anchor) {
+            (Some(j), _) => generate_expression(
+                "+",
+                registers[*j].expression(),
+                AbstractExpression::Immediate(self.offset),
+            ),
+            (None, Some(anchor)) => anchor.clone(),
+            (None, None) => unreachable!("a bound names another register or an anchor"),
+        };
+        AbstractComparison::new(self.op, registers[self.register].expression(), right)
+    }
+
+    fn key(&self) -> String {
+        format!(
+            "{}{}{:?}{}",
+            self.register, self.op, self.other, self.offset
+        )
+    }
+}
+
+fn bound_candidates(invariants: &[LoopInvariant], current: &[RegisterValue]) -> Vec<Bound> {
+    let mut candidates = Vec::new();
+    for (i, invariant) in invariants.iter().enumerate() {
+        if *invariant != LoopInvariant::Unknown || current[i].kind == RegisterKind::Number {
+            continue;
+        }
+        let anchor = current[i].expression();
+        for op in [">=", "<="] {
+            candidates.push(Bound {
+                register: i,
+                op,
+                other: None,
+                offset: 0,
+                anchor: Some(anchor.clone()),
+            });
+        }
+        for (j, other) in invariants.iter().enumerate() {
+            let LoopInvariant::Linear(AbstractExpression::Immediate(step)) = other else {
+                continue;
+            };
+            if j == i || *step == 0 {
+                continue;
+            }
+            let op = if *step > 0 { "<=" } else { ">=" };
+            for offset in [0, -step] {
+                candidates.push(Bound {
+                    register: i,
+                    op,
+                    other: Some(j),
+                    offset,
+                    anchor: None,
+                });
+            }
+        }
+    }
+    candidates
 }
 
 #[derive(Debug, Clone)]
@@ -1734,6 +1804,7 @@ struct ActiveLoop {
     slots: Vec<SymbolicSlot>,
     settled_steps: Vec<SettledSelectStep>,
     continuing: AbstractComparison,
+    bounds: Vec<Bound>,
 }
 
 #[derive(Clone)]
@@ -3498,10 +3569,8 @@ impl ExecutionEngine {
 
         let mut attempt = match self.loop_attempts.get(&pc) {
             Some(earlier) if earlier.widened => LoopAttempt {
-                id: earlier.id,
-                invariants: earlier.invariants.clone(),
-                rounds: earlier.rounds,
                 widened: false,
+                ..earlier.clone()
             },
             Some(earlier) => {
                 let joined = join_all(&earlier.invariants, &observed);
@@ -3521,6 +3590,7 @@ impl ExecutionEngine {
                     invariants: joined,
                     rounds: earlier.rounds + 1,
                     widened: false,
+                    rejected_bounds: earlier.rejected_bounds.clone(),
                 }
             }
             None => LoopAttempt {
@@ -3528,6 +3598,7 @@ impl ExecutionEngine {
                 invariants: observed,
                 rounds: 1,
                 widened: false,
+                rejected_bounds: Vec::new(),
             },
         };
         if let Some(unstable) = self.unstable_registers.borrow().get(&pc) {
@@ -3652,6 +3723,11 @@ impl ExecutionEngine {
             }
         }
         let round = attempt.rounds;
+        let bounds: Vec<Bound> = bound_candidates(&summary.invariants, &current_state.0)
+            .into_iter()
+            .filter(|bound| !attempt.rejected_bounds.contains(&bound.key()))
+            .filter(|bound| self.plausible(bound, &entry_state.0, &current_state.0))
+            .collect();
         self.loop_attempts.insert(pc, attempt);
 
         let unjustified: Vec<AbstractComparison> = summary
@@ -3676,6 +3752,20 @@ impl ExecutionEngine {
         for fact in summary.facts.iter().filter_map(summary_fact_to_ast) {
             self.computer.solver.assert(fact);
         }
+        let mut summarized = self.computer.registers.clone();
+        for (i, new_reg) in summary.updates.iter().cloned() {
+            summarized[i] = new_reg;
+        }
+        for bound in bounds.iter().map(|bound| bound.at(&summarized)) {
+            log::info!("{id} assumes {bound}");
+            for fact in self
+                .select_definitions_in(&bound)
+                .into_iter()
+                .chain(comparison_to_ast(bound))
+            {
+                self.computer.solver.assert(fact);
+            }
+        }
         let mentioned: Vec<String> = summary
             .facts
             .iter()
@@ -3696,9 +3786,7 @@ impl ExecutionEngine {
             return None;
         }
 
-        for (i, new_reg) in summary.updates.iter().cloned() {
-            self.computer.registers[i] = new_reg;
-        }
+        self.computer.registers = summarized;
         if self.unstable_slots.borrow().contains(&pc) {
             self.computer.symbolic_slots.clear();
         }
@@ -3756,6 +3844,7 @@ impl ExecutionEngine {
             slots: self.computer.symbolic_slots.clone(),
             settled_steps,
             continuing: continuing_at_summary,
+            bounds,
         });
         Some(branch_decision)
     }
@@ -4860,7 +4949,12 @@ impl ExecutionEngine {
         })
     }
 
-    fn widen_for_retry(&mut self, active: &ActiveLoop, observed: &[LoopInvariant]) -> bool {
+    fn widen_for_retry(
+        &mut self,
+        active: &ActiveLoop,
+        observed: &[LoopInvariant],
+        unbounded: Vec<String>,
+    ) -> bool {
         let mut joined = join_all(&active.invariants, observed);
         for (i, inv) in joined.iter_mut().enumerate() {
             if *inv != active.invariants[i] && self.carries_region(&active.entry_state.0[i]) {
@@ -4881,16 +4975,19 @@ impl ExecutionEngine {
         if failures.is_some_and(|n| n >= MAX_SUMMARY_TRIES) {
             return false;
         }
-        if joined == active.invariants {
+        if joined == active.invariants && unbounded.is_empty() {
             return false;
         }
-        let rounds = self
+        let (rounds, mut rejected_bounds) = self
             .loop_attempts
             .get(&active.pc)
-            .map_or(1, |earlier| earlier.rounds);
+            .map_or((1, Vec::new()), |earlier| {
+                (earlier.rounds, earlier.rejected_bounds.clone())
+            });
         if rounds >= max_ascents(observed.len()) {
             return false;
         }
+        rejected_bounds.extend(unbounded);
         self.loop_attempts.insert(
             active.pc,
             LoopAttempt {
@@ -4898,6 +4995,7 @@ impl ExecutionEngine {
                 invariants: joined,
                 rounds: rounds + 1,
                 widened: true,
+                rejected_bounds,
             },
         );
         log::info!(
@@ -4959,6 +5057,37 @@ impl ExecutionEngine {
             .truncate(call.history_len.min(self.jump_history.len()));
         log::info!("resumed {} loop(s) after the call", call.loops.len());
         self.active_loops = call.loops;
+    }
+
+    fn plausible(
+        &self,
+        bound: &Bound,
+        previous: &[RegisterValue],
+        current: &[RegisterValue],
+    ) -> bool {
+        let moved = AbstractComparison::new(
+            bound.op,
+            current[bound.register].expression(),
+            previous[bound.register].expression(),
+        );
+        let stayed = AbstractComparison::new(
+            "==",
+            current[bound.register].expression(),
+            previous[bound.register].expression(),
+        );
+        match bound.anchor {
+            Some(_) => self.implied(&moved) && !self.implied(&stayed),
+            None => self.implied(&bound.at(previous)) && self.implied(&bound.at(current)),
+        }
+    }
+
+    fn implied(&self, fact: &AbstractComparison) -> bool {
+        let Some(violated) = comparison_to_ast(fact.not()) else {
+            return false;
+        };
+        let mut assuming = self.select_definitions_in(fact);
+        assuming.push(violated);
+        check(&self.computer.solver, &assuming) == SatResult::Unsat
     }
 
     fn proves(&self, fact: AbstractComparison) -> bool {
@@ -5393,11 +5522,21 @@ impl ExecutionEngine {
             log::info!("{} a saved slot did not survive the body", active.id);
             self.unstable_slots.borrow_mut().insert(active.pc);
         }
+        let unbounded: Vec<String> = active
+            .bounds
+            .iter()
+            .filter(|bound| !self.implied(&bound.at(&current.0)))
+            .map(Bound::key)
+            .collect();
+        if !unbounded.is_empty() {
+            log::info!("{} bounds {unbounded:?} not re-established", active.id);
+        }
         let holds = cells_hold
             && slots_hold
             && confinements_hold
             && steps_hold
             && ghosts_repeat
+            && unbounded.is_empty()
             && active
                 .invariants
                 .iter()
@@ -5447,7 +5586,7 @@ impl ExecutionEngine {
                 .entry(active.pc)
                 .or_insert(0) += 1;
         }
-        let retrying = !holds && self.widen_for_retry(&active, &observed);
+        let retrying = !holds && self.widen_for_retry(&active, &observed, unbounded);
 
         let above = if retrying {
             Vec::new()
@@ -5496,6 +5635,10 @@ impl ExecutionEngine {
                     .filter_map(summary_fact_to_ast),
             );
             kept.extend(active.nested_facts.iter().cloned());
+            for bound in active.bounds.iter().map(|bound| bound.at(&current.0)) {
+                kept.extend(self.select_definitions_in(&bound));
+                kept.extend(comparison_to_ast(bound));
+            }
             self.keep_facts(kept);
             self.jump_history.truncate(active.history_len);
             for record in &mut self.jump_history {
