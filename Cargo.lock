@@ -269,6 +269,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ffmpeg-playground"
+version = "0.1.0"
+dependencies = [
+ "bums_macros",
+ "cc",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"

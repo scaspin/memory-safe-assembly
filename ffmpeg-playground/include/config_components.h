@@ -1,0 +1,2 @@
+#define CONFIG_RV40_DECODER 1
+#define CONFIG_VC1DSP 1

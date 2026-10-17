@@ -8,7 +8,8 @@ members = [
   "awslc-probe",
   "corecrypto-playground",
   "graviola-playground",
-  "candle-playground"
+  "candle-playground",
+  "ffmpeg-playground"
 ]
 exclude = ["scrape-asm"]
 resolver = "2"
