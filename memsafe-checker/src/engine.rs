@@ -966,6 +966,16 @@ fn continues_while_nonzero(
             || (*continuing.right == zero && is_walked(&continuing.left)))
 }
 
+fn visits_since_the_branch_turned(history: &[JumpRecord], pc: usize, taken: bool) -> usize {
+    history
+        .iter()
+        .rev()
+        .filter(|record| record.point.pc == pc)
+        .take_while(|record| record.taken == taken)
+        .filter(|record| !record.resolved)
+        .count()
+}
+
 fn trip_facts(
     op: &str,
     inclusive: bool,
@@ -2803,14 +2813,7 @@ impl ExecutionEngine {
         if self.jump_history.len() > MAX_JUMP_HISTORY {
             let latest = self.jump_history.last().expect("jump history");
             let last = latest.point.pc;
-            let loop_count = self
-                .jump_history
-                .iter()
-                .rev()
-                .filter(|h| h.point.pc == last)
-                .take_while(|h| h.taken == latest.taken)
-                .filter(|h| !h.resolved)
-                .count();
+            let loop_count = visits_since_the_branch_turned(&self.jump_history, last, latest.taken);
             let allowance = self
                 .bounded_guard(last)
                 .map_or(cap, |bound| cap.max(bound as usize * 4));
@@ -5659,6 +5662,66 @@ mod tests {
             8,
         );
         assert_eq!(at_summary(&held, &abstract_of("stride")), unchanged);
+    }
+
+    fn history(runs: &[(usize, bool, usize)]) -> Vec<JumpRecord> {
+        let mut out = Vec::new();
+        for &(pc, taken, times) in runs {
+            for _ in 0..times {
+                out.push(JumpRecord {
+                    point: BranchPoint {
+                        pc,
+                        condition: AbstractComparison::new(
+                            "==",
+                            AbstractExpression::Immediate(0),
+                            AbstractExpression::Immediate(0),
+                        ),
+                        accesses: Vec::new(),
+                        state: (
+                            std::array::from_fn(|_| RegisterValue::new_imm(0)),
+                            None,
+                            None,
+                            None,
+                            None,
+                        ),
+                        journal_len: 0,
+                        instructions_run: 0,
+                    },
+                    taken,
+                    resolved: false,
+                });
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_loop_an_outer_one_re_enters_counts_only_its_latest_run() {
+        let mut runs = vec![(7683, true, 5)];
+        for _ in 0..4 {
+            runs.push((7683, false, 1));
+            runs.push((7683, true, 16));
+        }
+        let history = history(&runs);
+        assert_eq!(history.len(), 73);
+        assert_eq!(visits_since_the_branch_turned(&history, 7683, true), 16);
+    }
+
+    #[test]
+    fn a_loop_that_never_leaves_counts_every_visit() {
+        let history = history(&[(4833, true, 81)]);
+        assert_eq!(visits_since_the_branch_turned(&history, 4833, true), 81);
+    }
+
+    #[test]
+    fn other_branches_in_the_body_do_not_break_the_run() {
+        let mut runs = Vec::new();
+        for _ in 0..30 {
+            runs.push((4833, true, 1));
+            runs.push((4850, true, 1));
+        }
+        let history = history(&runs);
+        assert_eq!(visits_since_the_branch_turned(&history, 4833, true), 30);
     }
 
     #[test]
