@@ -3720,7 +3720,7 @@ impl ExecutionEngine {
         };
         let next = pc + 1;
         match instruction.opcode.as_str() {
-            "ret" => Some(Vec::new()),
+            "ret" | "brk" | "udf" | "hlt" => Some(Vec::new()),
             "br" => None,
             "b" => Some(vec![label_at(0)?]),
             "bl" | "blr" => Some(vec![next]),
