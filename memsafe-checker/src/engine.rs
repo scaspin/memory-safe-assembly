@@ -747,24 +747,42 @@ fn is_ordered(op: &str) -> bool {
     matches!(op, "<" | "<=" | ">" | ">=")
 }
 
-fn landing_requirement(
+fn landing_requirements(
     op: &str,
     distance: &AbstractExpression,
     step: &AbstractExpression,
-) -> Option<AbstractComparison> {
+) -> Vec<AbstractComparison> {
     if is_ordered(op) && bound_toward(step).is_some() {
-        return None;
+        return Vec::new();
     }
-    let modulus = match step {
-        AbstractExpression::Immediate(0) => return None,
-        AbstractExpression::Immediate(n) => AbstractExpression::Immediate(n.abs()),
-        other => other.clone(),
+    let zero = AbstractExpression::Immediate(0);
+    let (modulus, ahead) = match step {
+        AbstractExpression::Immediate(0) => return Vec::new(),
+        AbstractExpression::Immediate(n) => (
+            AbstractExpression::Immediate(n.abs()),
+            AbstractComparison::new(
+                if *n > 0 { ">=" } else { "<=" },
+                distance.clone(),
+                zero.clone(),
+            ),
+        ),
+        other => (
+            other.clone(),
+            AbstractComparison::new(
+                ">=",
+                generate_expression("*", distance.clone(), other.clone()),
+                zero.clone(),
+            ),
+        ),
     };
-    Some(AbstractComparison::new(
-        "==",
-        generate_expression("%", distance.clone(), modulus),
-        AbstractExpression::Immediate(0),
-    ))
+    vec![
+        AbstractComparison::new(
+            "==",
+            generate_expression("%", distance.clone(), modulus),
+            zero,
+        ),
+        ahead,
+    ]
 }
 
 fn is_unsigned(e: &AbstractExpression) -> bool {
@@ -1084,11 +1102,15 @@ fn facts_for_exit(
         anchored_at_exit(exit, states, invariants),
         anchored_at_exit(peel_unsigned(walker), states, invariants),
     );
-    let requirement = landing_requirement(&branch.op, &distance, &step);
+    let requirements = landing_requirements(&branch.op, &distance, &step);
     let unwrapped = unwrapped_requirements(branch, record.taken, (exit, walker, &step), &distance);
     let mut facts = trip_facts(&branch.op, at_equality, distance, trips.clone(), &step);
-    if let (Some(requirement), Some(landing)) = (requirement, facts.first()) {
-        landings.push((requirement, landing.clone()));
+    if let Some(landing) = facts.first() {
+        landings.extend(
+            requirements
+                .into_iter()
+                .map(|requirement| (requirement, landing.clone())),
+        );
     }
     let reached = generate_expression(
         "+",
@@ -1438,7 +1460,7 @@ fn summarize(
                 ghosts,
             ),
         );
-        let requirement = landing_requirement(&condition.op, &distance, &step);
+        let requirements = landing_requirements(&condition.op, &distance, &step);
         let unwrapped =
             unwrapped_requirements(condition, continues_when, (exit, walker, &step), &distance);
         let totals = trip_facts(
@@ -1448,8 +1470,12 @@ fn summarize(
             counter.total(),
             &step,
         );
-        if let (Some(requirement), Some(landing)) = (requirement, totals.first()) {
-            landings.push((requirement, landing.clone()));
+        if let Some(landing) = totals.first() {
+            landings.extend(
+                requirements
+                    .into_iter()
+                    .map(|requirement| (requirement, landing.clone())),
+            );
         }
         for requirement in &unwrapped {
             landings.extend(
