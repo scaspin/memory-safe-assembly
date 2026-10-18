@@ -5,7 +5,7 @@ use proc_macro::{Span, TokenStream};
 use proc_macro_error::*;
 use punctuated::Punctuated;
 use quote::quote;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{BufRead, BufReader};
@@ -630,12 +630,12 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let mut arguments_to_memory_safe_regions = Vec::new();
-    let mut input_sizes = HashMap::new();
-    let mut pointer_sizes = HashMap::new();
-    let mut input_types = HashMap::new();
-    let mut input_expressions = HashMap::new();
+    let mut input_sizes = BTreeMap::new();
+    let mut pointer_sizes = BTreeMap::new();
+    let mut input_types = BTreeMap::new();
+    let mut input_expressions = BTreeMap::new();
     let mut arguments_to_pass: Punctuated<_, _> = Punctuated::new();
-    let mut new_structs = HashMap::new();
+    let mut new_structs = BTreeMap::new();
     let mut before_call = quote! {};
     let mut after_call = quote! {};
     if attributes.argument_list.is_empty() {
@@ -813,7 +813,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut extern_fn = vars.item_fn.clone();
     extern_fn.ident = fn_name.clone();
-    let mut pointer_offsets: HashMap<String, (bool, Expr)> = HashMap::new();
+    let mut pointer_offsets: BTreeMap<String, (bool, Expr)> = BTreeMap::new();
     if !attributes.argument_list.is_empty() {
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
         let mut span = proc_macro2::Span::call_site();

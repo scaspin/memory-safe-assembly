@@ -294,7 +294,7 @@ pub fn proportion(follower: &LinearForm, leader: &LinearForm) -> Option<i64> {
     (k != 0 && leader.scaled(k)? == *follower).then_some(k)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LoopId(usize);
 
 impl LoopId {

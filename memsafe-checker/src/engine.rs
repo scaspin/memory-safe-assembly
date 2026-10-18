@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Error;
 use std::rc::Rc;
 
@@ -165,9 +165,9 @@ fn join_branch_errors(e1: Error, e2: Error) -> String {
 struct Program {
     code: Vec<Instruction>,
     labels: Vec<(String, usize)>,
-    loop_ends: HashMap<usize, usize>,
-    line_at: HashMap<i64, usize>,
-    addresses: HashMap<String, i64>,
+    loop_ends: BTreeMap<usize, usize>,
+    line_at: BTreeMap<i64, usize>,
+    addresses: BTreeMap<String, i64>,
 }
 
 fn store_data_item(computer: &mut ARMCORTEXA, section: &str, item: &DataItem) {
@@ -235,8 +235,8 @@ fn label_line(labels: &[(String, usize)], label: &str, pc: usize) -> Option<usiz
         .map(|l| l.1)
 }
 
-fn loop_ends_of(code: &[Instruction], labels: &[(String, usize)]) -> HashMap<usize, usize> {
-    let mut ends: HashMap<usize, usize> = HashMap::new();
+fn loop_ends_of(code: &[Instruction], labels: &[(String, usize)]) -> BTreeMap<usize, usize> {
+    let mut ends: BTreeMap<usize, usize> = BTreeMap::new();
     for (pc, instruction) in code.iter().enumerate() {
         if let Some(target) = branch_label(instruction).and_then(|l| label_line(labels, l, pc))
             && target <= pc
@@ -1937,31 +1937,31 @@ pub struct ExecutionEngine {
     program: Rc<Program>,
     computer: ARMCORTEXA,
     active_loops: Vec<ActiveLoop>,
-    loop_attempts: HashMap<usize, LoopAttempt>,
+    loop_attempts: BTreeMap<usize, LoopAttempt>,
     jump_history: Vec<JumpRecord>,
-    concrete_decisions: HashMap<usize, bool>,
+    concrete_decisions: BTreeMap<usize, bool>,
     closed_counters: Vec<(AbstractExpression, Vec<AbstractExpression>)>,
     instructions_run: usize,
-    concrete_latch_visits: HashMap<usize, (usize, i64)>,
-    costly_latches: HashSet<usize>,
+    concrete_latch_visits: BTreeMap<usize, (usize, i64)>,
+    costly_latches: BTreeSet<usize>,
     select_history: Vec<usize>,
-    value_ranges: HashMap<String, i64>,
+    value_ranges: BTreeMap<String, i64>,
     fail_fast: bool,
     summaries: Rc<RefCell<Vec<Summary>>>,
-    failed_summaries: Rc<RefCell<HashMap<usize, usize>>>,
-    dead_registers: Rc<RefCell<HashMap<usize, Rc<Vec<usize>>>>>,
-    unstable_registers: Rc<RefCell<HashMap<usize, HashSet<usize>>>>,
-    unstable_cells: Rc<RefCell<HashMap<usize, HashSet<MemoryCell>>>>,
-    unstable_slots: Rc<RefCell<HashSet<usize>>>,
-    cell_retries: Rc<RefCell<HashMap<usize, usize>>>,
-    refuted_select_steps: Rc<RefCell<HashSet<usize>>>,
-    counted_failures: Rc<RefCell<HashSet<(usize, LoopId, usize)>>>,
+    failed_summaries: Rc<RefCell<BTreeMap<usize, usize>>>,
+    dead_registers: Rc<RefCell<BTreeMap<usize, Rc<Vec<usize>>>>>,
+    unstable_registers: Rc<RefCell<BTreeMap<usize, BTreeSet<usize>>>>,
+    unstable_cells: Rc<RefCell<BTreeMap<usize, BTreeSet<MemoryCell>>>>,
+    unstable_slots: Rc<RefCell<BTreeSet<usize>>>,
+    cell_retries: Rc<RefCell<BTreeMap<usize, usize>>>,
+    refuted_select_steps: Rc<RefCell<BTreeSet<usize>>>,
+    counted_failures: Rc<RefCell<BTreeSet<(usize, LoopId, usize)>>>,
     next_loop_id: Rc<Cell<usize>>,
     steps_left: Rc<Cell<usize>>,
     explored: Rc<RefCell<Explored>>,
     scopes: Vec<Scope>,
     next_scope_id: usize,
-    round_entries: HashMap<usize, RoundEntry>,
+    round_entries: BTreeMap<usize, RoundEntry>,
     left_through: Option<(usize, Vec<(AbstractComparison, bool)>)>,
     path_ends: bool,
     suspended: Vec<SuspendedCall>,
@@ -1986,7 +1986,7 @@ impl ExecutionEngine {
         let listing = Listing::parse(lines);
         let mut computer = ARMCORTEXA::new();
 
-        let mut addresses: HashMap<String, i64> = HashMap::new();
+        let mut addresses: BTreeMap<String, i64> = BTreeMap::new();
         for section in &listing.data {
             let ty = if section.writable {
                 RegionType::RW
@@ -2037,31 +2037,31 @@ impl ExecutionEngine {
             }),
             computer,
             jump_history: Vec::new(),
-            concrete_decisions: HashMap::new(),
+            concrete_decisions: BTreeMap::new(),
             closed_counters: Vec::new(),
             instructions_run: 0,
-            concrete_latch_visits: HashMap::new(),
-            costly_latches: HashSet::new(),
+            concrete_latch_visits: BTreeMap::new(),
+            costly_latches: BTreeSet::new(),
             select_history: Vec::new(),
-            value_ranges: HashMap::new(),
+            value_ranges: BTreeMap::new(),
             active_loops: Vec::new(),
             fail_fast: true,
             summaries: Rc::new(RefCell::new(Vec::new())),
-            failed_summaries: Rc::new(RefCell::new(HashMap::new())),
-            dead_registers: Rc::new(RefCell::new(HashMap::new())),
-            unstable_registers: Rc::new(RefCell::new(HashMap::new())),
-            unstable_cells: Rc::new(RefCell::new(HashMap::new())),
-            unstable_slots: Rc::new(RefCell::new(HashSet::new())),
-            cell_retries: Rc::new(RefCell::new(HashMap::new())),
-            refuted_select_steps: Rc::new(RefCell::new(HashSet::new())),
-            counted_failures: Rc::new(RefCell::new(HashSet::new())),
+            failed_summaries: Rc::new(RefCell::new(BTreeMap::new())),
+            dead_registers: Rc::new(RefCell::new(BTreeMap::new())),
+            unstable_registers: Rc::new(RefCell::new(BTreeMap::new())),
+            unstable_cells: Rc::new(RefCell::new(BTreeMap::new())),
+            unstable_slots: Rc::new(RefCell::new(BTreeSet::new())),
+            cell_retries: Rc::new(RefCell::new(BTreeMap::new())),
+            refuted_select_steps: Rc::new(RefCell::new(BTreeSet::new())),
+            counted_failures: Rc::new(RefCell::new(BTreeSet::new())),
             next_loop_id: Rc::new(Cell::new(0)),
             steps_left: Rc::new(Cell::new(limit_from_env("BUMS_MAX_STEPS", MAX_STEPS))),
             explored: Rc::default(),
-            loop_attempts: HashMap::new(),
+            loop_attempts: BTreeMap::new(),
             scopes: Vec::new(),
             next_scope_id: 0,
-            round_entries: HashMap::new(),
+            round_entries: BTreeMap::new(),
             left_through: None,
             path_ends: false,
             suspended: Vec::new(),
@@ -2402,7 +2402,7 @@ impl ExecutionEngine {
         reached: &mut Vec<String>,
     ) -> std::io::Result<()> {
         let mut pc = start_pc;
-        let mut unconditional_visits: HashMap<usize, usize> = HashMap::new();
+        let mut unconditional_visits: BTreeMap<usize, usize> = BTreeMap::new();
         let length = self.program.code.len();
         while pc < length {
             match self.step(pc, depth, &mut unconditional_visits, reached)? {
@@ -2466,7 +2466,7 @@ impl ExecutionEngine {
         &mut self,
         mut pc: usize,
         depth: usize,
-        unconditional_visits: &mut HashMap<usize, usize>,
+        unconditional_visits: &mut BTreeMap<usize, usize>,
         reached: &mut Vec<String>,
     ) -> std::io::Result<Step> {
         let Some(steps_left) = self.steps_left.get().checked_sub(1) else {
@@ -2659,7 +2659,7 @@ impl ExecutionEngine {
     }
 
     fn note_unconditional_jump(
-        visits: &mut HashMap<usize, usize>,
+        visits: &mut BTreeMap<usize, usize>,
         dest: usize,
     ) -> std::io::Result<()> {
         let count = visits.entry(dest).or_insert(0);
@@ -4804,7 +4804,7 @@ impl ExecutionEngine {
         register: usize,
         has_calls: bool,
     ) -> bool {
-        let mut seen = HashSet::new();
+        let mut seen = BTreeSet::new();
         let mut pending = self.static_successors(from).unwrap_or_default();
         if pending.is_empty() {
             return false;
@@ -4882,14 +4882,14 @@ impl ExecutionEngine {
         loop_pc: usize,
         continues: bool,
         cycle: &[JumpRecord],
-    ) -> Option<(usize, usize, HashSet<usize>)> {
+    ) -> Option<(usize, usize, BTreeSet<usize>)> {
         let branch_step = |pc: usize, taken: bool| -> Option<usize> {
             match self.static_successors(pc)?.as_slice() {
                 [target, fallthrough] => Some(if taken { *target } else { *fallthrough }),
                 _ => None,
             }
         };
-        let mut walked = HashSet::new();
+        let mut walked = BTreeSet::new();
         let mut edge = None;
         let mut pc = loop_pc;
         let mut next = branch_step(loop_pc, continues)?;
@@ -4935,7 +4935,7 @@ impl ExecutionEngine {
         if from == header {
             return true;
         }
-        let mut seen = HashSet::new();
+        let mut seen = BTreeSet::new();
         let mut pending = vec![from];
         while let Some(pc) = pending.pop() {
             if pc == source {
@@ -4957,8 +4957,8 @@ impl ExecutionEngine {
         false
     }
 
-    fn can_leave_cycle(&self, from: usize, walked: &HashSet<usize>) -> bool {
-        let mut seen = HashSet::new();
+    fn can_leave_cycle(&self, from: usize, walked: &BTreeSet<usize>) -> bool {
+        let mut seen = BTreeSet::new();
         let mut pending = vec![from];
         while let Some(pc) = pending.pop() {
             if walked.contains(&pc) || !seen.insert(pc) {

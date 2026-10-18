@@ -689,7 +689,7 @@ impl ARMCORTEXA {
     }
 
     pub fn select_assumptions(&self, e: &AbstractExpression) -> Vec<ast::Bool> {
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = std::collections::BTreeSet::new();
         let mut pending = e.get_abstracts();
         let mut assumptions = Vec::new();
         while let Some(name) = pending.pop() {

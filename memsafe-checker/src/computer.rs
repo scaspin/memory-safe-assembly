@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::instruction_parser::*;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::rc::Rc;
 use z3::*;
@@ -34,15 +34,15 @@ pub struct ARMCORTEXA {
     neg: Option<FlagValue>,
     pub carry: Option<FlagValue>,
     overflow: Option<FlagValue>,
-    pub memory: HashMap<String, MemorySafeRegion>,
-    pub memory_labels: HashMap<String, (String, i64)>,
-    pub data_symbol_sizes: HashMap<String, i64>,
-    pub code_labels: Rc<HashSet<String>>,
+    pub memory: BTreeMap<String, MemorySafeRegion>,
+    pub memory_labels: BTreeMap<String, (String, i64)>,
+    pub data_symbol_sizes: BTreeMap<String, i64>,
+    pub code_labels: Rc<BTreeSet<String>>,
     pub select_definitions:
-        HashMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>,
-    pub symbols_bounding_counter: HashMap<String, Vec<String>>,
+        BTreeMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>,
+    pub symbols_bounding_counter: BTreeMap<String, Vec<String>>,
     rw_queue: Vec<MemoryAccess>,
-    element_facts: Rc<RefCell<HashMap<(String, i64), (String, bool)>>>,
+    element_facts: Rc<RefCell<BTreeMap<(String, i64), (String, bool)>>>,
     stack_arguments: i64,
     pub red_zone: i64,
     findings: Rc<RefCell<Vec<String>>>,
@@ -54,8 +54,8 @@ pub struct ARMCORTEXA {
     pub write_journal: Vec<CellWrite>,
     pub blind_stack_writes: Vec<(AbstractExpression, i64, i64)>,
     pub symbolic_slots: Vec<SymbolicSlot>,
-    pointer_elements: HashMap<String, String>,
-    element_ranges: HashMap<String, Vec<ElementRange>>,
+    pointer_elements: BTreeMap<String, String>,
+    element_ranges: BTreeMap<String, Vec<ElementRange>>,
     pristine_read: Option<String>,
 }
 
@@ -75,7 +75,7 @@ pub struct SymbolicSlot {
     pub value: RegisterValue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MemoryCell {
     pub region: String,
     pub offset: i64,
@@ -196,7 +196,7 @@ impl ARMCORTEXA {
         ]);
 
         let solver = Solver::new();
-        let mut memory = HashMap::new();
+        let mut memory = BTreeMap::new();
 
         let max = ast::Int::from_i64(i64::MAX);
         let stack_max = ast::Int::new_const("MAX");
@@ -219,13 +219,13 @@ impl ARMCORTEXA {
             carry: None,
             overflow: None,
             memory,
-            memory_labels: HashMap::new(),
-            data_symbol_sizes: HashMap::new(),
+            memory_labels: BTreeMap::new(),
+            data_symbol_sizes: BTreeMap::new(),
             code_labels: Rc::default(),
-            select_definitions: HashMap::new(),
-            symbols_bounding_counter: HashMap::new(),
+            select_definitions: BTreeMap::new(),
+            symbols_bounding_counter: BTreeMap::new(),
             rw_queue: Vec::new(),
-            element_facts: Rc::new(RefCell::new(HashMap::new())),
+            element_facts: Rc::new(RefCell::new(BTreeMap::new())),
             stack_arguments: 0,
             red_zone: 0,
             findings: Rc::default(),
@@ -236,8 +236,8 @@ impl ARMCORTEXA {
             write_journal: Vec::new(),
             blind_stack_writes: Vec::new(),
             symbolic_slots: Vec::new(),
-            pointer_elements: HashMap::new(),
-            element_ranges: HashMap::new(),
+            pointer_elements: BTreeMap::new(),
+            element_ranges: BTreeMap::new(),
             pristine_read: None,
             solver,
         }

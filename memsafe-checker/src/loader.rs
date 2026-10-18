@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::instruction_parser::{Instruction, InstructionType};
 
@@ -46,9 +46,9 @@ pub struct Listing {
     pub code: Vec<Instruction>,
     pub labels: Vec<(String, usize)>,
     pub line_addresses: Vec<i64>,
-    pub line_at: HashMap<i64, usize>,
+    pub line_at: BTreeMap<i64, usize>,
     pub data: Vec<DataSection>,
-    pub data_symbols: HashMap<String, DataSymbol>,
+    pub data_symbols: BTreeMap<String, DataSymbol>,
     text_block: Option<usize>,
     held_alignment: Vec<(String, String)>,
 }

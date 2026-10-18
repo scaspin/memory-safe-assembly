@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 use z3::*;
@@ -873,8 +873,8 @@ pub struct MemorySafeRegion {
     pub kind: RegionType,
     length: AbstractExpression,
     alignment: i64,
-    pub content: HashMap<i64, RegisterValue>,
-    widths: HashMap<i64, i64>,
+    pub content: BTreeMap<i64, RegisterValue>,
+    widths: BTreeMap<i64, i64>,
     written: Vec<(i64, i64)>,
     pub epoch: usize,
 }
@@ -885,8 +885,8 @@ impl MemorySafeRegion {
             kind,
             length,
             alignment: 1,
-            content: HashMap::new(),
-            widths: HashMap::new(),
+            content: BTreeMap::new(),
+            widths: BTreeMap::new(),
             written: Vec::new(),
             epoch: 0,
         }
