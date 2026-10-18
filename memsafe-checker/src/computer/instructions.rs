@@ -110,6 +110,7 @@ impl ARMCORTEXA {
         pc: usize,
         instruction: &Instruction,
     ) -> Result<ExecuteReturnType, String> {
+        self.set_current_line(pc);
         let effect = self.plan_lane_effect(instruction);
         let result = self.execute_instruction(pc, instruction);
         if result.is_ok() {

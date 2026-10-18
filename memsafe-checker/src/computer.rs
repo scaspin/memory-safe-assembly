@@ -41,6 +41,9 @@ pub struct ARMCORTEXA {
     rw_queue: Vec<MemoryAccess>,
     element_facts: Rc<RefCell<HashMap<(String, i64), (String, bool)>>>,
     stack_arguments: i64,
+    pub red_zone: i64,
+    findings: Rc<RefCell<Vec<String>>>,
+    current_line: usize,
     alignment: i64,
     flag_counter: usize,
     pub solver: Solver,
@@ -197,6 +200,9 @@ impl ARMCORTEXA {
             rw_queue: Vec::new(),
             element_facts: Rc::new(RefCell::new(HashMap::new())),
             stack_arguments: 0,
+            red_zone: 0,
+            findings: Rc::default(),
+            current_line: 0,
             alignment: 4,
             flag_counter: 0,
             lane_bounds: Box::default(),
@@ -570,6 +576,23 @@ impl ARMCORTEXA {
             .get_abstracts()
             .into_iter()
             .find(|name| self.memory.contains_key(name) || self.memory_labels.contains_key(name))
+    }
+
+    pub fn set_current_line(&mut self, line: usize) {
+        self.current_line = line;
+    }
+
+    pub fn note_finding(&self, what: &str) {
+        let finding = format!("line {}: {what}", self.current_line);
+        let mut findings = self.findings.borrow_mut();
+        if !findings.contains(&finding) {
+            log::warn!("{finding}");
+            findings.push(finding);
+        }
+    }
+
+    pub fn findings(&self) -> Vec<String> {
+        self.findings.borrow().clone()
     }
 
     pub fn stack_bounds(&self) -> Option<(i64, i64)> {

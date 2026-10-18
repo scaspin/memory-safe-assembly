@@ -1879,6 +1879,14 @@ impl ExecutionEngine {
         self.computer.unread_element_facts()
     }
 
+    pub fn allow_red_zone(&mut self, bytes: i64) {
+        self.computer.red_zone = bytes;
+    }
+
+    pub fn findings(&self) -> Vec<String> {
+        self.computer.findings()
+    }
+
     pub fn get_register_output(&self, register: usize) -> RegisterValue {
         self.computer.registers[register].clone()
     }

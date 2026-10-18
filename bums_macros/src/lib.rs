@@ -32,7 +32,23 @@ impl Parse for CallColon {
 struct AttributeList {
     filename: LitStr,
     _separator: Option<Token![,]>,
+    red_zone: Option<LitInt>,
     argument_list: Punctuated<Expr, Token![,]>,
+}
+
+fn parse_red_zone(input: ParseStream) -> Result<Option<LitInt>> {
+    let names_red_zone = input
+        .fork()
+        .parse::<Ident>()
+        .is_ok_and(|name| name == "red_zone");
+    if !(names_red_zone && input.peek2(Token![=])) {
+        return Ok(None);
+    }
+    input.parse::<Ident>()?;
+    input.parse::<Token![=]>()?;
+    let bytes = input.parse()?;
+    input.parse::<Option<Token![,]>>()?;
+    Ok(Some(bytes))
 }
 
 impl Parse for AttributeList {
@@ -40,6 +56,7 @@ impl Parse for AttributeList {
         Ok(Self {
             filename: input.parse()?,
             _separator: input.parse()?,
+            red_zone: parse_red_zone(input)?,
             argument_list: punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)?,
         })
     }
@@ -873,6 +890,9 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
+    if let Some(bytes) = &attributes.red_zone {
+        engine.allow_red_zone(bytes.base10_parse().unwrap_or_else(|e| abort!(bytes, e)));
+    }
 
     for (i, a) in arguments_to_memory_safe_regions.iter().enumerate() {
         let name;
@@ -1198,6 +1218,27 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             )))
         }
     });
+
+    let findings = engine.findings();
+    let token_stream: TokenStream = if findings.is_empty() {
+        token_stream
+    } else {
+        let notes = findings
+            .iter()
+            .map(|finding| format!("bums finding in {label}: {finding}"));
+        let markers = quote! {
+            #(
+                const _: () = {
+                    #[deprecated(note = #notes)]
+                    struct BumsFinding;
+                    let _ = BumsFinding;
+                };
+            )*
+        };
+        let mut combined: proc_macro2::TokenStream = token_stream.into();
+        combined.extend(markers);
+        combined.into()
+    };
 
     match res {
         Ok(_) => return token_stream,

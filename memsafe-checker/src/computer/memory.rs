@@ -500,7 +500,7 @@ impl ARMCORTEXA {
             )));
         }
 
-        let (l, u, extent) = if region_name == "sp" {
+        let (l, u, extent, below_red_zone) = if region_name == "sp" {
             let Some((low, high)) = self.stack_bounds() else {
                 return Err(MemorySafetyError::new(&format!(
                     "{ty} of {width} bytes at {} has no frame to measure: \
@@ -517,6 +517,8 @@ impl ARMCORTEXA {
                 displacement.lt(ast::Int::from_i64(low)),
                 last_byte.ge(ast::Int::from_i64(high)),
                 format!("stack frame [{low}, {high})"),
+                (self.red_zone > 0)
+                    .then(|| displacement.lt(ast::Int::from_i64(low - self.red_zone))),
             )
         } else {
             let upperbound_value = expression_to_ast(region.get_length()).unwrap_or_else(|| {
@@ -529,6 +531,7 @@ impl ARMCORTEXA {
                 access.lt(&base),
                 last_byte.ge(&up_access),
                 format!("region of length {}", region.get_length()),
+                None,
             )
         };
 
@@ -570,6 +573,19 @@ impl ARMCORTEXA {
                         );
                         return Ok(());
                     }
+                }
+                if b == SatResult::Unsat
+                    && let Some(below) = &below_red_zone
+                    && self.solver.check_assumptions(&with(below)) == SatResult::Unsat
+                    && self.solver.check_assumptions(&selects) == SatResult::Sat
+                {
+                    self.note_finding(&format!(
+                        "{ty} of {width} bytes at {} is below the stack pointer, in the \
+                         {}-byte red zone this analysis was told to allow",
+                        format_address(&base_expr, offset),
+                        self.red_zone
+                    ));
+                    return Ok(());
                 }
                 log::info!(
                     "below-region is {a:?} and past-end is {b:?}, model: {:?}",

@@ -52,6 +52,19 @@ fn the_top_of_the_frame_is_the_entry_pointer() {
     ]));
 }
 
+fn run_with_findings(body: &[&str], red_zone: Option<i64>) -> (bool, Vec<String>) {
+    init();
+    let mut program = vec!["start:".to_string()];
+    program.extend(body.iter().map(|line| line.to_string()));
+    program.push("ret".to_string());
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    if let Some(bytes) = red_zone {
+        engine.allow_red_zone(bytes);
+    }
+    let ok = engine.start("start".to_string()).is_ok();
+    (ok, engine.findings())
+}
+
 #[test]
 fn below_the_stack_pointer_is_not_in_the_frame() {
     // aarch64 has no red zone, so nothing below the pointer belongs to us.
@@ -60,6 +73,40 @@ fn below_the_stack_pointer_is_not_in_the_frame() {
         "stur x0,[sp,#-8]",
         "add sp,sp,#16",
     ]));
+}
+
+// Apple's arm64 ABI keeps the 128 bytes below the stack pointer intact; plain
+// AAPCS64 promises nothing there. Code written for Apple asks for the red zone,
+// and an access in it is then listed as a finding rather than failed.
+#[test]
+fn below_the_stack_pointer_is_a_finding_within_an_allowed_red_zone() {
+    let (ok, findings) = run_with_findings(
+        &["sub sp,sp,#16", "stur x0,[sp,#-8]", "add sp,sp,#16"],
+        Some(128),
+    );
+    assert!(ok);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(findings[0].contains("red zone"), "{findings:?}");
+
+    let (ok, _) = run_with_findings(&["ldp x1,x2,[sp,#-128]"], Some(128));
+    assert!(ok);
+    let (ok, _) = run_with_findings(&["ldr x1,[sp,#-136]"], Some(128));
+    assert!(!ok, "past the red zone");
+}
+
+#[test]
+fn without_a_red_zone_below_the_stack_pointer_is_no_finding_but_a_failure() {
+    let (ok, findings) = run_with_findings(&["ldr x1,[sp,#-8]"], None);
+    assert!(!ok);
+    assert!(findings.is_empty(), "{findings:?}");
+}
+
+#[test]
+fn an_access_inside_the_frame_is_no_finding() {
+    let (ok, findings) =
+        run_with_findings(&["sub sp,sp,#16", "str x0,[sp,#8]", "add sp,sp,#16"], None);
+    assert!(ok);
+    assert!(findings.is_empty(), "{findings:?}");
 }
 
 #[test]

@@ -14,5 +14,5 @@ fn AccelerateCrypto_ecb_AES_decrypt(key: &([u32; 60], u32), nblocks: usize, inpu
 #[bums_macros::check_mem_safe("aes_key_schedule.S", ecb, ctx as *mut _, rawkey.len(), rawkey.as_ptr())]
 fn ccaes_arm_encrypt_key(ecb: u64, ctx: &mut ([u32; 60], u32), rawkey: &[u8]) -> i32;
 
-#[bums_macros::check_mem_safe("aes_key_schedule.S", ecb, ctx as *mut _, rawkey.len(), rawkey.as_ptr())]
+#[bums_macros::check_mem_safe("aes_key_schedule.S", red_zone = 128, ecb, ctx as *mut _, rawkey.len(), rawkey.as_ptr())]
 fn ccaes_arm_decrypt_key(ecb: u64, ctx: &mut ([u32; 60], u32), rawkey: &[u8]) -> i32;
