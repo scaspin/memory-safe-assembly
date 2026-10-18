@@ -1,0 +1,30 @@
+# General Project TODOs
+
+- [ ] clean up and generalize the loop acceleration protocol
+- [ ] stronger post-condition checking
+- [ ] do not allow access as a result of overflow (probably have to constrain/precondition inputs)
+- [ ] x86
+- [ ] s2n_bignum, 
+- [ ] fiat crypto from paper
+- [ ] vtables
+- [ ] s2n-bignum assembly verified
+- [ ] s2n-bignum bums version
+- [ ] rav1d assembly verified
+- [ ] rav1d bums version
+- [ ] awslc assembly verified (updated)
+- [ ] awslc bums version
+- [ ] https://github.com/google/mundane?
+- [ ] bums as specs that run in CI
+- [ ] cryptol/saw
+- [ ] bug suite working (after x86)
+- [ ] find all the "isolated" asm out there, can we do all of it? what can we not do?
+- [ ] overheads
+- [ ] inline asm
+- [ ] a tensor library? candle?
+- [ ] compare with rust crypto
+- [ ] optimize our rust rewrites
+- [ ] preconditions/postconditions integrated into flux
+- [ ] preconditions/postconditions integrated into https://crates.io/crates/cargo-anneal
+- [ ] lean backend from sail? 
+- [ ] derive preconditions? 
+- [ ] before/after comparison to make sure asm optimizations are safe? (rav1d bounty)
