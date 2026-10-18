@@ -9,7 +9,8 @@ members = [
   "corecrypto-playground",
   "graviola-playground",
   "candle-playground",
-  "ffmpeg-playground"
+  "ffmpeg-playground",
+  "openblas-playground"
 ]
 exclude = ["scrape-asm"]
 resolver = "2"
