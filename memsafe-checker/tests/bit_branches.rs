@@ -30,10 +30,8 @@ fn run(branch: &str, x1: Option<usize>, taken: &[&str], fallen: &[&str]) -> std:
         "base".to_string(),
         AbstractExpression::Immediate(16),
     );
-    match x1 {
-        Some(value) => engine.add_immediate("x1", value),
-        // A symbolic value: the bit is unknown, but the register has a base.
-        None => (),
+    if let Some(value) = x1 {
+        engine.add_immediate("x1", value);
     }
     engine.start("start".to_string())
 }
