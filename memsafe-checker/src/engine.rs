@@ -966,6 +966,10 @@ fn continues_while_nonzero(
             || (*continuing.right == zero && is_walked(&continuing.left)))
 }
 
+fn at_least_zero(register: &RegisterValue) -> AbstractComparison {
+    AbstractComparison::new(">=", value_of(register), AbstractExpression::Immediate(0))
+}
+
 fn visits_since_the_branch_turned(history: &[JumpRecord], pc: usize, taken: bool) -> usize {
     history
         .iter()
@@ -1657,6 +1661,7 @@ struct Generalization {
     steps: Vec<(usize, i64)>,
     free_registers: Vec<usize>,
     free_flags: Vec<usize>,
+    nonnegative: Vec<usize>,
 }
 
 #[derive(Clone)]
@@ -4884,13 +4889,23 @@ impl ExecutionEngine {
             flag(2, &current.3),
             flag(3, &current.4),
         ];
-        let nonnegative = comparison_to_ast(AbstractComparison::new(">=", progress, zero))?;
-        self.computer.solver.assert(nonnegative);
+        let nonnegative: Vec<usize> = steps
+            .iter()
+            .map(|(i, _)| *i)
+            .filter(|&i| self.proves(at_least_zero(&current.0[i])))
+            .collect();
+        let progresses = comparison_to_ast(AbstractComparison::new(">=", progress, zero))?;
+        self.computer.solver.assert(progresses);
         for guard in guards {
             self.computer.solver.assert(guard);
         }
         for (i, register) in updates {
             self.computer.registers[i] = register;
+        }
+        for &i in &nonnegative {
+            if let Some(stays) = comparison_to_ast(at_least_zero(&self.computer.registers[i])) {
+                self.computer.solver.assert(stays);
+            }
         }
         self.computer.set_flags(flags);
         *expression = condition;
@@ -4900,6 +4915,7 @@ impl ExecutionEngine {
                 steps,
                 free_registers,
                 free_flags,
+                nonnegative,
             },
         ))
     }
@@ -4943,7 +4959,12 @@ impl ExecutionEngine {
                 }
             }
         });
-        if !registers {
+        if !registers
+            || !generalization
+                .nonnegative
+                .iter()
+                .all(|&i| self.proves(at_least_zero(&next.0[i])))
+        {
             return false;
         }
         let shifts: Vec<(usize, AbstractExpression)> = generalization
