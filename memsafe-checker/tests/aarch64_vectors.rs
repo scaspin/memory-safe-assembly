@@ -195,6 +195,47 @@ fn symbolic_stride_walk_is_summarized() {
 }
 
 #[test]
+fn a_symbolic_stride_taken_twice_an_iteration_is_summarized() {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "lsl x2, x2, #3",
+        "loop:",
+        "ldr x3, [x1]",
+        "add x1, x1, x2",
+        "ldr x3, [x1]",
+        "add x1, x1, x2",
+        "subs x0, x0, #1",
+        "b.ne loop",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let run = |slack: i64| {
+        let mut engine = bums::engine::ExecutionEngine::new(program.clone());
+        engine.add_abstract_from(0, "n");
+        engine.add_abstract_from(1, "buf");
+        engine.add_abstract_from(2, "inc");
+        engine.add_region(
+            RegionType::READ,
+            "buf",
+            generate_expression("*", abs("len"), imm(8)),
+        );
+        engine.add_invariant(AbstractComparison::new(">=", abs("n"), imm(1)));
+        engine.add_invariant(AbstractComparison::new(">=", abs("inc"), imm(1)));
+        engine.add_invariant(AbstractComparison::new(
+            "<=",
+            generate_expression("*", imm(2), generate_expression("*", abs("n"), abs("inc"))),
+            generate_expression("+", abs("len"), imm(slack)),
+        ));
+        engine.start("start").is_ok()
+    };
+    assert!(run(0));
+    assert!(!run(1));
+}
+
+#[test]
 fn right_shift_of_an_offset_value_folds_the_offset_first() {
     let body = [
         "sub x0, x0, #1",

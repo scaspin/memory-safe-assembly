@@ -482,7 +482,8 @@ fn symbolic_step(
                 .map(|step| generate_expression("-", AbstractExpression::Immediate(0), step));
         }
     }
-    None
+    let step = Affine::of(cur)?.combine(&Affine::of(prev)?, -1)?;
+    (!step.terms.is_empty() && !step.mentions_a_loop_counter()).then(|| step.to_expression())
 }
 
 pub fn invariant_of_register(prev: &RegisterValue, cur: &RegisterValue) -> LoopInvariant {
