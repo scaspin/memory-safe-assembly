@@ -2155,6 +2155,6 @@ impl ARMCORTEXA {
     }
 }
 
-fn is_floating_point(opcode: &str) -> bool {
+pub(crate) fn is_floating_point(opcode: &str) -> bool {
     opcode.starts_with('f') || matches!(opcode, "scvtf" | "ucvtf")
 }

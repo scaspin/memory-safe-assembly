@@ -8,6 +8,7 @@ use z3::*;
 
 mod instruction_aux;
 mod instructions;
+pub(crate) use instructions::is_floating_point;
 mod memory;
 mod simd;
 pub(crate) use simd::{

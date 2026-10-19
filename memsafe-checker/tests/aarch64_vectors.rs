@@ -333,3 +333,26 @@ fn paths_that_rejoin_in_the_same_state_are_merged() {
     assert!(accepts(&lines, 8, &[]));
     assert!(!accepts(&lines, 4, &[]));
 }
+
+#[test]
+fn nested_floating_point_diamonds_keep_the_index_either_arm_chose() {
+    let body = [
+        "mov x2, #0",
+        "fcmp d0, d1",
+        "b.eq done",
+        "fabs d2, d2",
+        "fcmp d2, d1",
+        "b.ge other",
+        "fadd d0, d0, d2",
+        "add x2, x2, #8",
+        "b done",
+        "other:",
+        "fdiv d3, d2, d1",
+        "done:",
+        "add x5, x1, x2",
+        "ldr x4, [x5]",
+    ];
+    assert!(!accepts(&body, 8, &[]));
+    assert!(!accepts(&body, 15, &[]));
+    assert!(accepts(&body, 16, &[]));
+}

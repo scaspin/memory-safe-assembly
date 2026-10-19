@@ -3026,15 +3026,39 @@ impl ExecutionEngine {
                 return Some(pc);
             }
             let instruction = self.program.code.get(pc)?.clone();
+            let vector_floating_point = is_floating_point(&instruction.opcode)
+                && instruction
+                    .operands
+                    .first()
+                    .is_none_or(|destination| vector_index(destination).is_some());
             match instruction.ty {
                 InstructionType::Label => {}
                 InstructionType::Arithmetic => {}
                 InstructionType::Other if matches!(instruction.opcode.as_str(), "mov") => {}
+                InstructionType::SIMDArithmetic | InstructionType::SIMDManagement
+                    if vector_floating_point => {}
                 InstructionType::ControlFlow if instruction.opcode == "b" => {
                     let Some(Operand::Label(label)) = instruction.operands.first() else {
                         return None;
                     };
                     return self.resolve_jump_target(label, pc).ok();
+                }
+                InstructionType::ControlFlow if is_conditional_branch(&instruction.opcode) => {
+                    pc = match self.computer.execute(pc, &instruction) {
+                        Ok(ExecuteReturnType::Next) => pc + 1,
+                        Ok(ExecuteReturnType::JumpLabel(label)) => {
+                            self.resolve_jump_target(&label, pc).ok()?
+                        }
+                        Ok(ExecuteReturnType::ConditionalJumpLabel(condition, label)) => {
+                            let target = self.resolve_jump_target(&label, pc).ok()?;
+                            let join = (target > pc)
+                                .then(|| self.merge_branch_arms(pc, &condition, target, &[]))
+                                .flatten()?;
+                            (join > pc).then_some(join)?
+                        }
+                        _ => return None,
+                    };
+                    continue;
                 }
                 _ => return None,
             }
@@ -3064,22 +3088,28 @@ impl ExecutionEngine {
             return None;
         }
         let entry = self.computer.get_state();
+        let vectors = self.computer.simd_registers.clone();
+        let lanes = self.computer.lane_bounds.clone();
+        let history_len = self.jump_history.len();
+        let abandon = |engine: &mut Self, entry: ComputerState| {
+            engine.computer.set_state(entry);
+            engine.computer.simd_registers = vectors.clone();
+            engine.computer.lane_bounds = lanes.clone();
+            engine.jump_history.truncate(history_len);
+            None
+        };
         let stop_at = (jump_dest > pc).then_some(jump_dest);
         let Some(fall_end) = self.run_data_arm(pc + 1, stop_at) else {
-            self.computer.set_state(entry);
-            return None;
+            return abandon(self, entry);
         };
         let fallen = self.computer.get_state();
         self.computer.set_state(entry.clone());
         let (taken, join) = if fall_end == jump_dest {
             (entry.clone(), jump_dest)
         } else {
-            match self.run_data_arm(jump_dest, None) {
+            match self.run_data_arm(jump_dest, Some(fall_end)) {
                 Some(end) if end == fall_end => (self.computer.get_state(), end),
-                _ => {
-                    self.computer.set_state(entry);
-                    return None;
-                }
+                _ => return abandon(self, entry),
             }
         };
         let pointer_moved = taken
@@ -3088,8 +3118,7 @@ impl ExecutionEngine {
             .zip(fallen.0.iter())
             .any(|(a, b)| a != b && (self.carries_region(a) || self.carries_region(b)));
         if pointer_moved {
-            self.computer.set_state(entry);
-            return None;
+            return abandon(self, entry);
         }
         let mut merged = fallen.clone();
         for (i, (if_taken, if_fallen)) in taken.0.iter().zip(fallen.0.iter()).enumerate() {
