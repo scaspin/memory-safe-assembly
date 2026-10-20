@@ -43,6 +43,8 @@ impl X86_64 {
                 }
             };
             address = add_values(&address, &scaled);
+        } else if let Some(index) = &m.index {
+            return Err(format!("addressing indexed by {index:?} is not modelled"));
         }
         Ok(address)
     }

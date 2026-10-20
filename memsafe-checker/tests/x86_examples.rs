@@ -272,3 +272,46 @@ fn a_byte_written_into_a_pointer_register_reads_back_as_written() {
     ];
     assert_eq!(check(&program, &short_input()), Ok(()));
 }
+
+#[test]
+fn a_masked_store_through_rdi_is_checked() {
+    let blocks = len_is_blocks_of(16);
+    assert_eq!(
+        check(&["start:", "maskmovdqu %xmm1,%xmm0", "ret"], &blocks),
+        Ok(())
+    );
+    let past_the_end = check(
+        &["start:", "addq $8,%rdi", "maskmovdqu %xmm1,%xmm0", "ret"],
+        &blocks,
+    );
+    assert!(past_the_end.is_err(), "{past_the_end:?}");
+    let read_only = check(
+        &["start:", "movq %rsi,%rdi", "maskmovdqu %xmm1,%xmm0", "ret"],
+        &blocks,
+    );
+    assert!(read_only.is_err(), "{read_only:?}");
+}
+
+#[test]
+fn a_string_compare_leaves_its_index_in_rcx_unknown() {
+    let result = check(
+        &[
+            "start:",
+            "xorl %ecx,%ecx",
+            "pcmpistri $8,(%rsi),%xmm0",
+            "movb (%rdi,%rcx),%al",
+            "ret",
+        ],
+        &len_is_blocks_of(16),
+    );
+    assert!(result.is_err(), "{result:?}");
+}
+
+#[test]
+fn a_gather_through_a_vector_index_is_refused() {
+    let result = check(
+        &["start:", "vpgatherdd %ymm2,(%rsi,%ymm1,4),%ymm0", "ret"],
+        &len_is_blocks_of(16),
+    );
+    assert!(result.is_err(), "{result:?}");
+}

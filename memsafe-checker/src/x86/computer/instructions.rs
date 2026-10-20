@@ -757,6 +757,11 @@ impl X86_64 {
                 }
             }
 
+            "maskmovdqu" | "vmaskmovdqu" | "maskmovq" => {
+                let rdi = self.registers[RDI].clone();
+                let bytes = if m == "maskmovq" { 8 } else { 16 };
+                self.store_range(&rdi, AbstractExpression::Immediate(bytes))?;
+            }
             "bums.vector_op" => {
                 if ops[0].is_memory() {
                     self.read(&ops[0], 16)?;
@@ -1118,6 +1123,11 @@ impl X86_64 {
         }
         if reads_only {
             self.set_unknown_flags();
+            match m.trim_start_matches('v') {
+                "pcmpestri" | "pcmpistri" => self.registers[RCX] = unknown(),
+                "pcmpestrm" | "pcmpistrm" => self.vectors[0] = unknown(),
+                _ => (),
+            }
             return Ok(ExecuteReturnType::Next);
         }
 
