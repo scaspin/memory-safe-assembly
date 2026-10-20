@@ -1,4 +1,3 @@
-
 use bums::common::*;
 
 fn init() {
@@ -384,4 +383,47 @@ fn a_merged_data_block_still_reaches_the_access_it_feeds() {
         unsafe_when_run.is_err(),
         "the block's effect on the index was lost in the merge"
     );
+}
+
+fn read_indexed_by_a_condition(body: &[&str]) -> Result<(), String> {
+    init();
+    let program: Vec<String> = std::iter::once("start:")
+        .chain(body.iter().copied())
+        .chain(["ldr x4,[x5,x3,lsl #3]", "skip:", "ret"])
+        .map(|s| s.to_string())
+        .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "first");
+    engine.add_abstract_from(1, "second");
+    engine.add_abstract_from(5, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn the_higher_side_of_an_unknown_carry_still_has_the_carry_set() {
+    assert!(read_indexed_by_a_condition(&["cmn x0,x1", "b.ls skip", "cset x3, cs"]).is_err());
+}
+
+#[test]
+fn the_lower_or_same_side_of_an_unknown_carry_may_have_it_clear() {
+    assert!(read_indexed_by_a_condition(&["cmn x0,x1", "b.hi skip", "cset x3, cc"]).is_err());
+}
+
+#[test]
+fn an_unsigned_higher_branch_after_a_compare_is_exact() {
+    assert_eq!(
+        read_indexed_by_a_condition(&["cmp x0,x1", "b.hi skip", "cset x3, hi"]),
+        Ok(())
+    );
+    assert!(read_indexed_by_a_condition(&["cmp x0,x1", "b.ls skip", "cset x3, hi"]).is_err());
+}
+
+#[test]
+fn a_signed_greater_branch_after_a_compare_is_exact() {
+    assert_eq!(
+        read_indexed_by_a_condition(&["cmp x0,x1", "b.gt skip", "cset x3, gt"]),
+        Ok(())
+    );
+    assert!(read_indexed_by_a_condition(&["cmp x0,x1", "b.le skip", "cset x3, gt"]).is_err());
 }

@@ -8,17 +8,6 @@ fn immediate(value: i64) -> RegisterValue {
     }
 }
 
-fn signed_sides(
-    zero: &FlagValue,
-    neg: &FlagValue,
-) -> Option<(AbstractExpression, AbstractExpression)> {
-    match (neg, zero) {
-        (FlagValue::Abstract(n), _) => Some((*n.left.clone(), *n.right.clone())),
-        (_, FlagValue::Abstract(z)) => Some((*z.left.clone(), *z.right.clone())),
-        _ => None,
-    }
-}
-
 fn permuted(opcode: &str, word: bool, value: u64) -> u64 {
     let per_half =
         |f: &dyn Fn(u32) -> u32| ((f((value >> 32) as u32) as u64) << 32) | f(value as u32) as u64;
@@ -77,40 +66,66 @@ impl ARMCORTEXA {
         }
     }
 
-    fn condition_holds(&self, condition: &str) -> Option<Result<bool, AbstractComparison>> {
-        let single = |flag: &Option<FlagValue>, negated: bool| match flag.as_ref()? {
-            FlagValue::Real(set) => Some(Ok(*set != negated)),
-            FlagValue::Abstract(holds) => Some(Err(if negated {
-                holds.clone().not()
-            } else {
-                holds.clone()
-            })),
+    fn condition(&mut self, condition: &str) -> Result<FlagValue, String> {
+        let (tested, negated) = match condition {
+            "ne" => ("eq", true),
+            "hs" => ("cs", false),
+            "cc" | "lo" => ("cs", true),
+            "pl" => ("mi", true),
+            "vc" => ("vs", true),
+            "ls" => ("hi", true),
+            "ge" => ("lt", true),
+            "le" => ("gt", true),
+            "nv" => ("al", false),
+            other => (other, false),
         };
-        let real = |flag: &Option<FlagValue>| match flag {
-            Some(FlagValue::Real(set)) => Some(*set),
-            _ => None,
+        let flag = |flag: &Option<FlagValue>| {
+            flag.clone()
+                .ok_or_else(|| format!("condition {condition} reads a flag the program never set"))
         };
-        match condition {
-            "eq" => single(&self.zero, false),
-            "ne" => single(&self.zero, true),
-            "cs" | "hs" => single(&self.carry, false),
-            "cc" | "lo" => single(&self.carry, true),
-            "mi" | "lt" => single(&self.neg, false),
-            "pl" | "ge" => single(&self.neg, true),
-            "vs" => single(&self.overflow, false),
-            "vc" => single(&self.overflow, true),
-            "hi" | "ls" => match (real(&self.carry), real(&self.zero)) {
-                (Some(c), Some(z)) => Some(Ok((c && !z) == (condition == "hi"))),
-                _ => {
-                    let (left, right) = self.unsigned_order()?;
-                    let op = if condition == "hi" { ">" } else { "<=" };
-                    Some(Err(AbstractComparison::new(op, left, right)))
-                }
+        let holds = match tested {
+            "al" => FlagValue::Real(true),
+            "eq" => flag(&self.zero)?,
+            "cs" => flag(&self.carry)?,
+            "vs" => flag(&self.overflow)?,
+            "lt" => flag(&self.neg)?,
+            "mi" => match (flag(&self.neg)?, flag(&self.overflow)?) {
+                (negative, FlagValue::Real(false)) => negative,
+                (FlagValue::Real(n), FlagValue::Real(v)) => FlagValue::Real(n != v),
+                _ => self.unknown_condition(),
             },
-            "gt" => Some(Ok(!real(&self.zero)? && !real(&self.neg)?)),
-            "le" => Some(Ok(real(&self.zero)? || real(&self.neg)?)),
-            _ => None,
-        }
+            "gt" => match (flag(&self.neg)?, flag(&self.zero)?) {
+                (FlagValue::Abstract(less), _) if Self::is_signed_difference(&less) => {
+                    FlagValue::Abstract(AbstractComparison::new(">", *less.left, *less.right))
+                }
+                (FlagValue::Real(true), _) | (_, FlagValue::Real(true)) => FlagValue::Real(false),
+                (FlagValue::Real(false), zero) => zero.not(),
+                (less, FlagValue::Real(false)) => less.not(),
+                _ => self.unknown_condition(),
+            },
+            "hi" => match (flag(&self.carry)?, flag(&self.zero)?, self.unsigned_order()) {
+                (_, _, Some((left, right))) => {
+                    FlagValue::Abstract(AbstractComparison::new(">", left, right))
+                }
+                (FlagValue::Real(false), _, _) | (_, FlagValue::Real(true), _) => {
+                    FlagValue::Real(false)
+                }
+                (FlagValue::Real(true), zero, _) => zero.not(),
+                (carry, FlagValue::Real(false), _) => carry,
+                _ => self.unknown_condition(),
+            },
+            _ => return Err(format!("unknown condition {condition}")),
+        };
+        Ok(if negated { holds.not() } else { holds })
+    }
+
+    fn is_signed_difference(less: &AbstractComparison) -> bool {
+        less.op == "<" && *less.right == AbstractExpression::Immediate(0)
+    }
+
+    fn unknown_condition(&mut self) -> FlagValue {
+        self.unknown_flag("condition")
+            .expect("an unknown flag is always abstract")
     }
 
     pub(crate) fn field_of_unknown(
@@ -214,160 +229,12 @@ impl ARMCORTEXA {
             self.set_register(dest, RegisterKind::RegisterBase, Some(extreme), 0);
             return Ok(ExecuteReturnType::Next);
         }
-        match cond {
-            "cc" | "lo" => {
-                match self
-                    .carry
-                    .clone()
-                    .expect("csel cc reads a carry flag the program never set")
-                {
-                    FlagValue::Real(b) => {
-                        if b {
-                            self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                        } else {
-                            self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                        }
-                    }
-                    FlagValue::Abstract(a) => {
-                        return Ok(ExecuteReturnType::Select(a.not(), dest.clone(), opt1, opt2));
-                    }
-                }
+        match self.condition(cond)? {
+            FlagValue::Real(true) => self.set_register(dest, opt1.kind, opt1.base, opt1.offset),
+            FlagValue::Real(false) => self.set_register(dest, opt2.kind, opt2.base, opt2.offset),
+            FlagValue::Abstract(holds) => {
+                return Ok(ExecuteReturnType::Select(holds, dest.clone(), opt1, opt2));
             }
-            "cs" | "hs" => match self.carry.clone() {
-                Some(FlagValue::Real(b)) => {
-                    if b {
-                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                    } else {
-                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                    }
-                }
-                Some(FlagValue::Abstract(a)) => {
-                    return Ok(ExecuteReturnType::Select(a, dest.clone(), opt1, opt2));
-                }
-                None => {
-                    return Ok(ExecuteReturnType::Select(
-                        AbstractComparison::new(
-                            "==",
-                            AbstractExpression::Abstract("c_flag".to_string()),
-                            AbstractExpression::Immediate(1),
-                        ),
-                        dest.clone(),
-                        opt1,
-                        opt2,
-                    ));
-                }
-            },
-            "eq" | "ne" => {
-                match self
-                    .zero
-                    .clone()
-                    .expect("reads a zero flag the program never set")
-                {
-                    FlagValue::Real(z) => {
-                        let first = if cond == "ne" { !z } else { z };
-                        if first {
-                            self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                        } else {
-                            self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                        }
-                    }
-                    FlagValue::Abstract(z) => {
-                        let z = if cond == "ne" { z.not() } else { z };
-                        return Ok(ExecuteReturnType::Select(z, dest.clone(), opt1, opt2));
-                    }
-                };
-            }
-            "lt" => match (&self.zero, &self.neg, &self.overflow) {
-                (Some(zero), Some(neg), Some(_)) => match (zero, neg) {
-                    (FlagValue::Real(z), FlagValue::Real(n)) => {
-                        if !*z && *n {
-                            self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                        } else {
-                            self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                        }
-                    }
-                    (zero, neg) => {
-                        let Some((left, right)) = signed_sides(zero, neg) else {
-                            todo!("csel lt needs concrete flags")
-                        };
-                        return Ok(ExecuteReturnType::Select(
-                            generate_comparison("<", left, right),
-                            dest.clone(),
-                            opt1,
-                            opt2,
-                        ));
-                    }
-                },
-                (_, _, _) => {
-                    return Err("csel reads a flag the program never set".to_string());
-                }
-            },
-            "gt" => match (&self.zero, &self.neg, &self.overflow) {
-                (Some(zero), Some(neg), Some(_)) => match (zero, neg) {
-                    (FlagValue::Real(z), FlagValue::Real(n)) => {
-                        if !*z && !*n {
-                            self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                        } else {
-                            self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                        }
-                    }
-                    (zero, neg) => {
-                        let Some((left, right)) = signed_sides(zero, neg) else {
-                            todo!("csel gt needs concrete flags")
-                        };
-                        return Ok(ExecuteReturnType::Select(
-                            generate_comparison(">", left, right),
-                            dest.clone(),
-                            opt1,
-                            opt2,
-                        ));
-                    }
-                },
-                (_, _, _) => {
-                    return Err("csel reads a flag the program never set".to_string());
-                }
-            },
-            "le" | "ge" => {
-                let (Some(zero), Some(neg)) = (&self.zero, &self.neg) else {
-                    return Err("csel reads a flag the program never set".to_string());
-                };
-                let taken = match (cond, zero, neg) {
-                    ("le", FlagValue::Real(z), FlagValue::Real(n)) => Some(*z || *n),
-                    ("ge", _, FlagValue::Real(n)) => Some(!n),
-                    _ => None,
-                };
-                match (taken, zero) {
-                    (Some(true), _) => self.set_register(dest, opt1.kind, opt1.base, opt1.offset),
-                    (Some(false), _) => self.set_register(dest, opt2.kind, opt2.base, opt2.offset),
-                    (None, _) if signed_sides(zero, neg).is_some() => {
-                        let Some((left, right)) = signed_sides(zero, neg) else {
-                            unreachable!()
-                        };
-                        let op = if cond == "le" { "<=" } else { ">=" };
-                        return Ok(ExecuteReturnType::Select(
-                            generate_comparison(op, left, right),
-                            dest.clone(),
-                            opt1,
-                            opt2,
-                        ));
-                    }
-                    (_, _) => todo!("csel {cond} needs concrete flags"),
-                }
-            }
-            other => match self.condition_holds(other) {
-                Some(Ok(true)) => {
-                    self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                }
-                Some(Ok(false)) => {
-                    self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                }
-                Some(Err(holds)) => {
-                    return Ok(ExecuteReturnType::Select(holds, dest.clone(), opt1, opt2));
-                }
-                None => {
-                    self.set_register(dest, RegisterKind::Number, None, 0);
-                }
-            },
         }
         Ok(ExecuteReturnType::Next)
     }
@@ -391,8 +258,10 @@ impl ARMCORTEXA {
         pc: usize,
         instruction: &Instruction,
     ) -> Result<ExecuteReturnType, String> {
-        if !matches!(instruction.ty, InstructionType::Label | InstructionType::Def)
-            && is_floating_point(&instruction.opcode)
+        if !matches!(
+            instruction.ty,
+            InstructionType::Label | InstructionType::Def
+        ) && is_floating_point(&instruction.opcode)
         {
             self.floating_point(instruction);
             return Ok(ExecuteReturnType::Next);
@@ -986,337 +855,6 @@ impl ARMCORTEXA {
                         panic!("bl not invoked correctly");
                     }
                 }
-                "b.ne" | "bne" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match &self.zero {
-                            Some(flag) => match flag {
-                                FlagValue::Real(b) => {
-                                    if !b {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                FlagValue::Abstract(s) => {
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        s.clone().not(),
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            None => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                    panic!("bne not invoked correctly with label");
-                }
-                "b.eq" | "beq" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match &self.zero {
-                            Some(flag) => match flag {
-                                FlagValue::Real(b) => {
-                                    if *b {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                FlagValue::Abstract(s) => {
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        s.clone(),
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            None => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                    panic!("beq not invoked correctly with label");
-                }
-                "b.mi" | "b.pl" | "b.vs" | "b.vc" => {
-                    let Operand::Label(label) = &instruction.operands[0] else {
-                        return Err(format!("{} without a label", instruction.opcode));
-                    };
-                    let (Some(neg), Some(overflow)) = (&self.neg, &self.overflow) else {
-                        return Err("branch reads a flag the program never set".to_string());
-                    };
-                    let flag = match instruction.opcode.as_str() {
-                        "b.vs" | "b.vc" => overflow.clone(),
-                        _ => match (neg, overflow) {
-                            (FlagValue::Real(n), FlagValue::Real(v)) => FlagValue::Real(n != v),
-                            (n, FlagValue::Real(false)) => n.clone(),
-                            _ => {
-                                return Err(format!(
-                                    "{} after a comparison that may overflow is not modelled",
-                                    instruction.opcode
-                                ));
-                            }
-                        },
-                    };
-                    let when = matches!(instruction.opcode.as_str(), "b.mi" | "b.vs");
-                    return match flag {
-                        FlagValue::Real(b) if b == when => {
-                            Ok(ExecuteReturnType::JumpLabel(label.clone()))
-                        }
-                        FlagValue::Real(_) => Ok(ExecuteReturnType::Next),
-                        FlagValue::Abstract(s) => Ok(ExecuteReturnType::ConditionalJumpLabel(
-                            if when { s } else { s.not() },
-                            label.clone(),
-                        )),
-                    };
-                }
-                "bgt" | "bt" | "b.gt" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.neg, &self.overflow) {
-                            (Some(zero), Some(neg), Some(ove)) => match (zero, neg, ove) {
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(_)) => {
-                                    if !z && !n {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                (zero, neg, _) => {
-                                    let Some((left, right)) = signed_sides(zero, neg) else {
-                                        todo!("branch needs concrete flags")
-                                    };
-                                    let expression = generate_comparison(">", left, right);
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            (_, _, _) => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                    panic!("b.gt not invoked correctly with label");
-                }
-                "b.lt" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.neg, &self.overflow) {
-                            (Some(zero), Some(neg), Some(ove)) => match (zero, neg, ove) {
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(_)) => {
-                                    if !z && *n {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                (zero, neg, _) => {
-                                    let Some((left, right)) = signed_sides(zero, neg) else {
-                                        todo!("branch needs concrete flags")
-                                    };
-                                    let expression = generate_comparison("<", left, right);
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            (_, _, _) => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                }
-                "b.ge" | "bge" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.neg, &self.overflow) {
-                            (Some(zero), Some(neg), Some(ove)) => match (zero, neg, ove) {
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(_)) => {
-                                    if *z || !n {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                (zero, neg, _) => {
-                                    let Some((left, right)) = signed_sides(zero, neg) else {
-                                        todo!("branch needs concrete flags")
-                                    };
-                                    let expression = generate_comparison(">=", left, right);
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            (_, _, _) => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                }
-                "b.ls" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.carry) {
-                            (Some(zero), Some(carry)) => match (zero, carry) {
-                                (FlagValue::Real(z), FlagValue::Real(c)) => {
-                                    if *z || !c {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                (_, FlagValue::Abstract(c)) => {
-                                    let expression = generate_comparison(
-                                        "<=",
-                                        *c.left.clone(),
-                                        *c.right.clone(),
-                                    );
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                                (FlagValue::Abstract(z), _) => {
-                                    let expression = generate_comparison(
-                                        "<=",
-                                        *z.left.clone(),
-                                        *z.right.clone(),
-                                    );
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            (_, _) => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                    panic!("b.ls not invoked correctly with label");
-                }
-                "b.hi" | "bhi" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.carry) {
-                            (Some(zero), Some(carry)) => match (zero, carry) {
-                                (FlagValue::Real(z), FlagValue::Real(c)) => {
-                                    if !z && *c {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                (_, FlagValue::Abstract(c)) => {
-                                    let expression =
-                                        generate_comparison(">", *c.left.clone(), *c.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                                (FlagValue::Abstract(z), _) => {
-                                    let expression =
-                                        generate_comparison(">", *z.left.clone(), *z.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            (_, _) => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                    panic!("b.hi not invoked correctly with label");
-                }
-                "b.le" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.neg) {
-                            (Some(zero), Some(neg)) => match (zero, neg) {
-                                (FlagValue::Real(z), FlagValue::Real(n)) => {
-                                    if *z || *n {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                (zero, neg) => {
-                                    let Some((left, right)) = signed_sides(zero, neg) else {
-                                        return Err(
-                                            "b.le reads a flag the program never set".to_string()
-                                        );
-                                    };
-                                    let expression = generate_comparison("<=", left, right);
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            (_, _) => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                    panic!("b.le not invoked correctly with label");
-                }
-                "b.cs" | "b.hs" | "bcs" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match &self.carry {
-                            Some(carry) => match carry {
-                                FlagValue::Real(c) => {
-                                    if *c {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                FlagValue::Abstract(c) => {
-                                    let expression = generate_comparison(
-                                        ">=",
-                                        *c.left.clone(),
-                                        *c.right.clone(),
-                                    );
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            None => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                    panic!("b.cs not invoked correctly");
-                }
-                "b.cc" | "b.lo" | "blo" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match &self.carry {
-                            Some(carry) => match carry {
-                                FlagValue::Real(c) => {
-                                    if !*c {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                FlagValue::Abstract(c) => {
-                                    let expression =
-                                        generate_comparison("<", *c.left.clone(), *c.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                        expression,
-                                        label.clone(),
-                                    ));
-                                }
-                            },
-                            None => {
-                                return Err("branch reads a flag the program never set".to_string());
-                            }
-                        }
-                    }
-                    panic!("b.cc/lo/blo not invoked correctly");
-                }
                 "cset" | "csetm" => {
                     let Some(dest) = instruction.operands.first() else {
                         return Err(format!("{} needs a destination", instruction.opcode));
@@ -1356,22 +894,14 @@ impl ARMCORTEXA {
                 }
                 op if op.starts_with("b.") => {
                     let Some(Operand::Label(label)) = instruction.operands.first() else {
-                        panic!("{op} needs a target label");
+                        return Err(format!("{op} needs a target label"));
                     };
-                    return Ok(match self.condition_holds(&op[2..]) {
-                        Some(Ok(true)) => ExecuteReturnType::JumpLabel(label.clone()),
-                        Some(Ok(false)) => ExecuteReturnType::Next,
-                        Some(Err(condition)) => {
+                    return Ok(match self.condition(&op[2..])? {
+                        FlagValue::Real(true) => ExecuteReturnType::JumpLabel(label.clone()),
+                        FlagValue::Real(false) => ExecuteReturnType::Next,
+                        FlagValue::Abstract(condition) => {
                             ExecuteReturnType::ConditionalJumpLabel(condition, label.clone())
                         }
-                        None => ExecuteReturnType::ConditionalJumpLabel(
-                            AbstractComparison::new(
-                                "==",
-                                fresh_unknown(),
-                                AbstractExpression::Immediate(0),
-                            ),
-                            label.clone(),
-                        ),
                     });
                 }
                 "cinv" | "cinc" | "cneg" | "csinv" | "csinc" | "csneg" => {
@@ -1401,8 +931,8 @@ impl ARMCORTEXA {
                             instruction.opcode
                         ));
                     };
-                    match self.condition_holds(cond) {
-                        Some(Ok(true)) => {
+                    match self.condition(cond)? {
+                        FlagValue::Real(true) => {
                             let bits = Self::flag_bits(&instruction.operands);
                             let (left, right) = (self.get_register(left), self.get_register(right));
                             if instruction.opcode == "ccmp" {
@@ -1411,7 +941,7 @@ impl ARMCORTEXA {
                                 self.cmn_values_sized(left, right, bits);
                             }
                         }
-                        Some(Ok(false)) => {
+                        FlagValue::Real(false) => {
                             let (n, v) = (nzcv & 8 != 0, nzcv & 1 != 0);
                             self.set_flags([
                                 Some(FlagValue::Real(nzcv & 4 != 0)),
