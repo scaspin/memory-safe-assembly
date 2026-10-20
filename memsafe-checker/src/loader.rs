@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
 use crate::instruction_parser::Instruction;
-use crate::machine::MachineInstruction;
+use crate::machine::{Flow, MachineInstruction};
 
 const PAGE: i64 = 1 << 12;
 const TEXT_DATA: &str = ".text.data";
+const UNSUPPORTED_ENCODING: &str = "bums.encoded_unknown";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataValue {
@@ -52,6 +53,7 @@ pub struct Listing<I = Instruction> {
     pub data_symbols: BTreeMap<String, DataSymbol>,
     text_block: Option<usize>,
     held_alignment: Vec<(String, String)>,
+    falls_through: bool,
 }
 
 impl<I> Default for Listing<I> {
@@ -65,6 +67,7 @@ impl<I> Default for Listing<I> {
             data_symbols: BTreeMap::new(),
             text_block: None,
             held_alignment: Vec::new(),
+            falls_through: false,
         }
     }
 }
@@ -130,6 +133,32 @@ fn is_writable_section(name: &str) -> bool {
     name.starts_with(".data") || name.starts_with(".bss") || name.starts_with("__DATA")
 }
 
+fn encoded_instructions<I: MachineInstruction>(directives: &[(String, String)]) -> i64 {
+    let bytes: i64 = directives
+        .iter()
+        .filter(|(directive, _)| emits_bytes::<I>(directive))
+        .map(|(directive, rest)| {
+            let items = rest.split(',').filter(|o| !o.trim().is_empty()).count() as i64;
+            match (directive.as_str(), I::item_width(directive)) {
+                (_, Some(width)) => width * items,
+                (".zero" | ".space" | ".skip", _) => {
+                    parse_integer(rest.split(',').next().unwrap_or("").trim()).unwrap_or(4)
+                }
+                _ => 4 * items.max(1),
+            }
+        })
+        .sum();
+    (bytes + 3) / 4
+}
+
+fn emits_bytes<I: MachineInstruction>(directive: &str) -> bool {
+    I::item_width(directive).is_some()
+        || matches!(
+            directive,
+            ".zero" | ".space" | ".skip" | ".fill" | ".ascii" | ".asciz" | ".string" | ".inst"
+        )
+}
+
 impl<I: MachineInstruction> Listing<I> {
     pub fn parse<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> Listing<I> {
         let mut listing = Listing::default();
@@ -182,7 +211,7 @@ impl<I: MachineInstruction> Listing<I> {
                         }
                         Section::Text => {
                             let aligns = matches!(directive, ".align" | ".p2align" | ".balign");
-                            if I::item_width(directive).is_some()
+                            if emits_bytes::<I>(directive)
                                 || (aligns && (run.is_some() || waiting.is_empty()))
                             {
                                 run.get_or_insert_with(|| TextRun {
@@ -207,8 +236,15 @@ impl<I: MachineInstruction> Listing<I> {
                     waiting.push(text);
                 }
                 _ => {
-                    let encoded = run.take().map(|r| r.labels).unwrap_or_default();
-                    for label in encoded.into_iter().chain(waiting.drain(..)) {
+                    if let Some(run) = run.take() {
+                        for label in run.labels {
+                            listing.push_code(I::parse(label));
+                        }
+                        for _ in 0..encoded_instructions::<I>(&run.directives) {
+                            listing.push_code(I::parse(UNSUPPORTED_ENCODING.to_string()));
+                        }
+                    }
+                    for label in waiting.drain(..) {
                         listing.push_code(I::parse(label));
                     }
                     listing.push_code(I::parse(text));
@@ -237,12 +273,8 @@ impl<I: MachineInstruction> Listing<I> {
         let Some(run) = run else {
             return;
         };
-        if run.labels.is_empty()
-            && run
-                .directives
-                .iter()
-                .all(|(d, _)| I::item_width(d).is_none())
-        {
+        let encoded = encoded_instructions::<I>(&run.directives);
+        if run.labels.is_empty() && encoded == 0 {
             self.held_alignment.extend(run.directives);
             return;
         }
@@ -253,8 +285,13 @@ impl<I: MachineInstruction> Listing<I> {
         for label in run.labels {
             self.add_data_symbol(index, label.trim_end_matches(':').to_string());
         }
-        for (directive, rest) in run.directives {
-            self.data_directive(index, &directive, &rest, pending);
+        for (directive, rest) in &run.directives {
+            self.data_directive(index, directive, rest, pending);
+        }
+        if self.falls_through {
+            for _ in 0..encoded {
+                self.push_code(I::parse(UNSUPPORTED_ENCODING.to_string()));
+            }
         }
     }
 
@@ -264,6 +301,10 @@ impl<I: MachineInstruction> Listing<I> {
         } else {
             self.text_block = None;
             self.held_alignment.clear();
+            self.falls_through = !matches!(
+                instruction.flow(),
+                Flow::Jump(_) | Flow::Return | Flow::Trap | Flow::Indirect
+            );
         }
         self.code.push(instruction);
     }
@@ -519,6 +560,35 @@ mod tests {
         assert!(l.labels.iter().any(|(n, _)| n == "g"));
         assert!(l.data_symbols.is_empty());
         assert_eq!(l.address_of("Loop_ce"), Some(4));
+        let encoded = l.labels.iter().find(|(n, _)| n == "Loop_ce").unwrap().1 + 1;
+        assert_eq!(l.code[encoded].opcode, UNSUPPORTED_ENCODING);
+    }
+
+    fn unsupported_encodings(l: &Listing) -> usize {
+        l.code
+            .iter()
+            .filter(|i| i.opcode == UNSUPPORTED_ENCODING)
+            .count()
+    }
+
+    #[test]
+    fn an_encoded_instruction_directive_among_code_is_unsupported() {
+        let l = listing(&["f:", "add x0, x0, #1", ".inst 0xce608c00", "ret"]);
+        assert_eq!(unsupported_encodings(&l), 1);
+    }
+
+    #[test]
+    fn words_reached_by_falling_through_are_unsupported_code() {
+        let l = listing(&["f:", "add x0, x0, #1", ".long 0xce0f2a99", "g:", "ret"]);
+        assert_eq!(unsupported_encodings(&l), 1);
+        assert!(l.labels.iter().any(|(n, _)| n == "g"));
+    }
+
+    #[test]
+    fn words_after_a_return_are_only_data() {
+        let l = listing(&["f:", "ret", "tbl:", ".long 1", "g:", "ret"]);
+        assert_eq!(unsupported_encodings(&l), 0);
+        assert!(l.data_symbols.contains_key("tbl"));
     }
 
     #[test]

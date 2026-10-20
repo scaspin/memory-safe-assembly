@@ -676,6 +676,8 @@ fn modrm_operand(bytes: &[u8], rex: u8, wide: bool) -> Option<(String, usize, u8
 pub fn decode_encoded(bytes: &[u8]) -> Option<String> {
     match bytes {
         [0xf3, 0xc3] => return Some("ret".to_string()),
+        [0xf3, 0x0f, 0x1e, 0xfa] => return Some("endbr64".to_string()),
+        [0xf3, 0x0f, 0x1e, 0xfb] => return Some("nop".to_string()),
         [0x66] | [0x67] | [0x67, 0x67] | [0x2e] | [0x3e] | [0x66, 0x90] | [0x90] => {
             return Some("nop".to_string());
         }
@@ -758,8 +760,50 @@ pub fn decode_encoded(bytes: &[u8]) -> Option<String> {
         (0, 0xc7) if register_form && reg & 7 == 7 => format!("rdseed {operand}"),
         (0x38, 0xf0) if !register_form => format!("movbe {operand},%{}", gpr_name(reg)),
         (0x38, 0xf1) if !register_form => format!("movbe %{},{operand}", gpr_name(reg)),
-        _ => format!("bums.vector_op {},{}", rm_vector(&operand), xmm(reg)),
+        _ if updates_only_its_vector(map, opcode) => {
+            format!("bums.vector_op {},{}", rm_vector(&operand), xmm(reg))
+        }
+        _ => return None,
     })
+}
+
+fn updates_only_its_vector(map: u8, opcode: u8) -> bool {
+    match map {
+        0x38 => matches!(
+            opcode,
+            0x00..=0x0b
+                | 0x10
+                | 0x14
+                | 0x15
+                | 0x1c..=0x1e
+                | 0x20..=0x25
+                | 0x28..=0x2b
+                | 0x30..=0x35
+                | 0x37..=0x41
+                | 0xc8..=0xcd
+                | 0xdb..=0xdf
+        ),
+        0x3a => matches!(
+            opcode,
+            0x08..=0x0f | 0x20..=0x22 | 0x40..=0x42 | 0x44 | 0xcc | 0xdf
+        ),
+        _ => matches!(
+            opcode,
+            0x10 | 0x12
+                | 0x14..=0x16
+                | 0x28
+                | 0x51..=0x5f
+                | 0x60..=0x6d
+                | 0x6f
+                | 0x74..=0x76
+                | 0xd1..=0xd5
+                | 0xd8..=0xdf
+                | 0xe0..=0xe5
+                | 0xe8..=0xef
+                | 0xf1..=0xf6
+                | 0xf8..=0xfe
+        ),
+    }
 }
 
 pub fn byte_values(line: &str) -> Option<Vec<u8>> {
@@ -891,6 +935,10 @@ mod tests {
     fn decodes_perlasm_byte_encodings() {
         assert_eq!(decode_encoded(&[0xf3, 0xc3]).as_deref(), Some("ret"));
         assert_eq!(
+            decode_encoded(&[243, 15, 30, 250]).as_deref(),
+            Some("endbr64")
+        );
+        assert_eq!(
             decode_encoded(&[102, 72, 15, 126, 199]).as_deref(),
             Some("movq %xmm0,%rdi")
         );
@@ -919,5 +967,9 @@ mod tests {
             Some("nop")
         );
         assert_eq!(decode_encoded(&[71, 72, 65, 83, 72]), None);
+        assert_eq!(decode_encoded(&[0x66, 0x0f, 0x7f, 0x07]), None);
+        assert_eq!(decode_encoded(&[0x66, 0x0f, 0xf7, 0xc1]), None);
+        assert_eq!(decode_encoded(&[0x66, 0x0f, 0x3a, 0x16, 0xc0, 1]), None);
+        assert_eq!(decode_encoded(&[0x66, 0x0f, 0x38, 0x17, 0xc1]), None);
     }
 }

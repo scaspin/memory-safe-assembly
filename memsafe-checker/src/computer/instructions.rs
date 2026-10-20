@@ -1502,6 +1502,9 @@ impl ARMCORTEXA {
             },
             InstructionType::Other => match instruction.opcode.as_str() {
                 "nop" | "hint" => {}
+                "bums.encoded_unknown" => {
+                    return Err("unsupported encoded instruction".to_string());
+                }
                 "brk" | "udf" | "hlt" => return Ok(ExecuteReturnType::Trap),
                 "cmp" => {
                     self.cmp(&instruction.operands[0], &instruction.operands[1]);

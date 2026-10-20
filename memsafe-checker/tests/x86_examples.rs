@@ -315,3 +315,12 @@ fn a_gather_through_a_vector_index_is_refused() {
     );
     assert!(result.is_err(), "{result:?}");
 }
+
+#[test]
+fn bytes_that_do_not_decode_at_the_start_of_a_block_are_refused() {
+    let result = check(
+        &["start:", ".byte 0x0f,0x0b", "movq (%rsi),%rax", "ret"],
+        &len_is_blocks_of(16),
+    );
+    assert!(result.is_err(), "{result:?}");
+}

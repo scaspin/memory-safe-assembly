@@ -544,3 +544,24 @@ fn an_extend_without_an_amount_still_computes() {
     assert_eq!(read(15), Ok(()));
     assert!(read(16).is_err());
 }
+
+#[test]
+fn an_encoded_word_among_the_code_is_refused() {
+    let r = run(
+        &["start:", "loop:", ".long 0x8b000000", "ldr x3,[x0]", "ret"],
+        Some(8),
+        &[],
+    );
+    let err = r.expect_err("executed an instruction it cannot see");
+    assert!(err.contains("unsupported encoded instruction"), "{err}");
+}
+
+#[test]
+fn a_word_reached_by_falling_through_is_refused() {
+    let r = run(
+        &["start:", "add x0,x0,#0", ".inst 0x8b000000", "next:", "ret"],
+        Some(8),
+        &[],
+    );
+    assert!(r.is_err(), "fell through an instruction it cannot see");
+}
