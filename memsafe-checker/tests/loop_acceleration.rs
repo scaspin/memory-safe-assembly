@@ -2977,3 +2977,72 @@ fn a_split_step_beside_the_walk_still_catches_an_out_of_bounds_read() {
         "proved an out of bounds read"
     );
 }
+
+fn offset_growing_late(exit: &[&str], growth: &str) -> Vec<String> {
+    let head = [
+        "start:",
+        "mov x2,#0",
+        "mov x4,#0",
+        "mov x6,#8",
+        "loop:",
+        "ldrb w9,[x0]",
+        "cmp x2,x1",
+        "b.eq done",
+    ];
+    let tail = [
+        "cmp x2,#4",
+        growth,
+        "add x4,x4,x5",
+        "add x2,x2,#1",
+        "b loop",
+        "found:",
+        "ldr x3,[x0,x4]",
+        "done:",
+        "ret",
+    ];
+    head.iter()
+        .chain(exit)
+        .chain(tail.iter())
+        .map(|s| s.to_string())
+        .collect()
+}
+
+fn analyze_eight_bytes(lines: Vec<String>) -> Result<(), String> {
+    init();
+    let mut engine = bums::engine::ExecutionEngine::new(lines);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(8));
+    engine.add_abstract_from(1, "count");
+    engine.add_abstract_from(7, "stop");
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn an_offset_that_starts_moving_after_the_summary_is_caught_on_a_mid_body_exit() {
+    let lines = offset_growing_late(&["cmp x2,x7", "b.eq found"], "csel x5,x6,xzr,hs");
+    assert_rejected_access(analyze_eight_bytes(lines));
+}
+
+#[test]
+fn an_offset_that_never_moves_is_safe_on_a_mid_body_exit() {
+    let lines = offset_growing_late(&["cmp x2,x7", "b.eq found"], "mov x5,#0");
+    assert_eq!(analyze_eight_bytes(lines), Ok(()));
+}
+
+#[test]
+fn a_return_inside_the_body_sees_an_offset_that_starts_moving_late() {
+    let lines = offset_growing_late(
+        &["cmp x2,x7", "b.ne stay", "ldr x3,[x0,x4]", "ret", "stay:"],
+        "csel x5,x6,xzr,hs",
+    );
+    assert_rejected_access(analyze_eight_bytes(lines));
+}
+
+#[test]
+fn an_exit_reached_only_in_late_iterations_sees_the_moved_offset() {
+    let lines = offset_growing_late(
+        &["cmp x2,#5", "b.lo stay", "cbz x7,found", "stay:"],
+        "csel x5,x6,xzr,hs",
+    );
+    assert_rejected_access(analyze_eight_bytes(lines));
+}

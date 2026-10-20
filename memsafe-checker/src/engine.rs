@@ -9,6 +9,7 @@ const MAX_JUMP_HISTORY: usize = 30;
 const MIN_REVISITS_PER_BRANCH: usize = 20;
 const MAX_SPLIT_VALUES: usize = 4;
 const MAX_SUMMARY_TRIES: usize = 3;
+const MAX_REFUTATIONS: usize = 8;
 const MAX_SELECT_CHAIN: usize = 16;
 const SUMMARY_ITERATION: i64 = 3;
 const DECIDED_REPEATS_BEFORE_SUMMARY: usize = 3;
@@ -1709,6 +1710,7 @@ fn bound_candidates(invariants: &[LoopInvariant], current: &[RegisterValue]) -> 
 #[derive(Debug, Clone)]
 struct ActiveLoop {
     id: LoopId,
+    instance: usize,
     pc: usize,
     depth: usize,
     scope_id: usize,
@@ -1718,15 +1720,12 @@ struct ActiveLoop {
     state: MachineState,
     entry_state: MachineState,
     history_len: usize,
-    entry_condition: AbstractComparison,
-    entry_accesses: Vec<MemoryAccess>,
     facts: Vec<AbstractComparison>,
     exits: Vec<(usize, bool)>,
     round: usize,
     nested_facts: Vec<ast::Bool>,
     ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
     cells: Vec<(MemoryCell, LoopInvariant)>,
-    journal_before_summary: usize,
     journal_after_summary: usize,
     blind_writes_at_summary: usize,
     slots: Vec<SymbolicSlot>,
@@ -1782,9 +1781,46 @@ pub struct Engine<M: Machine> {
     scopes: Vec<Scope>,
     next_scope_id: usize,
     round_entries: BTreeMap<usize, RoundEntry>,
-    left_through: Option<(usize, Vec<(AbstractComparison, bool)>)>,
     path_ends: bool,
     suspended: Vec<SuspendedCall>,
+    ledger: Rc<RefCell<SummaryLedger>>,
+    relied_on: Vec<usize>,
+    pending_summary: Option<(usize, Box<Engine<M>>)>,
+}
+
+enum Discharge {
+    Closed(bool),
+    LeftThrough(usize, Vec<(AbstractComparison, bool)>),
+    Refuted,
+}
+
+#[derive(Default)]
+struct SummaryLedger {
+    next_instance: usize,
+    failures: Vec<FailedDischarge>,
+    refuted: BTreeSet<usize>,
+    refutations_at: BTreeMap<usize, usize>,
+}
+
+struct FailedDischarge {
+    instance: usize,
+    relied_on: Vec<usize>,
+    retry: Option<LoopAttempt>,
+}
+
+impl SummaryLedger {
+    fn refute(&mut self, instance: usize) -> Option<Option<LoopAttempt>> {
+        let failure = self.failures.iter().find(|failure| {
+            failure.instance == instance
+                && failure
+                    .relied_on
+                    .iter()
+                    .all(|other| !self.refuted.contains(other))
+        })?;
+        let retry = failure.retry.clone();
+        self.refuted.insert(instance);
+        Some(retry)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1879,9 +1915,11 @@ impl<M: Machine> Engine<M> {
             scopes: Vec::new(),
             next_scope_id: 0,
             round_entries: BTreeMap::new(),
-            left_through: None,
             path_ends: false,
             suspended: Vec::new(),
+            ledger: Rc::default(),
+            relied_on: Vec::new(),
+            pending_summary: None,
         }
     }
 
@@ -2234,7 +2272,7 @@ impl<M: Machine> Engine<M> {
             self.costly_latches,
             self.value_ranges,
             self.round_entries,
-            self.left_through,
+            self.relied_on,
             self.suspended,
             self.scopes.iter().map(|scope| scope.id).collect::<Vec<_>>(),
         );
@@ -2671,13 +2709,26 @@ impl<M: Machine> Engine<M> {
         jump_dest: usize,
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
-        let mut rw_list = self.computer.read_rw_queue();
+        let rw_list = self.computer.read_rw_queue();
         if self.active_loops.is_empty()
             && let Some((symbol, values)) = self.concrete_split(&condition)
         {
             return self.split_on(&symbol, &values, pc, depth);
         }
-        let decision = self.evaluate_branch_condition(pc, depth, &mut condition, &mut rw_list);
+        let decision = self.evaluate_branch_condition(pc, depth, &mut condition, &rw_list);
+        self.follow_branch(pc, condition, rw_list, decision, jump_dest, depth)
+    }
+
+    fn follow_branch(
+        &mut self,
+        pc: usize,
+        condition: AbstractComparison,
+        rw_list: Vec<MemoryAccess>,
+        decision: Option<bool>,
+        jump_dest: usize,
+        depth: usize,
+    ) -> std::io::Result<BranchOutcome> {
+        let pending_summary = self.pending_summary.take();
         if std::mem::take(&mut self.path_ends) {
             return Ok(BranchOutcome::BothExplored);
         }
@@ -2757,9 +2808,51 @@ impl<M: Machine> Engine<M> {
                 }
                 let next = if taken { jump_dest } else { pc + 1 };
                 log::info!("exploring line: {}", next);
-                Ok(BranchOutcome::Next(next))
+                match pending_summary {
+                    Some((instance, fallback)) => self.validate_summary(
+                        instance,
+                        *fallback,
+                        next,
+                        (pc, condition, rw_list, jump_dest),
+                        depth,
+                    ),
+                    None => Ok(BranchOutcome::Next(next)),
+                }
             }
         }
+    }
+
+    fn validate_summary(
+        &mut self,
+        instance: usize,
+        fallback: Engine<M>,
+        next: usize,
+        (pc, condition, rw_list, jump_dest): (usize, AbstractComparison, Vec<MemoryAccess>, usize),
+        depth: usize,
+    ) -> std::io::Result<BranchOutcome> {
+        let explored = self.run(next, depth);
+        let Some(retry) = self.ledger.borrow_mut().refute(instance) else {
+            return explored.map(|()| BranchOutcome::BothExplored);
+        };
+        log::info!("summary {instance} at line {pc} failed its inductive check, exploring again");
+        *self = fallback;
+        let refutations = {
+            let mut ledger = self.ledger.borrow_mut();
+            let refutations = ledger.refutations_at.entry(pc).or_insert(0);
+            *refutations += 1;
+            *refutations
+        };
+        if refutations >= MAX_REFUTATIONS {
+            self.failed_summaries
+                .borrow_mut()
+                .insert(pc, MAX_SUMMARY_TRIES);
+        }
+        match retry {
+            Some(attempt) => self.loop_attempts.insert(pc, attempt),
+            None => self.loop_attempts.remove(&pc),
+        };
+        let decision = self.decide(pc, depth, &condition);
+        self.follow_branch(pc, condition, rw_list, decision, jump_dest, depth)
     }
 
     fn memory_free_loop(
@@ -3168,41 +3261,31 @@ impl<M: Machine> Engine<M> {
         pc: usize,
         depth: usize,
         expression: &mut AbstractComparison,
-        rw_list: &mut Vec<MemoryAccess>,
+        rw_list: &[MemoryAccess],
     ) -> Option<bool> {
         log::info!("jump condition: {}", expression.clone());
-        log::info!("memory accesses: {:?}", rw_list.clone());
+        log::info!("memory accesses: {:?}", rw_list);
 
         if let Some(active) = self.active_loops.last().cloned()
             && active.pc == pc
         {
-            let (entry_condition, entry_accesses) = (
-                active.entry_condition.clone(),
-                active.entry_accesses.clone(),
-            );
-            if let Some(decision) = self.discharge_active_loop(active, expression.clone()) {
-                return Some(decision);
-            }
-            match self.left_through.take() {
-                Some((exit, prefix)) => {
-                    if self.repeat_round(pc, exit, &prefix, expression) {
-                        return None;
-                    }
+            match self.discharge_active_loop(active, expression.clone()) {
+                Discharge::Closed(decision) => return Some(decision),
+                Discharge::Refuted => {
+                    self.path_ends = true;
+                    return None;
                 }
-                None => {
-                    *expression = entry_condition;
-                    *rw_list = entry_accesses;
-                    if !self
-                        .loop_attempts
-                        .get(&pc)
-                        .is_some_and(|attempt| attempt.widened)
-                    {
+                Discharge::LeftThrough(exit, prefix) => {
+                    if self.repeat_round(pc, exit, &prefix, expression) {
                         return None;
                     }
                 }
             }
         }
+        self.decide(pc, depth, expression)
+    }
 
+    fn decide(&mut self, pc: usize, depth: usize, expression: &AbstractComparison) -> Option<bool> {
         match self.decide_from_solver(expression) {
             Decision::Unreachable => {
                 log::info!("line {pc} is unreachable on this path");
@@ -3213,11 +3296,10 @@ impl<M: Machine> Engine<M> {
                 if self.repeats_unboundedly(pc, taken, expression)
                     || self.unrolling_costs_too_much(pc, taken, expression) =>
             {
-                self.try_summarize(pc, depth, expression, rw_list)
-                    .or(Some(taken))
+                self.try_summarize(pc, depth, expression).or(Some(taken))
             }
             Decision::Take(taken) => Some(taken),
-            Decision::Explore => self.try_summarize(pc, depth, expression, rw_list),
+            Decision::Explore => self.try_summarize(pc, depth, expression),
         }
     }
 
@@ -3504,7 +3586,6 @@ impl<M: Machine> Engine<M> {
         pc: usize,
         depth: usize,
         expression: &AbstractComparison,
-        rw_list: &[MemoryAccess],
     ) -> Option<bool> {
         if self.active_loops.iter().any(|open| open.pc == pc) {
             return None;
@@ -3750,6 +3831,7 @@ impl<M: Machine> Engine<M> {
             .exit_facts
             .retain(|fact| !unjustified.contains(fact));
 
+        let fallback = self.fork();
         let scope_id = self.push_scope();
         for fact in summary.facts.iter().filter_map(summary_fact_to_ast) {
             self.computer.solver().assert(fact);
@@ -3799,7 +3881,6 @@ impl<M: Machine> Engine<M> {
             .filter(|slot| previous.slots.contains(slot))
             .collect();
         self.computer.set_symbolic_slots(kept);
-        let journal_before_summary = self.computer.write_journal().len();
         let counter = LoopCounter::for_loop(id);
         for (cell, invariant) in &cells {
             let stored = self.computer.cell_content(cell);
@@ -3825,8 +3906,16 @@ impl<M: Machine> Engine<M> {
         let ghost_checks = summary.ghost_checks.clone();
         self.summaries.borrow_mut().push(summary);
 
+        let instance = {
+            let mut ledger = self.ledger.borrow_mut();
+            ledger.next_instance += 1;
+            ledger.next_instance
+        };
+        self.relied_on.push(instance);
+        self.pending_summary = Some((instance, Box::new(fallback)));
         self.active_loops.push(ActiveLoop {
             id,
+            instance,
             pc,
             depth,
             scope_id,
@@ -3836,15 +3925,12 @@ impl<M: Machine> Engine<M> {
             state: self.computer.get_state(),
             entry_state: current_state,
             history_len: self.jump_history.len(),
-            entry_condition: expression.clone(),
-            entry_accesses: rw_list.to_vec(),
             facts,
             exits,
             round,
             nested_facts: Vec::new(),
             ghost_checks,
             cells,
-            journal_before_summary,
             journal_after_summary,
             blind_writes_at_summary: self.computer.blind_stack_writes().len(),
             slots: self.computer.symbolic_slots(),
@@ -4925,7 +5011,7 @@ impl<M: Machine> Engine<M> {
         active: &ActiveLoop,
         observed: &[LoopInvariant],
         unbounded: Vec<String>,
-    ) -> bool {
+    ) {
         let mut joined = join_all(&active.invariants, observed);
         for (i, inv) in joined.iter_mut().enumerate() {
             if *inv != active.invariants[i]
@@ -4946,10 +5032,10 @@ impl<M: Machine> Engine<M> {
         }
         let failures = self.failed_summaries.borrow().get(&active.pc).copied();
         if failures.is_some_and(|n| n >= MAX_SUMMARY_TRIES) {
-            return false;
+            return;
         }
         if joined == active.invariants && unbounded.is_empty() {
-            return false;
+            return;
         }
         let (rounds, mut rejected_bounds) = self
             .loop_attempts
@@ -4958,7 +5044,7 @@ impl<M: Machine> Engine<M> {
                 (earlier.rounds, earlier.rejected_bounds.clone())
             });
         if rounds >= max_ascents(observed.len()) {
-            return false;
+            return;
         }
         rejected_bounds.extend(unbounded);
         self.loop_attempts.insert(
@@ -4976,7 +5062,6 @@ impl<M: Machine> Engine<M> {
             active.id,
             active.pc
         );
-        true
     }
 
     fn release_loop(&mut self, active: &ActiveLoop) {
@@ -5368,7 +5453,7 @@ impl<M: Machine> Engine<M> {
         &mut self,
         active: ActiveLoop,
         expression: AbstractComparison,
-    ) -> Option<bool> {
+    ) -> Discharge {
         let since = active.history_len.min(self.jump_history.len());
         let left_through = self.jump_history[since..].iter().position(|record| {
             active
@@ -5391,8 +5476,7 @@ impl<M: Machine> Engine<M> {
                 active.id,
                 active.pc
             );
-            self.left_through = Some((exit_pc, prefix));
-            return None;
+            return Discharge::LeftThrough(exit_pc, prefix);
         }
 
         let mut active = active;
@@ -5519,38 +5603,117 @@ impl<M: Machine> Engine<M> {
                 .zip(observed.iter())
                 .all(|(recorded, seen)| recorded.subsumes(seen));
 
-        let read_by_guard = registers_in(&expression);
-        let shown = expression.clone();
-        let leaving = comparison_to_ast(expression).map(|condition| {
-            if active.entry_decision {
-                condition
-            } else {
-                condition.not()
+        if !holds {
+            let read_by_guard = registers_in(&expression);
+            let only_data_moved = ghosts_repeat
+                && active
+                    .invariants
+                    .iter()
+                    .zip(&observed)
+                    .enumerate()
+                    .filter(|(_, (recorded, seen))| !recorded.subsumes(seen))
+                    .all(|(i, _)| {
+                        [&active.entry_state.0[i], &active.state.0[i], &current.0[i]]
+                            .into_iter()
+                            .all(|r| !self.computer.carries_region(r) && !read_by_guard.contains(r))
+                    });
+            self.refute_active_loop(
+                &active,
+                &observed,
+                unbounded,
+                only_data_moved,
+                !cells_hold || !slots_hold,
+            );
+            log::info!(
+                "{} at line {} not closed, exit condition {expression}",
+                active.id,
+                active.pc
+            );
+            for (i, (recorded, seen)) in active.invariants.iter().zip(observed.iter()).enumerate() {
+                if *seen == LoopInvariant::Fixed && recorded.subsumes(seen) {
+                    continue;
+                }
+                log::info!(
+                    "{} x{i}: recorded={recorded:?} observed={seen:?} subsumed={} entry={:?} exit={:?}",
+                    active.id,
+                    recorded.subsumes(seen),
+                    active.state.0[i],
+                    current.0[i]
+                );
             }
-        });
-        let exits = leaving.as_ref().is_some_and(|leaving| {
-            self.computer
-                .solver()
-                .check_assumptions(std::slice::from_ref(leaving))
-                == SatResult::Unsat
-        });
+            return Discharge::Refuted;
+        }
 
-        let unstable: Vec<usize> = active
-            .invariants
-            .iter()
-            .zip(observed.iter())
-            .enumerate()
-            .filter(|(_, (recorded, seen))| !recorded.subsumes(seen))
-            .map(|(i, _)| i)
-            .collect();
-        let only_data_moved = ghosts_repeat
-            && unstable.iter().all(|&i| {
-                [&active.entry_state.0[i], &active.state.0[i], &current.0[i]]
+        let above = self.scopes_above(active.scope_id);
+        self.pop_scope(active.scope_id);
+        self.active_loops.pop();
+        let left_by = if active.entry_decision {
+            expression.not()
+        } else {
+            expression.clone()
+        };
+        let counter = AbstractExpression::Abstract(format!("{}_?", active.id));
+        if let (Some(left), Some(right)) = (Affine::of(&left_by.left), Affine::of(&left_by.right))
+            && let Some(distance) = left.combine(&right, -1)
+        {
+            let values: Vec<AbstractExpression> =
+                exit_window(&left_by.op, distance.coefficient(&counter))
                     .into_iter()
-                    .all(|r| !self.computer.carries_region(r) && !read_by_guard.contains(r))
-            });
-        if !holds
-            && !only_data_moved
+                    .filter_map(|reached| {
+                        counter_value_at_exit(
+                            &counter,
+                            &Affine {
+                                constant: distance.constant - reached,
+                                terms: distance.terms.clone(),
+                            },
+                        )
+                    })
+                    .collect();
+            if !values.is_empty() {
+                log::info!("{} leaves with its counter at one of {values:?}", active.id);
+                self.closed_counters.push((counter, values));
+            }
+        }
+        let mut kept: Vec<ast::Bool> = summary_fact_to_ast(&left_by).into_iter().collect();
+        kept.extend(
+            active
+                .facts
+                .iter()
+                .chain(&active.exit_facts)
+                .filter_map(summary_fact_to_ast),
+        );
+        kept.extend(active.nested_facts.iter().cloned());
+        for bound in active.bounds.iter().map(|bound| bound.at(&current.0)) {
+            kept.extend(self.select_definitions_in(&bound));
+            kept.extend(comparison_to_ast(bound));
+        }
+        self.keep_facts(kept);
+        self.jump_history.truncate(active.history_len);
+        for record in &mut self.jump_history {
+            record.resolved |= record.point.pc == active.pc;
+        }
+        self.loop_attempts.remove(&active.pc);
+        self.rebuild_scopes(above);
+        if self.computer.solver().check() == SatResult::Unsat {
+            log::info!(
+                "{} at line {} has no feasible exit on this path",
+                active.id,
+                active.pc
+            );
+            self.path_ends = true;
+        }
+        Discharge::Closed(!active.entry_decision)
+    }
+
+    fn refute_active_loop(
+        &mut self,
+        active: &ActiveLoop,
+        observed: &[LoopInvariant],
+        unbounded: Vec<String>,
+        only_data_moved: bool,
+        memory_drifted: bool,
+    ) {
+        if !only_data_moved
             && self
                 .counted_failures
                 .borrow_mut()
@@ -5562,86 +5725,8 @@ impl<M: Machine> Engine<M> {
                 .entry(active.pc)
                 .or_insert(0) += 1;
         }
-        let retrying = !holds && self.widen_for_retry(&active, &observed, unbounded);
-
-        let above = if retrying {
-            Vec::new()
-        } else {
-            self.scopes_above(active.scope_id)
-        };
-        self.pop_scope(active.scope_id);
-        self.active_loops.pop();
-
-        let closed = holds;
-        if closed {
-            let left_by = if active.entry_decision {
-                shown.not()
-            } else {
-                shown.clone()
-            };
-            let counter = AbstractExpression::Abstract(format!("{}_?", active.id));
-            if let (Some(left), Some(right)) =
-                (Affine::of(&left_by.left), Affine::of(&left_by.right))
-                && let Some(distance) = left.combine(&right, -1)
-            {
-                let values: Vec<AbstractExpression> =
-                    exit_window(&left_by.op, distance.coefficient(&counter))
-                        .into_iter()
-                        .filter_map(|reached| {
-                            counter_value_at_exit(
-                                &counter,
-                                &Affine {
-                                    constant: distance.constant - reached,
-                                    terms: distance.terms.clone(),
-                                },
-                            )
-                        })
-                        .collect();
-                if !values.is_empty() {
-                    log::info!("{} leaves with its counter at one of {values:?}", active.id);
-                    self.closed_counters.push((counter, values));
-                }
-            }
-            let mut kept: Vec<ast::Bool> = leaving.iter().map(|l| l.not().simplify()).collect();
-            kept.extend(
-                active
-                    .facts
-                    .iter()
-                    .chain(&active.exit_facts)
-                    .filter_map(summary_fact_to_ast),
-            );
-            kept.extend(active.nested_facts.iter().cloned());
-            for bound in active.bounds.iter().map(|bound| bound.at(&current.0)) {
-                kept.extend(self.select_definitions_in(&bound));
-                kept.extend(comparison_to_ast(bound));
-            }
-            self.keep_facts(kept);
-            self.jump_history.truncate(active.history_len);
-            for record in &mut self.jump_history {
-                record.resolved |= record.point.pc == active.pc;
-            }
-            self.loop_attempts.remove(&active.pc);
-        }
-
-        self.rebuild_scopes(above);
-
-        if closed {
-            if self.computer.solver().check() == SatResult::Unsat {
-                log::info!(
-                    "{} at line {} has no feasible exit on this path",
-                    active.id,
-                    active.pc
-                );
-                self.path_ends = true;
-            }
-            return Some(!active.entry_decision);
-        }
-
-        self.computer.set_state(active.entry_state);
-        self.computer
-            .undo_writes_since(active.journal_before_summary);
-        self.computer.set_symbolic_slots(active.slots);
-        if !cells_hold || !slots_hold {
+        self.widen_for_retry(active, observed, unbounded);
+        if memory_drifted {
             let mut retries = self.cell_retries.borrow_mut();
             let used = retries.entry(active.pc).or_insert(0);
             if *used < MAX_CELL_RETRIES {
@@ -5649,27 +5734,11 @@ impl<M: Machine> Engine<M> {
                 self.loop_attempts.remove(&active.pc);
             }
         }
-        self.jump_history.truncate(active.history_len);
-
-        log::info!(
-            "{} at line {} not closed: inductive={holds} exits={exits}",
-            active.id,
-            active.pc
-        );
-        log::info!("{} exit condition checked: {shown}", active.id);
-        for (i, (recorded, seen)) in active.invariants.iter().zip(observed.iter()).enumerate() {
-            if *seen == LoopInvariant::Fixed && recorded.subsumes(seen) {
-                continue;
-            }
-            log::info!(
-                "{} x{i}: recorded={recorded:?} observed={seen:?} subsumed={} entry={:?} exit={:?}",
-                active.id,
-                recorded.subsumes(seen),
-                active.state.0[i],
-                current.0[i]
-            );
-        }
-        None
+        self.ledger.borrow_mut().failures.push(FailedDischarge {
+            instance: active.instance,
+            relied_on: self.relied_on.clone(),
+            retry: self.loop_attempts.get(&active.pc).cloned(),
+        });
     }
 }
 

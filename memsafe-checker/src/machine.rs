@@ -46,7 +46,6 @@ pub struct MemoryCell {
 pub struct CellWrite {
     pub cell: MemoryCell,
     pub previous: Option<RegisterValue>,
-    pub previous_width: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -325,12 +324,10 @@ pub trait Machine: Clone {
             return;
         };
         let previous = region.content.get(&cell.offset).cloned();
-        let previous_width = region.width_at(cell.offset);
         region.insert(cell.offset, value);
         self.write_journal_mut().push(CellWrite {
             cell: cell.clone(),
             previous,
-            previous_width,
         });
     }
 
@@ -339,7 +336,6 @@ pub trait Machine: Clone {
             return;
         };
         let previous = region.content.get(&offset).cloned();
-        let previous_width = region.width_at(offset);
         region.put(offset, None);
         self.write_journal_mut().push(CellWrite {
             cell: MemoryCell {
@@ -347,7 +343,6 @@ pub trait Machine: Clone {
                 offset,
             },
             previous,
-            previous_width,
         });
     }
 
@@ -371,7 +366,6 @@ pub trait Machine: Clone {
         self.write_journal_mut().push(CellWrite {
             cell: cell.clone(),
             previous: None,
-            previous_width: None,
         });
     }
 
@@ -417,21 +411,6 @@ pub trait Machine: Clone {
             if let Some(region) = self.memory_mut().get_mut(&name) {
                 region.renew_unwritten();
             }
-        }
-    }
-
-    fn undo_writes_since(&mut self, journal_len: usize) {
-        while self.write_journal().len() > journal_len {
-            let Some(write) = self.write_journal_mut().pop() else {
-                break;
-            };
-            let Some(region) = self.memory_mut().get_mut(&write.cell.region) else {
-                continue;
-            };
-            region.put(
-                write.cell.offset,
-                write.previous.map(|value| (value, write.previous_width)),
-            );
         }
     }
 
