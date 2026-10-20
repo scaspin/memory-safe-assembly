@@ -2489,9 +2489,14 @@ impl<M: Machine> Engine<M> {
         let line = self
             .get_linenumber_of_label(base.to_string(), pc)
             .ok_or_else(|| Error::other(format!("No label found: {:?}", base)))?;
+        let width = M::Instruction::FIXED_WIDTH.ok_or_else(|| {
+            Error::other(format!(
+                "{label}: instructions have no fixed width to count"
+            ))
+        })?;
         let parsed_offset = usize::from_str_radix(offset.trim_start_matches("0x"), 16)
             .expect("unable to parse label offset");
-        Ok(line + 1 + (parsed_offset / 4))
+        Ok(line + 1 + parsed_offset / width)
     }
 
     fn is_boolean_mask(&self, expr: &AbstractExpression) -> bool {
