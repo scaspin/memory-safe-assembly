@@ -214,6 +214,7 @@ struct Summary {
     exits: Vec<(usize, bool)>,
     ranges: Vec<(String, i64)>,
     ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
+    operand_checks: Vec<(Vec<bool>, usize)>,
     continuing: AbstractComparison,
 }
 
@@ -246,10 +247,66 @@ fn rewind(value: AbstractExpression, steps: i64, step: &AbstractExpression) -> A
     )
 }
 
+fn operand_index(
+    operands: &[(RegisterValue, usize)],
+    current: &[RegisterValue],
+    r: &RegisterValue,
+) -> Option<usize> {
+    operands
+        .iter()
+        .find(|(value, _)| value == r)
+        .map(|(_, i)| *i)
+        .or_else(|| current.iter().position(|c| c == r))
+}
+
+fn guard_operands(
+    before: &AbstractComparison,
+    after: &AbstractComparison,
+    previous: &[RegisterValue],
+    current: &[RegisterValue],
+) -> Vec<(RegisterValue, usize)> {
+    fn pair(
+        before: &AbstractExpression,
+        after: &AbstractExpression,
+        states: (&[RegisterValue], &[RegisterValue]),
+        found: &mut Vec<(RegisterValue, usize)>,
+    ) {
+        match (before, after) {
+            (AbstractExpression::Register(was), AbstractExpression::Register(is)) => {
+                let (previous, current) = states;
+                let moved_alike = |i: &usize| previous[*i] == **was && current[*i] == **is;
+                let first = current.iter().position(|c| c == &**is);
+                if first.is_some_and(|i| !moved_alike(&i))
+                    && let Some(i) = (0..current.len()).find(moved_alike)
+                {
+                    found.push(((**is).clone(), i));
+                }
+            }
+            (
+                AbstractExpression::Expression(op_before, left_before, right_before),
+                AbstractExpression::Expression(op_after, left_after, right_after),
+            ) if op_before == op_after => {
+                pair(left_before, left_after, states, found);
+                pair(right_before, right_after, states, found);
+            }
+            _ => (),
+        }
+    }
+    let mut found = Vec::new();
+    if before.op == after.op {
+        pair(&before.left, &after.left, (previous, current), &mut found);
+        pair(&before.right, &after.right, (previous, current), &mut found);
+    }
+    found
+}
+
 fn anchored(
     e: &AbstractExpression,
-    current: &[RegisterValue],
-    previous: &[RegisterValue],
+    (current, previous, operands): (
+        &[RegisterValue],
+        &[RegisterValue],
+        &[(RegisterValue, usize)],
+    ),
     invariants: &[LoopInvariant],
     ghosts: &[Ghost],
 ) -> AbstractExpression {
@@ -262,9 +319,7 @@ fn anchored(
                     &AbstractExpression::Immediate(step),
                 );
             }
-            let found = current
-                .iter()
-                .position(|c| c == &**r)
+            let found = operand_index(operands, current, r)
                 .map(|i| (i, 0))
                 .or_else(|| previous.iter().position(|p| p == &**r).map(|i| (i, 1)));
             match found.map(|(i, behind)| (&invariants[i], behind)) {
@@ -284,8 +339,8 @@ fn anchored(
         }
         AbstractExpression::Expression(op, a, b) => generate_expression(
             op,
-            anchored(a, current, previous, invariants, ghosts),
-            anchored(b, current, previous, invariants, ghosts),
+            anchored(a, (current, previous, operands), invariants, ghosts),
+            anchored(b, (current, previous, operands), invariants, ghosts),
         ),
         other => other.clone(),
     }
@@ -293,15 +348,16 @@ fn anchored(
 
 fn at_summary(
     e: &AbstractExpression,
-    current: &[RegisterValue],
-    previous: &[RegisterValue],
+    (current, previous, operands): (
+        &[RegisterValue],
+        &[RegisterValue],
+        &[(RegisterValue, usize)],
+    ),
     updates: &[(usize, RegisterValue)],
 ) -> AbstractExpression {
     match e {
         AbstractExpression::Register(r) => {
-            let index = current
-                .iter()
-                .position(|c| c == &**r)
+            let index = operand_index(operands, current, r)
                 .or_else(|| previous.iter().position(|p| p == &**r));
             match index.and_then(|i| updates.iter().find(|(j, _)| *j == i)) {
                 Some((_, rewritten)) => AbstractExpression::Register(Box::new(rewritten.clone())),
@@ -310,8 +366,8 @@ fn at_summary(
         }
         AbstractExpression::Expression(op, a, b) => generate_expression(
             op,
-            at_summary(a, current, previous, updates),
-            at_summary(b, current, previous, updates),
+            at_summary(a, (current, previous, operands), updates),
+            at_summary(b, (current, previous, operands), updates),
         ),
         other => other.clone(),
     }
@@ -1242,7 +1298,7 @@ fn summarize(
     id: LoopId,
     pc: usize,
     label: Option<String>,
-    guard: (&AbstractComparison, &[Ghost]),
+    guard: (&AbstractComparison, &[Ghost], &[(RegisterValue, usize)]),
     continues_when: bool,
     invariants: Vec<LoopInvariant>,
     states: (
@@ -1252,7 +1308,7 @@ fn summarize(
         &[GhostedRecord],
     ),
 ) -> Summary {
-    let (condition, ghosts) = guard;
+    let (condition, ghosts, operands) = guard;
     let (previous, current, cycle, walked) = states;
     let counter = LoopCounter::for_loop(id);
     let name = counter.name().to_string();
@@ -1417,11 +1473,7 @@ fn summarize(
     facts.extend(progress_facts);
 
     let index_of = |r: &RegisterValue| -> Option<usize> {
-        current
-            .0
-            .iter()
-            .position(|c| c == r)
-            .or_else(|| previous.0.iter().position(|c| c == r))
+        operand_index(operands, &current.0, r).or_else(|| previous.0.iter().position(|c| c == r))
     };
 
     let register_step = |r: &RegisterValue| match (ghost_step(ghosts, r), index_of(r)) {
@@ -1440,11 +1492,15 @@ fn summarize(
     if let Some((exit, walker, step)) = trip {
         let distance = generate_expression(
             "-",
-            anchored(exit, &current.0, &previous.0, &invariants, ghosts),
+            anchored(
+                exit,
+                (&current.0, &previous.0, operands),
+                &invariants,
+                ghosts,
+            ),
             anchored(
                 peel_unsigned(walker),
-                &current.0,
-                &previous.0,
+                (&current.0, &previous.0, operands),
                 &invariants,
                 ghosts,
             ),
@@ -1525,7 +1581,7 @@ fn summarize(
             .fold(side.clone(), |e, ghost| {
                 replaced_at(&e, &ghost.path[1..], &ghost_at_summary(ghost, &counter, 0))
             });
-        at_summary(&substituted, &current.0, &previous.0, &updates)
+        at_summary(&substituted, (&current.0, &previous.0, operands), &updates)
     };
     let held = AbstractComparison::new(
         &condition.op,
@@ -1545,6 +1601,14 @@ fn summarize(
         .iter()
         .map(|ghost| (ghost.path.clone(), ghost_at_summary(ghost, &counter, 1)))
         .collect();
+    let operand_checks = register_leaves(condition)
+        .into_iter()
+        .filter(|(_, r)| ghost_step(ghosts, r).is_none())
+        .filter_map(|(path, r)| {
+            let i = operand_index(operands, &current.0, &r)?;
+            (invariants[i] != LoopInvariant::Fixed).then_some((path, i))
+        })
+        .collect();
 
     Summary {
         id,
@@ -1560,8 +1624,34 @@ fn summarize(
         exits,
         ranges,
         ghost_checks,
+        operand_checks,
         continuing,
     }
+}
+
+fn register_leaves(condition: &AbstractComparison) -> Vec<(Vec<bool>, RegisterValue)> {
+    fn collect(
+        e: &AbstractExpression,
+        path: &mut Vec<bool>,
+        found: &mut Vec<(Vec<bool>, RegisterValue)>,
+    ) {
+        match e {
+            AbstractExpression::Register(r) => found.push((path.clone(), (**r).clone())),
+            AbstractExpression::Expression(_, a, b) => {
+                for (side, child) in [(true, a), (false, b)] {
+                    path.push(side);
+                    collect(child, path, found);
+                    path.pop();
+                }
+            }
+            _ => (),
+        }
+    }
+    let mut found = Vec::new();
+    for (side, e) in [(true, &condition.left), (false, &condition.right)] {
+        collect(e, &mut vec![side], &mut found);
+    }
+    found
 }
 
 fn exit_window(op: &str, per_iteration: i64) -> Vec<i64> {
@@ -1725,6 +1815,7 @@ struct ActiveLoop {
     round: usize,
     nested_facts: Vec<ast::Bool>,
     ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
+    operand_checks: Vec<(Vec<bool>, usize)>,
     cells: Vec<(MemoryCell, LoopInvariant)>,
     journal_after_summary: usize,
     blind_writes_at_summary: usize,
@@ -3751,7 +3842,16 @@ impl<M: Machine> Engine<M> {
             id,
             pc,
             self.enclosing_label(pc),
-            (expression, &ghosts),
+            (
+                expression,
+                &ghosts,
+                &guard_operands(
+                    &previous.condition,
+                    expression,
+                    &entry_state.0,
+                    &current_state.0,
+                ),
+            ),
             branch_decision,
             self.bound_values(
                 pc,
@@ -3904,6 +4004,7 @@ impl<M: Machine> Engine<M> {
         let facts = summary.facts.clone();
         let exits = summary.exits.clone();
         let ghost_checks = summary.ghost_checks.clone();
+        let operand_checks = summary.operand_checks.clone();
         self.summaries.borrow_mut().push(summary);
 
         let instance = {
@@ -3930,6 +4031,7 @@ impl<M: Machine> Engine<M> {
             round,
             nested_facts: Vec::new(),
             ghost_checks,
+            operand_checks,
             cells,
             journal_after_summary,
             blind_writes_at_summary: self.computer.blind_stack_writes().len(),
@@ -5509,6 +5611,18 @@ impl<M: Machine> Engine<M> {
                     Some(AbstractExpression::Register(now)) => self.proves(
                         AbstractComparison::new("==", value_of(now), expected.clone()),
                     ),
+                    _ => false,
+                }
+            }) && active.operand_checks.iter().all(|(path, i)| {
+                match condition_side(&expression, path) {
+                    Some(AbstractExpression::Register(now)) => {
+                        **now == current.0[*i]
+                            || self.proves(AbstractComparison::new(
+                                "==",
+                                value_of(now),
+                                value_of(&current.0[*i]),
+                            ))
+                    }
                     _ => false,
                 }
             });
