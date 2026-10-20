@@ -3701,9 +3701,14 @@ impl<M: Machine> Engine<M> {
             return None;
         }
         let history = self.jump_history.clone();
+        let this_iteration = self
+            .active_loops
+            .last()
+            .map_or(0, |open| open.history_len.min(history.len()));
         let (index, record) = history
             .iter()
             .enumerate()
+            .skip(this_iteration)
             .rev()
             .find(|(_, record)| record.point.pc == pc)?;
         let (previous, branch_decision) = (record.point.clone(), record.taken);

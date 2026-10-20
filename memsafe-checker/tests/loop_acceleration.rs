@@ -229,7 +229,6 @@ fn immediate_counter_loop_resolves() {
 }
 
 #[test]
-#[ignore = "passed only because the body reads nothing; the inner loop unrolls to the depth limit"]
 fn nested_loops_resolve() {
     let program = vec![
         "start:".to_string(),
@@ -277,7 +276,6 @@ fn nested_loops_still_catch_out_of_bounds_read() {
 }
 
 #[test]
-#[ignore = "detection is gated on no loop being open, so an inner loop never summarizes"]
 fn nested_both_accelerated_is_safe() {
     let program = nested_walk(
         SYMBOLIC_LIMIT,
@@ -3045,6 +3043,136 @@ fn an_exit_reached_only_in_late_iterations_sees_the_moved_offset() {
         "csel x5,x6,xzr,hs",
     );
     assert_rejected_access(analyze_eight_bytes(lines));
+}
+
+fn triangular_walk(read: &str) -> Vec<String> {
+    [
+        "start:",
+        "add x1,x0,x1",
+        "add x6,x0,#0",
+        "outer:",
+        "cmp x0,x1",
+        "b.eq done",
+        "add x2,x6,#0",
+        "inner:",
+        "cmp x2,x0",
+        "b.eq next",
+        read,
+        "add x2,x2,#4",
+        "b inner",
+        "next:",
+        "add x0,x0,#4",
+        "b outer",
+        "done:",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+#[test]
+fn an_inner_loop_bounded_by_the_outer_pointer_is_safe() {
+    assert_eq!(
+        analyze_accelerated(triangular_walk("ldr w4,[x2,#0]"), 4, 4),
+        Ok(())
+    );
+}
+
+#[test]
+fn an_inner_loop_bounded_by_the_outer_pointer_catches_a_read_past_it() {
+    assert_rejected_access(analyze_accelerated(triangular_walk("ldr w4,[x2,#8]"), 4, 4));
+}
+
+fn continuing_walk(read: &str) -> Vec<String> {
+    [
+        "start:",
+        "add x1,x0,x1",
+        "add x2,x0,#0",
+        "outer:",
+        "cmp x0,x1",
+        "b.eq done",
+        "add x3,x0,#16",
+        "inner:",
+        "cmp x2,x3",
+        "b.eq next",
+        read,
+        "add x2,x2,#4",
+        "b inner",
+        "next:",
+        "add x0,x0,#16",
+        "b outer",
+        "done:",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+#[test]
+fn an_inner_pointer_that_continues_across_outer_iterations_is_safe() {
+    assert_eq!(
+        analyze_accelerated(continuing_walk("ldr w4,[x2,#0]"), 16, 16),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_read_past_the_end_only_on_the_last_outer_iteration_is_rejected() {
+    assert_rejected_access(analyze_accelerated(
+        continuing_walk("ldr w4,[x2,#4]"),
+        16,
+        16,
+    ));
+}
+
+#[test]
+fn a_read_past_the_end_only_on_the_last_outer_iteration_of_a_reset_pointer_is_rejected() {
+    let program = nested_walk(SYMBOLIC_LIMIT, "add x3,x0,#16", 16, 4, &["ldr w4,[x2,#4]"]);
+    assert_rejected_access(analyze_accelerated(program, 16, 16));
+}
+
+fn three_deep_walk(read: &str) -> Vec<String> {
+    [
+        "start:",
+        "add x1,x0,x1",
+        "outer:",
+        "cmp x0,x1",
+        "b.eq done",
+        "add x7,x0,#0",
+        "middle:",
+        "cmp x7,x1",
+        "b.eq next_outer",
+        "add x2,x7,#0",
+        "inner:",
+        "cmp x2,x1",
+        "b.eq next_middle",
+        read,
+        "add x2,x2,#4",
+        "b inner",
+        "next_middle:",
+        "add x7,x7,#4",
+        "b middle",
+        "next_outer:",
+        "add x0,x0,#4",
+        "b outer",
+        "done:",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+#[test]
+fn three_nested_loops_are_safe() {
+    assert_eq!(
+        analyze_accelerated(three_deep_walk("ldr w4,[x2,#0]"), 4, 4),
+        Ok(())
+    );
+}
+
+#[test]
+fn three_nested_loops_catch_a_read_past_the_end() {
+    assert_rejected_access(analyze_accelerated(three_deep_walk("ldr w4,[x2,#4]"), 4, 4));
 }
 
 #[test]
