@@ -3,8 +3,6 @@ use crate::x86::computer::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Carry {
     Cleared,
-    Borrow,
-    Overflowed,
     Kept,
     Unknown,
 }
@@ -118,26 +116,67 @@ impl X86_64 {
                 self.overflow = real(false);
             }
             RegisterKind::RegisterBase => {
-                let value = AbstractExpression::Register(Box::new(result.clone()));
-                self.zero = compare("==", value.clone(), AbstractExpression::Immediate(0));
-                self.neg = compare("<", value, AbstractExpression::Immediate(0));
+                let signed = AbstractExpression::Register(Box::new(sign_extend(result, width)));
+                self.zero = compare("==", signed.clone(), AbstractExpression::Immediate(0));
+                self.neg = compare("<", signed, AbstractExpression::Immediate(0));
                 self.overflow = real(false);
             }
         }
-        let value = AbstractExpression::Register(Box::new(result.clone()));
         self.carry = match carry {
             Carry::Kept | Carry::Cleared => carry_flag,
-            Carry::Borrow => match result.kind {
-                RegisterKind::Immediate => real(false),
-                _ => compare("<", value, AbstractExpression::Immediate(0)),
-            },
-            Carry::Overflowed => match result.kind {
-                RegisterKind::Immediate => real(false),
-                _ => compare(">", value, AbstractExpression::Immediate(i64::MAX)),
-            },
             Carry::Unknown => {
                 let symbol = self.fresh("carry_flag");
                 compare("==", symbol, AbstractExpression::Immediate(1))
+            }
+        };
+    }
+
+    pub fn set_arithmetic_carry(
+        &mut self,
+        add: bool,
+        (dst, src, result): (&RegisterValue, &RegisterValue, &RegisterValue),
+        width: i64,
+    ) {
+        let largest = mask(width);
+        self.carry = match (&dst.kind, &src.kind) {
+            (RegisterKind::Immediate, RegisterKind::Immediate) => {
+                let (a, b) = (dst.offset as u64 & largest, src.offset as u64 & largest);
+                real(if add {
+                    a.checked_add(b).is_none_or(|sum| sum > largest)
+                } else {
+                    a < b
+                })
+            }
+            (RegisterKind::Number, _) | (_, RegisterKind::Number) => {
+                let symbol = self.fresh("carry_flag");
+                compare("==", symbol, AbstractExpression::Immediate(1))
+            }
+            _ => {
+                let (left, right) = if width >= 8 {
+                    (
+                        AbstractExpression::Register(Box::new(result.clone())),
+                        AbstractExpression::Immediate(0),
+                    )
+                } else {
+                    (
+                        AbstractExpression::Register(Box::new(dst.clone())),
+                        AbstractExpression::Register(Box::new(src.clone())),
+                    )
+                };
+                if add {
+                    let beyond = AbstractExpression::Expression(
+                        "+".to_string(),
+                        Box::new(AbstractExpression::Expression(
+                            "*".to_string(),
+                            Box::new(AbstractExpression::Immediate((largest / 2) as i64)),
+                            Box::new(AbstractExpression::Immediate(2)),
+                        )),
+                        Box::new(AbstractExpression::Immediate(1)),
+                    );
+                    compare(">", generate_expression("+", left, right), beyond)
+                } else {
+                    compare("<", left, right)
+                }
             }
         };
     }

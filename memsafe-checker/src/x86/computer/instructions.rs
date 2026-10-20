@@ -427,12 +427,10 @@ impl X86_64 {
                 };
                 self.write(&ops[1], width, result)?;
                 let written = self.read(&ops[1], width)?;
-                let carry = match m {
-                    "add" => Carry::Overflowed,
-                    "sub" => Carry::Borrow,
-                    _ => Carry::Cleared,
-                };
-                self.flags_of_result(&written, width, carry);
+                self.flags_of_result(&written, width, Carry::Cleared);
+                if matches!(m, "add" | "sub") {
+                    self.set_arithmetic_carry(m == "add", (&dst, &src, &written), width);
+                }
             }
             "adc" | "sbb" => return self.with_carry(m, ops, width),
             "adcx" | "adox" => {

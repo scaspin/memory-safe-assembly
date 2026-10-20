@@ -204,3 +204,28 @@ fn an_arithmetic_shift_of_a_negative_value_rounds_down() {
     let other = value.eq(ast::Int::from_i64(-2)).not();
     assert_eq!(c.solver.check_assumptions(&[other]), SatResult::Unsat);
 }
+
+#[test]
+fn a_subtraction_of_immediates_borrows_when_it_wraps() {
+    let mut c = X86_64::new();
+    c.set_immediate("rax".to_string(), 16);
+    run(&mut c, "subq $32,%rax");
+    assert_eq!(
+        run(&mut c, "jb L$taken"),
+        ExecuteReturnType::JumpLabel("L$taken".to_string())
+    );
+}
+
+#[test]
+fn a_32_bit_result_below_zero_sets_the_sign_flag() {
+    let mut c = X86_64::new();
+    c.set_abstract("rcx".to_string(), abstract_of("v"));
+    c.solver
+        .assert(ast::Int::new_const("v").eq(ast::Int::from_i64(0)));
+    run(&mut c, "decl %ecx");
+    let ExecuteReturnType::ConditionalJumpLabel(condition, _) = run(&mut c, "jg L$loop") else {
+        panic!("a symbolic count gives a symbolic condition");
+    };
+    let taken = comparison_to_ast(condition).unwrap();
+    assert_eq!(c.solver.check_assumptions(&[taken]), SatResult::Unsat);
+}
