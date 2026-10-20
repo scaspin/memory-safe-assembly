@@ -221,11 +221,11 @@ fn shift(op: &str, value: &RegisterValue, count: i64, width: i64) -> RegisterVal
             })
         }
         RegisterKind::RegisterBase => {
-            let floor_div = |v: &RegisterValue| {
+            let shifted = |shift: &str, v: &RegisterValue| {
                 RegisterValue::new(
                     RegisterKind::RegisterBase,
                     Some(generate_expression(
-                        ">>",
+                        shift,
                         v.expression(),
                         AbstractExpression::Immediate(count),
                     )),
@@ -236,8 +236,8 @@ fn shift(op: &str, value: &RegisterValue, count: i64, width: i64) -> RegisterVal
                 "shl" | "sal" if count < 62 => {
                     combine("*", value, &RegisterValue::new_imm(1 << count))
                 }
-                "shr" => floor_div(value),
-                "sar" => floor_div(&sign_extend(value, width)),
+                "shr" => shifted("lsr", value),
+                "sar" => shifted("asr", &sign_extend(value, width)),
                 _ => unknown(),
             }
         }

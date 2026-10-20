@@ -192,3 +192,15 @@ fn aligning_the_stack_pointer_keeps_it_on_the_stack() {
     assert_eq!(c.registers[RSP].base, Some(abstract_of(STACK)));
     assert_eq!(c.registers[RSP].offset, -128);
 }
+
+#[test]
+fn an_arithmetic_shift_of_a_negative_value_rounds_down() {
+    let mut c = X86_64::new();
+    c.set_abstract("rax".to_string(), abstract_of("v"));
+    c.solver
+        .assert(ast::Int::new_const("v").eq(ast::Int::from_i64(-9)));
+    run(&mut c, "sarq $3,%rax");
+    let value = expression_to_ast(c.registers[RAX].expression()).unwrap();
+    let other = value.eq(ast::Int::from_i64(-2)).not();
+    assert_eq!(c.solver.check_assumptions(&[other]), SatResult::Unsat);
+}
