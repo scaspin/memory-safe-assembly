@@ -103,9 +103,22 @@ struct Explored {
     bytes: usize,
 }
 
-fn join_branch_errors(e1: Error, e2: Error) -> String {
-    let (e1, e2) = (e1.to_string(), e2.to_string());
-    if e1 == e2 { e1 } else { format!("{e1}; {e2}") }
+fn join_arms(
+    first: std::io::Result<()>,
+    second: std::io::Result<()>,
+) -> std::io::Result<BranchOutcome> {
+    match (first, second) {
+        (Ok(()), Ok(())) => Ok(BranchOutcome::BothExplored),
+        (Err(err), Ok(())) | (Ok(()), Err(err)) => Err(err),
+        (Err(e1), Err(e2)) => {
+            let (e1, e2) = (e1.to_string(), e2.to_string());
+            Err(Error::other(if e1 == e2 {
+                e1
+            } else {
+                format!("{e1}; {e2}")
+            }))
+        }
+    }
 }
 
 struct Program<I> {
@@ -2784,11 +2797,7 @@ impl<M: Machine> Engine<M> {
                     .computer
                     .set_register(&register, option2.kind, option2.base, option2.offset);
                 let res2 = clone.run(pc + 1, depth + 1);
-                match (res1, res2) {
-                    (Ok(_), Ok(_)) => Ok(BranchOutcome::BothExplored),
-                    (Err(err), Ok(_)) | (Ok(_), Err(err)) => Err(err),
-                    (Err(e1), Err(e2)) => Err(Error::other(join_branch_errors(e1, e2))),
-                }
+                join_arms(res1, res2)
             }
         }
     }
@@ -2830,53 +2839,11 @@ impl<M: Machine> Engine<M> {
         }
         match decision {
             None => {
-                let clone = &mut self.fork();
-                let here = BranchPoint {
-                    pc,
-                    condition: condition.clone(),
-                    accesses: rw_list,
-                    state: self.computer.get_state(),
-                    journal_len: self.computer.write_journal().len(),
-                    slots: self.computer.symbolic_slots(),
-                    instructions_run: self.instructions_run,
-                };
-                self.jump_history.push(JumpRecord {
-                    point: here.clone(),
-                    taken: true,
-                    resolved: false,
-                });
-                self.computer.clear_rw_queue();
-                log::info!(
-                    "exploring jump branch starting line: {:?} (from line {pc}, depth {depth}, history {})",
-                    jump_dest,
-                    self.jump_history.len()
-                );
-
-                let taken_scope = self.push_scope();
-                self.add_constraint(condition.clone(), true);
-                self.order_a_monotone_guard(pc, &condition, true);
-                let res1 = self.run(jump_dest, depth + 1);
-                self.pop_scope(taken_scope);
-
-                clone.jump_history.push(JumpRecord {
-                    point: here,
-                    taken: false,
-                    resolved: false,
-                });
-                clone.computer.clear_rw_queue();
-                log::info!("exploring non-jump branch starting line: {:?}", pc + 1);
-
-                let other_scope = clone.push_scope();
-                clone.add_constraint(condition.clone(), false);
-                clone.order_a_monotone_guard(pc, &condition, false);
-                let res2 = clone.run(pc + 1, depth + 1);
-                clone.pop_scope(other_scope);
-
-                match (res1, res2) {
-                    (Ok(_), Ok(_)) => Ok(BranchOutcome::BothExplored),
-                    (Err(err), Ok(_)) | (Ok(_), Err(err)) => Err(err),
-                    (Err(e1), Err(e2)) => Err(Error::other(join_branch_errors(e1, e2))),
-                }
+                let here = self.branch_point(pc, &condition, rw_list);
+                let mut other = self.fork();
+                let taken = self.explore_arm(here.clone(), true, jump_dest, depth);
+                let fallen = other.explore_arm(here, false, pc + 1, depth);
+                join_arms(taken, fallen)
             }
             Some(taken) => {
                 self.jump_history.push(JumpRecord {
@@ -2913,6 +2880,49 @@ impl<M: Machine> Engine<M> {
         }
     }
 
+    fn branch_point(
+        &self,
+        pc: usize,
+        condition: &AbstractComparison,
+        accesses: Vec<MemoryAccess>,
+    ) -> BranchPoint {
+        BranchPoint {
+            pc,
+            condition: condition.clone(),
+            accesses,
+            state: self.computer.get_state(),
+            journal_len: self.computer.write_journal().len(),
+            slots: self.computer.symbolic_slots(),
+            instructions_run: self.instructions_run,
+        }
+    }
+
+    fn explore_arm(
+        &mut self,
+        here: BranchPoint,
+        taken: bool,
+        dest: usize,
+        depth: usize,
+    ) -> std::io::Result<()> {
+        let (pc, condition) = (here.pc, here.condition.clone());
+        self.jump_history.push(JumpRecord {
+            point: here,
+            taken,
+            resolved: false,
+        });
+        self.computer.clear_rw_queue();
+        log::info!(
+            "exploring line {dest} (from line {pc}, depth {depth}, history {})",
+            self.jump_history.len()
+        );
+        let scope = self.push_scope();
+        self.add_constraint(condition.clone(), taken);
+        self.order_a_monotone_guard(pc, &condition, taken);
+        let explored = self.run(dest, depth + 1);
+        self.pop_scope(scope);
+        explored
+    }
+
     fn validate_summary(
         &mut self,
         instance: usize,
@@ -2923,7 +2933,16 @@ impl<M: Machine> Engine<M> {
     ) -> std::io::Result<BranchOutcome> {
         let explored = self.run(next, depth);
         let Some(retry) = self.ledger.borrow_mut().refute(instance) else {
-            return explored.map(|()| BranchOutcome::BothExplored);
+            let mut fallback = fallback;
+            let continues = next == jump_dest;
+            if !matches!(fallback.decide_from_solver(&condition), Decision::Explore) {
+                return explored.map(|()| BranchOutcome::BothExplored);
+            }
+            fallback.loop_attempts.remove(&pc);
+            let here = fallback.branch_point(pc, &condition, rw_list);
+            let leaves = if continues { pc + 1 } else { jump_dest };
+            let left = fallback.explore_arm(here, !continues, leaves, depth);
+            return join_arms(explored, left);
         };
         log::info!("summary {instance} at line {pc} failed its inductive check, exploring again");
         *self = fallback;
@@ -4873,8 +4892,13 @@ impl<M: Machine> Engine<M> {
     ) {
         let read_by_guard = registers_in(guard);
         let dead = self.dead_after(pc);
+        let live: Vec<RegisterValue> = (0..M::Instruction::TRACKED_REGISTERS)
+            .filter(|other| !dead.contains(other))
+            .map(|other| self.computer.register_at(other))
+            .collect();
         for &register in dead.iter() {
-            if read_by_guard.contains(&self.computer.register_at(register)) {
+            let value = self.computer.register_at(register);
+            if read_by_guard.contains(&value) && !live.contains(&value) {
                 continue;
             }
             let forgotten = RegisterValue::new(RegisterKind::Number, None, 0);

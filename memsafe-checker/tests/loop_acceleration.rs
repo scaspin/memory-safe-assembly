@@ -3046,3 +3046,9 @@ fn an_exit_reached_only_in_late_iterations_sees_the_moved_offset() {
     );
     assert_rejected_access(analyze_eight_bytes(lines));
 }
+
+#[test]
+fn an_exit_at_the_visit_that_summarizes_the_loop_is_explored() {
+    let program = walking_loop_with_tail(4, &["ldr w2,[x0,#0]"], &["ldr w3,[x0,#-8]"]);
+    assert_rejected_access(analyze_accelerated(program, 4, 4));
+}
