@@ -1972,18 +1972,16 @@ impl<M: Machine> Engine<M> {
     }
 
     pub(super) fn suspend_for_call(&mut self, pc: usize) {
-        if !self.active_loops.is_empty() {
-            let loops = std::mem::take(&mut self.active_loops);
-            log::info!(
-                "suspended {} loop(s) across the call at line {pc}",
-                loops.len()
-            );
-            self.suspended.push(SuspendedCall {
-                resume: pc + 1,
-                loops,
-                history_len: self.jump_history.len(),
-            });
-        }
+        let loops = std::mem::take(&mut self.active_loops);
+        log::info!(
+            "suspended {} loop(s) across the call at line {pc}",
+            loops.len()
+        );
+        self.suspended.push(SuspendedCall {
+            resume: pc + 1,
+            loops,
+            history_len: self.jump_history.len(),
+        });
     }
 
     pub(super) fn resume_suspended(&mut self) {

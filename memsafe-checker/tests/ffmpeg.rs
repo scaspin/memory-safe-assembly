@@ -971,3 +971,36 @@ fn a_read_straddling_two_elements_is_not_an_element() {
     let res = index_through_a_map("ldrsw x10, [x1, #2]\nldrsw x11, [x1, #6]", &ranges);
     assert!(res.is_err(), "{res:?}");
 }
+
+fn helper_called_then_tail_called(rows: i64) -> Result<(), String> {
+    init();
+    let program = "start:
+        mov x7, x30
+        add x5, x0, x1
+        bl helper
+        mov x30, x7
+        mov x0, x5
+        b helper
+        helper:
+        ld1 { v0.8b }, [x0]
+        ldrb w3, [x0, x1]
+        mov x8, v0.d[0]
+        cbz x8, done
+        strb w3, [x0]
+        done:
+        ret";
+    let mut engine = bums::engine::ExecutionEngine::new(program.lines().map(str::trim));
+    engine.add_abstract_from(0, "buf");
+    let len = generate_expression("*", abstract_of("stride"), imm(rows));
+    engine.add_region(RegionType::RW, "buf", generate_expression("+", len, imm(8)));
+    engine.add_abstract_from(1, "stride");
+    engine.add_invariant(fact(">=", abstract_of("stride"), imm(1)));
+    engine.add_invariant(fact("<=", abstract_of("stride"), imm(1 << 20)));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_helper_entered_again_after_it_returned_is_not_a_loop() {
+    assert_eq!(helper_called_then_tail_called(2), Ok(()));
+    assert!(helper_called_then_tail_called(1).is_err());
+}
