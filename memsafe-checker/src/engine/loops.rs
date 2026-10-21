@@ -2077,7 +2077,12 @@ impl<M: Machine> Engine<M> {
             let pc = record.point.pc;
             if !exits.contains(&pc)
                 || cycle.iter().filter(|other| other.point.pc == pc).count() != 1
-                || continuing(&record.point.condition, record.taken).op != "!="
+                || !matches!(
+                    continuing(&record.point.condition, record.taken)
+                        .op
+                        .as_str(),
+                    "!=" | "<" | ">"
+                )
             {
                 continue;
             }

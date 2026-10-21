@@ -72,6 +72,10 @@ fn counter_inside_a_subtraction_resolves() {
 }
 
 fn unrolled_countdown(last_step: i64) -> Vec<String> {
+    unrolled_countdown_closed_by(last_step, "b.ne")
+}
+
+fn unrolled_countdown_closed_by(last_step: i64, back_edge: &str) -> Vec<String> {
     let mut program = vec!["start:".to_string(), "loop:".to_string()];
     for _ in 0..2 {
         program.push("ldr x4,[x1],#8".to_string());
@@ -80,7 +84,7 @@ fn unrolled_countdown(last_step: i64) -> Vec<String> {
     }
     program.push("ldr x4,[x1],#8".to_string());
     program.push(format!("subs x2,x2,#{last_step}"));
-    program.push("b.ne loop".to_string());
+    program.push(format!("{back_edge} loop"));
     program.push("done:".to_string());
     program.push("ret".to_string());
     program
@@ -130,5 +134,17 @@ fn equality_exits_a_count_off_their_lattice_steps_over_are_rejected() {
 #[test]
 fn equality_exits_with_a_gap_in_the_walk_are_rejected() {
     let res = analyze_countdown(unrolled_countdown(8), 4);
+    assert!(res.is_err(), "{res:?}");
+}
+
+#[test]
+fn equality_exits_closed_by_an_unsigned_test_bound_the_walk() {
+    let res = analyze_countdown(unrolled_countdown_closed_by(4, "b.hi"), 4);
+    assert!(res.is_ok(), "{res:?}");
+}
+
+#[test]
+fn equality_exits_closed_by_an_unsigned_test_off_their_lattice_are_rejected() {
+    let res = analyze_countdown(unrolled_countdown_closed_by(8, "b.hi"), 4);
     assert!(res.is_err(), "{res:?}");
 }
