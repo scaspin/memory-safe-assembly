@@ -226,3 +226,38 @@ fn a_slot_saved_below_a_walked_frame_is_read_back_where_the_walk_ends() {
 fn a_slot_read_back_after_a_walked_frame_still_bounds_the_access() {
     assert!(!walks_a_frame_sized_at_run_time_then_reads_a_saved_count(0));
 }
+
+fn realigned_frame(access: &str) -> Vec<&str> {
+    vec![
+        "stp x29,x30,[sp,#-64]!",
+        "add x29,sp,#0",
+        "and x5,x5,#0xff",
+        "sub x22,sp,x5,lsl #3",
+        "and x22,x22,#-16",
+        "mov sp,x22",
+        access,
+        "mov sp,x29",
+        "ldp x29,x30,[sp],#64",
+    ]
+}
+
+#[test]
+fn a_frame_realigned_below_a_runtime_size_is_writable() {
+    assert!(accepts_with_arguments(&realigned_frame("str x0,[sp]"), 6));
+    assert!(accepts_with_arguments(
+        &realigned_frame("str x0,[x29,#56]"),
+        6
+    ));
+}
+
+#[test]
+fn below_a_realigned_stack_pointer_is_not_in_the_frame() {
+    assert!(!accepts_with_arguments(
+        &realigned_frame("str x0,[sp,#-8]"),
+        6
+    ));
+    assert!(!accepts_with_arguments(
+        &realigned_frame("str x0,[x29,#64]"),
+        6
+    ));
+}

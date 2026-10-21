@@ -284,6 +284,7 @@ impl ARMCORTEXA {
                 }
                 "and" => {
                     self.arithmetic("&", |x, y| x & y, instruction.operands.clone());
+                    self.realign_below_stack_pointer(instruction);
                 }
                 "orr" => {
                     self.arithmetic("|", |x, y| x | y, instruction.operands.clone());

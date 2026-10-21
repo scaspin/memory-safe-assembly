@@ -226,6 +226,40 @@ impl ARMCORTEXA {
         self.set_register(destination, RegisterKind::RegisterBase, Some(bounded), 0);
     }
 
+    pub fn realign_below_stack_pointer(&mut self, instruction: &Instruction) {
+        let Some(destination @ Operand::Register(RePrefix::X | RePrefix::Sp, _)) =
+            instruction.operands.first()
+        else {
+            return;
+        };
+        let value = self.get_register(destination);
+        let Some(AbstractExpression::Expression(op, inner, mask)) = &value.base else {
+            return;
+        };
+        let AbstractExpression::Immediate(mask) = **mask else {
+            return;
+        };
+        let alignment = mask.wrapping_neg();
+        let rounds_down = alignment > 1 && alignment <= 1 << 16 && alignment & (alignment - 1) == 0;
+        if op != "&" || value.offset != 0 || !rounds_down {
+            return;
+        }
+        let entry = AbstractExpression::Abstract("sp".to_string());
+        let Some(form) = crate::widening::Affine::of(inner) else {
+            return;
+        };
+        if form.coefficient(&entry) != 1 || !form.mentions_only_as_term(&entry) {
+            return;
+        }
+        let name = self.fresh_symbol("realigned");
+        let dropped = ast::Int::new_const(name.clone());
+        self.bound_fresh(dropped.ge(ast::Int::from_i64(0)));
+        self.bound_fresh(dropped.lt(ast::Int::from_i64(alignment)));
+        let lowered =
+            generate_expression("-", (**inner).clone(), AbstractExpression::Abstract(name));
+        self.set_register(destination, RegisterKind::RegisterBase, Some(lowered), 0);
+    }
+
     pub fn shift_reg(&mut self, op: &str, reg1: &Operand, reg2: &Operand, reg3: &Operand) {
         let r2 = self.get_register(reg2);
 
