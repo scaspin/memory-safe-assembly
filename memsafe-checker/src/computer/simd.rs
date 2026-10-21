@@ -269,6 +269,7 @@ pub enum LaneEffect {
 pub struct LaneWrite {
     register: usize,
     bytes: [u8; 16],
+    bits: [u8; 16],
     scalar: Option<u64>,
     maxima: Vec<AbstractExpression>,
 }
@@ -277,8 +278,16 @@ fn lanes_bounded_by(register: usize, bytes: [u8; 16]) -> LaneWrite {
     LaneWrite {
         register,
         bytes,
+        bits: bytes.map(|max| u8::MAX.checked_shr(max.leading_zeros()).unwrap_or(0)),
         scalar: None,
         maxima: Vec::new(),
+    }
+}
+
+fn lanes_holding_bits(register: usize, bytes: [u8; 16], bits: [u8; 16]) -> LaneWrite {
+    LaneWrite {
+        bits,
+        ..lanes_bounded_by(register, bytes)
     }
 }
 
@@ -361,12 +370,14 @@ impl ARMCORTEXA {
             ) => {
                 let width = arrangement.element_width() as usize;
                 let mut bytes = bounds.bytes[dst];
+                let mut bits = bounds.bits[dst];
                 let value = self
                     .immediate_of(source)
                     .map_or([u8::MAX; 16], |v| truncated(v, width));
                 let start = *lane as usize * width;
                 bytes[start..start + width].copy_from_slice(&value[..width]);
-                LaneEffect::Vectors(vec![lanes_bounded_by(dst, bytes)])
+                bits[start..start + width].copy_from_slice(&value[..width]);
+                LaneEffect::Vectors(vec![lanes_holding_bits(dst, bytes, bits)])
             }
             (
                 "dup",
@@ -387,7 +398,7 @@ impl ARMCORTEXA {
                         {
                             *byte = lane[k % width];
                         }
-                        LaneEffect::Vectors(vec![lanes_bounded_by(dst, bytes)])
+                        LaneEffect::Vectors(vec![lanes_holding_bits(dst, bytes, bytes)])
                     }
                     None => {
                         let value = self.get_register(source);
@@ -416,6 +427,7 @@ impl ARMCORTEXA {
                 let width = arrangement.element_width() as usize;
                 let lanes = arrangement.width() as usize / width;
                 let mut bytes = [u8::MAX; 16];
+                let mut bits = [u8::MAX; 16];
                 for lane in 0..lanes {
                     let smaller = if lane_max(&bounds.bytes[*a], lane, width)
                         <= lane_max(&bounds.bytes[*b], lane, width)
@@ -425,7 +437,8 @@ impl ARMCORTEXA {
                         *b
                     };
                     let range = lane * width..(lane + 1) * width;
-                    bytes[range.clone()].copy_from_slice(&bounds.bytes[smaller][range]);
+                    bytes[range.clone()].copy_from_slice(&bounds.bytes[smaller][range.clone()]);
+                    bits[range.clone()].copy_from_slice(&bounds.bits[smaller][range]);
                 }
                 let maxima = bounds.maxima[*a]
                     .iter()
@@ -434,7 +447,7 @@ impl ARMCORTEXA {
                     .collect();
                 LaneEffect::Vectors(vec![LaneWrite {
                     maxima,
-                    ..lanes_bounded_by(dst, bytes)
+                    ..lanes_holding_bits(dst, bytes, bits)
                 }])
             }
             ("eor", [_, Operand::Vector(_, a, _), Operand::Vector(_, b, _)]) if a == b => {
@@ -449,19 +462,27 @@ impl ARMCORTEXA {
                 ],
             ) => {
                 let mut bytes = [0u8; 16];
+                let mut bits = [0u8; 16];
+                for k in 0..arrangement.width() as usize {
+                    bits[k] = bounds.bits[*a][k] & bounds.bits[*b][k];
+                    bytes[k] = bounds.bytes[*a][k].min(bounds.bytes[*b][k]).min(bits[k]);
+                }
+                LaneEffect::Vectors(vec![lanes_holding_bits(dst, bytes, bits)])
+            }
+            (
+                "cnt",
+                [
+                    Operand::Vector(_, _, arrangement),
+                    Operand::Vector(_, source, _),
+                ],
+            ) => {
+                let mut bytes = [0u8; 16];
                 for (k, byte) in bytes
                     .iter_mut()
                     .enumerate()
                     .take(arrangement.width() as usize)
                 {
-                    *byte = bounds.bytes[*a][k].min(bounds.bytes[*b][k]);
-                }
-                LaneEffect::Vectors(vec![lanes_bounded_by(dst, bytes)])
-            }
-            ("cnt", [Operand::Vector(_, _, arrangement), Operand::Vector(..)]) => {
-                let mut bytes = [0u8; 16];
-                for byte in bytes.iter_mut().take(arrangement.width() as usize) {
-                    *byte = 8;
+                    *byte = bounds.bits[*source][k].count_ones() as u8;
                 }
                 LaneEffect::Vectors(vec![lanes_bounded_by(dst, bytes)])
             }
@@ -485,6 +506,7 @@ impl ARMCORTEXA {
             LaneEffect::Vectors(written) => {
                 for write in written {
                     self.lane_bounds.bytes[write.register] = write.bytes;
+                    self.lane_bounds.bits[write.register] = write.bits;
                     self.lane_bounds.scalar[write.register] = write.scalar;
                     self.lane_bounds.maxima[write.register] = write.maxima;
                 }

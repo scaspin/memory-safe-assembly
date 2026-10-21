@@ -56,6 +56,7 @@ pub struct ARMCORTEXA {
 #[derive(Debug, Clone)]
 pub struct LaneBounds {
     pub bytes: [[u8; 16]; 32],
+    pub bits: [[u8; 16]; 32],
     pub scalar: [Option<u64>; 32],
     pub maxima: [Vec<AbstractExpression>; 32],
 }
@@ -64,6 +65,7 @@ impl Default for LaneBounds {
     fn default() -> Self {
         Self {
             bytes: [[u8::MAX; 16]; 32],
+            bits: [[u8::MAX; 16]; 32],
             scalar: [None; 32],
             maxima: std::array::from_fn(|_| Vec::new()),
         }

@@ -62,3 +62,39 @@ fn an_overwritten_mask_is_not_bounded() {
     ];
     assert!(!accepts(overwritten, "ldrb w2, [x1, #32]", 1024));
 }
+
+const SINGLE_BIT_COUNT: &[&str] = &[
+    "mov x7,#0x1",
+    "movk x7,#0x2,lsl #16",
+    "movk x7,#0x4,lsl #32",
+    "movk x7,#0x8,lsl #48",
+    "mov v31.d[0],x7",
+    "mov x7,#0x10",
+    "movk x7,#0x20,lsl #16",
+    "movk x7,#0x40,lsl #32",
+    "movk x7,#0x80,lsl #48",
+    "mov v31.d[1],x7",
+    "cmhi v4.8h,v30.8h,v16.8h",
+    "and v4.16b,v4.16b,v31.16b",
+    "cnt v4.16b,v4.16b",
+    "uaddlv s20,v4.8h",
+    "fmov w12,s20",
+    "add x1,x0,x12",
+];
+
+#[test]
+fn counting_single_bit_lanes_bounds_the_count_by_the_lanes() {
+    assert!(accepts(SINGLE_BIT_COUNT, "ldrb w2,[x1]", 9));
+    assert!(!accepts(SINGLE_BIT_COUNT, "ldrb w2,[x1]", 8));
+}
+
+#[test]
+fn counting_unmasked_lanes_is_bounded_only_by_their_width() {
+    let unmasked: Vec<&str> = SINGLE_BIT_COUNT
+        .iter()
+        .copied()
+        .filter(|line| !line.starts_with("and"))
+        .collect();
+    assert!(!accepts(&unmasked, "ldrb w2,[x1]", 9));
+    assert!(accepts(&unmasked, "ldrb w2,[x1]", 8 * 2056 + 1));
+}
