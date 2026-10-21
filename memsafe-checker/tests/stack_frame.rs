@@ -172,3 +172,57 @@ fn an_index_loaded_from_the_frame_is_not_a_frame_access() {
     assert!(error.contains("region of length 1024"), "{error}");
     assert!(!error.contains("stack frame"), "{error}");
 }
+
+fn walks_a_frame_sized_at_run_time_then_reads_a_saved_count(read_offset: i64) -> bool {
+    use bums::common::*;
+    init();
+    let mut program = vec!["start:".to_string()];
+    program.extend(
+        [
+            "stp x2,x30,[sp,#-16]!",
+            "lsl x10,x2,#3",
+            "sub sp,sp,x10",
+            "loop:",
+            "ldr x4,[sp],#8",
+            "subs x2,x2,#1",
+            "b.ne loop",
+            "ldp x2,x30,[sp],#16",
+            "lsl x5,x2,#3",
+        ]
+        .iter()
+        .map(|line| line.to_string()),
+    );
+    program.push(format!("add x5,x5,#{read_offset}"));
+    program.push("ldr x4,[x1,x5]".to_string());
+    program.push("ret".to_string());
+    let count = AbstractExpression::Abstract("count".to_string());
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(1, "base".to_string());
+    engine.add_region(
+        RegionType::READ,
+        "base".to_string(),
+        generate_expression("*", count.clone(), AbstractExpression::Immediate(8)),
+    );
+    engine.add_abstract_from(2, "count".to_string());
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        count.clone(),
+        AbstractExpression::Immediate(1),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "<=",
+        count,
+        AbstractExpression::Immediate(1 << 20),
+    ));
+    engine.start("start".to_string()).is_ok()
+}
+
+#[test]
+fn a_slot_saved_below_a_walked_frame_is_read_back_where_the_walk_ends() {
+    assert!(walks_a_frame_sized_at_run_time_then_reads_a_saved_count(-8));
+}
+
+#[test]
+fn a_slot_read_back_after_a_walked_frame_still_bounds_the_access() {
+    assert!(!walks_a_frame_sized_at_run_time_then_reads_a_saved_count(0));
+}

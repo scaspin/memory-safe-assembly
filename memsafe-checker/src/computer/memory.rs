@@ -61,6 +61,48 @@ fn unproved_reason(path: SatResult) -> Option<&'static str> {
 }
 
 impl ARMCORTEXA {
+    fn settled_stack_address(&self, address: RegisterValue) -> RegisterValue {
+        let stack = AbstractExpression::Abstract("sp".to_string());
+        let Some(base) = &address.base else {
+            return address;
+        };
+        if matches!(base, AbstractExpression::Abstract(_))
+            || self
+                .region_of(base)
+                .is_none_or(|(region, ..)| region != "sp")
+        {
+            return address;
+        }
+        let displacement = generate_expression("-", base.clone(), stack.clone());
+        let Some(term) = expression_to_ast(displacement) else {
+            return address;
+        };
+        if self.solver.check() != SatResult::Sat {
+            return address;
+        }
+        let Some(value) = self
+            .solver
+            .get_model()
+            .and_then(|model| model.eval(&term, true))
+            .and_then(|value| value.as_i64())
+        else {
+            return address;
+        };
+        if self
+            .solver
+            .check_assumptions(&[term.eq(ast::Int::from_i64(value)).not()])
+            != SatResult::Unsat
+        {
+            return address;
+        }
+        log::info!("{base} is sp {value:+} on this path");
+        RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(stack),
+            value + address.offset,
+        )
+    }
+
     pub fn load(
         &mut self,
         t: Operand,
@@ -73,6 +115,12 @@ impl ARMCORTEXA {
             RegionType::READ,
             width,
         );
+        let address = match &address.base {
+            Some(base) if self.recall_slot(base, address.offset, width).is_none() => {
+                self.settled_stack_address(address)
+            }
+            _ => address,
+        };
 
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = address.base.clone() {
@@ -337,6 +385,7 @@ impl ARMCORTEXA {
         address: RegisterValue,
         width: i64,
     ) -> Result<(), MemorySafetyError> {
+        let address = self.settled_stack_address(address);
         let region = address.base.clone();
         let res = self.mem_safe_access(
             region_base(&address, RegionType::WRITE, width)?,
