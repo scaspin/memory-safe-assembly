@@ -1,5 +1,6 @@
 use bums::common::*;
 
+const MLKEM: &str = include_str!("asm/mlkem_rej_uniform.S");
 const MLDSA_ETA2: &str = include_str!("asm/mldsa_rej_uniform_eta2.S");
 
 fn sample(asm: &str, frame: &str, output: i64, block: i64) -> Result<(), String> {
@@ -44,5 +45,16 @@ fn mldsa_eta2_sampling_stays_in_its_frame() {
 #[test]
 fn mldsa_eta2_sampling_overflows_a_smaller_frame() {
     let rejected = sample(MLDSA_ETA2, "#0x200", 1024, 8).unwrap_err();
+    assert!(rejected.contains("stack frame"), "{rejected}");
+}
+
+#[test]
+fn mlkem_sampling_stays_in_its_frame() {
+    assert_eq!(sample(MLKEM, "#0x240", 512, 24), Ok(()));
+}
+
+#[test]
+fn mlkem_sampling_overflows_a_smaller_frame() {
+    let rejected = sample(MLKEM, "#0x210", 512, 24).unwrap_err();
     assert!(rejected.contains("stack frame"), "{rejected}");
 }

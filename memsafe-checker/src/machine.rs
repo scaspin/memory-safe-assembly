@@ -164,6 +164,9 @@ pub trait Machine: Clone {
     fn symbols_bounding_counter(&self) -> &BTreeMap<String, Vec<String>>;
     fn symbols_bounding_counter_mut(&mut self) -> &mut BTreeMap<String, Vec<String>>;
     fn element_facts(&self) -> &ElementFacts;
+    fn fresh_bounds(&self) -> &[ast::Bool] {
+        &[]
+    }
 
     fn set_immediate(&mut self, register: String, value: u64);
     fn set_abstract(&mut self, register: String, value: AbstractExpression);

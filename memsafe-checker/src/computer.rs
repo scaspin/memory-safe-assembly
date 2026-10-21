@@ -45,6 +45,7 @@ pub struct ARMCORTEXA {
     flag_counter: usize,
     pub solver: Solver,
     pub lane_bounds: Box<LaneBounds>,
+    pub fresh_bounds: Vec<ast::Bool>,
     pub write_journal: Vec<CellWrite>,
     pub blind_stack_writes: Vec<(AbstractExpression, i64, i64)>,
     pub symbolic_slots: Vec<SymbolicSlot>,
@@ -200,6 +201,7 @@ impl ARMCORTEXA {
             alignment: 4,
             flag_counter: 0,
             lane_bounds: Box::default(),
+            fresh_bounds: Vec::new(),
             write_journal: Vec::new(),
             blind_stack_writes: Vec::new(),
             symbolic_slots: Vec::new(),
@@ -411,6 +413,11 @@ impl ARMCORTEXA {
         let n = self.flag_counter;
         self.flag_counter += 1;
         n
+    }
+
+    pub fn bound_fresh(&mut self, fact: ast::Bool) {
+        self.solver.assert(&fact);
+        self.fresh_bounds.push(fact);
     }
 
     pub fn fresh_symbol(&mut self, which: &str) -> String {

@@ -480,6 +480,10 @@ impl Machine for ARMCORTEXA {
         &self.element_facts
     }
 
+    fn fresh_bounds(&self) -> &[ast::Bool] {
+        &self.fresh_bounds
+    }
+
     fn set_immediate(&mut self, register: String, value: u64) {
         ARMCORTEXA::set_immediate(self, register, value)
     }

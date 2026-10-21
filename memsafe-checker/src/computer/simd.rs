@@ -514,8 +514,8 @@ impl ARMCORTEXA {
             LaneEffect::General(register, bound, maxima) => {
                 let name = format!("lane_value_{}", self.next_carry());
                 let value = ast::Int::new_const(name.clone());
-                self.solver.assert(value.ge(ast::Int::from_i64(0)));
-                self.solver.assert(value.le(ast::Int::from_u64(bound)));
+                self.bound_fresh(value.ge(ast::Int::from_i64(0)));
+                self.bound_fresh(value.le(ast::Int::from_u64(bound)));
                 let bounded = maxima
                     .into_iter()
                     .fold(AbstractExpression::Abstract(name), |value, maximum| {
