@@ -312,6 +312,7 @@ impl<M: Machine> Engine<M> {
         &mut self,
         condition: &AbstractComparison,
         continues_when: bool,
+        tested: &[AbstractComparison],
         entry_state: &mut MachineState,
         current_state: &mut MachineState,
     ) -> Vec<LoopInvariant> {
@@ -319,7 +320,13 @@ impl<M: Machine> Engine<M> {
         self.resolve_selects(entry_state);
         self.resolve_selects(current_state);
         let mut observed = invariant_of_registers(&entry_state.0, &current_state.0);
-        self.pin_unknown_steps(&mut observed, &entry_state.0, &current_state.0, condition);
+        self.pin_unknown_steps(
+            &mut observed,
+            &entry_state.0,
+            &current_state.0,
+            condition,
+            tested,
+        );
         self.computer.solver().pop(1);
         observed
     }
@@ -342,6 +349,7 @@ impl<M: Machine> Engine<M> {
         entry: &[RegisterValue],
         current: &[RegisterValue],
         guard: &AbstractComparison,
+        tested: &[AbstractComparison],
     ) {
         let mut in_guard = guard.get_abstracts();
         in_guard.sort();
@@ -379,6 +387,7 @@ impl<M: Machine> Engine<M> {
         }
         let registers = observed.len().min(entry.len()).min(current.len());
         let guarded = registers_in(guard);
+        let compared: Vec<RegisterValue> = tested.iter().flat_map(registers_in).collect();
         let mut at_entry: Vec<String> = entry
             .iter()
             .filter_map(|r| r.base.as_ref())
@@ -411,7 +420,9 @@ impl<M: Machine> Engine<M> {
                 if j == i
                     || self.computer.carries_region(&entry[j])
                     || self.computer.carries_region(&current[j])
-                    || !guarded.contains(&current[j])
+                    || !(guarded.contains(&current[j])
+                        || compared.contains(&current[j])
+                        || compared.contains(&entry[j]))
                 {
                     return None;
                 }
@@ -506,9 +517,14 @@ impl<M: Machine> Engine<M> {
         let mut entry_state = previous.state.clone();
         self.forget_dead_registers(pc, expression, &mut [&mut entry_state]);
         let mut current_state = self.computer.get_state();
+        let tested: Vec<AbstractComparison> = history[index + 1..]
+            .iter()
+            .map(|record| record.point.condition.clone())
+            .collect();
         let mut observed = self.invariants_while_staying(
             expression,
             branch_decision,
+            &tested,
             &mut entry_state,
             &mut current_state,
         );
@@ -2473,7 +2489,11 @@ impl<M: Machine> Engine<M> {
         self.computer.solver().pop(1);
         let mut observed = self.pin_steps(&invariant_of_registers(&before.0, &after.0));
         self.assume_staying(&expression, active.entry_decision);
-        self.pin_unknown_steps(&mut observed, &before.0, &after.0, &expression);
+        let tested: Vec<AbstractComparison> = self.jump_history[since..]
+            .iter()
+            .map(|record| record.point.condition.clone())
+            .collect();
+        self.pin_unknown_steps(&mut observed, &before.0, &after.0, &expression, &tested);
         self.computer.solver().pop(1);
         let mut observed = self.bound_values(active.pc, &observed, &before.0, &after.0);
         for (i, recorded) in active.invariants.iter().enumerate() {
