@@ -1076,7 +1076,10 @@ impl<M: Machine> Engine<M> {
                 Ok(BranchOutcome::Next(pc + 1))
             }
             _ => {
+                let code_address = self.computer.carries_code_address(&option1)
+                    || self.computer.carries_code_address(&option2);
                 if let Some(base) = option1.base.clone()
+                    && !code_address
                     && option1.base == option2.base
                     && option1.kind == option2.kind
                 {
@@ -1101,7 +1104,8 @@ impl<M: Machine> Engine<M> {
                     );
                     return Ok(BranchOutcome::Next(pc + 1));
                 }
-                if !self.computer.carries_region(&option1)
+                if !code_address
+                    && !self.computer.carries_region(&option1)
                     && !self.computer.carries_region(&option2)
                 {
                     let name = format!("select_{}", self.computer.fresh_index());

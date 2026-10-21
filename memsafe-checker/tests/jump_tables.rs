@@ -109,3 +109,30 @@ fn a_bad_write_in_the_callee_is_caught() {
 fn a_bad_write_after_the_call_returns_is_caught() {
     assert!(run_call(indirect_call(0, 8)).is_err());
 }
+
+fn call_chosen_by_csel(first_offset: u32, second_offset: u32) -> Vec<String> {
+    [
+        "wrapper:".to_string(),
+        "mov x15, x30".into(),
+        "adr x4, first".into(),
+        "adr x5, second".into(),
+        "cmp x2, #0".into(),
+        "csel x6, x4, x5, ne".into(),
+        "blr x6".into(),
+        "ret x15".into(),
+        "first:".into(),
+        format!("strb w1, [x0, #{first_offset}]"),
+        "ret".into(),
+        "second:".into(),
+        format!("strb w1, [x0, #{second_offset}]"),
+        "ret".into(),
+    ]
+    .to_vec()
+}
+
+#[test]
+fn a_call_through_a_selected_code_address_runs_either_callee() {
+    assert!(run_call(call_chosen_by_csel(0, 7)).is_ok());
+    assert!(run_call(call_chosen_by_csel(8, 7)).is_err());
+    assert!(run_call(call_chosen_by_csel(0, 8)).is_err());
+}

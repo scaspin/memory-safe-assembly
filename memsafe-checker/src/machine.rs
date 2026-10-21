@@ -196,6 +196,14 @@ pub trait Machine: Clone {
         })
     }
 
+    fn carries_code_address(&self, register: &RegisterValue) -> bool {
+        register.base.as_ref().is_some_and(|base| {
+            base.get_abstracts()
+                .iter()
+                .any(|symbol| self.code_labels().contains(symbol))
+        })
+    }
+
     fn add_memory_region(&mut self, name: String, ty: RegionType, length: AbstractExpression) {
         self.memory_mut()
             .insert(name, MemorySafeRegion::new(length, ty));
