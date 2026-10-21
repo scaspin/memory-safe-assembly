@@ -88,21 +88,21 @@ impl ARMCORTEXA {
         if let Some(register) = register_offset {
             self.arithmetic(
                 "+",
-                &|x, y| x + y,
+                |x, y| x + y,
                 vec![target.clone(), target, (**register).clone()],
             );
             return;
         }
 
-        if *indexing == Some(true) {
-            if let Some(step) = offset {
-                self.set_register(
-                    &target,
-                    address.kind.clone(),
-                    address.base.clone(),
-                    address.offset + step,
-                );
-            }
+        if *indexing == Some(true)
+            && let Some(step) = offset
+        {
+            self.set_register(
+                &target,
+                address.kind.clone(),
+                address.base.clone(),
+                address.offset + step,
+            );
         }
     }
 

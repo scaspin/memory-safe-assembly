@@ -275,10 +275,12 @@ fn element_bound(input: &ExprBinary) -> Option<(String, i64)> {
     Some((path.path.segments[0].ident.to_string(), index))
 }
 
+type PointerContent = (String, i64, String, &'static str, Option<(bool, Expr)>);
+
 fn pointer_contents(
     input: &ExprBinary,
     arguments: &Punctuated<Expr, Token![,]>,
-) -> Option<(String, i64, String, &'static str, Option<(bool, Expr)>)> {
+) -> Option<PointerContent> {
     let (array, element) = indexed_element(input)?;
     let (array_suffix, _) = passed_pointer(&array, arguments)?;
 
@@ -556,8 +558,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut invariants: Vec<AbstractComparison> = Vec::new();
     let mut element_bounds: Vec<(String, i64, ExprBinary)> = Vec::new();
-    let mut pointer_values: Vec<(String, i64, String, &'static str, Option<(bool, Expr)>)> =
-        Vec::new();
+    let mut pointer_values: Vec<PointerContent> = Vec::new();
     let mut element_ranges: Vec<(String, ExprBinary)> = Vec::new();
     let mut pointer_arrays: Vec<(String, String, Expr, Expr)> = Vec::new();
     let mut disjunctions: Vec<Vec<Vec<AbstractComparison>>> = Vec::new();
@@ -1162,17 +1163,14 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                             if let Some((scaled, expression)) = pointer_offsets.get(no_suffix) {
                                 let mut offset = syn_expr_to_abstract_expression(expression);
-                                if *scaled {
-                                    if let Some(ty) = pointer_sizes.get(no_suffix) {
-                                        offset = generate_expression(
-                                            "*",
-                                            offset,
-                                            AbstractExpression::Immediate(calculate_size_of(
-                                                ty.clone(),
-                                            )
-                                                as i64),
-                                        );
-                                    }
+                                if *scaled && let Some(ty) = pointer_sizes.get(no_suffix) {
+                                    offset = generate_expression(
+                                        "*",
+                                        offset,
+                                        AbstractExpression::Immediate(
+                                            calculate_size_of(ty.clone()) as i64,
+                                        ),
+                                    );
                                 }
                                 engine.add_abstract_expression_from(
                                     i,
@@ -1360,31 +1358,28 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut value = AbstractExpression::Abstract(base);
             if let Some((scaled, expression)) = step {
                 let mut step = syn_expr_to_abstract_expression(&expression);
-                if scaled {
-                    if let Some(ty) = pointer_sizes.get(&slice) {
-                        step = generate_expression(
-                            "*",
-                            step,
-                            AbstractExpression::Immediate(calculate_size_of(ty.clone()) as i64),
-                        );
-                    }
+                if scaled && let Some(ty) = pointer_sizes.get(&slice) {
+                    step = generate_expression(
+                        "*",
+                        step,
+                        AbstractExpression::Immediate(calculate_size_of(ty.clone()) as i64),
+                    );
                 }
                 value = generate_expression("+", value, step);
             }
             engine.add_abstract_to_memory(region, offset, value);
         }
         for (name, ty) in &input_types {
-            if let Type::Path(p) = ty {
-                if ["usize", "u64", "u32", "u16", "u8"]
+            if let Type::Path(p) = ty
+                && ["usize", "u64", "u32", "u16", "u8"]
                     .iter()
                     .any(|unsigned| p.path.is_ident(unsigned))
-                {
-                    engine.add_invariant(AbstractComparison::new(
-                        ">=",
-                        AbstractExpression::Abstract(name.clone()),
-                        AbstractExpression::Immediate(0),
-                    ));
-                }
+            {
+                engine.add_invariant(AbstractComparison::new(
+                    ">=",
+                    AbstractExpression::Abstract(name.clone()),
+                    AbstractExpression::Immediate(0),
+                ));
             }
             if let Type::Reference(r) = ty
                 && let Type::Slice(sl) = &*r.elem

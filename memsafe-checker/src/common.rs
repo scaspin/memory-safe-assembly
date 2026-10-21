@@ -1454,10 +1454,8 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                         Some(ast::Int::sub(&[&ast::Int::from_i64(-1), &new2]))
                     } else if let Some(flipped) = flip_mask(&new1, &old2) {
                         Some(flipped)
-                    } else if let Some(flipped) = flip_mask(&new2, &old1) {
-                        Some(flipped)
                     } else {
-                        None
+                        flip_mask(&new2, &old1)
                     }
                 }
                 "|" => {

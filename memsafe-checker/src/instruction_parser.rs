@@ -58,10 +58,10 @@ impl Arrangement {
     }
 
     pub fn from_string(s: &str) -> Arrangement {
-        Arrangement::from_str(s).unwrap_or_else(|| panic!("Invalid arrangement string {:?}", s))
+        Arrangement::parse(s).unwrap_or_else(|| panic!("Invalid arrangement string {:?}", s))
     }
 
-    pub fn from_str(s: &str) -> Option<Arrangement> {
+    pub fn parse(s: &str) -> Option<Arrangement> {
         match s.to_ascii_lowercase().as_str() {
             "8b" => Some(Arrangement::B8),
             "16b" => Some(Arrangement::B16),
@@ -317,10 +317,10 @@ pub fn operand_from_string(a: String) -> Operand {
         if let Some(o) = parts.next() {
             let o = o.trim();
             if o.starts_with("x") || o.starts_with("w") {
-                let register = operand_from_string(o.trim_matches(&[']', '!']).to_string());
+                let register = operand_from_string(o.trim_matches([']', '!']).to_string());
                 register_offset = Some(Box::new(match parts.next() {
                     Some(extend) => {
-                        let mut pieces = extend.trim_matches(&[']', '!']).split('#');
+                        let mut pieces = extend.trim_matches([']', '!']).split('#');
                         let op = pieces.next().unwrap_or("").to_string();
                         let amount = pieces.next().map(string_to_int).unwrap_or(0);
                         Operand::ShiftedRegister(Box::new(register), op, amount)
@@ -477,7 +477,7 @@ fn normalize_arrangement_suffix(opcode: &mut String, operands: &mut [Operand]) {
     let Some((base, suffix)) = opcode.rsplit_once('.') else {
         return;
     };
-    let Some(arrangement) = Arrangement::from_str(suffix) else {
+    let Some(arrangement) = Arrangement::parse(suffix) else {
         return;
     };
 

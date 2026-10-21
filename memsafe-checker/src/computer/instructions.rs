@@ -1171,9 +1171,7 @@ impl ARMCORTEXA {
                 "sub" => self.vector_arithmetic("-", |x, y| x.wrapping_sub(y), instruction),
                 "mul" => self.vector_arithmetic("*", |x, y| x.wrapping_mul(y), instruction),
                 "uaddw" | "uaddw2" | "saddw" | "saddw2" => {
-                    if let Err(e) = self.vector_widening_add("+", instruction) {
-                        return Err(e);
-                    }
+                    self.vector_widening_add("+", instruction)?
                 }
                 "movi" | "mvni" => {
                     let mut reg_iter = instruction.operands.iter();
@@ -1337,9 +1335,9 @@ impl ARMCORTEXA {
                     let mut cursor = address.clone();
                     for destination in &destinations {
                         let width = vector_access_width(destination) as i64;
-                        match self.load_vector(destination.clone(), cursor.clone(), width) {
-                            Err(e) => return Err(e.to_string()),
-                            _ => (),
+                        if let Err(e) = self.load_vector(destination.clone(), cursor.clone(), width)
+                        {
+                            return Err(e.to_string());
                         }
                         cursor.offset += width;
                     }
@@ -1358,9 +1356,8 @@ impl ARMCORTEXA {
                     let mut cursor = address.clone();
                     for source in &sources {
                         let width = vector_access_width(source) as i64;
-                        match self.store_vector(source.clone(), cursor.clone(), width) {
-                            Err(e) => return Err(e.to_string()),
-                            _ => (),
+                        if let Err(e) = self.store_vector(source.clone(), cursor.clone(), width) {
+                            return Err(e.to_string());
                         }
                         cursor.offset += width;
                     }
@@ -1417,13 +1414,11 @@ impl ARMCORTEXA {
                             } else {
                                 self.store_vector(reg2.clone(), address.clone(), width)
                             };
-                            match res1 {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            if let Err(e) = res1 {
+                                return Err(e.to_string());
                             }
-                            match res2 {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            if let Err(e) = res2 {
+                                return Err(e.to_string());
                             }
 
                             self.write_back(w, *reg_num, writeback);
