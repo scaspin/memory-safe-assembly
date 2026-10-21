@@ -94,7 +94,9 @@ impl ARMCORTEXA {
                     }
                     None => {
                         let unwritten = content_symbol(&region_name, offset, width, region.epoch);
-                        self.pristine_read = pristine.then(|| region_name.clone());
+                        self.pristine_read = (pristine
+                            && self.element_read(&region_name, &address, width))
+                        .then(|| region_name.clone());
                         Some(
                             self.element_pointer(&region_name, &address, width)
                                 .filter(|_| pristine)
@@ -141,7 +143,8 @@ impl ARMCORTEXA {
                         .recall_slot(&base, address.offset, width)
                         .unwrap_or_else(|| self.unknown_load(width)),
                 };
-                self.pristine_read = pristine;
+                self.pristine_read =
+                    pristine.filter(|region| self.element_read(region, &address, width));
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
                     base,
@@ -163,26 +166,31 @@ impl ARMCORTEXA {
         width: i64,
     ) -> Option<RegisterValue> {
         let target = self.pointer_elements.get(region)?;
-        if width != 8 {
-            return None;
-        }
-        let within = generate_expression(
-            "-",
-            instruction_aux::full_value(address),
-            AbstractExpression::Abstract(region.to_string()),
-        );
-        let misaligned = comparison_to_ast(AbstractComparison::new(
-            "!=",
-            generate_expression("%", within, AbstractExpression::Immediate(8)),
-            AbstractExpression::Immediate(0),
-        ))?;
-        (self.solver.check_assumptions(&[misaligned]) == SatResult::Unsat).then(|| {
+        (width == 8 && self.aligned_within(region, address, width)).then(|| {
             RegisterValue::new(
                 RegisterKind::RegisterBase,
                 Some(AbstractExpression::Abstract(target.clone())),
                 0,
             )
         })
+    }
+
+    fn aligned_within(&self, region: &str, address: &RegisterValue, width: i64) -> bool {
+        let within = generate_expression(
+            "-",
+            instruction_aux::full_value(address),
+            AbstractExpression::Abstract(region.to_string()),
+        );
+        comparison_to_ast(AbstractComparison::new(
+            "!=",
+            generate_expression("%", within, AbstractExpression::Immediate(width)),
+            AbstractExpression::Immediate(0),
+        ))
+        .is_some_and(|misaligned| self.solver.check_assumptions(&[misaligned]) == SatResult::Unsat)
+    }
+
+    fn element_read(&self, region: &str, address: &RegisterValue, width: i64) -> bool {
+        self.element_ranges.contains_key(region) && self.aligned_within(region, address, width)
     }
 
     pub(crate) fn bound_loaded_element(&mut self, dst: &Operand, width: i64, signed: bool) {
@@ -196,11 +204,13 @@ impl ARMCORTEXA {
         if value.kind != RegisterKind::RegisterBase {
             return;
         }
+        let ranges: Vec<ElementRange> = ranges.into_iter().filter(|r| r.width == width).collect();
+        let sign_agrees = width == 8
+            || ranges
+                .iter()
+                .any(|r| r.signed != signed && self.range_excludes_sign_bit(r));
         let mut bounded = instruction_aux::full_value(&value);
-        for range in ranges
-            .iter()
-            .filter(|r| r.width == width && (width == 8 || r.signed == signed))
-        {
+        for range in ranges.iter().filter(|r| sign_agrees || r.signed == signed) {
             let one = AbstractExpression::Immediate(1);
             bounded = match range.op.as_str() {
                 "<" => generate_expression(
@@ -221,6 +231,28 @@ impl ARMCORTEXA {
         }
         self.set_register(dst, RegisterKind::RegisterBase, Some(bounded), 0);
         self.mark_loaded(dst);
+    }
+
+    fn range_excludes_sign_bit(&self, range: &ElementRange) -> bool {
+        let sign_bit = AbstractExpression::Immediate(1 << (8 * range.width - 1));
+        let zero = AbstractExpression::Immediate(0);
+        let bound = range.bound.clone();
+        let needed = match (range.signed, range.op.as_str()) {
+            (true, ">=" | ">") => vec![AbstractComparison::new(">=", bound, zero)],
+            (false, "<") => vec![AbstractComparison::new("<=", bound, sign_bit)],
+            (false, "<=") => vec![AbstractComparison::new("<", bound, sign_bit)],
+            (_, "==") => vec![
+                AbstractComparison::new(">=", bound.clone(), zero),
+                AbstractComparison::new("<", bound, sign_bit),
+            ],
+            _ => return false,
+        };
+        needed
+            .into_iter()
+            .all(|fact| match comparison_to_ast(fact) {
+                Some(c) => self.solver.check_assumptions(&[c.not()]) == SatResult::Unsat,
+                None => false,
+            })
     }
 
     fn unknown_load(&mut self, width: i64) -> RegisterValue {

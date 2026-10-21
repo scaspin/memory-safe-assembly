@@ -927,3 +927,47 @@ fn a_label_with_a_negative_addend_points_before_its_symbol() {
     assert_eq!(read_below_a_table(16), Ok(()));
     assert!(read_below_a_table(12).is_err());
 }
+
+fn index_through_a_map(load: &str, ranges: &[(&str, i64)]) -> Result<(), String> {
+    init();
+    let program = format!(
+        "start:
+        {load}
+        ldr d0, [x2, x10, lsl #3]
+        ldr d1, [x2, x11, lsl #3]
+        ret"
+    );
+    let mut engine = bums::engine::ExecutionEngine::new(program.lines().map(str::trim));
+    engine.add_abstract_from(1, "map");
+    engine.add_region(RegionType::READ, "map", imm(12));
+    engine.add_abstract_from(2, "input");
+    engine.add_region(RegionType::READ, "input", imm(64));
+    for (op, bound) in ranges {
+        engine.add_element_range("map", 4, true, op, imm(*bound));
+    }
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn an_unsigned_read_of_a_nonnegative_signed_element_keeps_its_range() {
+    let both = [(">=", 0), ("<", 8)];
+    assert_eq!(index_through_a_map("ldp w10, w11, [x1]", &both), Ok(()));
+    assert_eq!(index_through_a_map("ldp w10, w11, [x1, #4]", &both), Ok(()));
+}
+
+#[test]
+fn an_unsigned_read_of_a_possibly_negative_element_is_unbounded() {
+    let res = index_through_a_map("ldp w10, w11, [x1]", &[("<", 8)]);
+    assert!(res.is_err(), "{res:?}");
+    let res = index_through_a_map("ldp w10, w11, [x1]", &[(">=", -1), ("<", 8)]);
+    assert!(res.is_err(), "{res:?}");
+}
+
+#[test]
+fn a_read_straddling_two_elements_is_not_an_element() {
+    let ranges = [(">=", 0), ("<", 8)];
+    let aligned = "ldrsw x10, [x1]\nldrsw x11, [x1, #4]";
+    assert_eq!(index_through_a_map(aligned, &ranges), Ok(()));
+    let res = index_through_a_map("ldrsw x10, [x1, #2]\nldrsw x11, [x1, #6]", &ranges);
+    assert!(res.is_err(), "{res:?}");
+}
