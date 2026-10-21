@@ -6,3 +6,7 @@ scrape-asm/lib
 scrape-asm/hashes
 crypto-playground/bin
 crypto-playground/lib
+s2n-bignum/
+scrape-asm/crates/
+bugs/cve-examples/
+__pycache__/
