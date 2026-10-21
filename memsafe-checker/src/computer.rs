@@ -663,10 +663,12 @@ impl ARMCORTEXA {
             .trim_start_matches(":pg_hi21_nc:")
             .trim_start_matches(":pg_hi21:")
             .trim_start_matches(":lo12:");
-        let (symbol, addend) = match label.rsplit_once('+') {
-            Some((symbol, addend)) => (symbol, addend.trim().parse::<i64>().unwrap_or(0)),
-            None => (label, 0),
-        };
+        let split_addend = label.rfind(['+', '-']).filter(|&at| at > 0).and_then(|at| {
+            let addend: String = label[at..].chars().filter(|c| !c.is_whitespace()).collect();
+            let addend = crate::loader::parse_integer(addend.trim_start_matches('+'))?;
+            Some((label[..at].trim(), addend))
+        });
+        let (symbol, addend) = split_addend.unwrap_or((label, 0));
         let (base, offset) = self.symbol_address(symbol)?;
         Some((base, offset + addend))
     }

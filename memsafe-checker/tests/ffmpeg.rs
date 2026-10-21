@@ -903,3 +903,27 @@ fn a_loop_entered_again_after_closing_is_summarized_again() {
     engine.add_invariant(fact("<=", abstract_of("w"), imm(1 << 20)));
     assert_eq!(engine.start("start").map_err(|e| e.to_string()), Ok(()));
 }
+
+fn read_below_a_table(offset: i64) -> Result<(), String> {
+    init();
+    let load = format!("ldr w8, [x7, #{offset}]");
+    let program = [
+        "start:",
+        "adrp x7, tbl-16",
+        "add x7, x7, :lo12:tbl-16",
+        &load,
+        "ret",
+        "\t.section .rodata",
+        "tbl:",
+        "\t.size tbl, 4",
+        "\t.word 1",
+    ];
+    let mut engine = bums::engine::ExecutionEngine::new(program.iter().map(|s| s.to_string()));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_label_with_a_negative_addend_points_before_its_symbol() {
+    assert_eq!(read_below_a_table(16), Ok(()));
+    assert!(read_below_a_table(12).is_err());
+}

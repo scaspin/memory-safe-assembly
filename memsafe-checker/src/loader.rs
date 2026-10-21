@@ -97,7 +97,7 @@ enum Section {
     Data(usize),
 }
 
-fn parse_integer(text: &str) -> Option<i64> {
+pub(crate) fn parse_integer(text: &str) -> Option<i64> {
     let (negative, digits) = match text.strip_prefix('-') {
         Some(rest) => (true, rest),
         None => (false, text),
