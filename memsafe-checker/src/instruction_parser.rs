@@ -776,6 +776,47 @@ fn constant_expression(s: &str) -> Option<i64> {
     parser.rest.trim().is_empty().then_some(value)
 }
 
+const VECTOR_ONLY_ENCODINGS: [(u32, u32, &str); 18] = [
+    (0xffe0_8000, 0xce00_0000, "eor3"),
+    (0xffe0_8000, 0xce20_0000, "bcax"),
+    (0xffe0_fc00, 0xce60_8000, "sha512h"),
+    (0xffe0_fc00, 0xce60_8400, "sha512h2"),
+    (0xffe0_fc00, 0xce60_8800, "sha512su1"),
+    (0xffe0_fc00, 0xce60_8c00, "rax1"),
+    (0xffff_fc00, 0xcec0_8000, "sha512su0"),
+    (0xffe0_0000, 0xce80_0000, "xar"),
+    (0xffe0_fc00, 0x5e00_0000, "sha1c"),
+    (0xffe0_fc00, 0x5e00_1000, "sha1p"),
+    (0xffe0_fc00, 0x5e00_2000, "sha1m"),
+    (0xffe0_fc00, 0x5e00_3000, "sha1su0"),
+    (0xffe0_fc00, 0x5e00_4000, "sha256h"),
+    (0xffe0_fc00, 0x5e00_5000, "sha256h2"),
+    (0xffe0_fc00, 0x5e00_6000, "sha256su1"),
+    (0xffff_fc00, 0x5e28_0800, "sha1h"),
+    (0xffff_fc00, 0x5e28_1800, "sha1su1"),
+    (0xffff_fc00, 0x5e28_2800, "sha256su0"),
+];
+
+pub fn decode_vector_only_word(word: u32) -> Option<String> {
+    let (_, _, opcode) = VECTOR_ONLY_ENCODINGS
+        .iter()
+        .find(|(mask, value, _)| word & mask == *value)?;
+    let field = |shift: u32| (word >> shift) & 31;
+    let vector = |shift: u32| format!("v{}.16b", field(shift));
+    let operands = match *opcode {
+        "eor3" | "bcax" => vec![vector(0), vector(5), vector(16), vector(10)],
+        "xar" => vec![
+            vector(0),
+            vector(5),
+            vector(16),
+            format!("#{}", (word >> 10) & 63),
+        ],
+        "sha512su0" | "sha1h" | "sha1su1" | "sha256su0" => vec![vector(0), vector(5)],
+        _ => vec![vector(0), vector(5), vector(16)],
+    };
+    Some(format!("{opcode} {}", operands.join(", ")))
+}
+
 pub fn string_to_int(s: &str) -> i64 {
     let value: i64;
     let v = s.trim().trim_start_matches('#').trim();

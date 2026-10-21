@@ -1,4 +1,5 @@
 use crate::computer::*;
+use crate::instruction_parser::decode_vector_only_word;
 
 fn is_conditional_branch(opcode: &str) -> bool {
     matches!(
@@ -112,6 +113,10 @@ impl MachineInstruction for Instruction {
 
     fn parse(text: String) -> Self {
         Instruction::new(text)
+    }
+
+    fn decode_word(word: u32) -> Option<String> {
+        decode_vector_only_word(word)
     }
 
     fn label(&self) -> Option<&str> {

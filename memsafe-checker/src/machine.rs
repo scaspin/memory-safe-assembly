@@ -68,6 +68,9 @@ pub trait MachineInstruction: Clone + Debug {
     fn alignment(directive: &str, argument: i64) -> Option<i64>;
     fn item_width(directive: &str) -> Option<i64>;
     fn parse(text: String) -> Self;
+    fn decode_word(_word: u32) -> Option<String> {
+        None
+    }
     fn label(&self) -> Option<&str>;
     fn opcode(&self) -> &str;
     fn flow(&self) -> Flow<'_>;

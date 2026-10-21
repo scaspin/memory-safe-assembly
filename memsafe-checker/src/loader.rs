@@ -151,6 +151,31 @@ fn encoded_instructions<I: MachineInstruction>(directives: &[(String, String)]) 
     (bytes + 3) / 4
 }
 
+fn encoded_code<I: MachineInstruction>(directives: &[(String, String)]) -> Vec<String> {
+    let words: Option<Vec<u32>> = directives
+        .iter()
+        .filter(|(directive, _)| emits_bytes::<I>(directive))
+        .map(|(directive, rest)| {
+            let word_sized = directive == ".inst" || I::item_width(directive) == Some(4);
+            word_sized.then(|| {
+                rest.split(',')
+                    .map(|item| u32::try_from(parse_integer(item.trim())?).ok())
+                    .collect::<Option<Vec<u32>>>()
+            })?
+        })
+        .collect::<Option<Vec<Vec<u32>>>>()
+        .map(|items| items.concat());
+    match words {
+        Some(words) => words
+            .into_iter()
+            .map(|word| I::decode_word(word).unwrap_or_else(|| UNSUPPORTED_ENCODING.to_string()))
+            .collect(),
+        None => {
+            vec![UNSUPPORTED_ENCODING.to_string(); encoded_instructions::<I>(directives) as usize]
+        }
+    }
+}
+
 fn emits_bytes<I: MachineInstruction>(directive: &str) -> bool {
     I::item_width(directive).is_some()
         || matches!(
@@ -240,8 +265,8 @@ impl<I: MachineInstruction> Listing<I> {
                         for label in run.labels {
                             listing.push_code(I::parse(label));
                         }
-                        for _ in 0..encoded_instructions::<I>(&run.directives) {
-                            listing.push_code(I::parse(UNSUPPORTED_ENCODING.to_string()));
+                        for instruction in encoded_code::<I>(&run.directives) {
+                            listing.push_code(I::parse(instruction));
                         }
                     }
                     for label in waiting.drain(..) {
@@ -289,8 +314,8 @@ impl<I: MachineInstruction> Listing<I> {
             self.data_directive(index, directive, rest, pending);
         }
         if self.falls_through {
-            for _ in 0..encoded {
-                self.push_code(I::parse(UNSUPPORTED_ENCODING.to_string()));
+            for instruction in encoded_code::<I>(&run.directives) {
+                self.push_code(I::parse(instruction));
             }
         }
     }
@@ -549,7 +574,7 @@ mod tests {
             "b Loop_ce",
             ".align 4",
             "Loop_ce:",
-            ".long 0xce0f2a99",
+            ".long 0xf9400000",
             "subs x9, x9, #1",
             "b.ne Loop_ce",
             "g:",
@@ -573,13 +598,29 @@ mod tests {
 
     #[test]
     fn an_encoded_instruction_directive_among_code_is_unsupported() {
-        let l = listing(&["f:", "add x0, x0, #1", ".inst 0xce608c00", "ret"]);
+        let l = listing(&["f:", "add x0, x0, #1", ".inst 0xf9400000", "ret"]);
         assert_eq!(unsupported_encodings(&l), 1);
     }
 
     #[test]
+    fn an_encoded_vector_only_instruction_is_decoded() {
+        let l = listing(&[
+            "f:",
+            ".inst 0xce006d08 // eor3",
+            ".inst 0x5e280803",
+            ".inst 0xce608c00",
+            ".long 0x5e2818e4, 0xce0f2a99",
+            "ret",
+        ]);
+        assert_eq!(unsupported_encodings(&l), 0);
+        let opcodes: Vec<&str> = l.code[1..6].iter().map(|i| i.opcode.as_str()).collect();
+        assert_eq!(opcodes, ["eor3", "sha1h", "rax1", "sha1su1", "eor3"]);
+        assert_eq!(l.code[1].operands.len(), 4);
+    }
+
+    #[test]
     fn words_reached_by_falling_through_are_unsupported_code() {
-        let l = listing(&["f:", "add x0, x0, #1", ".long 0xce0f2a99", "g:", "ret"]);
+        let l = listing(&["f:", "add x0, x0, #1", ".long 0xf9400000", "g:", "ret"]);
         assert_eq!(unsupported_encodings(&l), 1);
         assert!(l.labels.iter().any(|(n, _)| n == "g"));
     }
