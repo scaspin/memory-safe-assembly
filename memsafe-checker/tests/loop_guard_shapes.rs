@@ -148,3 +148,36 @@ fn equality_exits_closed_by_an_unsigned_test_off_their_lattice_are_rejected() {
     let res = analyze_countdown(unrolled_countdown_closed_by(8, "b.hi"), 4);
     assert!(res.is_err(), "{res:?}");
 }
+
+fn countdown_first_tested_unsigned() -> Vec<String> {
+    [
+        "start:",
+        "loop:",
+        "ldr x4,[x1],#8",
+        "subs x2,x2,#4",
+        "b.ls done",
+        "ldr x4,[x1],#8",
+        "subs x2,x2,#4",
+        "b.eq done",
+        "ldr x4,[x1],#8",
+        "subs x2,x2,#4",
+        "b.ne loop",
+        "done:",
+        "ret",
+    ]
+    .iter()
+    .map(|line| line.to_string())
+    .collect()
+}
+
+#[test]
+fn an_unsigned_guard_summarized_with_equality_exits_bounds_the_walk() {
+    let res = analyze_countdown(countdown_first_tested_unsigned(), 4);
+    assert!(res.is_ok(), "{res:?}");
+}
+
+#[test]
+fn an_unsigned_guard_with_equality_exits_off_their_lattice_is_rejected() {
+    let res = analyze_countdown(countdown_first_tested_unsigned(), 2);
+    assert!(res.is_err(), "{res:?}");
+}

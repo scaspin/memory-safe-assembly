@@ -2055,12 +2055,13 @@ impl<M: Machine> Engine<M> {
         let difference = |condition: &AbstractComparison| {
             Some(generate_expression(
                 "-",
-                without_registers(&condition.left)?,
-                without_registers(&condition.right)?,
+                without_registers(peel_unsigned(&condition.left))?,
+                without_registers(peel_unsigned(&condition.right))?,
             ))
         };
         let held_now = continuing(current, continues);
-        if held_now.op != "!=" || at_summary.op != "!=" {
+        let excludes_equality = |op: &str| matches!(op, "!=" | "<" | ">");
+        if !excludes_equality(&held_now.op) || !excludes_equality(&at_summary.op) {
             return None;
         }
         let exits: Vec<usize> = self
@@ -2077,12 +2078,7 @@ impl<M: Machine> Engine<M> {
             let pc = record.point.pc;
             if !exits.contains(&pc)
                 || cycle.iter().filter(|other| other.point.pc == pc).count() != 1
-                || !matches!(
-                    continuing(&record.point.condition, record.taken)
-                        .op
-                        .as_str(),
-                    "!=" | "<" | ">"
-                )
+                || !excludes_equality(&continuing(&record.point.condition, record.taken).op)
             {
                 continue;
             }
@@ -2123,7 +2119,11 @@ impl<M: Machine> Engine<M> {
         proved.then(|| {
             AbstractComparison::new(
                 toward,
-                generate_expression("-", (*at_summary.left).clone(), (*at_summary.right).clone()),
+                generate_expression(
+                    "-",
+                    peel_unsigned(&at_summary.left).clone(),
+                    peel_unsigned(&at_summary.right).clone(),
+                ),
                 AbstractExpression::Immediate(0),
             )
         })

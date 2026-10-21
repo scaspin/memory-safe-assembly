@@ -609,7 +609,7 @@ fn is_unsigned(e: &AbstractExpression) -> bool {
         if op == "zext" && **width == AbstractExpression::Immediate(64))
 }
 
-fn peel_unsigned(e: &AbstractExpression) -> &AbstractExpression {
+pub(super) fn peel_unsigned(e: &AbstractExpression) -> &AbstractExpression {
     match e {
         AbstractExpression::Expression(_, inner, _) if is_unsigned(e) => inner,
         _ => e,
