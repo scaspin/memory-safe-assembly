@@ -304,7 +304,6 @@ fn buffer(engine: &mut bums::engine::ExecutionEngine, register: usize, name: &st
     engine.add_region(RegionType::RW, name, AbstractExpression::Immediate(length));
 }
 
-// An index kept in memory, then overwritten at a symbolic offset that may hit it.
 fn stale_after_symbolic_store(index: i64) -> Result<(), String> {
     run_with(
         &[
@@ -354,7 +353,6 @@ fn a_narrow_store_inside_a_stored_value_invalidates_it() {
     assert!(stale_after_narrow_store().is_err());
 }
 
-// `.long 0, 1` read as one doubleword is 2^32, not 0.
 fn wide_read_of_a_narrow_table(item: &str) -> Result<(), String> {
     run_with(
         &[
@@ -376,7 +374,6 @@ fn a_wide_load_assembles_every_item_it_covers() {
     assert!(wide_read_of_a_narrow_table(".long 0, 1").is_err());
 }
 
-// A symbolic index into the second table, plus an immediate that must not be lost.
 fn indexed_table_read(immediate: i64) -> Result<(), String> {
     run_with(
         &[
@@ -440,7 +437,6 @@ fn the_stack_is_bounded_by_its_frame() {
     assert!(stack_access(&["str x1,[sp,#-144]"]).is_err());
 }
 
-// A buffer whose name happens to contain "sp" is still that buffer.
 #[test]
 fn a_region_named_like_the_stack_is_not_the_stack() {
     let result = run_with(&["start:", "ldr x3,[x0,#-8]", "ret"], |e| {
@@ -468,7 +464,6 @@ fn clz_of_a_word_counts_32_bits() {
     assert!(read("1").is_err());
 }
 
-// sxtb reads the index byte as signed: 0xf8 is -8 and 0xf7 is one byte before the buffer.
 #[test]
 fn a_sign_extended_index_is_negative() {
     let read = |value: i64| {
@@ -488,9 +483,6 @@ fn a_sign_extended_index_is_negative() {
     assert!(read(0xf7).is_err());
 }
 
-// Counted down by two in a w register: an odd count leaves the loop at -1, one
-// step past where an even count stops, and the read after it is then past the
-// end. The exit has to admit the odd counts.
 #[test]
 fn a_w_countdown_exits_on_odd_counts_too() {
     let result = run_with(
@@ -526,7 +518,6 @@ fn a_w_countdown_exits_on_odd_counts_too() {
     assert!(result.is_err(), "{result:?}");
 }
 
-// An extend written without an amount is still an operand of the instruction.
 #[test]
 fn an_extend_without_an_amount_still_computes() {
     let read = |value: i64| {

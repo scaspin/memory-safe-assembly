@@ -1,14 +1,9 @@
-// Each load and store spelling reads or writes a particular number of bytes, and the
-// `s` forms sign extend what they load. These pin both per opcode: the extent decides
-// what counts as in bounds, and the extension decides the value that comes back.
-
 use bums::common::*;
 
 fn init() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-// Runs `body` against an `n`-byte region whose base is in x0.
 fn accepts(n: i64, body: &[&str]) -> bool {
     init();
     let mut program = vec!["start:".to_string()];
@@ -26,7 +21,6 @@ fn accepts(n: i64, body: &[&str]) -> bool {
     engine.start("start".to_string()).is_ok()
 }
 
-// An access of `width` bytes at offset 0 fits in exactly `width` bytes and no less.
 fn pins_width(access: &str, width: i64) {
     assert!(
         accepts(width, &[access]),
@@ -39,7 +33,6 @@ fn pins_width(access: &str, width: i64) {
     );
 }
 
-// Stores `value` with `store`, reads it back with `load`, and returns x2.
 fn round_trip(store: &str, load: &str, value: usize) -> i64 {
     init();
     let program = vec![
@@ -155,7 +148,6 @@ fn sturh_writes_two_bytes() {
     pins_width("sturh w1,[x0,#0]", 2);
 }
 
-// The unscaled forms are the ones that take a negative offset.
 #[test]
 fn ldur_reaches_back_from_the_end() {
     assert!(accepts(16, &["add x3,x0,#16", "ldur x2,[x3,#-8]"]));
@@ -168,7 +160,6 @@ fn stur_reaches_back_from_the_end() {
     assert!(!accepts(16, &["add x3,x0,#16", "stur x1,[x3,#-24]"]));
 }
 
-// An unsigned load keeps the loaded bytes; a signed one copies the top bit up.
 #[test]
 fn ldrb_zero_extends() {
     assert_eq!(round_trip("strb w1,[x0]", "ldrb w2,[x0]", 0xff), 255);

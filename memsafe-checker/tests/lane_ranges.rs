@@ -1,4 +1,3 @@
-
 use bums::common::*;
 
 fn init() {

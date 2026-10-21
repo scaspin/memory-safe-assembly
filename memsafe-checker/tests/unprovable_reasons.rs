@@ -1,7 +1,3 @@
-// An access that violates neither bound is proved only when the path it sits on can
-// actually happen. These pin the outcomes apart: proved, out of bounds, and nothing
-// proved at all because the path has no model.
-
 use bums::common::*;
 
 fn init() {
@@ -46,9 +42,6 @@ fn an_access_past_the_region_names_the_region() {
     );
 }
 
-// Both bound queries come back unsat on a path that cannot happen, which proves
-// nothing. Saying so is the point: contradictory facts are a bug in the analysis,
-// and reading them as a safe access is how a vacuous proof slips through.
 #[test]
 fn contradictory_facts_report_a_dead_path() {
     let err = analyze(&[length_is(8), length_is(9)], "ldr x1,[x0]").expect_err("dead path");
@@ -58,9 +51,6 @@ fn contradictory_facts_report_a_dead_path() {
     );
 }
 
-// An undecided path is a different thing from an impossible one, and must not be
-// reported as one. The wording is pinned by the unit tests on `unproved_reason`;
-// this checks the two messages cannot be confused.
 #[test]
 fn the_dead_path_report_does_not_claim_the_solver_gave_up() {
     let err = analyze(&[length_is(8), length_is(9)], "ldr x1,[x0]").expect_err("dead path");

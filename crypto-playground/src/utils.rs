@@ -33,7 +33,6 @@ pub fn convert_5(data: &[u32; 5]) -> [u8; 20] {
 
 #[inline]
 pub fn ms_addc_u64(x: u64, y: u64, carry_in: bool) -> (u64, bool) {
-    // nightly option: x.carrying_add(y, carry_in)
     if carry_in {
         match x.overflowing_add(1) {
             (r, true) => return (r.overflowing_add(y).0, true),
@@ -52,15 +51,6 @@ pub fn ms_subc_u64(x: u64, y: u64, carry_in: bool) -> (u64, bool) {
 
 #[inline]
 pub fn ms_xor16(output: &mut [u8; 16], a: &[u8; 16], b: &[u8; 16]) {
-    // (scaspin) todo from aws-lc: need to check this here too! but don't have crypto_word_t yet
-    // TODO(davidben): Ideally we'd leave this to the compiler, which could use
-    // vector registers, etc. But the compiler doesn't know that |in| and |out|
-    // cannot partially alias. |restrict| is slightly two strict (we allow exact
-    // aliasing), but perhaps in-place could be a separate function?
-    // OPENSSL_STATIC_ASSERT(16 % sizeof(crypto_word_t) == 0,
-    // block_cannot_be_evenly_divided_into_crypto_word_t)
-
-    // TODO: (scaspin) I don't really get what's going on here tbh
     let i = 0;
     while i < 16 {
         byteorder::LE::write_u32(
