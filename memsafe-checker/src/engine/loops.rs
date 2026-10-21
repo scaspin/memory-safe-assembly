@@ -703,6 +703,16 @@ impl<M: Machine> Engine<M> {
             log::info!("{id} at line {pc} may step over its bound, dropping {landing}");
         }
         summary.facts.retain(|fact| !unjustified.contains(fact));
+        if !unjustified.is_empty()
+            && let Some(ordered) = self.ordered_by_consecutive_exits(
+                (&previous, expression, branch_decision),
+                &history[index + 1..],
+                &summary.continuing,
+            )
+        {
+            log::info!("{id} at line {pc} exits at every value its walk takes: {ordered}");
+            summary.facts.push(ordered);
+        }
         summary
             .exit_facts
             .retain(|fact| !unjustified.contains(fact));
@@ -2027,6 +2037,91 @@ impl<M: Machine> Engine<M> {
         let mut assuming = self.select_definitions_in(fact);
         assuming.push(violated);
         check(self.computer.solver(), &assuming) == SatResult::Unsat
+    }
+
+    fn ordered_by_consecutive_exits(
+        &self,
+        (previous, current, continues): (&BranchPoint, &AbstractComparison, bool),
+        cycle: &[JumpRecord],
+        at_summary: &AbstractComparison,
+    ) -> Option<AbstractComparison> {
+        let continuing = |condition: &AbstractComparison, taken: bool| {
+            if taken {
+                condition.clone()
+            } else {
+                condition.not()
+            }
+        };
+        let difference = |condition: &AbstractComparison| {
+            Some(generate_expression(
+                "-",
+                without_registers(&condition.left)?,
+                without_registers(&condition.right)?,
+            ))
+        };
+        let held_now = continuing(current, continues);
+        if held_now.op != "!=" || at_summary.op != "!=" {
+            return None;
+        }
+        let exits: Vec<usize> = self
+            .loop_exits(previous.pc, continues, cycle)
+            .iter()
+            .map(|record| record.point.pc)
+            .collect();
+        let gap = |from: &AbstractExpression, to: &AbstractExpression| {
+            self.pinned_value(&generate_expression("-", to.clone(), from.clone()))
+        };
+        let mut last = difference(&previous.condition)?;
+        let mut step = None;
+        for record in cycle {
+            let pc = record.point.pc;
+            if !exits.contains(&pc)
+                || cycle.iter().filter(|other| other.point.pc == pc).count() != 1
+                || continuing(&record.point.condition, record.taken).op != "!="
+            {
+                continue;
+            }
+            let Some(next) = difference(&record.point.condition) else {
+                continue;
+            };
+            match (gap(&last, &next), step) {
+                (Some(by), None) if by != 0 => step = Some(by),
+                (Some(by), Some(known)) if by == known => (),
+                _ => continue,
+            }
+            last = next;
+        }
+        let now = difference(current)?;
+        let step = match (gap(&last, &now), step) {
+            (Some(by), None) if by != 0 => by,
+            (Some(by), Some(known)) if by == known => known,
+            _ => return None,
+        };
+        let toward = if step < 0 { ">" } else { "<" };
+        let required = [
+            AbstractComparison::new(
+                "==",
+                generate_expression("%", now.clone(), AbstractExpression::Immediate(step.abs())),
+                AbstractExpression::Immediate(0),
+            ),
+            AbstractComparison::new(toward, now, AbstractExpression::Immediate(0)),
+        ];
+        let held_now = comparison_to_ast(held_now)?;
+        let proved = required.into_iter().all(|requirement| {
+            comparison_to_ast(requirement).is_some_and(|requirement| {
+                self.computer
+                    .solver()
+                    .check_assumptions(&[held_now.clone(), requirement.not()])
+                    == SatResult::Unsat
+            })
+        });
+        proved.then(|| {
+            AbstractComparison::new(
+                toward,
+                generate_expression("-", (*at_summary.left).clone(), (*at_summary.right).clone()),
+                AbstractExpression::Immediate(0),
+            )
+        })
     }
 
     pub(super) fn proves(&self, fact: AbstractComparison) -> bool {
