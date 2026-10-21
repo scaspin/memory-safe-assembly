@@ -500,7 +500,7 @@ impl ARMCORTEXA {
         let mut entries = Vec::new();
         for entry in (0..=length - width).step_by(width as usize) {
             let pinned = index_ast.eq(ast::Int::from_i64(entry));
-            if self.solver.check_assumptions(&[pinned]) == SatResult::Sat {
+            if self.solver.check_assumptions(&[pinned]) != SatResult::Unsat {
                 if entries.len() == MAX_CASES {
                     return TableLoad::NotATable;
                 }
