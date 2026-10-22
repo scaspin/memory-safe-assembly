@@ -129,17 +129,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "bums_macros"
+name = "bums_annotations"
 version = "0.1.0"
 dependencies = [
  "bums",
- "env_logger",
  "log",
- "proc-macro-error",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
- "z3",
+]
+
+[[package]]
+name = "bums_macros"
+version = "0.1.0"
+dependencies = [
+ "bums_annotations",
+ "env_logger",
+ "proc-macro-error",
+ "quote",
 ]
 
 [[package]]

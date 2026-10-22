@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "bums_macros",
+  "bums_annotations",
   "memsafe-checker",
   "crypto-playground",
   "bignum-playground",

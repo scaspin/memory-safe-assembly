@@ -1,0 +1,11 @@
+[package]
+name = "bums_annotations"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+quote = "1.0.35"
+syn = {version = "2.0.49", features = ["full", "extra-traits", "parsing", "derive"]}
+bums = { path = "../memsafe-checker" }
+log = "0.4"
+proc-macro2 = "1.0.78"
