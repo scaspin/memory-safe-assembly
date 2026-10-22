@@ -2,6 +2,7 @@
 members = [
   "bums_macros",
   "bums_annotations",
+  "bums-check",
   "memsafe-checker",
   "crypto-playground",
   "bignum-playground",

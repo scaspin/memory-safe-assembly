@@ -15,6 +15,10 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         emit_call_site_error!(diagnostic);
     }
     let expansion = annotation.expansion.clone();
+    let skip_tracking = quote! { const _: Option<&str> = option_env!("BUMS_SKIP"); };
+    if std::env::var_os("BUMS_SKIP").is_some() {
+        return quote! { #expansion #skip_tracking }.into();
+    }
 
     let assembly_file: std::path::PathBuf = [
         std::env::var("OUT_DIR").expect("OUT_DIR"),
@@ -47,6 +51,7 @@ pub fn check_mem_safe(attr: TokenStream, item: TokenStream) -> TokenStream {
         .map(|finding| format!("bums finding in {label}: {finding}"));
     let token_stream: TokenStream = quote! {
         #expansion
+        #skip_tracking
         #(
             const _: () = {
                 #[deprecated(note = #notes)]
