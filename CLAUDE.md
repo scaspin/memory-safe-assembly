@@ -26,17 +26,28 @@ RUSTUP_TOOLCHAIN=1.93-aarch64-apple-darwin
 
 ## Verifying assembly
 
-`awslc-probe/` is a scratch crate: write one annotation into its `src/lib.rs` and build it
-release with `RUST_MIN_STACK` set. One build categorises every annotation in the file; a panic
-in one function does not abort the rest, but a rustc SIGBUS truncates everything after it.
+Use `bums-check` instead of building a playground. It finds every `check_mem_safe`
+annotation active for the target and features, runs the crate's build script once (a
+`cargo check` with `BUMS_SKIP=1` in `target/bums-check`, which skips verification), then
+checks each function in its own child process with a wall clock and a memory cap. It shares
+the annotation logic with the macro (`bums_annotations`), so verdicts are the macro's.
 
-Verdicts only appear in `--release` builds; debug builds turn them into proc-macro warnings
-that stable Rust drops. rav1d-playground/asm-status.tsv and ffmpeg-playground/asm-status.tsv
-record per-function results. Check large playgrounds per module or per function with a wall
-clock and a memory cap.
+```
+cargo build --release -p bums-check
+target/release/bums-check corecrypto-playground --jobs 2 --out cc.tsv --log-dir cc-logs
+target/release/bums-check openblas-playground --target x86_64-apple-darwin
+target/release/bums-check ffmpeg-playground --features vp9 --filter '^ff_vp9_' --timeout 120
+```
 
-**A probe reporting `failed=0` does not mean verified** — it only counts `VERIFICATION FAILED`
-and misses panics and truncated runs. Confirm through the sweep.
+Options: `--all-features`, `--no-default-features`, `--asm-dir DIR` (skip the build script),
+`--jobs N` (default cores/2), `--timeout SECS` (300), `--mem-gb G` (4, resident per child),
+`--skip-file FILE` (function names, e.g. known timeouts), `--list`. Statuses are `verified`,
+`FAIL`, `TIMEOUT`, `MEMCAP`, `ERROR` (panic, bad annotation, missing asm); the exit code is
+nonzero on any FAIL or ERROR. `RUST_LOG=bums=info` goes into the per-function logs.
+
+Verdicts from a real build only appear with `--release`; debug builds turn them into
+proc-macro warnings that stable Rust drops. rav1d-playground/asm-status.tsv and
+ffmpeg-playground/asm-status.tsv record per-function results.
 
 ## Working style
 

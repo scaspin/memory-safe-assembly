@@ -22,6 +22,24 @@ so x86-64 assembly can be checked from an Apple Silicon Mac with
 Verification results are only reported by `--release` builds: in debug builds a failed check
 is a proc-macro warning, which stable Rust does not display.
 
+## Checking a whole crate
+
+`bums-check` evaluates every `check_mem_safe` annotation of a crate without building it once
+per function. It runs the crate's build script once (to find the assembly), then checks each
+function in its own process, in parallel, with a wall clock and a memory cap. It uses the
+same annotation library as the macro (`bums_annotations`), so its verdicts are the macro's.
+
+```
+cargo build --release -p bums-check
+target/release/bums-check corecrypto-playground --jobs 4 --out results.tsv --log-dir logs
+target/release/bums-check openblas-playground --target x86_64-apple-darwin --timeout 600
+```
+
+Options: `--features A,B`, `--all-features`, `--no-default-features`, `--asm-dir DIR`,
+`--jobs N`, `--timeout SECS`, `--mem-gb G`, `--filter REGEX`, `--skip-file FILE`, `--list`.
+Each function is reported as `verified`, `FAIL`, `TIMEOUT`, `MEMCAP` or `ERROR`; the exit code
+is nonzero if any function fails or errors, so it can gate CI.
+
 Repository structure:
 -  [memsafe-checker](memsafe-checker) is the ```bums``` symbex engine
 -  [bums_macros](bums_macros) exposes the macro
