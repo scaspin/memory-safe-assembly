@@ -698,7 +698,9 @@ impl<M: Machine> Engine<M> {
             }
         }
         let round = attempt.rounds;
-        let bounds: Vec<Bound> = bound_candidates(&summary.invariants, &current_state.0)
+        let mut candidates = bound_candidates(&summary.invariants, &current_state.0);
+        candidates.extend(self.word_limits(&summary.invariants, &current_state.0));
+        let bounds: Vec<Bound> = candidates
             .into_iter()
             .filter(|bound| !attempt.rejected_bounds.contains(&bound.key()))
             .filter(|bound| self.plausible(bound, &entry_state.0, &current_state.0))
@@ -2051,9 +2053,36 @@ impl<M: Machine> Engine<M> {
             previous[bound.register].expression(),
         );
         match bound.anchor {
+            Some(AbstractExpression::Immediate(_)) => {
+                self.implied(&bound.at(previous)) && self.implied(&bound.at(current))
+            }
             Some(_) => self.implied(&moved) && !self.implied(&stayed),
             None => self.implied(&bound.at(previous)) && self.implied(&bound.at(current)),
         }
+    }
+
+    fn word_limits(&self, invariants: &[LoopInvariant], current: &[RegisterValue]) -> Vec<Bound> {
+        let limited: Vec<(usize, i64)> = invariants
+            .iter()
+            .zip(current)
+            .enumerate()
+            .filter(|(_, (invariant, now))| {
+                **invariant == LoopInvariant::Unknown && now.kind != RegisterKind::Number
+            })
+            .filter_map(|(i, (_, now))| Some((i, self.proven_upper_bound(now)?)))
+            .collect();
+        limited
+            .iter()
+            .flat_map(|&(register, limit)| {
+                [(">=", 0), ("<=", limit)].map(|(op, value)| Bound {
+                    register,
+                    op,
+                    other: None,
+                    offset: 0,
+                    anchor: Some(AbstractExpression::Immediate(value)),
+                })
+            })
+            .collect()
     }
 
     fn implied(&self, fact: &AbstractComparison) -> bool {

@@ -106,3 +106,55 @@ fn the_same_walk_into_an_output_one_word_short_is_rejected() {
     let err = ccn_add("short").expect_err("the last word lands past the output");
     assert!(err.contains("not provably within region"), "{err}");
 }
+
+fn position_walk(body: &[&str], slack: i64) -> Result<(), String> {
+    init();
+    let mut program: Vec<String> = [
+        "start:",
+        "mov w7,w5",
+        "walk:",
+        "lsr w8,w7,#6",
+        "add w7,w7,w5",
+        "lsr w10,w7,#6",
+        "cmp w8,w6",
+        "b.ge done",
+    ]
+    .iter()
+    .map(|line| line.to_string())
+    .collect();
+    program.extend(body.iter().map(|line| line.to_string()));
+    program.extend(["b walk", "done:", "ret"].map(str::to_string));
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    let symbol = |name: &str| AbstractExpression::Abstract(name.to_string());
+    engine.add_abstract_from(2, "top");
+    engine.add_region(
+        RegionType::READ,
+        "top",
+        generate_expression("+", symbol("limit"), AbstractExpression::Immediate(slack)),
+    );
+    engine.add_abstract_from(5, "step");
+    engine.add_abstract_from(6, "limit");
+    for (op, name, value) in [
+        (">=", "step", 1),
+        ("<=", "step", 102),
+        (">=", "limit", 1),
+        ("<=", "limit", 30),
+    ] {
+        engine.add_invariant(AbstractComparison::new(
+            op,
+            symbol(name),
+            AbstractExpression::Immediate(value),
+        ));
+    }
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_shifted_word_position_below_its_guard_indexes_the_region() {
+    assert_eq!(position_walk(&["ldrb w9,[x2,w8,uxtw]"], 0), Ok(()));
+}
+
+#[test]
+fn a_shifted_word_position_read_one_past_its_guard_is_rejected() {
+    assert!(position_walk(&["ldrh w9,[x2,w8,uxtw]"], 0).is_err());
+}

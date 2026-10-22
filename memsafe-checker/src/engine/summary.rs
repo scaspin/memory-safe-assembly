@@ -143,6 +143,11 @@ pub(super) fn anchored(
     }
 }
 
+fn word_view(register: &RegisterValue) -> RegisterValue {
+    let (base, offset) = narrow_to_32(register.base.clone(), register.offset);
+    RegisterValue::new(register.kind.clone(), base, offset)
+}
+
 pub(super) fn at_summary(
     e: &AbstractExpression,
     (current, previous, operands): (
@@ -156,8 +161,15 @@ pub(super) fn at_summary(
         AbstractExpression::Register(r) => {
             let index = operand_index(operands, current, r)
                 .or_else(|| previous.iter().position(|p| p == &**r));
-            match index.and_then(|i| updates.iter().find(|(j, _)| *j == i)) {
-                Some((_, rewritten)) => AbstractExpression::Register(Box::new(rewritten.clone())),
+            if let Some((_, rewritten)) = index.and_then(|i| updates.iter().find(|(j, _)| *j == i))
+            {
+                return AbstractExpression::Register(Box::new(rewritten.clone()));
+            }
+            let word = current.iter().position(|c| word_view(c) == **r);
+            match word.and_then(|i| updates.iter().find(|(j, _)| *j == i)) {
+                Some((_, rewritten)) => {
+                    AbstractExpression::Register(Box::new(word_view(rewritten)))
+                }
                 None => e.clone(),
             }
         }
@@ -1510,6 +1522,9 @@ impl Bound {
     }
 
     pub(super) fn key(&self) -> String {
+        if let Some(AbstractExpression::Immediate(limit)) = self.anchor {
+            return format!("{}{}{limit}", self.register, self.op);
+        }
         format!(
             "{}{}{:?}{}",
             self.register, self.op, self.other, self.offset
