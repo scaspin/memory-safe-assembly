@@ -709,7 +709,7 @@ impl<M: Machine> Engine<M> {
             .collect();
         self.loop_attempts.insert(pc, attempt);
 
-        let unjustified: Vec<AbstractComparison> = summary
+        let mut unjustified: Vec<AbstractComparison> = summary
             .landings
             .iter()
             .filter(|(requirement, _)| {
@@ -719,11 +719,40 @@ impl<M: Machine> Engine<M> {
             })
             .map(|(_, landing)| landing.clone())
             .collect();
+        let undefined_trips: Vec<String> = unjustified
+            .iter()
+            .flat_map(AbstractComparison::get_abstracts)
+            .filter(|symbol| symbol.contains("_trips"))
+            .collect();
+        let uncarried = self
+            .uncarried_branches
+            .borrow()
+            .get(&pc)
+            .cloned()
+            .unwrap_or_default();
+        let unusable: Vec<AbstractComparison> = summary
+            .branch_facts
+            .iter()
+            .filter(|(branch, fact)| {
+                !unjustified.contains(fact)
+                    && (uncarried.contains(branch)
+                        || fact
+                            .get_abstracts()
+                            .iter()
+                            .any(|symbol| undefined_trips.contains(symbol)))
+            })
+            .map(|(_, fact)| fact.clone())
+            .collect();
+        for fact in &unusable {
+            log::info!("{id} at line {pc} cannot carry {fact} across iterations, dropping it");
+        }
         for landing in &unjustified {
             log::info!("{id} at line {pc} may step over its bound, dropping {landing}");
         }
+        unjustified.extend(unusable);
         summary.facts.retain(|fact| !unjustified.contains(fact));
         if !unjustified.is_empty()
+            && !uncarried.contains(&pc)
             && let Some(ordered) = self.ordered_by_consecutive_exits(
                 (&previous, expression, branch_decision),
                 &history[index + 1..],
@@ -731,11 +760,35 @@ impl<M: Machine> Engine<M> {
             )
         {
             log::info!("{id} at line {pc} exits at every value its walk takes: {ordered}");
+            summary.branch_facts.push((pc, ordered.clone()));
             summary.facts.push(ordered);
         }
         summary
             .exit_facts
             .retain(|fact| !unjustified.contains(fact));
+        summary
+            .branch_facts
+            .retain(|(_, fact)| !unjustified.contains(fact));
+
+        let counter_name = summary.counter.name().to_string();
+        let at_base = AbstractExpression::Immediate(SUMMARY_ITERATION);
+        self.assume_staying(expression, branch_decision);
+        let unproved_at_base = summary
+            .branch_facts
+            .iter()
+            .map(|(_, fact)| comparison_with_counter_at(fact, &counter_name, &at_base))
+            .filter(|fact| {
+                fact.get_abstracts()
+                    .iter()
+                    .all(|symbol| !symbol.starts_with(&counter_name))
+            })
+            .find(|fact| !self.proves(fact.clone()));
+        self.computer.solver().pop(1);
+        if let Some(fact) = unproved_at_base {
+            log::info!("{id} at line {pc} does not hold {fact} where it is summarized, unrolling");
+            *self.failed_summaries.borrow_mut().entry(pc).or_insert(0) += 1;
+            return None;
+        }
 
         let fallback = self.fork();
         let scope_id = self.push_scope();
@@ -769,7 +822,13 @@ impl<M: Machine> Engine<M> {
                 .or_default()
                 .extend(mentioned.iter().cloned());
         }
-        if self.computer.solver().check() == SatResult::Unsat {
+        let admits_base = comparison_to_ast(AbstractComparison::new(
+            "==",
+            summary.counter.expression(),
+            at_base,
+        ))
+        .is_some_and(|base| self.computer.solver().check_assumptions(&[base]) == SatResult::Sat);
+        if !admits_base {
             self.pop_scope(scope_id);
             *self.failed_summaries.borrow_mut().entry(pc).or_insert(0) += 1;
             log::info!("{id} at line {pc} summary contradicts the path, unrolling");
@@ -809,6 +868,7 @@ impl<M: Machine> Engine<M> {
         let exit_facts = summary.exit_facts.clone();
         let facts = summary.facts.clone();
         let exits = summary.exits.clone();
+        let branch_facts = summary.branch_facts.clone();
         let ghost_checks = summary.ghost_checks.clone();
         let operand_checks = summary.operand_checks.clone();
         self.summaries.borrow_mut().push(summary);
@@ -834,6 +894,7 @@ impl<M: Machine> Engine<M> {
             history_len: self.jump_history.len(),
             facts,
             exits,
+            branch_facts,
             round,
             nested_facts: Vec::new(),
             fresh_bounds_at_entry: self.computer.fresh_bounds().len(),
@@ -1511,6 +1572,24 @@ impl<M: Machine> Engine<M> {
             }
         }
         settled
+    }
+
+    fn branches_not_carried(&self, active: &ActiveLoop) -> BTreeSet<usize> {
+        let name = LoopCounter::for_loop(active.id).name().to_string();
+        let next_iteration = generate_expression(
+            "+",
+            AbstractExpression::Abstract(name.clone()),
+            AbstractExpression::Immediate(1),
+        );
+        let mut uncarried = BTreeSet::new();
+        for (branch, fact) in &active.branch_facts {
+            let next = comparison_with_counter_at(fact, &name, &next_iteration);
+            if !self.proves(next.clone()) {
+                log::info!("{} did not carry {next} to its next iteration", active.id);
+                uncarried.insert(*branch);
+            }
+        }
+        uncarried
     }
 
     fn settled_steps_repeat(&self, active: &ActiveLoop) -> bool {
@@ -2640,6 +2719,9 @@ impl<M: Machine> Engine<M> {
                 .or_default()
                 .extend(drifting_cells);
         }
+        self.assume_staying(&expression, active.entry_decision);
+        let uncarried = self.branches_not_carried(&active);
+        self.computer.solver().pop(1);
         let steps_hold = self.settled_steps_repeat(&active);
         let slots_hold = self.computer.slots_kept(&active.slots);
         let confinements_hold = active
@@ -2666,6 +2748,15 @@ impl<M: Machine> Engine<M> {
         if !confinements_hold {
             log::info!("{} a widened load left its width", active.id);
         }
+        if !uncarried.is_empty() {
+            let mut known = self.uncarried_branches.borrow_mut();
+            let at_loop = known.entry(active.pc).or_default();
+            let before = at_loop.len();
+            at_loop.extend(uncarried.iter().copied());
+            if at_loop.len() > before {
+                self.loop_attempts.remove(&active.pc);
+            }
+        }
         if !slots_hold {
             log::info!("{} a saved slot did not survive the body", active.id);
             self.unstable_slots.borrow_mut().insert(active.pc);
@@ -2679,7 +2770,8 @@ impl<M: Machine> Engine<M> {
         if !unbounded.is_empty() {
             log::info!("{} bounds {unbounded:?} not re-established", active.id);
         }
-        let holds = cells_hold
+        let holds = uncarried.is_empty()
+            && cells_hold
             && slots_hold
             && confinements_hold
             && steps_hold
@@ -2694,6 +2786,7 @@ impl<M: Machine> Engine<M> {
         if !holds {
             let read_by_guard = registers_in(&expression);
             let only_data_moved = ghosts_repeat
+                && uncarried.is_empty()
                 && active
                     .invariants
                     .iter()

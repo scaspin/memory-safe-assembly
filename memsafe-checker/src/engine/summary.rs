@@ -19,6 +19,7 @@ pub(super) struct Summary {
     pub(super) exit_facts: Vec<AbstractComparison>,
     pub(super) landings: Vec<(AbstractComparison, AbstractComparison)>,
     pub(super) exits: Vec<(usize, bool)>,
+    pub(super) branch_facts: Vec<(usize, AbstractComparison)>,
     pub(super) ranges: Vec<(String, i64)>,
     pub(super) ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
     pub(super) operand_checks: Vec<(Vec<bool>, usize)>,
@@ -1326,23 +1327,27 @@ pub(super) fn summarize(
     }
 
     let exits = cycle.iter().map(|(r, _)| (r.point.pc, r.taken)).collect();
+    let mut branch_facts = Vec::new();
     for (record, exit_ghosts) in cycle {
-        facts.extend(facts_for_exit(
+        let held = facts_for_exit(
             (record, exit_ghosts),
             &counter,
             &invariants,
             bounded,
             &mut landings,
-        ));
+        );
+        branch_facts.extend(held.into_iter().map(|fact| (record.point.pc, fact)));
     }
     for (record, branch_ghosts) in walked {
-        facts.extend(held_on_the_cycle(
+        let held = held_on_the_cycle(
             (record, branch_ghosts),
             &counter,
             &invariants,
             &mut landings,
-        ));
+        );
+        branch_facts.extend(held.map(|fact| (record.point.pc, fact)));
     }
+    facts.extend(branch_facts.iter().map(|(_, fact)| fact.clone()));
 
     let side_at_summary = |on_left: bool, side: &AbstractExpression| {
         let substituted = ghosts
@@ -1392,6 +1397,7 @@ pub(super) fn summarize(
         exit_facts,
         landings,
         exits,
+        branch_facts,
         ranges,
         ghost_checks,
         operand_checks,
@@ -1588,6 +1594,7 @@ pub(super) struct ActiveLoop {
     pub(super) history_len: usize,
     pub(super) facts: Vec<AbstractComparison>,
     pub(super) exits: Vec<(usize, bool)>,
+    pub(super) branch_facts: Vec<(usize, AbstractComparison)>,
     pub(super) round: usize,
     pub(super) nested_facts: Vec<ast::Bool>,
     pub(super) fresh_bounds_at_entry: usize,
