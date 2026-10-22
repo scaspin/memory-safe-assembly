@@ -16,6 +16,7 @@ const DECIDED_REPEATS_BEFORE_SUMMARY: usize = 3;
 const UNROLLING_INSTRUCTION_BUDGET: i64 = 200_000;
 const MAX_MERGED_BLOCK: usize = 16;
 const MAX_STEPS: usize = 200_000;
+const STEPS_PER_INSTRUCTION: usize = 256;
 
 fn limit_from_env(variable: &str, default: usize) -> usize {
     std::env::var(variable)
@@ -320,6 +321,7 @@ impl<M: Machine> Engine<M> {
             line_at,
             ..
         } = listing;
+        let steps = MAX_STEPS.max(STEPS_PER_INSTRUCTION * code.len());
 
         Engine {
             program: Rc::new(Program {
@@ -350,7 +352,7 @@ impl<M: Machine> Engine<M> {
             refuted_select_steps: Rc::new(RefCell::new(BTreeSet::new())),
             counted_failures: Rc::new(RefCell::new(BTreeSet::new())),
             next_loop_id: Rc::new(Cell::new(0)),
-            steps_left: Rc::new(Cell::new(limit_from_env("BUMS_MAX_STEPS", MAX_STEPS))),
+            steps_left: Rc::new(Cell::new(limit_from_env("BUMS_MAX_STEPS", steps))),
             explored: Rc::default(),
             loop_attempts: BTreeMap::new(),
             scopes: Vec::new(),
@@ -1791,6 +1793,36 @@ mod tests {
             err.to_string().contains("exploration limit reached"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn a_concrete_loop_longer_than_the_base_budget_runs_to_its_end() {
+        let mut asm = vec![
+            "start:".to_string(),
+            "mov x0, #255".to_string(),
+            "round:".to_string(),
+        ];
+        asm.extend((0..1000).map(|_| "add x1, x1, #1".to_string()));
+        asm.push("subs x0, x0, #1".to_string());
+        asm.push("b.ne round".to_string());
+        asm.push("ret".to_string());
+        let mut engine = ExecutionEngine::new(asm);
+        assert_eq!(engine.start("start").map_err(|e| e.to_string()), Ok(()));
+    }
+
+    #[test]
+    fn a_runaway_concrete_loop_is_still_stopped() {
+        let asm = vec![
+            "start:",
+            "mov x0, #0",
+            "round:",
+            "add x0, x0, #2",
+            "cmp x0, #1",
+            "b.ne round",
+            "ret",
+        ];
+        let mut engine = ExecutionEngine::new(asm);
+        assert!(engine.start("start").is_err());
     }
 
     #[test]
