@@ -143,7 +143,7 @@ pub(super) fn anchored(
     }
 }
 
-fn word_view(register: &RegisterValue) -> RegisterValue {
+pub(super) fn word_view(register: &RegisterValue) -> RegisterValue {
     let (base, offset) = narrow_to_32(register.base.clone(), register.offset);
     RegisterValue::new(register.kind.clone(), base, offset)
 }

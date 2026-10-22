@@ -158,3 +158,16 @@ fn a_shifted_word_position_below_its_guard_indexes_the_region() {
 fn a_shifted_word_position_read_one_past_its_guard_is_rejected() {
     assert!(position_walk(&["ldrh w9,[x2,w8,uxtw]"], 0).is_err());
 }
+
+#[test]
+fn a_position_one_step_ahead_stays_near_the_guarded_one() {
+    assert_eq!(
+        position_walk(&["ldrb w9,[x2,w10,uxtw]", "ldrb w9,[x2,w8,uxtw]"], 2),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_position_one_step_ahead_can_pass_the_guard() {
+    assert!(position_walk(&["ldrb w9,[x2,w10,uxtw]", "ldrb w9,[x2,w8,uxtw]"], 0).is_err());
+}

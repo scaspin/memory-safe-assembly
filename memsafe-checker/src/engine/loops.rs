@@ -37,6 +37,8 @@ impl SummaryLedger {
     }
 }
 
+const NEIGHBOUR_GAPS: [i64; 6] = [0, 1, 2, 4, 16, 256];
+
 impl<M: Machine> Engine<M> {
     pub(super) fn validate_summary(
         &mut self,
@@ -699,7 +701,7 @@ impl<M: Machine> Engine<M> {
         }
         let round = attempt.rounds;
         let mut candidates = bound_candidates(&summary.invariants, &current_state.0);
-        candidates.extend(self.word_limits(&summary.invariants, &current_state.0));
+        candidates.extend(self.word_limits(&summary.invariants, &current_state.0, expression));
         let bounds: Vec<Bound> = candidates
             .into_iter()
             .filter(|bound| !attempt.rejected_bounds.contains(&bound.key()))
@@ -2061,7 +2063,12 @@ impl<M: Machine> Engine<M> {
         }
     }
 
-    fn word_limits(&self, invariants: &[LoopInvariant], current: &[RegisterValue]) -> Vec<Bound> {
+    fn word_limits(
+        &self,
+        invariants: &[LoopInvariant],
+        current: &[RegisterValue],
+        guard: &AbstractComparison,
+    ) -> Vec<Bound> {
         let limited: Vec<(usize, i64)> = invariants
             .iter()
             .zip(current)
@@ -2071,7 +2078,7 @@ impl<M: Machine> Engine<M> {
             })
             .filter_map(|(i, (_, now))| Some((i, self.proven_upper_bound(now)?)))
             .collect();
-        limited
+        let mut bounds: Vec<Bound> = limited
             .iter()
             .flat_map(|&(register, limit)| {
                 [(">=", 0), ("<=", limit)].map(|(op, value)| Bound {
@@ -2082,7 +2089,36 @@ impl<M: Machine> Engine<M> {
                     anchor: Some(AbstractExpression::Immediate(value)),
                 })
             })
-            .collect()
+            .collect();
+        let guarded: Vec<usize> = registers_in(guard)
+            .iter()
+            .filter_map(|r| current.iter().position(|c| c == r || word_view(c) == *r))
+            .collect();
+        for &(register, _) in &limited {
+            for &other in guarded.iter().filter(|other| **other != register) {
+                let ahead = NEIGHBOUR_GAPS.into_iter().find(|gap| {
+                    self.implied(&AbstractComparison::new(
+                        "<=",
+                        current[register].expression(),
+                        generate_expression(
+                            "+",
+                            current[other].expression(),
+                            AbstractExpression::Immediate(*gap),
+                        ),
+                    ))
+                });
+                if let Some(offset) = ahead {
+                    bounds.push(Bound {
+                        register,
+                        op: "<=",
+                        other: Some(other),
+                        offset,
+                        anchor: None,
+                    });
+                }
+            }
+        }
+        bounds
     }
 
     fn implied(&self, fact: &AbstractComparison) -> bool {
