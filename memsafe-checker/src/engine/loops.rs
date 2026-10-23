@@ -411,29 +411,34 @@ impl<M: Machine> Engine<M> {
     }
 
     fn invariants_while_staying(
-        &mut self,
+        &self,
         condition: &AbstractComparison,
         continues_when: bool,
         tested: &[AbstractComparison],
         entry_state: &mut MachineState,
         current_state: &mut MachineState,
     ) -> Vec<LoopInvariant> {
-        self.assume_staying(condition, continues_when);
-        self.resolve_selects(entry_state);
-        self.resolve_selects(current_state);
-        let mut observed = invariant_of_registers(&entry_state.0, &current_state.0);
-        self.pin_unknown_steps(
-            &mut observed,
-            &entry_state.0,
-            &current_state.0,
-            condition,
-            tested,
-        );
-        self.computer.solver().pop(1);
-        observed
+        self.while_staying(condition, continues_when, |engine| {
+            engine.resolve_selects(entry_state);
+            engine.resolve_selects(current_state);
+            let mut observed = invariant_of_registers(&entry_state.0, &current_state.0);
+            engine.pin_unknown_steps(
+                &mut observed,
+                &entry_state.0,
+                &current_state.0,
+                condition,
+                tested,
+            );
+            observed
+        })
     }
 
-    fn assume_staying(&mut self, condition: &AbstractComparison, continues_when: bool) {
+    fn while_staying<T>(
+        &self,
+        condition: &AbstractComparison,
+        continues_when: bool,
+        within: impl FnOnce(&Self) -> T,
+    ) -> T {
         let staying = comparison_to_ast(if continues_when {
             condition.clone()
         } else {
@@ -443,6 +448,9 @@ impl<M: Machine> Engine<M> {
         if let Some(staying) = staying {
             self.computer.solver().assert(staying);
         }
+        let result = within(self);
+        self.computer.solver().pop(1);
+        result
     }
 
     fn pin_unknown_steps(
@@ -939,18 +947,18 @@ impl<M: Machine> Engine<M> {
 
         let counter_name = summary.counter.name().to_string();
         let at_base = AbstractExpression::Immediate(SUMMARY_ITERATION);
-        self.assume_staying(expression, cycle.continues);
-        let unproved_at_base = summary
-            .branch_facts
-            .iter()
-            .map(|(_, fact)| comparison_with_counter_at(fact, &counter_name, &at_base))
-            .filter(|fact| {
-                fact.get_abstracts()
-                    .iter()
-                    .all(|symbol| !LoopSymbol::names_of(symbol, id))
-            })
-            .find(|fact| !self.proves(fact.clone()));
-        self.computer.solver().pop(1);
+        let unproved_at_base = self.while_staying(expression, cycle.continues, |engine| {
+            summary
+                .branch_facts
+                .iter()
+                .map(|(_, fact)| comparison_with_counter_at(fact, &counter_name, &at_base))
+                .filter(|fact| {
+                    fact.get_abstracts()
+                        .iter()
+                        .all(|symbol| !LoopSymbol::names_of(symbol, id))
+                })
+                .find(|fact| !engine.proves(fact.clone()))
+        });
         match unproved_at_base {
             Some(fact) => Err(Decline::UnprovedAtBase(id, fact)),
             None => Ok(()),
@@ -1761,15 +1769,11 @@ impl<M: Machine> Engine<M> {
     }
 
     fn branches_not_carried(&self, active: &ActiveLoop) -> BTreeSet<usize> {
-        let name = LoopCounter::for_loop(active.id).name().to_string();
-        let next_iteration = generate_expression(
-            "+",
-            AbstractExpression::Abstract(name.clone()),
-            AbstractExpression::Immediate(1),
-        );
+        let counter = LoopCounter::for_loop(active.id);
+        let (name, next_iteration) = (counter.name(), counter.next_iteration());
         let mut uncarried = BTreeSet::new();
         for (branch, fact) in &active.branch_facts {
-            let next = comparison_with_counter_at(fact, &name, &next_iteration);
+            let next = comparison_with_counter_at(fact, name, &next_iteration);
             if !self.proves(next.clone()) {
                 log::info!("{} did not carry {next} to its next iteration", active.id);
                 uncarried.insert(*branch);
@@ -1779,13 +1783,9 @@ impl<M: Machine> Engine<M> {
     }
 
     fn settled_steps_repeat(&self, active: &ActiveLoop) -> bool {
-        let name = LoopCounter::for_loop(active.id).name().to_string();
-        let next_iteration = generate_expression(
-            "+",
-            AbstractExpression::Abstract(name.clone()),
-            AbstractExpression::Immediate(1),
-        );
-        let continues = comparison_with_counter_at(&active.continuing, &name, &next_iteration);
+        let counter = LoopCounter::for_loop(active.id);
+        let (name, next_iteration) = (counter.name(), counter.next_iteration());
+        let continues = comparison_with_counter_at(&active.continuing, name, &next_iteration);
         let repeats = active.settled_steps.iter().all(|settled| {
             let now = value_of(&self.computer.register_at(settled.register));
             let step = if settled.holds_the_select {
@@ -1793,7 +1793,7 @@ impl<M: Machine> Engine<M> {
             } else {
                 generate_expression("-", now, value_of(&active.state.0[settled.register]))
             };
-            let condition = comparison_with_counter_at(&settled.condition, &name, &next_iteration);
+            let condition = comparison_with_counter_at(&settled.condition, name, &next_iteration);
             let mut assuming = self.computer.select_assumptions(&step);
             assuming.extend(self.computer.select_assumptions(&continues.left));
             assuming.extend(self.computer.select_assumptions(&continues.right));
@@ -2821,18 +2821,18 @@ impl<M: Machine> Engine<M> {
         active.entry_state = entered;
         let current = self.computer.get_state();
         let (mut before, mut after) = (active.state.clone(), current.clone());
-        self.assume_staying(&expression, active.entry_decision);
-        self.resolve_selects(&mut before);
-        self.resolve_selects(&mut after);
-        self.computer.solver().pop(1);
+        self.while_staying(&expression, active.entry_decision, |engine| {
+            engine.resolve_selects(&mut before);
+            engine.resolve_selects(&mut after);
+        });
         let mut observed = self.pin_steps(&invariant_of_registers(&before.0, &after.0));
-        self.assume_staying(&expression, active.entry_decision);
         let tested: Vec<AbstractComparison> = self.jump_history[since..]
             .iter()
             .map(|record| record.point.condition.clone())
             .collect();
-        self.pin_unknown_steps(&mut observed, &before.0, &after.0, &expression, &tested);
-        self.computer.solver().pop(1);
+        self.while_staying(&expression, active.entry_decision, |engine| {
+            engine.pin_unknown_steps(&mut observed, &before.0, &after.0, &expression, &tested)
+        });
         let mut observed = self.bound_values(active.pc, &observed, &before.0, &after.0);
         for (i, recorded) in active.invariants.iter().enumerate() {
             if let LoopInvariant::Linear(step) = recorded
@@ -2903,9 +2903,9 @@ impl<M: Machine> Engine<M> {
                 .or_default()
                 .extend(drifting_cells);
         }
-        self.assume_staying(&expression, active.entry_decision);
-        let uncarried = self.branches_not_carried(&active);
-        self.computer.solver().pop(1);
+        let uncarried = self.while_staying(&expression, active.entry_decision, |engine| {
+            engine.branches_not_carried(&active)
+        });
         let steps_hold = self.settled_steps_repeat(&active);
         let slots_hold = self.computer.slots_kept(&active.slots);
         let confinements_hold = active

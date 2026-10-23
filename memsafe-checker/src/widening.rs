@@ -427,6 +427,10 @@ impl LoopCounter {
         AbstractExpression::Abstract(self.name.clone())
     }
 
+    pub fn next_iteration(&self) -> AbstractExpression {
+        generate_expression("+", self.expression(), AbstractExpression::Immediate(1))
+    }
+
     pub fn symbol(&self, role: LoopRole) -> LoopSymbol {
         LoopSymbol::new(self.id, role)
     }
