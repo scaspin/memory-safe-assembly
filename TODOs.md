@@ -41,6 +41,13 @@
 - [ ] running past the end of the listing returns Ok instead of an error
 - [ ] AArch64 32-bit arguments assume clean upper bits (the ABI leaves bits 32-63 unspecified)
 
+## Loop acceleration structure
+
+- [ ] a `LoopFact` type that carries its justification (defining, proved, or assumed) instead of plain comparisons
+- [ ] one bound representation: unify `Bound`, `LinearForm` and `Affine`
+- [ ] state the join of invariants, cells and bounds as one lattice operation with documented semantics
+- [ ] an explicit lifecycle state machine for a loop (attempted, open, closed, refuted, abandoned) in place of scattered flags
+
 ## Verification (sweep of 2026-10-23, `bums-check`)
 
 | playground | verified |

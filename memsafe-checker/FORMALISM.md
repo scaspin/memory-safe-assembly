@@ -160,9 +160,9 @@ $$
 | $\Delta$ | `select_definitions` | $\alpha \mapsto (c, e_t, e_f)$: $\alpha$ is $e_t$ if $c$, else $e_f$ |
 | $H$ | `jump_history` | branch records $h = (pc, c, \sigma, |J|, \varsigma, \mathit{taken}, \mathit{resolved})$ |
 | $J$ | `write_journal` | cell writes $(R, n, v_{\text{old}})$, read by loop analysis |
-| $\mathcal{A}$ | `active_loops` | open loop summaries awaiting their inductive check (§6.5) |
-| $\mathcal{C}$ | `closed_counters` | counters of closed loops with their possible exit values (§6.5) |
-| $\mathcal{L}$ | `ledger`, `relied_on` | summary instances this path relies on, and recorded refutations (§6.6) |
+| $\mathcal{A}$ | `loops.active` | open loop summaries awaiting their inductive check (§6.5) |
+| $\mathcal{C}$ | `loops.closed_counters` | counters of closed loops with their possible exit values (§6.5) |
+| $\mathcal{L}$ | `ledger`, `loops.relied_on` | summary instances this path relies on, and recorded refutations (§6.6) |
 
 A configuration is $\Gamma \vdash \langle pc, \sigma\rangle$.
 
@@ -696,8 +696,7 @@ iteration. Acceleration is declined, and the branch decided as usual, when:
 - there is no such $h$, or $pc$ is already an open loop's guard;
 - the guard reads a register loaded from memory that changed since $h$
   (`reads_a_changing_load`): the loop is unrolled;
-- the loop has failed 3 times (`MAX_SUMMARY_TRIES`), or been refuted 8 times
-  (`MAX_REFUTATIONS`);
+- the loop has failed 3 times, or been refuted 8 times (`LoopBudget::exhausted`);
 - the branch is internal to a loop body: its other side cannot leave the cycle;
 - the cycle since $h$ walks the guard of an open loop;
 - the summary would widen a register that carries a region to $\top$;
@@ -764,7 +763,7 @@ with something sharper when the solver can justify it:
 
 Each refinement rests on a proof, not a model; each is a point the soundness argument
 must cover (§7). Registers that broke an earlier summary at this $pc$
-(`unstable_registers`) are forced to $\top$.
+(`PcRecord::unstable_registers`) are forced to $\top$.
 
 ### 6.4 The summary as a λ-term (`summarize`, `stepped_by_the_counter`)
 
@@ -915,7 +914,7 @@ The conjuncts:
 - **ghosts.** $\Pi \vDash$ each ghost operand equals its $\kappa{+}1$ prediction, and each
   checked guard operand is still its register.
 - **bounds.** Each assumed bound holds at $\sigma_1$.
-- **settled.** Settled select steps repeat (`settled_steps_repeat`).
+- **settled.** Settled select steps repeat (`unrepeated_settled_step`).
 
 For $\mathsf{Lin}$ components this is (IND) from §6.1, by the substitution identity
 
@@ -951,8 +950,8 @@ the path ends with no result of its own (`path_ends`), and the engine:
 
 1. counts a failure at $pc$, unless every broken component is data that carries no region
    and is not read by the guard;
-2. records the broken components as `unstable_registers` / `unstable_cells` /
-   `unstable_slots`, and a retry attempt $\iota \sqcup \iota^1$ (keeping $\iota_i$ for
+2. records the broken obligations (`broken_obligations`) in the shared `PcRecord` as
+   unstable registers, cells and slots, and a retry attempt $\iota \sqcup \iota^1$ (keeping $\iota_i$ for
    registers that carried a region at entry) with the bounds that failed rejected;
 3. records the failure in the ledger: (instance, the instances this path relied on, the
    retry).
@@ -1103,9 +1102,10 @@ for some extension of $\theta$:
 | trigger | `engine/loops.rs::{repeats_unboundedly, unrolling_costs_too_much, costly_concrete_latch, try_summarize}` |
 | $\mathsf{refine}$ | `engine/loops.rs::{pin_unknown_steps, step_past_inner_loops, anchor_past_inner_loops, bound_values, pin_steps, settle_select_steps, proves_step}` |
 | $\sigma^\sharp$, $\Phi$, landings | `engine/summary.rs::{summarize, stepped_by_the_counter, anchored, trip_facts, facts_for_exit, held_on_the_cycle, landing_requirements, unwrapped_requirements, bound_candidates, ghost_operands}`; `engine/loops.rs::bound_geometric_walks`; `widening::advance` |
-| $L$, attempts | `engine/summary.rs::{Summary, ActiveLoop, LoopAttempt, Bound}` |
-| **(Acc-Open)** | `engine/loops.rs::try_summarize` |
-| **(Acc-Close)**, failure | `engine/loops.rs::{discharge_active_loop, refute_active_loop, widen_for_retry, keep_facts}`; `engine/summary.rs::exit_window` |
-| **(Validate)**, **(Refuted)** | `engine/loops.rs::{validate_summary, SummaryLedger}` |
+| $L$, attempts | `engine/summary.rs::{Summary, ActiveLoop, LoopAttempt, Bound}`; `engine/loops.rs::{PathLoops, LoopHistory, PcRecord, LoopBudget}` |
+| per-loop symbols ($\kappa$, $T$, $p_i$, $w_i$) | `widening.rs::{LoopSymbol, LoopRole, LoopCounter}` |
+| **(Acc-Open)** | `engine/loops.rs::{try_summarize, locate_cycle, observe, next_attempt, abstract_cells, draft_summary, justify_facts, install, Decline}` |
+| **(Acc-Close)**, failure | `engine/loops.rs::{discharge_active_loop, broken_obligations, Obligation, refute_active_loop, widen_for_retry, keep_facts}`; `engine/summary.rs::exit_window` |
+| **(Validate)**, **(Refuted)** | `engine/loops.rs::{validate_summary, SummaryLedger, Verdict}` |
 | rounds | `engine/loops.rs::{release_loop, repeat_round, generalize_round, round_covers}` |
 | **(Havoc)** | `engine/loops.rs::{memory_free_loop, havoc_memory_free_loop}` |
