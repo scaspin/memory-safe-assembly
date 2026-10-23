@@ -429,6 +429,75 @@ fn casts_keep_their_values(e: &Expr) -> proc_macro2::TokenStream {
     inner.into_iter().map(casts_keep_their_values).collect()
 }
 
+const PRECONDITION_OVERFLOW: &str = "precondition arithmetic overflows i128";
+
+fn exact_condition(e: &Expr) -> proc_macro2::TokenStream {
+    match e {
+        Expr::Paren(p) => {
+            let inner = exact_condition(&p.expr);
+            quote! { (#inner) }
+        }
+        Expr::Group(g) => exact_condition(&g.expr),
+        Expr::Unary(u) if matches!(u.op, UnOp::Not(_)) => {
+            let inner = exact_condition(&u.expr);
+            match &*u.expr {
+                Expr::Paren(_) | Expr::Path(_) | Expr::Call(_) | Expr::MethodCall(_) => {
+                    quote! { !#inner }
+                }
+                _ => quote! { !(#inner) },
+            }
+        }
+        Expr::Binary(b) => {
+            let op = &b.op;
+            match b.op {
+                BinOp::And(_) | BinOp::Or(_) => {
+                    let (left, right) = (exact_condition(&b.left), exact_condition(&b.right));
+                    quote! { #left #op #right }
+                }
+                BinOp::Eq(_)
+                | BinOp::Ne(_)
+                | BinOp::Lt(_)
+                | BinOp::Le(_)
+                | BinOp::Gt(_)
+                | BinOp::Ge(_) => {
+                    let (left, right) = (exact_value(&b.left), exact_value(&b.right));
+                    quote! { #left #op #right }
+                }
+                _ => quote! { #e },
+            }
+        }
+        _ => quote! { #e },
+    }
+}
+
+fn exact_leaf(value: impl quote::ToTokens) -> proc_macro2::TokenStream {
+    quote! { i128::try_from(#value).expect(#PRECONDITION_OVERFLOW) }
+}
+
+fn exact_value(e: &Expr) -> proc_macro2::TokenStream {
+    match e {
+        Expr::Paren(p) => exact_value(&p.expr),
+        Expr::Group(g) => exact_value(&g.expr),
+        Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) => {
+            let inner = exact_value(&u.expr);
+            quote! { #inner.checked_neg().expect(#PRECONDITION_OVERFLOW) }
+        }
+        Expr::Binary(b) => {
+            let checked = match b.op {
+                BinOp::Add(_) => quote! { checked_add },
+                BinOp::Sub(_) => quote! { checked_sub },
+                BinOp::Mul(_) => quote! { checked_mul },
+                BinOp::Div(_) => quote! { checked_div_euclid },
+                BinOp::Rem(_) => quote! { checked_rem_euclid },
+                _ => return exact_leaf(e),
+            };
+            let (left, right) = (exact_value(&b.left), exact_value(&b.right));
+            quote! { #left.#checked(#right).expect(#PRECONDITION_OVERFLOW) }
+        }
+        _ => exact_leaf(e),
+    }
+}
+
 fn binary_to_abstract_expression(input: &ExprBinary) -> AbstractExpression {
     let left_expr = syn_expr_to_abstract_expression(&input.left);
     let right_expr = syn_expr_to_abstract_expression(&input.right);
@@ -633,22 +702,25 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                     let mut alternatives = Vec::new();
                     disjuncts(e, &mut alternatives, &mut diagnostics);
                     disjunctions.push(alternatives);
-                    asserts = quote! { #asserts assert!(#e); };
+                    let exact = exact_condition(e);
+                    asserts = quote! { #asserts assert!(#exact); };
                     continue;
                 }
                 if matches!(b.op, BinOp::And(_)) {
                     conjuncts(e, &mut invariants, &mut diagnostics);
-                    asserts = quote! { #asserts assert!(#e); };
+                    let exact = exact_condition(e);
+                    asserts = quote! { #asserts assert!(#exact); };
                     continue;
                 }
                 if let Some(array) = element_range_array(b) {
                     let Expr::Index(indexed) = &*b.left else {
                         unreachable!()
                     };
-                    let (collection, op, bound) = (&indexed.expr, &b.op, &b.right);
+                    let (collection, op) = (&indexed.expr, &b.op);
+                    let exact_bound = exact_value(&b.right);
                     asserts = quote! {
                         #asserts
-                        assert!(#collection.iter().all(|e| (*e as i128) #op ((#bound) as i128)));
+                        assert!(#collection.iter().all(|e| (*e as i128) #op #exact_bound));
                     };
                     element_ranges.push((array, b.clone()));
                     continue;
@@ -674,11 +746,13 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                 }
                 if let Some((array, index)) = element_bound(b, &mut diagnostics) {
                     element_bounds.push((array, index, b.clone()));
-                    asserts = quote! { #asserts assert!(#e);};
+                    let exact = exact_condition(e);
+                    asserts = quote! { #asserts assert!(#exact); };
                     continue;
                 }
                 invariants.push(binary_to_abstract_comparison(b));
-                asserts = quote! { #asserts assert!(#e);};
+                let exact = exact_condition(e);
+                asserts = quote! { #asserts assert!(#exact); };
             } else {
                 diagnostics
                     .push("Cannot define an invariant that is not a binary expression".to_string());
@@ -833,12 +907,16 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
     let mut unchecked_rows = Vec::new();
     for (array, _, len, count) in &pointer_arrays {
         let rows = Ident::new(array, proc_macro2::Span::call_site());
-        asserts = quote! { #asserts assert!(#rows.len() == (#count) as usize); };
+        let exact_count = exact_value(count);
+        let exact_rows = exact_leaf(quote! { #rows.len() });
+        asserts = quote! { #asserts assert!(#exact_rows == #exact_count); };
         match input_types.get(array).and_then(row_pointer_type) {
             Some((_, true)) => {
+                let exact_len = exact_value(len);
+                let exact_row = exact_leaf(quote! { row.len() });
                 asserts = quote! {
                     #asserts
-                    assert!(#rows.iter().all(|row| row.len() == (#len) as usize));
+                    assert!(#rows.iter().all(|row| #exact_row == #exact_len));
                 };
             }
             Some((_, false)) => unchecked_rows.push(array.clone()),
@@ -909,7 +987,12 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                     if let Some((scaled, expression)) = offset.take() {
                         if scaled {
                             let buffer = Ident::new(&var_name, span);
-                            asserts = quote! { #asserts assert!(#expression <= #buffer.len()); };
+                            let exact = exact_value(&expression);
+                            let exact_buffer = exact_leaf(quote! { #buffer.len() });
+                            asserts = quote! {
+                                #asserts
+                                assert!(#exact <= #exact_buffer);
+                            };
                         }
                         pointer_offsets.insert(var_name.clone(), (scaled, expression));
                     }
@@ -957,6 +1040,8 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                 Expr::Binary(ref b) => {
                     let exp = spelled(quote! {#b});
                     let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
+                    let (passed, exact) = (exact_leaf(&i), exact_value(&i));
+                    asserts = quote! { #asserts assert!(#passed == #exact); };
                     input_expressions.insert(name.clone(), i);
                     let n = Ident::new(&name, span);
                     new_args.push(parse_quote! {#n : usize});
@@ -964,6 +1049,8 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                 Expr::Unary(ref b) => {
                     let exp = spelled(quote! {#b});
                     let name = "expr_".to_owned() + &calculate_hash(&exp).to_string();
+                    let (passed, exact) = (exact_leaf(&i), exact_value(&i));
+                    asserts = quote! { #asserts assert!(#passed == #exact); };
                     input_expressions.insert(name.clone(), i);
                     let n = Ident::new(&name, span);
                     new_args.push(parse_quote! {#n : isize});
@@ -1664,5 +1751,87 @@ impl Annotation {
             findings,
             diagnostics: distinct_diagnostics,
         })
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unnecessary_fallible_conversions)]
+mod tests {
+    use super::*;
+
+    macro_rules! emitted {
+        ($($code:tt)*) => {
+            (stringify!($($code)*), move || -> bool { $($code)* })
+        };
+    }
+
+    fn without_spaces(text: &str) -> String {
+        text.chars().filter(|c| !c.is_whitespace()).collect()
+    }
+
+    #[test]
+    fn a_precondition_that_overflows_usize_is_rejected_at_run_time() {
+        let n: usize = 1 << 62;
+        let inc_x: usize = 4;
+        let x = [0u64; 4];
+        assert!(n.wrapping_mul(inc_x) <= x.len());
+
+        let precondition: Expr = parse_quote! { n * inc_x <= x.len() };
+        let (spelled, check) = emitted! {
+            i128::try_from(n)
+                .expect("precondition arithmetic overflows i128")
+                .checked_mul(i128::try_from(inc_x).expect("precondition arithmetic overflows i128"))
+                .expect("precondition arithmetic overflows i128")
+                <= i128::try_from(x.len()).expect("precondition arithmetic overflows i128")
+        };
+        assert_eq!(
+            without_spaces(&exact_condition(&precondition).to_string()),
+            without_spaces(spelled)
+        );
+        assert!(!check());
+    }
+
+    #[test]
+    fn precondition_arithmetic_that_overflows_i128_panics() {
+        let (n, inc_x) = (u64::MAX, u64::MAX);
+        let precondition: Expr = parse_quote! { n * inc_x * inc_x <= 4 };
+        let (spelled, check) = emitted! {
+            i128::try_from(n)
+                .expect("precondition arithmetic overflows i128")
+                .checked_mul(i128::try_from(inc_x).expect("precondition arithmetic overflows i128"))
+                .expect("precondition arithmetic overflows i128")
+                .checked_mul(i128::try_from(inc_x).expect("precondition arithmetic overflows i128"))
+                .expect("precondition arithmetic overflows i128")
+                <= i128::try_from(4).expect("precondition arithmetic overflows i128")
+        };
+        assert_eq!(
+            without_spaces(&exact_condition(&precondition).to_string()),
+            without_spaces(spelled)
+        );
+        assert!(std::panic::catch_unwind(check).is_err());
+    }
+
+    #[test]
+    fn an_expression_argument_is_checked_against_its_exact_value() {
+        let attr: TokenStream = quote! { "f.S", x.as_ptr(), n * inc_x, [n * inc_x <= x.len()] };
+        let item: TokenStream = quote! { fn f(x: &[u64], n: usize, inc_x: usize); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        let expansion = without_spaces(&annotation.expansion.to_string());
+        let fits = |value: &str| {
+            format!("i128::try_from({value}).expect(\"preconditionarithmeticoverflowsi128\")")
+        };
+        let exact = format!(
+            "{}.checked_mul({}).expect(\"preconditionarithmeticoverflowsi128\")",
+            fits("n"),
+            fits("inc_x")
+        );
+        assert!(
+            expansion.contains(&format!("assert!({exact}<={});", fits("x.len()"))),
+            "{expansion}"
+        );
+        assert!(
+            expansion.contains(&format!("assert!({}=={exact});", fits("n*inc_x"))),
+            "{expansion}"
+        );
     }
 }
