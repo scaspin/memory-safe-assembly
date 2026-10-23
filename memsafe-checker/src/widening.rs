@@ -219,7 +219,11 @@ impl Affine {
     }
 
     pub fn mentions_a_loop_counter(&self) -> bool {
-        self.terms.iter().any(|(atom, _)| atom.contains("_?"))
+        self.terms.iter().any(|(atom, _)| {
+            atom.get_abstracts()
+                .iter()
+                .any(|name| LoopSymbol::names_any(name))
+        })
     }
 
     pub fn without_terms_tied_to(&self, seeds: &[String]) -> Affine {
@@ -309,18 +313,110 @@ impl fmt::Display for LoopId {
     }
 }
 
+pub const STATUS_FLAGS: [&str; 4] = ["zero", "neg", "carry", "overflow"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopRole {
+    Counter,
+    Trips(Option<usize>),
+    Progress(usize),
+    Within(usize),
+    Widened(usize),
+    Flag(usize),
+    Status(usize),
+    Latest(usize),
+    Any,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoopSymbol {
+    pub id: LoopId,
+    pub role: LoopRole,
+}
+
+impl LoopSymbol {
+    pub fn new(id: LoopId, role: LoopRole) -> Self {
+        Self { id, role }
+    }
+
+    pub fn expression(&self) -> AbstractExpression {
+        AbstractExpression::Abstract(self.to_string())
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        let (number, role) = name.strip_prefix("loop")?.split_once("_?")?;
+        let id = LoopId::new(number.parse().ok()?);
+        let indexed = |prefix: &str| role.strip_prefix(prefix)?.parse::<usize>().ok();
+        let role = match role {
+            "" => LoopRole::Counter,
+            "_trips" => LoopRole::Trips(None),
+            "_any" => LoopRole::Any,
+            _ => {
+                if let Some(exit) = indexed("_trips") {
+                    LoopRole::Trips(Some(exit))
+                } else if let Some(i) = indexed("_progress_") {
+                    LoopRole::Progress(i)
+                } else if let Some(i) = indexed("_within_") {
+                    LoopRole::Within(i)
+                } else if let Some(i) = indexed("_widened_") {
+                    LoopRole::Widened(i)
+                } else if let Some(k) = indexed("_flag_") {
+                    LoopRole::Flag(k)
+                } else if let Some(i) = indexed("_latest_") {
+                    LoopRole::Latest(i)
+                } else {
+                    let status = role.strip_prefix('_')?;
+                    LoopRole::Status(STATUS_FLAGS.iter().position(|flag| *flag == status)?)
+                }
+            }
+        };
+        let symbol = Self::new(id, role);
+        (symbol.to_string() == name).then_some(symbol)
+    }
+
+    pub fn names_any(name: &str) -> bool {
+        Self::parse(name).is_some()
+    }
+
+    pub fn names_of(name: &str, id: LoopId) -> bool {
+        Self::parse(name).is_some_and(|symbol| symbol.id == id)
+    }
+}
+
+impl fmt::Display for LoopSymbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}_?", self.id)?;
+        match self.role {
+            LoopRole::Counter => Ok(()),
+            LoopRole::Trips(None) => write!(f, "_trips"),
+            LoopRole::Trips(Some(exit)) => write!(f, "_trips{exit}"),
+            LoopRole::Progress(i) => write!(f, "_progress_{i}"),
+            LoopRole::Within(i) => write!(f, "_within_{i}"),
+            LoopRole::Widened(i) => write!(f, "_widened_{i}"),
+            LoopRole::Flag(k) => write!(f, "_flag_{k}"),
+            LoopRole::Status(k) => write!(f, "_{}", STATUS_FLAGS[k]),
+            LoopRole::Latest(i) => write!(f, "_latest_{i}"),
+            LoopRole::Any => write!(f, "_any"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoopCounter {
+    id: LoopId,
     name: String,
 }
 
 impl LoopCounter {
-    pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into() }
+    pub fn for_loop(id: LoopId) -> Self {
+        Self {
+            id,
+            name: LoopSymbol::new(id, LoopRole::Counter).to_string(),
+        }
     }
 
-    pub fn for_loop(id: LoopId) -> Self {
-        Self::new(format!("{id}_?"))
+    pub fn id(&self) -> LoopId {
+        self.id
     }
 
     pub fn name(&self) -> &str {
@@ -331,12 +427,16 @@ impl LoopCounter {
         AbstractExpression::Abstract(self.name.clone())
     }
 
+    pub fn symbol(&self, role: LoopRole) -> LoopSymbol {
+        LoopSymbol::new(self.id, role)
+    }
+
     pub fn total(&self) -> AbstractExpression {
-        AbstractExpression::Abstract(format!("{}_trips", self.name))
+        self.symbol(LoopRole::Trips(None)).expression()
     }
 
     pub fn total_for(&self, exit: usize) -> AbstractExpression {
-        AbstractExpression::Abstract(format!("{}_trips{exit}", self.name))
+        self.symbol(LoopRole::Trips(Some(exit))).expression()
     }
 }
 
@@ -653,7 +753,44 @@ mod tests {
     }
 
     fn counter() -> LoopCounter {
-        LoopCounter::new("loop_?")
+        LoopCounter::for_loop(LoopId::new(0))
+    }
+
+    #[test]
+    fn loop_symbols_render_and_parse_back() {
+        let id = LoopId::new(12);
+        for role in [
+            LoopRole::Counter,
+            LoopRole::Trips(None),
+            LoopRole::Trips(Some(40)),
+            LoopRole::Progress(3),
+            LoopRole::Within(1),
+            LoopRole::Widened(0),
+            LoopRole::Flag(2),
+            LoopRole::Status(3),
+            LoopRole::Latest(5),
+            LoopRole::Any,
+        ] {
+            let symbol = LoopSymbol::new(id, role);
+            assert_eq!(LoopSymbol::parse(&symbol.to_string()), Some(symbol));
+        }
+        assert_eq!(
+            LoopSymbol::new(id, LoopRole::Counter).to_string(),
+            "loop12_?"
+        );
+        assert_eq!(
+            LoopSymbol::new(id, LoopRole::Status(0)).to_string(),
+            "loop12_?_zero"
+        );
+        for name in [
+            "loop",
+            "loop12",
+            "loaded_3",
+            "loop12_?_trips_",
+            "loop12_?_flag",
+        ] {
+            assert_eq!(LoopSymbol::parse(name), None, "{name}");
+        }
     }
 
     #[test]
@@ -924,7 +1061,7 @@ mod tests {
                 base(),
                 generate_expression(
                     "*",
-                    AbstractExpression::Abstract("loop_?".to_string()),
+                    AbstractExpression::Abstract("loop0_?".to_string()),
                     AbstractExpression::Immediate(4)
                 )
             )

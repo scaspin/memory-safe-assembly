@@ -403,10 +403,9 @@ impl<M: Machine> Engine<M> {
             }
             let step = step_form(&entry[j], &current[j])?;
             let fresh = !step.terms.is_empty()
-                && step
-                    .terms
-                    .keys()
-                    .all(|name| at_entry.binary_search(name).is_err() && !name.contains("_?"));
+                && step.terms.keys().all(|name| {
+                    at_entry.binary_search(name).is_err() && !LoopSymbol::names_any(name)
+                });
             fresh.then_some(step)
         };
         for i in 0..registers {
@@ -722,7 +721,11 @@ impl<M: Machine> Engine<M> {
         let undefined_trips: Vec<String> = unjustified
             .iter()
             .flat_map(AbstractComparison::get_abstracts)
-            .filter(|symbol| symbol.contains("_trips"))
+            .filter(|symbol| {
+                LoopSymbol::parse(symbol).is_some_and(|symbol| {
+                    symbol.id == id && matches!(symbol.role, LoopRole::Trips(_))
+                })
+            })
             .collect();
         let uncarried = self
             .uncarried_branches
@@ -780,7 +783,7 @@ impl<M: Machine> Engine<M> {
             .filter(|fact| {
                 fact.get_abstracts()
                     .iter()
-                    .all(|symbol| !symbol.starts_with(&counter_name))
+                    .all(|symbol| !LoopSymbol::names_of(symbol, id))
             })
             .find(|fact| !self.proves(fact.clone()));
         self.computer.solver().pop(1);
@@ -815,7 +818,10 @@ impl<M: Machine> Engine<M> {
             .chain(&summary.exit_facts)
             .flat_map(|fact| fact.get_abstracts())
             .collect();
-        for counter in mentioned.iter().filter(|symbol| symbol.contains("_?")) {
+        for counter in mentioned
+            .iter()
+            .filter(|symbol| LoopSymbol::names_any(symbol))
+        {
             self.computer
                 .symbols_bounding_counter_mut()
                 .entry(counter.clone())
@@ -963,7 +969,7 @@ impl<M: Machine> Engine<M> {
             let Some(bound) = self.proven_upper_bound(&current.0[i]) else {
                 continue;
             };
-            let widened = AbstractExpression::Abstract(format!("{}_widened_{i}", counter.name()));
+            let widened = counter.symbol(LoopRole::Widened(i)).expression();
             summary.facts.push(AbstractComparison::new(
                 ">=",
                 widened.clone(),
@@ -1411,13 +1417,13 @@ impl<M: Machine> Engine<M> {
         &self,
         rare_when: &AbstractComparison,
         continuing: &AbstractComparison,
-        counter: &str,
+        counter: &LoopCounter,
     ) -> bool {
-        let any = AbstractExpression::Abstract(format!("{counter}_any"));
-        let rare_at_any = comparison_with_counter_at(rare_when, counter, &any);
+        let any = counter.symbol(LoopRole::Any).expression();
+        let rare_at_any = comparison_with_counter_at(rare_when, counter.name(), &any);
         let continues_after = comparison_with_counter_at(
             continuing,
-            counter,
+            counter.name(),
             &generate_expression("+", any.clone(), AbstractExpression::Immediate(1)),
         );
         let past_the_prefix =
@@ -1450,7 +1456,6 @@ impl<M: Machine> Engine<M> {
             return Vec::new();
         }
         let counter = summary.counter.clone();
-        let name = counter.name().to_string();
         let clobbered_operand = |r: &RegisterValue| {
             ghosts
                 .iter()
@@ -1494,9 +1499,11 @@ impl<M: Machine> Engine<M> {
                 (taken_when.clone(), rare, usual),
                 (taken_when.not(), usual, rare),
             ];
-            let Some((latest, rare, usual)) = orientations.into_iter().find(|(rare_when, _, _)| {
-                self.rare_only_at_the_latest(rare_when, &summary.continuing, &name)
-            }) else {
+            let Some((latest_when, rare, usual)) =
+                orientations.into_iter().find(|(rare_when, _, _)| {
+                    self.rare_only_at_the_latest(rare_when, &summary.continuing, &counter)
+                })
+            else {
                 log::info!(
                     "{} x{i}: either arm of {select} may be taken before the latest iteration",
                     summary.id
@@ -1504,11 +1511,11 @@ impl<M: Machine> Engine<M> {
                 continue;
             };
 
-            let latest_name = format!("{name}_latest_{i}");
+            let latest = counter.symbol(LoopRole::Latest(i));
             self.computer.select_definitions_mut().insert(
-                latest_name.clone(),
+                latest.to_string(),
                 (
-                    latest.clone(),
+                    latest_when.clone(),
                     AbstractExpression::Immediate(rare),
                     AbstractExpression::Immediate(usual),
                 ),
@@ -1525,7 +1532,7 @@ impl<M: Machine> Engine<M> {
             let value = generate_expression(
                 "+",
                 generate_expression("+", value_of(before), usual_steps),
-                AbstractExpression::Abstract(latest_name),
+                latest.expression(),
             );
             let settled_register = RegisterValue::new(
                 if now.base.is_some() {
@@ -1537,7 +1544,7 @@ impl<M: Machine> Engine<M> {
                 0,
             );
             log::info!(
-                "{} x{i} steps {usual} except possibly the latest, {rare} when {latest}",
+                "{} x{i} steps {usual} except possibly the latest, {rare} when {latest_when}",
                 summary.id
             );
             match summary.updates.iter_mut().find(|(j, _)| *j == i) {
@@ -1547,11 +1554,11 @@ impl<M: Machine> Engine<M> {
             settled.push(SettledSelectStep {
                 register: i,
                 holds_the_select: false,
-                condition: latest.clone(),
+                condition: latest_when.clone(),
                 rare,
                 usual,
             });
-            let latest_value = AbstractExpression::Abstract(format!("{name}_latest_{i}"));
+            let latest_value = latest.expression();
             for (j, held) in current.0.iter().enumerate() {
                 if j == i || value_of(held) != AbstractExpression::Abstract(select.clone()) {
                     continue;
@@ -1565,7 +1572,7 @@ impl<M: Machine> Engine<M> {
                 settled.push(SettledSelectStep {
                     register: j,
                     holds_the_select: true,
-                    condition: latest.clone(),
+                    condition: latest_when.clone(),
                     rare,
                     usual,
                 });
@@ -2439,7 +2446,7 @@ impl<M: Machine> Engine<M> {
                 None => {
                     updates.push((
                         i,
-                        RegisterValue::new_empty(&format!("{}_widened_{i}", counter.name())),
+                        RegisterValue::new_empty(&counter.symbol(LoopRole::Widened(i)).to_string()),
                     ));
                     free_registers.push(i);
                 }
@@ -2469,7 +2476,7 @@ impl<M: Machine> Engine<M> {
                 Some(rebuilt) => Some(FlagValue::Abstract(rebuilt)),
                 None => {
                     free_flags.push(k);
-                    widen_flag(&format!("{}_flag_{k}", counter.name()), &None, value)
+                    widen_flag(&counter.symbol(LoopRole::Flag(k)).to_string(), &None, value)
                 }
             },
             _ => value.clone(),
@@ -2833,7 +2840,7 @@ impl<M: Machine> Engine<M> {
         } else {
             expression.clone()
         };
-        let counter = AbstractExpression::Abstract(format!("{}_?", active.id));
+        let counter = LoopCounter::for_loop(active.id).expression();
         if let (Some(left), Some(right)) = (Affine::of(&left_by.left), Affine::of(&left_by.right))
             && let Some(distance) = left.combine(&right, -1)
         {

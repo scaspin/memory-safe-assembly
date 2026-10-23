@@ -574,7 +574,13 @@ pub(super) fn counter_affine(
                 _ => None,
             }
         }
-        _ if e.get_abstracts().iter().any(|name| name.contains("_?")) => None,
+        _ if e
+            .get_abstracts()
+            .iter()
+            .any(|name| LoopSymbol::names_any(name)) =>
+        {
+            None
+        }
         _ => Some((e.clone(), 0)),
     }
 }
@@ -1082,7 +1088,6 @@ pub(super) fn summarize(
     let (condition, ghosts, operands) = guard;
     let (previous, current, cycle, walked) = states;
     let counter = LoopCounter::for_loop(id);
-    let name = counter.name().to_string();
 
     let mut updates = Vec::new();
     let mut progress_facts: Vec<AbstractComparison> = Vec::new();
@@ -1095,7 +1100,7 @@ pub(super) fn summarize(
                 updates.push((i, stepped_by_the_counter(cur, &step, &counter)));
             }
             LoopInvariant::AtMost(bound) => {
-                let progress = AbstractExpression::Abstract(format!("{name}_progress_{i}"));
+                let progress = counter.symbol(LoopRole::Progress(i)).expression();
                 let rounds = generate_expression(
                     "-",
                     counter.expression(),
@@ -1122,7 +1127,7 @@ pub(super) fn summarize(
                 ));
             }
             LoopInvariant::Within(bound) => {
-                let symbol = format!("{name}_within_{i}");
+                let symbol = counter.symbol(LoopRole::Within(i)).to_string();
                 let value = AbstractExpression::Abstract(symbol.clone());
                 progress_facts.push(AbstractComparison::new(
                     ">=",
@@ -1145,7 +1150,8 @@ pub(super) fn summarize(
                 ));
             }
             LoopInvariant::Unknown | LoopInvariant::Geometric(_) => {
-                let widened = RegisterValue::new_empty(&format!("{name}_widened_{i}"));
+                let widened =
+                    RegisterValue::new_empty(&counter.symbol(LoopRole::Widened(i)).to_string());
                 let confined = [&previous.0[i], cur].map(|r| {
                     r.base
                         .as_ref()
@@ -1165,7 +1171,7 @@ pub(super) fn summarize(
             }
             LoopInvariant::Tracks(..) => {}
             LoopInvariant::NonDecreasing | LoopInvariant::NonIncreasing => {
-                let progress = AbstractExpression::Abstract(format!("{name}_progress_{i}"));
+                let progress = counter.symbol(LoopRole::Progress(i)).expression();
                 progress_facts.push(AbstractComparison::new(
                     ">=",
                     progress.clone(),
@@ -1217,7 +1223,7 @@ pub(super) fn summarize(
             .find(|ghost| ghost.value == *r && !current.0.contains(r))
             .map(|ghost| ghost_at_summary(ghost, &counter, 0))
     };
-    let flag = |label: &str, prev: &Option<FlagValue>, cur: &Option<FlagValue>| match cur {
+    let flag = |k: usize, prev: &Option<FlagValue>, cur: &Option<FlagValue>| match cur {
         Some(FlagValue::Abstract(c)) if prev != cur => match (
             flag_at_summary(&c.left, &current.0, &updates, &clobbered_operand),
             flag_at_summary(&c.right, &current.0, &updates, &clobbered_operand),
@@ -1225,15 +1231,15 @@ pub(super) fn summarize(
             (Some(left), Some(right)) => Some(FlagValue::Abstract(AbstractComparison::new(
                 &c.op, left, right,
             ))),
-            _ => widen_flag(&format!("{name}_{label}"), prev, cur),
+            _ => widen_flag(&counter.symbol(LoopRole::Status(k)).to_string(), prev, cur),
         },
-        _ => widen_flag(&format!("{name}_{label}"), prev, cur),
+        _ => widen_flag(&counter.symbol(LoopRole::Status(k)).to_string(), prev, cur),
     };
     let flags = [
-        flag("zero", &previous.1, &current.1),
-        flag("neg", &previous.2, &current.2),
-        flag("carry", &previous.3, &current.3),
-        flag("overflow", &previous.4, &current.4),
+        flag(0, &previous.1, &current.1),
+        flag(1, &previous.2, &current.2),
+        flag(2, &previous.3, &current.3),
+        flag(3, &previous.4, &current.4),
     ];
 
     let mut facts = vec![AbstractComparison::new(
