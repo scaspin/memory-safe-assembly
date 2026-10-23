@@ -866,6 +866,22 @@ pub fn add_values(left: RegisterValue, right: RegisterValue) -> RegisterValue {
     }
 }
 
+pub fn sign_extend_word(word: RegisterValue) -> RegisterValue {
+    match word.kind {
+        RegisterKind::Number => word,
+        RegisterKind::Immediate => RegisterValue::new_imm(word.offset as i32 as i64),
+        _ => RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression(
+                "sext",
+                full_value(&word),
+                AbstractExpression::Immediate(32),
+            )),
+            0,
+        ),
+    }
+}
+
 pub fn full_value(register: &RegisterValue) -> AbstractExpression {
     match (&register.kind, &register.base) {
         (RegisterKind::RegisterBase, Some(base)) if register.offset == 0 => base.clone(),

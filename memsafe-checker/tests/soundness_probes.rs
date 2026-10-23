@@ -623,3 +623,46 @@ fn asr_of_a_zero_extended_word_shifted_up_is_negative() {
     );
     assert!(r.is_err(), "accepted an index that asr made negative");
 }
+
+#[test]
+fn smaddl_sign_extends_its_word_factors() {
+    let r = run(
+        &[
+            "start:",
+            "ldrb w1, [x0]",
+            "mov w2, #-1",
+            "smaddl x3, w1, w2, x0",
+            "ldrb w4, [x3]",
+            "ret",
+        ],
+        None,
+        &[length_at_least(1i64 << 41)],
+    );
+    assert!(
+        r.is_err(),
+        "accepted base - byte as base + byte * (2^32 - 1)"
+    );
+}
+
+#[test]
+fn smsubl_sign_extends_its_word_factors() {
+    let r = run(
+        &[
+            "start:",
+            "ldrb w1, [x0]",
+            "mov w2, #-1",
+            "mov x5, #1",
+            "lsl x5, x5, #40",
+            "add x5, x0, x5",
+            "smsubl x3, w1, w2, x5",
+            "ldrb w4, [x3]",
+            "ret",
+        ],
+        Some((1i64 << 40) + 1),
+        &[],
+    );
+    assert!(
+        r.is_err(),
+        "accepted base + 2^40 + byte as base + 2^40 - byte * (2^32 - 1)"
+    );
+}

@@ -639,6 +639,14 @@ impl ARMCORTEXA {
                     let dst = reg_iter.next().expect("Need destination register for madd");
                     let lhs = self.get_register(reg_iter.next().expect("madd first factor"));
                     let rhs = self.get_register(reg_iter.next().expect("madd second factor"));
+                    let (lhs, rhs) = if instruction.opcode.starts_with("sm") {
+                        (
+                            instruction_aux::sign_extend_word(lhs),
+                            instruction_aux::sign_extend_word(rhs),
+                        )
+                    } else {
+                        (lhs, rhs)
+                    };
                     let addend = self.get_register(reg_iter.next().expect("madd addend"));
 
                     let operands = [&lhs, &rhs, &addend];
