@@ -8,6 +8,106 @@ enum Discharge {
     Refuted,
 }
 
+enum Decline {
+    AlreadyOpen,
+    NotVisited,
+    ChangingLoad,
+    OutOfTries,
+    InsideBody,
+    OnOpenCycle(LoopId, usize),
+    Fixpoint(LoopId),
+    Ascended(LoopId),
+    WidensRegion(LoopId, usize, Box<[RegisterValue; 2]>),
+    UnprovedAtBase(LoopId, AbstractComparison),
+    Contradicts(LoopId),
+}
+
+impl Decline {
+    fn report(&self, pc: usize) {
+        match self {
+            Decline::AlreadyOpen | Decline::NotVisited => {}
+            Decline::ChangingLoad => {
+                log::info!("line {pc} tests a load that changed since the last visit, unrolling")
+            }
+            Decline::OutOfTries => {
+                log::info!("loop at line {pc} failed {MAX_SUMMARY_TRIES} summaries, unrolling")
+            }
+            Decline::InsideBody => {
+                log::info!("line {pc} branches inside a loop body, not summarized there")
+            }
+            Decline::OnOpenCycle(id, at) => {
+                log::info!("line {pc} is on the cycle of {id} at line {at}, not summarized again")
+            }
+            Decline::Fixpoint(id) => {
+                log::info!("{id} at line {pc} reached a fixpoint without closing")
+            }
+            Decline::Ascended(id) => log::error!("{id} at line {pc} exceeded its bound"),
+            Decline::WidensRegion(id, i, moved) => log::info!(
+                "{id} at line {pc} declined: would widen a region in x{i} (entry {:?} exit {:?})",
+                moved[0],
+                moved[1]
+            ),
+            Decline::UnprovedAtBase(id, fact) => log::info!(
+                "{id} at line {pc} does not hold {fact} where it is summarized, unrolling"
+            ),
+            Decline::Contradicts(id) => {
+                log::info!("{id} at line {pc} summary contradicts the path, unrolling")
+            }
+        }
+    }
+
+    fn counts_as_failure(&self) -> bool {
+        matches!(self, Decline::UnprovedAtBase(..) | Decline::Contradicts(_))
+    }
+}
+
+struct Cycle {
+    history: Vec<JumpRecord>,
+    index: usize,
+    previous: BranchPoint,
+    continues: bool,
+}
+
+impl Cycle {
+    fn walked(&self) -> &[JumpRecord] {
+        &self.history[self.index + 1..]
+    }
+
+    fn before(&self) -> &[JumpRecord] {
+        &self.history[..self.index]
+    }
+}
+
+struct Observation {
+    entry: MachineState,
+    current: MachineState,
+    invariants: Vec<LoopInvariant>,
+}
+
+struct Draft {
+    summary: Summary,
+    settled_steps: Vec<SettledSelectStep>,
+    continuing: AbstractComparison,
+    bounds: Vec<Bound>,
+    cells: Vec<(MemoryCell, LoopInvariant)>,
+    round: usize,
+}
+
+impl LoopAttempt {
+    fn advance(&self, invariants: Vec<LoopInvariant>, widened: bool) -> Result<Self, Decline> {
+        if self.rounds >= max_ascents(invariants.len()) {
+            return Err(Decline::Ascended(self.id));
+        }
+        Ok(LoopAttempt {
+            id: self.id,
+            invariants,
+            rounds: self.rounds + 1,
+            widened,
+            rejected_bounds: self.rejected_bounds.clone(),
+        })
+    }
+}
+
 #[derive(Default)]
 pub(super) struct SummaryLedger {
     next_instance: usize,
@@ -461,8 +561,38 @@ impl<M: Machine> Engine<M> {
         depth: usize,
         expression: &AbstractComparison,
     ) -> Option<bool> {
+        match self.summarize_loop(pc, depth, expression) {
+            Ok(decision) => Some(decision),
+            Err(decline) => {
+                decline.report(pc);
+                if decline.counts_as_failure() {
+                    *self.failed_summaries.borrow_mut().entry(pc).or_insert(0) += 1;
+                }
+                None
+            }
+        }
+    }
+
+    fn summarize_loop(
+        &mut self,
+        pc: usize,
+        depth: usize,
+        expression: &AbstractComparison,
+    ) -> Result<bool, Decline> {
+        let cycle = self.locate_cycle(pc, expression)?;
+        let mut observation = self.observe(pc, expression, &cycle);
+        let attempt = self.next_attempt(pc, &observation)?;
+        let cells = self.abstract_cells(pc, &cycle);
+        let mut draft =
+            self.draft_summary(pc, expression, &cycle, &attempt, &mut observation, cells);
+        self.loop_attempts.insert(pc, attempt);
+        self.justify_facts(pc, expression, &cycle, &mut draft.summary)?;
+        self.install(pc, depth, &cycle, observation, draft)
+    }
+
+    fn locate_cycle(&self, pc: usize, expression: &AbstractComparison) -> Result<Cycle, Decline> {
         if self.active_loops.iter().any(|open| open.pc == pc) {
-            return None;
+            return Err(Decline::AlreadyOpen);
         }
         let history = self.jump_history.clone();
         let this_iteration = self
@@ -474,92 +604,88 @@ impl<M: Machine> Engine<M> {
             .enumerate()
             .skip(this_iteration)
             .rev()
-            .find(|(_, record)| record.point.pc == pc)?;
-        let (previous, branch_decision) = (record.point.clone(), record.taken);
+            .find(|(_, record)| record.point.pc == pc)
+            .ok_or(Decline::NotVisited)?;
+        let (previous, continues) = (record.point.clone(), record.taken);
         if self.reads_a_changing_load(expression, &previous.state) {
-            log::info!("line {pc} tests a load that changed since the last visit, unrolling");
-            return None;
+            return Err(Decline::ChangingLoad);
         }
         let failures = self.failed_summaries.borrow().get(&pc).copied();
         if failures.is_some_and(|n| n >= MAX_SUMMARY_TRIES) {
-            log::info!("loop at line {pc} failed {MAX_SUMMARY_TRIES} summaries, unrolling");
-            return None;
+            return Err(Decline::OutOfTries);
         }
         if let Some((source, header, walked)) =
-            self.cycle_back_edge(pc, branch_decision, &history[index + 1..])
+            self.cycle_back_edge(pc, continues, &history[index + 1..])
             && let Some(successors) = self.static_successors(pc)
             && let [target, fallthrough] = successors.as_slice()
-            && let other = if branch_decision {
-                *fallthrough
-            } else {
-                *target
-            }
+            && let other = if continues { *fallthrough } else { *target }
             && self.stays_in_loop(other, header, source, pc != source)
             && !self.can_leave_cycle(other, &walked)
         {
-            log::info!("line {pc} branches inside a loop body, not summarized there");
-            return None;
+            return Err(Decline::InsideBody);
         }
-        if let Some((_, _, walked)) =
-            self.cycle_back_edge(pc, branch_decision, &history[index + 1..])
+        if let Some((_, _, walked)) = self.cycle_back_edge(pc, continues, &history[index + 1..])
             && let Some(open) = self
                 .active_loops
                 .iter()
                 .find(|open| walked.contains(&open.pc))
         {
-            log::info!(
-                "line {pc} is on the cycle of {} at line {}, not summarized again",
-                open.id,
-                open.pc
-            );
-            return None;
+            return Err(Decline::OnOpenCycle(open.id, open.pc));
         }
+        Ok(Cycle {
+            history,
+            index,
+            previous,
+            continues,
+        })
+    }
 
-        let mut entry_state = previous.state.clone();
-        self.forget_dead_registers(pc, expression, &mut [&mut entry_state]);
-        let mut current_state = self.computer.get_state();
-        let tested: Vec<AbstractComparison> = history[index + 1..]
+    fn observe(
+        &mut self,
+        pc: usize,
+        expression: &AbstractComparison,
+        cycle: &Cycle,
+    ) -> Observation {
+        let mut entry = cycle.previous.state.clone();
+        self.forget_dead_registers(pc, expression, &mut [&mut entry]);
+        let mut current = self.computer.get_state();
+        let tested: Vec<AbstractComparison> = cycle
+            .walked()
             .iter()
             .map(|record| record.point.condition.clone())
             .collect();
-        let mut observed = self.invariants_while_staying(
+        let mut invariants = self.invariants_while_staying(
             expression,
-            branch_decision,
+            cycle.continues,
             &tested,
-            &mut entry_state,
-            &mut current_state,
+            &mut entry,
+            &mut current,
         );
-        self.step_past_inner_loops(&mut observed, &entry_state, &current_state);
+        self.step_past_inner_loops(&mut invariants, &entry, &current);
+        Observation {
+            entry,
+            current,
+            invariants,
+        }
+    }
 
+    fn next_attempt(&self, pc: usize, observation: &Observation) -> Result<LoopAttempt, Decline> {
+        let observed = &observation.invariants;
         let mut attempt = match self.loop_attempts.get(&pc) {
             Some(earlier) if earlier.widened => LoopAttempt {
                 widened: false,
                 ..earlier.clone()
             },
             Some(earlier) => {
-                let joined = join_all(&earlier.invariants, &observed);
+                let joined = join_all(&earlier.invariants, observed);
                 if joined == earlier.invariants {
-                    log::info!(
-                        "{} at line {pc} reached a fixpoint without closing",
-                        earlier.id
-                    );
-                    return None;
+                    return Err(Decline::Fixpoint(earlier.id));
                 }
-                if earlier.rounds >= max_ascents(observed.len()) {
-                    log::error!("{} at line {pc} exceeded its bound", earlier.id);
-                    return None;
-                }
-                LoopAttempt {
-                    id: earlier.id,
-                    invariants: joined,
-                    rounds: earlier.rounds + 1,
-                    widened: false,
-                    rejected_bounds: earlier.rejected_bounds.clone(),
-                }
+                earlier.advance(joined, false)?
             }
             None => LoopAttempt {
                 id: self.allocate_loop_id(),
-                invariants: observed,
+                invariants: observed.clone(),
                 rounds: 1,
                 widened: false,
                 rejected_bounds: Vec::new(),
@@ -574,18 +700,23 @@ impl<M: Machine> Engine<M> {
         }
         if let Some((i, _)) = attempt.invariants.iter().enumerate().find(|(i, inv)| {
             matches!(inv, LoopInvariant::Unknown)
-                && self.computer.carries_region(&current_state.0[*i])
+                && self.computer.carries_region(&observation.current.0[*i])
         }) {
-            log::info!(
-                "{} at line {pc} declined: would widen a region in x{i} (entry {:?} exit {:?})",
+            return Err(Decline::WidensRegion(
                 attempt.id,
-                entry_state.0[i],
-                current_state.0[i]
-            );
-            return None;
+                i,
+                Box::new([
+                    observation.entry.0[i].clone(),
+                    observation.current.0[i].clone(),
+                ]),
+            ));
         }
+        Ok(attempt)
+    }
 
-        let cycle_start = previous
+    fn abstract_cells(&self, pc: usize, cycle: &Cycle) -> Vec<(MemoryCell, LoopInvariant)> {
+        let cycle_start = cycle
+            .previous
             .journal_len
             .min(self.computer.write_journal().len());
         let unstable_cells = self
@@ -617,8 +748,26 @@ impl<M: Machine> Engine<M> {
                 cells.push((cell, LoopInvariant::Unknown));
             }
         }
+        cells
+    }
 
-        self.anchor_past_inner_loops(pc, &attempt.invariants, &history, &mut current_state);
+    fn draft_summary(
+        &mut self,
+        pc: usize,
+        expression: &AbstractComparison,
+        cycle: &Cycle,
+        attempt: &LoopAttempt,
+        observation: &mut Observation,
+        cells: Vec<(MemoryCell, LoopInvariant)>,
+    ) -> Draft {
+        self.anchor_past_inner_loops(
+            pc,
+            &attempt.invariants,
+            &cycle.history,
+            &mut observation.current,
+        );
+        let (entry_state, current_state) = (&observation.entry, &observation.current);
+        let (previous, branch_decision) = (&cycle.previous, cycle.continues);
         let id = attempt.id;
         let ghosts = ghost_operands(
             &previous.condition,
@@ -653,16 +802,16 @@ impl<M: Machine> Engine<M> {
                 &current_state.0,
             ),
             (
-                &entry_state,
-                &current_state,
+                entry_state,
+                current_state,
                 &self.exit_ghosts(
-                    self.loop_exits(pc, branch_decision, &history[index + 1..]),
-                    &history[..index],
+                    self.loop_exits(pc, branch_decision, cycle.walked()),
+                    cycle.before(),
                     (pc, &entry_state.0, &attempt.invariants),
                 ),
                 &self.exit_ghosts(
-                    branches_walked(pc, &history[index + 1..]),
-                    &history[..index],
+                    branches_walked(pc, cycle.walked()),
+                    cycle.before(),
                     (pc, &entry_state.0, &attempt.invariants),
                 ),
             ),
@@ -672,15 +821,15 @@ impl<M: Machine> Engine<M> {
         } else {
             expression.clone().not()
         };
-        self.bound_geometric_walks(&mut summary, &continuing_now, &current_state);
+        self.bound_geometric_walks(&mut summary, &continuing_now, current_state);
         let settled_steps = self.settle_select_steps(
             &mut summary,
-            &entry_state,
-            &current_state,
+            entry_state,
+            current_state,
             &ghosts,
             &continuing_now,
         );
-        let continuing_at_summary = summary.continuing.clone();
+        let continuing = summary.continuing.clone();
         log::info!(
             "detected {id} at line {pc} in {:?}, round {}",
             summary.label.as_deref().unwrap_or("?"),
@@ -698,7 +847,6 @@ impl<M: Machine> Engine<M> {
                 );
             }
         }
-        let round = attempt.rounds;
         let mut candidates = bound_candidates(&summary.invariants, &current_state.0);
         candidates.extend(self.word_limits(&summary.invariants, &current_state.0, expression));
         let bounds: Vec<Bound> = candidates
@@ -706,8 +854,24 @@ impl<M: Machine> Engine<M> {
             .filter(|bound| !attempt.rejected_bounds.contains(&bound.key()))
             .filter(|bound| self.plausible(bound, &entry_state.0, &current_state.0))
             .collect();
-        self.loop_attempts.insert(pc, attempt);
+        Draft {
+            summary,
+            settled_steps,
+            continuing,
+            bounds,
+            cells,
+            round: attempt.rounds,
+        }
+    }
 
+    fn justify_facts(
+        &mut self,
+        pc: usize,
+        expression: &AbstractComparison,
+        cycle: &Cycle,
+        summary: &mut Summary,
+    ) -> Result<(), Decline> {
+        let id = summary.id;
         let mut unjustified: Vec<AbstractComparison> = summary
             .landings
             .iter()
@@ -757,8 +921,8 @@ impl<M: Machine> Engine<M> {
         if !unjustified.is_empty()
             && !uncarried.contains(&pc)
             && let Some(ordered) = self.ordered_by_consecutive_exits(
-                (&previous, expression, branch_decision),
-                &history[index + 1..],
+                (&cycle.previous, expression, cycle.continues),
+                cycle.walked(),
                 &summary.continuing,
             )
         {
@@ -775,7 +939,7 @@ impl<M: Machine> Engine<M> {
 
         let counter_name = summary.counter.name().to_string();
         let at_base = AbstractExpression::Immediate(SUMMARY_ITERATION);
-        self.assume_staying(expression, branch_decision);
+        self.assume_staying(expression, cycle.continues);
         let unproved_at_base = summary
             .branch_facts
             .iter()
@@ -787,12 +951,29 @@ impl<M: Machine> Engine<M> {
             })
             .find(|fact| !self.proves(fact.clone()));
         self.computer.solver().pop(1);
-        if let Some(fact) = unproved_at_base {
-            log::info!("{id} at line {pc} does not hold {fact} where it is summarized, unrolling");
-            *self.failed_summaries.borrow_mut().entry(pc).or_insert(0) += 1;
-            return None;
+        match unproved_at_base {
+            Some(fact) => Err(Decline::UnprovedAtBase(id, fact)),
+            None => Ok(()),
         }
+    }
 
+    fn install(
+        &mut self,
+        pc: usize,
+        depth: usize,
+        cycle: &Cycle,
+        observation: Observation,
+        draft: Draft,
+    ) -> Result<bool, Decline> {
+        let Draft {
+            summary,
+            settled_steps,
+            continuing,
+            bounds,
+            cells,
+            round,
+        } = draft;
+        let id = summary.id;
         let fallback = self.fork();
         let scope_id = self.push_scope();
         for fact in summary.facts.iter().filter_map(summary_fact_to_ast) {
@@ -831,14 +1012,12 @@ impl<M: Machine> Engine<M> {
         let admits_base = comparison_to_ast(AbstractComparison::new(
             "==",
             summary.counter.expression(),
-            at_base,
+            AbstractExpression::Immediate(SUMMARY_ITERATION),
         ))
         .is_some_and(|base| self.computer.solver().check_assumptions(&[base]) == SatResult::Sat);
         if !admits_base {
             self.pop_scope(scope_id);
-            *self.failed_summaries.borrow_mut().entry(pc).or_insert(0) += 1;
-            log::info!("{id} at line {pc} summary contradicts the path, unrolling");
-            return None;
+            return Err(Decline::Contradicts(id));
         }
 
         self.computer.set_state(summarized);
@@ -849,7 +1028,7 @@ impl<M: Machine> Engine<M> {
             .computer
             .symbolic_slots()
             .into_iter()
-            .filter(|slot| previous.slots.contains(slot))
+            .filter(|slot| cycle.previous.slots.contains(slot))
             .collect();
         self.computer.set_symbolic_slots(kept);
         let counter = LoopCounter::for_loop(id);
@@ -892,11 +1071,11 @@ impl<M: Machine> Engine<M> {
             pc,
             depth,
             scope_id,
-            entry_decision: branch_decision,
+            entry_decision: cycle.continues,
             invariants,
             exit_facts,
             state: self.computer.get_state(),
-            entry_state: current_state,
+            entry_state: observation.current,
             history_len: self.jump_history.len(),
             facts,
             exits,
@@ -911,10 +1090,10 @@ impl<M: Machine> Engine<M> {
             blind_writes_at_summary: self.computer.blind_stack_writes().len(),
             slots: self.computer.symbolic_slots(),
             settled_steps,
-            continuing: continuing_at_summary,
+            continuing,
             bounds,
         });
-        Some(branch_decision)
+        Ok(cycle.continues)
     }
 
     fn reads_a_changing_load(
@@ -2037,26 +2216,24 @@ impl<M: Machine> Engine<M> {
         if joined == active.invariants && unbounded.is_empty() {
             return;
         }
-        let (rounds, mut rejected_bounds) = self
-            .loop_attempts
-            .get(&active.pc)
-            .map_or((1, Vec::new()), |earlier| {
-                (earlier.rounds, earlier.rejected_bounds.clone())
-            });
-        if rounds >= max_ascents(observed.len()) {
-            return;
-        }
-        rejected_bounds.extend(unbounded);
-        self.loop_attempts.insert(
-            active.pc,
-            LoopAttempt {
+        let earlier = match self.loop_attempts.get(&active.pc) {
+            Some(earlier) => LoopAttempt {
                 id: active.id,
-                invariants: joined,
-                rounds: rounds + 1,
-                widened: true,
-                rejected_bounds,
+                ..earlier.clone()
             },
-        );
+            None => LoopAttempt {
+                id: active.id,
+                invariants: Vec::new(),
+                rounds: 1,
+                widened: false,
+                rejected_bounds: Vec::new(),
+            },
+        };
+        let Ok(mut retry) = earlier.advance(joined, true) else {
+            return;
+        };
+        retry.rejected_bounds.extend(unbounded);
+        self.loop_attempts.insert(active.pc, retry);
         log::info!(
             "{} at line {} widening after a failed inductive check",
             active.id,
