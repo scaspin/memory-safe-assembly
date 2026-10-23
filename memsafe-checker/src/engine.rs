@@ -1498,6 +1498,9 @@ impl<M: Machine> Engine<M> {
         {
             return None;
         }
+        if !self.equal_side_leaves_the_loop(pc, taken, history, last_round) {
+            return None;
+        }
         let (behind, order) = if step == 1 { (">=", "<") } else { ("<=", ">") };
         let started_past =
             comparison_to_ast(AbstractComparison::new(behind, start, bound.clone()))?;
@@ -1505,6 +1508,31 @@ impl<M: Machine> Engine<M> {
             return None;
         }
         Some(AbstractComparison::new(order, walker, bound))
+    }
+
+    fn equal_side_leaves_the_loop(
+        &self,
+        pc: usize,
+        taken: bool,
+        history: &[JumpRecord],
+        last_round: usize,
+    ) -> bool {
+        let loop_record = &history[last_round];
+        let Some((source, header, _)) = self.cycle_back_edge(
+            loop_record.point.pc,
+            loop_record.taken,
+            &history[last_round + 1..],
+        ) else {
+            return false;
+        };
+        let Some(successors) = self.static_successors(pc) else {
+            return false;
+        };
+        let [target, fallthrough] = successors.as_slice() else {
+            return false;
+        };
+        let equal_side = if taken { *fallthrough } else { *target };
+        !self.stays_in_loop(equal_side, header, source, pc != source)
     }
 
     fn straight_from_the_loop_branch(&self, pc: usize, loop_pc: usize) -> bool {

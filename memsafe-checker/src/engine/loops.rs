@@ -1086,7 +1086,7 @@ impl<M: Machine> Engine<M> {
             .collect()
     }
 
-    fn static_successors(&self, pc: usize) -> Option<Vec<usize>> {
+    pub(super) fn static_successors(&self, pc: usize) -> Option<Vec<usize>> {
         let instruction = self.program.code.get(pc)?;
         let target = |label: &str| self.resolve_jump_target(label, pc).ok();
         let next = pc + 1;
@@ -1776,7 +1776,7 @@ impl<M: Machine> Engine<M> {
         }
     }
 
-    fn cycle_back_edge(
+    pub(super) fn cycle_back_edge(
         &self,
         loop_pc: usize,
         continues: bool,
@@ -1824,7 +1824,7 @@ impl<M: Machine> Engine<M> {
         None
     }
 
-    fn stays_in_loop(
+    pub(super) fn stays_in_loop(
         &self,
         from: usize,
         header: usize,

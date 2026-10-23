@@ -556,3 +556,32 @@ fn a_word_reached_by_falling_through_is_refused() {
     );
     assert!(r.is_err(), "fell through an instruction it cannot see");
 }
+
+#[test]
+fn a_ne_guard_whose_eq_side_stays_in_the_loop_does_not_order_the_walker() {
+    let r = run(
+        &[
+            "start:",
+            "mov x9, #0",
+            "mov x10, #0",
+            "loop:",
+            "cmp x9, x2",
+            "b.hs done",
+            "cmp x10, x1",
+            "b.eq skip",
+            "ldrb w3, [x0, x10]",
+            "skip:",
+            "add x10, x10, #1",
+            "add x9, x9, #1",
+            "b loop",
+            "done:",
+            "ret",
+        ],
+        None,
+        &[length_at_least(1)],
+    );
+    assert!(
+        r.is_err(),
+        "accepted a walker that passes the bound on the side that keeps looping"
+    );
+}
