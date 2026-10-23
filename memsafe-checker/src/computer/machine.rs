@@ -63,7 +63,7 @@ impl Instruction {
         if self.ty == InstructionType::Memory {
             return match self.opcode.as_str() {
                 "ldr" | "ldur" | "ldrb" | "ldrh" | "ldrsw" | "ldrsb" | "ldrsh" => 1,
-                "ldp" => 2,
+                "ldp" | "ldnp" => 2,
                 _ => 0,
             };
         }

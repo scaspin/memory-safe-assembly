@@ -1004,7 +1004,7 @@ impl ARMCORTEXA {
                         }
                     }
                 }
-                "ldp" => {
+                "ldp" | "ldnp" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst1 = reg_iter.next().expect("ldr dst");
@@ -1056,7 +1056,7 @@ impl ARMCORTEXA {
                         }
                     }
                 }
-                "stp" => {
+                "stp" | "stnp" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst1 = reg_iter.next().expect("ldr dst");
@@ -1088,7 +1088,12 @@ impl ARMCORTEXA {
                     }
                 }
                 "prfm" | "prfum" => {}
-                _ => todo!("memory instruction not supported yet {:?}", instruction),
+                _ => {
+                    return Err(format!(
+                        "unsupported memory instruction {}",
+                        instruction.opcode
+                    ));
+                }
             },
             InstructionType::SIMDArithmetic
                 if matches!(instruction.opcode.as_str(), "orr" | "bic" | "and" | "eor")
@@ -1293,6 +1298,16 @@ impl ARMCORTEXA {
                         _ => self.vector_unknown(dst),
                     }
                 }
+                _ if instruction
+                    .operands
+                    .iter()
+                    .any(|op| matches!(op, Operand::Memory(..))) =>
+                {
+                    return Err(format!(
+                        "unsupported memory instruction {}",
+                        instruction.opcode
+                    ));
+                }
                 _ => {
                     if let Some(dst) = instruction.operands.first() {
                         match dst {
@@ -1397,7 +1412,7 @@ impl ARMCORTEXA {
 
                     self.write_back(prefix, *num, writeback);
                 }
-                "stp" | "ldp" => {
+                "stp" | "ldp" | "stnp" | "ldnp" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let reg1 = reg_iter.next().expect("stp/ldp first register");
@@ -1492,6 +1507,16 @@ impl ARMCORTEXA {
                         }
                         None => self.set_register(dst, RegisterKind::Number, None, 0),
                     }
+                }
+                _ if instruction
+                    .operands
+                    .iter()
+                    .any(|op| matches!(op, Operand::Memory(..))) =>
+                {
+                    return Err(format!(
+                        "unsupported memory instruction {}",
+                        instruction.opcode
+                    ));
                 }
                 _ => {
                     if let Some(dst) = instruction.operands.first() {

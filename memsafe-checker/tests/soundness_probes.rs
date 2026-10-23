@@ -666,3 +666,49 @@ fn smsubl_sign_extends_its_word_factors() {
         "accepted base + 2^40 + byte as base + 2^40 - byte * (2^32 - 1)"
     );
 }
+
+#[test]
+fn ldnp_of_vectors_is_bounds_checked() {
+    let r = run(
+        &["start:", "ldnp q0, q1, [x0, #1024]", "ret"],
+        Some(16),
+        &[],
+    );
+    assert!(
+        r.is_err(),
+        "accepted a non-temporal pair load far past the buffer"
+    );
+}
+
+#[test]
+fn stnp_of_vectors_is_bounds_checked() {
+    let r = run(
+        &["start:", "stnp q0, q1, [x0, #1024]", "ret"],
+        Some(16),
+        &[],
+    );
+    assert!(
+        r.is_err(),
+        "accepted a non-temporal pair store far past the buffer"
+    );
+}
+
+#[test]
+fn non_temporal_pairs_cover_both_registers() {
+    let pair = |line: &str, length: i64| run(&["start:", line, "ret"], Some(length), &[]);
+    assert_eq!(pair("ldnp q0, q1, [x0]", 32), Ok(()));
+    assert!(pair("ldnp q0, q1, [x0]", 31).is_err());
+    assert_eq!(pair("ldnp x3, x4, [x0, #8]", 24), Ok(()));
+    assert!(pair("ldnp x3, x4, [x0, #8]", 23).is_err());
+    assert_eq!(pair("ldnp w3, w4, [x0]", 8), Ok(()));
+    assert!(pair("ldnp w3, w4, [x0]", 7).is_err());
+    assert_eq!(pair("ldnp d0, d1, [x0]", 16), Ok(()));
+    assert!(pair("ldnp d0, d1, [x0]", 15).is_err());
+}
+
+#[test]
+fn an_unsupported_vector_memory_instruction_is_refused() {
+    let r = run(&["start:", "ldaxp q0, q1, [x0]", "ret"], Some(64), &[]);
+    let err = r.expect_err("ran a vector memory instruction it does not model");
+    assert!(err.contains("unsupported memory instruction"), "{err}");
+}
