@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(format!("asm/{arch}"));
     println!("cargo::rerun-if-changed={}", root.display());
     let Ok(components) = std::fs::read_dir(&root) else {
-        println!("cargo::warning=no rendered corecrypto assembly in {}; run import-corecrypto.py", root.display());
+        println!("cargo::warning=no rendered corecrypto assembly in {}; run `git submodule update --init corecrypto-playground/corecrypto` and `python3 import-corecrypto.py`", root.display());
         return Ok(());
     };
     for component in components.flatten() {

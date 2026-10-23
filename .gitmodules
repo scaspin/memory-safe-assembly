@@ -1,0 +1,3 @@
+[submodule "corecrypto-playground/corecrypto"]
+	path = corecrypto-playground/corecrypto
+	url = https://github.com/apple/corecrypto

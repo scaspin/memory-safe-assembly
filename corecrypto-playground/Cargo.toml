@@ -3,6 +3,7 @@ name = "corecrypto-playground"
 version = "0.1.0"
 edition = "2024"
 publish = false
+exclude = ["corecrypto"]
 
 # Annotations for the arm64 assembly in Apple's corecrypto
 # (https://github.com/apple/corecrypto). The crate never links, so the extern

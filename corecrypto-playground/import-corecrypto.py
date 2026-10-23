@@ -17,7 +17,8 @@ checker parses. Each arm64 file is
 corecrypto's license forbids redistribution, so the output is written to a
 directory that git ignores rather than committed.
 
-Usage: python3 import-corecrypto.py <corecrypto clone> <output dir>
+Usage: python3 import-corecrypto.py [<corecrypto clone> [<output dir>]]
+The defaults are the pinned `corecrypto` submodule and `asm/`.
 Set LLVM_BIN to the directory holding LLVM's `clang` and `llvm-mc` (default:
 Homebrew's).
 """
@@ -146,7 +147,9 @@ def rewrite(text, clone):
 
 
 def main():
-    clone, output = Path(sys.argv[1]).resolve(), Path(sys.argv[2])
+    here = Path(__file__).resolve().parent
+    clone = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else here / "corecrypto"
+    output = Path(sys.argv[2]) if len(sys.argv) > 2 else here / "asm"
     sources = sorted(
         p
         for p in clone.rglob("*")
