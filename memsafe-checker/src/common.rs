@@ -1268,6 +1268,18 @@ fn bit_of(value: &ast::Int, bit: i64) -> ast::Int {
     ast::Int::mul(&[&value.div(&weight).modulo(&two), &weight])
 }
 
+fn signed_word(value: &ast::Int) -> ast::Int {
+    let modulus = ast::Int::from_str(&(1u128 << 64).to_string()).expect("modulus");
+    let half = ast::Int::from_str(&(1u128 << 63).to_string()).expect("half");
+    let wrapped = ast::Int::sub(&[&ast::Int::add(&[value, &half]).modulo(&modulus), &half]);
+    let already_signed = value.ge(half.unary_minus()) & value.lt(&half);
+    let unsigned_high = value.ge(&half) & value.lt(&modulus);
+    already_signed.ite(
+        value,
+        &unsigned_high.ite(&ast::Int::sub(&[value, &modulus]), &wrapped),
+    )
+}
+
 pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
     match expression.clone() {
         AbstractExpression::Immediate(num) => Some(ast::Int::from_i64(num)),
@@ -1290,7 +1302,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 && shifted.as_ref() == old1.as_ref()
                 && **amount == AbstractExpression::Immediate(63)
             {
-                let value = expression_to_ast(*old1.clone())?;
+                let value = signed_word(&expression_to_ast(*old1.clone())?);
                 let zero = ast::Int::from_i64(0);
                 return Some(value.ge(&zero).ite(&value, &zero));
             }
@@ -1313,6 +1325,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 "asr" if constant_shift.is_some() => {
                     let shift = constant_shift.unwrap();
                     let zero = ast::Int::from_i64(0);
+                    let new1 = signed_word(&new1);
                     if shift >= 63 {
                         let minus_one = ast::Int::from_i64(-1);
                         return Some(new1.ge(&zero).ite(&zero, &minus_one));

@@ -585,3 +585,41 @@ fn a_ne_guard_whose_eq_side_stays_in_the_loop_does_not_order_the_walker() {
         "accepted a walker that passes the bound on the side that keeps looping"
     );
 }
+
+#[test]
+fn asr_of_a_value_above_2_63_is_negative() {
+    let r = run(
+        &[
+            "start:",
+            "ldrb w1, [x0]",
+            "sub x1, x1, #256",
+            "lsr x1, x1, #8",
+            "lsl x1, x1, #8",
+            "asr x1, x1, #60",
+            "ldrb w2, [x0, x1]",
+            "ret",
+        ],
+        Some(64),
+        &[],
+    );
+    assert!(r.is_err(), "accepted an index that asr made negative");
+}
+
+#[test]
+fn asr_of_a_zero_extended_word_shifted_up_is_negative() {
+    let r = run(
+        &[
+            "start:",
+            "ldrb w1, [x0]",
+            "sub w1, w1, #1",
+            "mov w1, w1",
+            "lsl x1, x1, #32",
+            "asr x1, x1, #60",
+            "ldrb w2, [x0, x1]",
+            "ret",
+        ],
+        Some(64),
+        &[],
+    );
+    assert!(r.is_err(), "accepted an index that asr made negative");
+}

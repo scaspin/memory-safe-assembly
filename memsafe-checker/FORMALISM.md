@@ -230,7 +230,7 @@ $$
 [\![\lceil \langle e\rangle{+}n\rceil]\!] = [\![e]\!] + n \quad [\![\lceil \top \rceil]\!] = \nu\alpha.\,\alpha\\[2pt]
 [\![e_1 \circ e_2]\!] = [\![e_1]\!] \circ [\![e_2]\!] && \circ \in \{+,-,*,\mathsf{div},\bmod\}\\
 [\![e \;\mathsf{lsl}\; k]\!] = [\![e]\!]\cdot 2^{k} && [\![e \;\mathsf{lsr}\; k]\!] = ([\![e]\!] \bmod 2^{64}) \mathbin{\mathsf{div}} 2^{k}\\
-[\![e \;\mathsf{asr}\; k]\!] = [\![e]\!] \mathbin{\mathsf{div}} 2^{k} && [\![\mathsf{zext}_w\,e]\!],\ [\![\mathsf{sext}_w\,e]\!],\ [\![\mathsf{clz}_w\,e]\!] \text{ exact for } w \le 64\\
+[\![e \;\mathsf{asr}\; k]\!] = [\![\mathsf{sext}_{64}\,e]\!] \mathbin{\mathsf{div}} 2^{k} && [\![\mathsf{zext}_w\,e]\!],\ [\![\mathsf{sext}_w\,e]\!],\ [\![\mathsf{clz}_w\,e]\!] \text{ exact for } w \le 64\\
 [\![e \,\&\, (2^k{-}1)]\!] = [\![e]\!] \bmod 2^k && [\![e \,\&\, {-2^k}]\!] = [\![e]\!] - ([\![e]\!] \bmod 2^k)\\
 [\![e \,\&\, 2^k]\!] = \mathsf{bit}_k([\![e]\!]) && [\![e \,\&\, {\sim}2^k]\!] = [\![e]\!] - \mathsf{bit}_k([\![e]\!]) \quad(\text{also runs of bits})\\
 [\![e \;\hat{}\; e]\!] = 0 \quad [\![e \;\hat{}\; {-1}]\!] = -1 - [\![e]\!] && [\![e_1 \mid e_2]\!] = [\![e_1]\!] + [\![e_2]\!] \quad (\text{bits provably disjoint})\\
