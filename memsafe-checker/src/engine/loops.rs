@@ -1,6 +1,35 @@
 use crate::computer::MAX_EXPRESSION_NODES;
+use std::fmt;
 
 use super::*;
+
+enum Obligation {
+    Step(usize),
+    Cell(MemoryCell),
+    Slots,
+    Confined(usize),
+    Ghost(Vec<bool>),
+    Operand(usize),
+    Bound(Bound),
+    Carried(usize),
+    Settled(usize),
+}
+
+impl fmt::Display for Obligation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Obligation::Step(i) => write!(f, "step of x{i}"),
+            Obligation::Cell(cell) => write!(f, "cell {}+{}", cell.region, cell.offset),
+            Obligation::Slots => write!(f, "saved slots"),
+            Obligation::Confined(i) => write!(f, "width of x{i}"),
+            Obligation::Ghost(path) => write!(f, "ghost operand at {path:?}"),
+            Obligation::Operand(i) => write!(f, "guard operand x{i}"),
+            Obligation::Bound(bound) => write!(f, "bound {}", bound.key()),
+            Obligation::Carried(branch) => write!(f, "branch fact of line {branch}"),
+            Obligation::Settled(i) => write!(f, "settled step of x{i}"),
+        }
+    }
+}
 
 enum Discharge {
     Closed(bool),
@@ -1782,11 +1811,11 @@ impl<M: Machine> Engine<M> {
         uncarried
     }
 
-    fn settled_steps_repeat(&self, active: &ActiveLoop) -> bool {
+    fn unrepeated_settled_step(&self, active: &ActiveLoop) -> Option<usize> {
         let counter = LoopCounter::for_loop(active.id);
         let (name, next_iteration) = (counter.name(), counter.next_iteration());
         let continues = comparison_with_counter_at(&active.continuing, name, &next_iteration);
-        let repeats = active.settled_steps.iter().all(|settled| {
+        let repeats = |settled: &SettledSelectStep| {
             let now = value_of(&self.computer.register_at(settled.register));
             let step = if settled.holds_the_select {
                 now
@@ -1816,15 +1845,16 @@ impl<M: Machine> Engine<M> {
             };
             refuted_when(condition.clone(), settled.rare)
                 && refuted_when(condition.not(), settled.usual)
-        });
-        if !repeats {
-            log::info!(
-                "{} a settled select step did not repeat; summarizing it as bounded instead",
-                active.id
-            );
-            self.refuted_select_steps.borrow_mut().insert(active.pc);
-        }
-        repeats
+        };
+        let unrepeated = active
+            .settled_steps
+            .iter()
+            .find(|settled| !repeats(settled))?;
+        log::info!(
+            "{} a settled select step did not repeat; summarizing it as bounded instead",
+            active.id
+        );
+        Some(unrepeated.register)
     }
 
     fn stack_cells_a_blind_write_may_reach(&self, active: &ActiveLoop) -> Vec<MemoryCell> {
@@ -2842,153 +2872,9 @@ impl<M: Machine> Engine<M> {
                 observed[i] = recorded.clone();
             }
         }
-        let ghosts_repeat =
-            active.ghost_checks.iter().all(|(path, expected)| {
-                match condition_side(&expression, path) {
-                    Some(AbstractExpression::Register(now)) => self.proves(
-                        AbstractComparison::new("==", value_of(now), expected.clone()),
-                    ),
-                    _ => false,
-                }
-            }) && active.operand_checks.iter().all(|(path, i)| {
-                match condition_side(&expression, path) {
-                    Some(AbstractExpression::Register(now)) => {
-                        **now == current.0[*i]
-                            || self.proves(AbstractComparison::new(
-                                "==",
-                                value_of(now),
-                                value_of(&current.0[*i]),
-                            ))
-                    }
-                    _ => false,
-                }
-            });
-        if !ghosts_repeat {
-            log::info!("{} guard operand did not repeat its step", active.id);
-        }
-        let checked_from = active
-            .journal_after_summary
-            .min(self.computer.write_journal().len());
-        let mut rewritten = cells_written(&self.computer.write_journal()[checked_from..]);
-        for (cell, _) in &active.cells {
-            if rewritten.iter().all(|(known, _)| known != cell) {
-                rewritten.push((cell.clone(), self.computer.cell_content(cell)));
-            }
-        }
-        let clobbered_cells = self.stack_cells_a_blind_write_may_reach(&active);
-        let drifting_cells: Vec<MemoryCell> = rewritten
-            .into_iter()
-            .filter(|(cell, before)| {
-                let now = self.computer.cell_content(cell);
-                let seen = self.pin_steps(&[invariant_of_register(before, &now)]);
-                let recorded = active
-                    .cells
-                    .iter()
-                    .find(|(known, _)| known == cell)
-                    .map_or(LoopInvariant::Fixed, |(_, invariant)| invariant.clone());
-                !recorded.subsumes(&seen[0])
-            })
-            .map(|(cell, _)| cell)
-            .chain(clobbered_cells)
-            .collect();
-        let cells_hold = drifting_cells.is_empty();
-        if !cells_hold {
-            log::info!(
-                "{} memory cells did not repeat their step: {drifting_cells:?}",
-                active.id
-            );
-            self.unstable_cells
-                .borrow_mut()
-                .entry(active.pc)
-                .or_default()
-                .extend(drifting_cells);
-        }
-        let uncarried = self.while_staying(&expression, active.entry_decision, |engine| {
-            engine.branches_not_carried(&active)
-        });
-        let steps_hold = self.settled_steps_repeat(&active);
-        let slots_hold = self.computer.slots_kept(&active.slots);
-        let confinements_hold = active
-            .state
-            .0
-            .iter()
-            .zip(&current.0)
-            .all(|(summarized, now)| {
-                match summarized
-                    .base
-                    .as_ref()
-                    .filter(|_| summarized.kind == RegisterKind::RegisterBase)
-                    .and_then(confined_load_width)
-                {
-                    Some(width) => {
-                        now.kind == RegisterKind::RegisterBase
-                            && self
-                                .computer
-                                .fits_unsigned(&value_of(now), 8 * width as u32)
-                    }
-                    None => true,
-                }
-            });
-        if !confinements_hold {
-            log::info!("{} a widened load left its width", active.id);
-        }
-        if !uncarried.is_empty() {
-            let mut known = self.uncarried_branches.borrow_mut();
-            let at_loop = known.entry(active.pc).or_default();
-            let before = at_loop.len();
-            at_loop.extend(uncarried.iter().copied());
-            if at_loop.len() > before {
-                self.loop_attempts.remove(&active.pc);
-            }
-        }
-        if !slots_hold {
-            log::info!("{} a saved slot did not survive the body", active.id);
-            self.unstable_slots.borrow_mut().insert(active.pc);
-        }
-        let unbounded: Vec<String> = active
-            .bounds
-            .iter()
-            .filter(|bound| !self.implied(&bound.at(&current.0)))
-            .map(Bound::key)
-            .collect();
-        if !unbounded.is_empty() {
-            log::info!("{} bounds {unbounded:?} not re-established", active.id);
-        }
-        let holds = uncarried.is_empty()
-            && cells_hold
-            && slots_hold
-            && confinements_hold
-            && steps_hold
-            && ghosts_repeat
-            && unbounded.is_empty()
-            && active
-                .invariants
-                .iter()
-                .zip(observed.iter())
-                .all(|(recorded, seen)| recorded.subsumes(seen));
-
-        if !holds {
-            let read_by_guard = registers_in(&expression);
-            let only_data_moved = ghosts_repeat
-                && uncarried.is_empty()
-                && active
-                    .invariants
-                    .iter()
-                    .zip(&observed)
-                    .enumerate()
-                    .filter(|(_, (recorded, seen))| !recorded.subsumes(seen))
-                    .all(|(i, _)| {
-                        [&active.entry_state.0[i], &active.state.0[i], &current.0[i]]
-                            .into_iter()
-                            .all(|r| !self.computer.carries_region(r) && !read_by_guard.contains(r))
-                    });
-            self.refute_active_loop(
-                &active,
-                &observed,
-                unbounded,
-                only_data_moved,
-                !cells_hold || !slots_hold,
-            );
+        let broken = self.broken_obligations(&active, &expression, &observed, &current);
+        if !broken.is_empty() {
+            self.refute_active_loop(&active, &expression, &observed, &broken);
             log::info!(
                 "{} at line {} not closed, exit condition {expression}",
                 active.id,
@@ -3071,14 +2957,197 @@ impl<M: Machine> Engine<M> {
         Discharge::Closed(!active.entry_decision)
     }
 
+    fn broken_obligations(
+        &self,
+        active: &ActiveLoop,
+        expression: &AbstractComparison,
+        observed: &[LoopInvariant],
+        current: &MachineState,
+    ) -> Vec<Obligation> {
+        let mut broken = Vec::new();
+        let ghost =
+            active
+                .ghost_checks
+                .iter()
+                .find(|(path, expected)| match condition_side(expression, path) {
+                    Some(AbstractExpression::Register(now)) => !self.proves(
+                        AbstractComparison::new("==", value_of(now), expected.clone()),
+                    ),
+                    _ => true,
+                })
+                .map(|(path, _)| Obligation::Ghost(path.clone()));
+        let operand = || {
+            active
+                .operand_checks
+                .iter()
+                .find(|(path, i)| match condition_side(expression, path) {
+                    Some(AbstractExpression::Register(now)) => {
+                        **now != current.0[*i]
+                            && !self.proves(AbstractComparison::new(
+                                "==",
+                                value_of(now),
+                                value_of(&current.0[*i]),
+                            ))
+                    }
+                    _ => true,
+                })
+                .map(|(_, i)| Obligation::Operand(*i))
+        };
+        if let Some(unrepeated) = ghost.or_else(operand) {
+            log::info!("{} guard operand did not repeat its step", active.id);
+            broken.push(unrepeated);
+        }
+        let checked_from = active
+            .journal_after_summary
+            .min(self.computer.write_journal().len());
+        let mut rewritten = cells_written(&self.computer.write_journal()[checked_from..]);
+        for (cell, _) in &active.cells {
+            if rewritten.iter().all(|(known, _)| known != cell) {
+                rewritten.push((cell.clone(), self.computer.cell_content(cell)));
+            }
+        }
+        let clobbered_cells = self.stack_cells_a_blind_write_may_reach(active);
+        let drifting_cells: Vec<MemoryCell> = rewritten
+            .into_iter()
+            .filter(|(cell, before)| {
+                let now = self.computer.cell_content(cell);
+                let seen = self.pin_steps(&[invariant_of_register(before, &now)]);
+                let recorded = active
+                    .cells
+                    .iter()
+                    .find(|(known, _)| known == cell)
+                    .map_or(LoopInvariant::Fixed, |(_, invariant)| invariant.clone());
+                !recorded.subsumes(&seen[0])
+            })
+            .map(|(cell, _)| cell)
+            .chain(clobbered_cells)
+            .collect();
+        if !drifting_cells.is_empty() {
+            log::info!(
+                "{} memory cells did not repeat their step: {drifting_cells:?}",
+                active.id
+            );
+            broken.extend(drifting_cells.into_iter().map(Obligation::Cell));
+        }
+        let uncarried = self.while_staying(expression, active.entry_decision, |engine| {
+            engine.branches_not_carried(active)
+        });
+        broken.extend(uncarried.into_iter().map(Obligation::Carried));
+        broken.extend(
+            self.unrepeated_settled_step(active)
+                .map(Obligation::Settled),
+        );
+        if !self.computer.slots_kept(&active.slots) {
+            log::info!("{} a saved slot did not survive the body", active.id);
+            broken.push(Obligation::Slots);
+        }
+        let unconfined = active
+            .state
+            .0
+            .iter()
+            .zip(&current.0)
+            .position(|(summarized, now)| {
+                match summarized
+                    .base
+                    .as_ref()
+                    .filter(|_| summarized.kind == RegisterKind::RegisterBase)
+                    .and_then(confined_load_width)
+                {
+                    Some(width) => {
+                        now.kind != RegisterKind::RegisterBase
+                            || !self
+                                .computer
+                                .fits_unsigned(&value_of(now), 8 * width as u32)
+                    }
+                    None => false,
+                }
+            });
+        if let Some(register) = unconfined {
+            log::info!("{} a widened load left its width", active.id);
+            broken.push(Obligation::Confined(register));
+        }
+        let unbounded: Vec<&Bound> = active
+            .bounds
+            .iter()
+            .filter(|bound| !self.implied(&bound.at(&current.0)))
+            .collect();
+        if !unbounded.is_empty() {
+            let keys: Vec<String> = unbounded.iter().map(|bound| bound.key()).collect();
+            log::info!("{} bounds {keys:?} not re-established", active.id);
+        }
+        broken.extend(unbounded.into_iter().cloned().map(Obligation::Bound));
+        broken.extend(
+            active
+                .invariants
+                .iter()
+                .zip(observed)
+                .enumerate()
+                .filter(|(_, (recorded, seen))| !recorded.subsumes(seen))
+                .map(|(i, _)| Obligation::Step(i)),
+        );
+        broken
+    }
+
     fn refute_active_loop(
         &mut self,
         active: &ActiveLoop,
+        expression: &AbstractComparison,
         observed: &[LoopInvariant],
-        unbounded: Vec<String>,
-        only_data_moved: bool,
-        memory_drifted: bool,
+        broken: &[Obligation],
     ) {
+        let listed: Vec<String> = broken.iter().map(Obligation::to_string).collect();
+        log::info!("{} broke {}", active.id, listed.join(", "));
+        let mut drifting_cells = Vec::new();
+        let mut uncarried = BTreeSet::new();
+        let mut unbounded = Vec::new();
+        let mut moved = Vec::new();
+        let (mut ghosts_repeat, mut slots_hold, mut steps_hold) = (true, true, true);
+        for obligation in broken {
+            match obligation {
+                Obligation::Step(i) => moved.push(*i),
+                Obligation::Cell(cell) => drifting_cells.push(cell.clone()),
+                Obligation::Slots => slots_hold = false,
+                Obligation::Confined(_) => {}
+                Obligation::Ghost(_) | Obligation::Operand(_) => ghosts_repeat = false,
+                Obligation::Bound(bound) => unbounded.push(bound.key()),
+                Obligation::Carried(branch) => {
+                    uncarried.insert(*branch);
+                }
+                Obligation::Settled(_) => steps_hold = false,
+            }
+        }
+        let cells_hold = drifting_cells.is_empty();
+        if !cells_hold {
+            self.unstable_cells
+                .borrow_mut()
+                .entry(active.pc)
+                .or_default()
+                .extend(drifting_cells);
+        }
+        if !steps_hold {
+            self.refuted_select_steps.borrow_mut().insert(active.pc);
+        }
+        if !uncarried.is_empty() {
+            let mut known = self.uncarried_branches.borrow_mut();
+            let at_loop = known.entry(active.pc).or_default();
+            let before = at_loop.len();
+            at_loop.extend(uncarried.iter().copied());
+            if at_loop.len() > before {
+                self.loop_attempts.remove(&active.pc);
+            }
+        }
+        if !slots_hold {
+            self.unstable_slots.borrow_mut().insert(active.pc);
+        }
+        let read_by_guard = registers_in(expression);
+        let current = self.computer.get_state();
+        let only_data_moved = ghosts_repeat
+            && uncarried.is_empty()
+            && moved.iter().all(|&i| {
+                [&active.entry_state.0[i], &active.state.0[i], &current.0[i]]
+                    .into_iter()
+                    .all(|r| !self.computer.carries_region(r) && !read_by_guard.contains(r))
+            });
         if !only_data_moved
             && self
                 .counted_failures
@@ -3092,7 +3161,7 @@ impl<M: Machine> Engine<M> {
                 .or_insert(0) += 1;
         }
         self.widen_for_retry(active, observed, unbounded);
-        if memory_drifted {
+        if !cells_hold || !slots_hold {
             let mut retries = self.cell_retries.borrow_mut();
             let used = retries.entry(active.pc).or_insert(0);
             if *used < MAX_CELL_RETRIES {
