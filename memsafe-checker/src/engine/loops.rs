@@ -59,7 +59,10 @@ impl Decline {
                 log::info!("line {pc} tests a load that changed since the last visit, unrolling")
             }
             Decline::OutOfTries => {
-                log::info!("loop at line {pc} failed {MAX_SUMMARY_TRIES} summaries, unrolling")
+                log::info!(
+                    "loop at line {pc} failed {} summaries, unrolling",
+                    LOOP_BUDGET.summary_tries
+                )
             }
             Decline::InsideBody => {
                 log::info!("line {pc} branches inside a loop body, not summarized there")
@@ -124,7 +127,7 @@ struct Draft {
 
 impl LoopAttempt {
     fn advance(&self, invariants: Vec<LoopInvariant>, widened: bool) -> Result<Self, Decline> {
-        if self.rounds >= max_ascents(invariants.len()) {
+        if self.rounds >= LOOP_BUDGET.ascents(invariants.len()) {
             return Err(Decline::Ascended(self.id));
         }
         Ok(LoopAttempt {
@@ -137,12 +140,85 @@ impl LoopAttempt {
     }
 }
 
+#[derive(Clone)]
+pub(super) struct PathLoops<M: Machine> {
+    pub(super) active: Vec<ActiveLoop>,
+    pub(super) attempts: BTreeMap<usize, LoopAttempt>,
+    pub(super) rounds: BTreeMap<usize, RoundEntry>,
+    pub(super) closed_counters: Vec<(AbstractExpression, Vec<AbstractExpression>)>,
+    pub(super) relied_on: Vec<usize>,
+    pub(super) pending: Option<(usize, Box<Engine<M>>)>,
+    pub(super) value_ranges: BTreeMap<String, i64>,
+    pub(super) concrete_latch_visits: BTreeMap<usize, (usize, i64)>,
+    pub(super) costly_latches: BTreeSet<usize>,
+}
+
+impl<M: Machine> PathLoops<M> {
+    pub(super) fn new() -> Self {
+        Self {
+            active: Vec::new(),
+            attempts: BTreeMap::new(),
+            rounds: BTreeMap::new(),
+            closed_counters: Vec::new(),
+            relied_on: Vec::new(),
+            pending: None,
+            value_ranges: BTreeMap::new(),
+            concrete_latch_visits: BTreeMap::new(),
+            costly_latches: BTreeSet::new(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub(super) struct PcRecord {
+    failures: usize,
+    refutations: usize,
+    cell_retries: usize,
+    counted: BTreeSet<(LoopId, usize)>,
+    unstable_registers: BTreeSet<usize>,
+    unstable_cells: BTreeSet<MemoryCell>,
+    unstable_slots: bool,
+    uncarried: BTreeSet<usize>,
+    select_refuted: bool,
+}
+
+#[derive(Default)]
+pub(super) struct LoopHistory {
+    records: BTreeMap<usize, PcRecord>,
+}
+
+struct LoopBudget {
+    summary_tries: usize,
+    refutations: usize,
+    cell_retries: usize,
+}
+
+const LOOP_BUDGET: LoopBudget = LoopBudget {
+    summary_tries: 3,
+    refutations: 8,
+    cell_retries: 4,
+};
+
+impl LoopBudget {
+    fn exhausted(&self, record: &PcRecord) -> bool {
+        record.failures >= self.summary_tries || record.refutations >= self.refutations
+    }
+
+    fn ascents(&self, components: usize) -> usize {
+        max_ascents(components)
+    }
+}
+
 #[derive(Default)]
 pub(super) struct SummaryLedger {
     next_instance: usize,
     failures: Vec<FailedDischarge>,
     refuted: BTreeSet<usize>,
-    refutations_at: BTreeMap<usize, usize>,
+}
+
+enum Verdict {
+    Stands,
+    Refuted { retry: Option<LoopAttempt> },
 }
 
 struct FailedDischarge {
@@ -152,23 +228,47 @@ struct FailedDischarge {
 }
 
 impl SummaryLedger {
-    fn refute(&mut self, instance: usize) -> Option<Option<LoopAttempt>> {
-        let failure = self.failures.iter().find(|failure| {
+    fn refute(&mut self, instance: usize) -> Verdict {
+        let Some(failure) = self.failures.iter().find(|failure| {
             failure.instance == instance
                 && failure
                     .relied_on
                     .iter()
                     .all(|other| !self.refuted.contains(other))
-        })?;
+        }) else {
+            return Verdict::Stands;
+        };
         let retry = failure.retry.clone();
         self.refuted.insert(instance);
-        Some(retry)
+        Verdict::Refuted { retry }
     }
 }
 
 const NEIGHBOUR_GAPS: [i64; 6] = [0, 1, 2, 4, 16, 256];
 
 impl<M: Machine> Engine<M> {
+    fn record_at<T>(&self, pc: usize, read: impl FnOnce(&PcRecord) -> T) -> T {
+        let history = self.loop_history.borrow();
+        match history.records.get(&pc) {
+            Some(record) => read(record),
+            None => read(&PcRecord::default()),
+        }
+    }
+
+    fn update_record<T>(&self, pc: usize, write: impl FnOnce(&mut PcRecord) -> T) -> T {
+        write(
+            self.loop_history
+                .borrow_mut()
+                .records
+                .entry(pc)
+                .or_default(),
+        )
+    }
+
+    fn out_of_tries(&self, pc: usize) -> bool {
+        self.record_at(pc, |record| LOOP_BUDGET.exhausted(record))
+    }
+
     pub(super) fn validate_summary(
         &mut self,
         instance: usize,
@@ -178,13 +278,13 @@ impl<M: Machine> Engine<M> {
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
         let explored = self.run(next, depth);
-        let Some(retry) = self.ledger.borrow_mut().refute(instance) else {
+        let Verdict::Refuted { retry } = self.ledger.borrow_mut().refute(instance) else {
             let mut fallback = fallback;
             let continues = next == jump_dest;
             if !matches!(fallback.decide_from_solver(&condition), Decision::Explore) {
                 return explored.map(|()| BranchOutcome::BothExplored);
             }
-            fallback.loop_attempts.remove(&pc);
+            fallback.loops.attempts.remove(&pc);
             let here = fallback.branch_point(pc, &condition);
             let leaves = if continues { pc + 1 } else { jump_dest };
             let left = fallback.explore_arm(here, !continues, leaves, depth);
@@ -192,20 +292,10 @@ impl<M: Machine> Engine<M> {
         };
         log::info!("summary {instance} at line {pc} failed its inductive check, exploring again");
         *self = fallback;
-        let refutations = {
-            let mut ledger = self.ledger.borrow_mut();
-            let refutations = ledger.refutations_at.entry(pc).or_insert(0);
-            *refutations += 1;
-            *refutations
-        };
-        if refutations >= MAX_REFUTATIONS {
-            self.failed_summaries
-                .borrow_mut()
-                .insert(pc, MAX_SUMMARY_TRIES);
-        }
+        self.update_record(pc, |record| record.refutations += 1);
         match retry {
-            Some(attempt) => self.loop_attempts.insert(pc, attempt),
-            None => self.loop_attempts.remove(&pc),
+            Some(attempt) => self.loops.attempts.insert(pc, attempt),
+            None => self.loops.attempts.remove(&pc),
         };
         let decision = self.decide(pc, depth, &condition);
         self.follow_branch(pc, condition, decision, jump_dest, depth)
@@ -288,7 +378,7 @@ impl<M: Machine> Engine<M> {
     ) -> Option<bool> {
         log::info!("jump condition: {}", expression.clone());
 
-        if let Some(active) = self.active_loops.last().cloned()
+        if let Some(active) = self.loops.active.last().cloned()
             && active.pc == pc
         {
             match self.discharge_active_loop(active, expression.clone()) {
@@ -327,7 +417,7 @@ impl<M: Machine> Engine<M> {
 
     fn repeats_unboundedly(&self, pc: usize, taken: bool, expression: &AbstractComparison) -> bool {
         if expression.get_abstracts().is_empty()
-            || self.active_loops.iter().any(|open| open.pc == pc)
+            || self.loops.active.iter().any(|open| open.pc == pc)
         {
             return false;
         }
@@ -368,11 +458,11 @@ impl<M: Machine> Engine<M> {
             AbstractExpression::Immediate(0),
             AbstractExpression::Register(Box::new(tested.clone())),
         );
-        if self.costly_latches.contains(&pc) {
+        if self.loops.costly_latches.contains(&pc) {
             return Some((condition, label));
         }
         let now = (self.instructions_run, tested.offset);
-        if let Some((run_before, value_before)) = self.concrete_latch_visits.insert(pc, now) {
+        if let Some((run_before, value_before)) = self.loops.concrete_latch_visits.insert(pc, now) {
             let closing = value_before - tested.offset;
             let per_iteration = (self.instructions_run - run_before) as i64;
             if closing != 0 && tested.offset.signum() == closing.signum() {
@@ -381,7 +471,7 @@ impl<M: Machine> Engine<M> {
                     log::info!(
                         "line {pc} would unroll {remaining} more iterations of {per_iteration} instructions, tracking it as a loop guard"
                     );
-                    self.costly_latches.insert(pc);
+                    self.loops.costly_latches.insert(pc);
                     return Some((condition, label));
                 }
             }
@@ -395,7 +485,7 @@ impl<M: Machine> Engine<M> {
         taken: bool,
         expression: &AbstractComparison,
     ) -> bool {
-        if self.active_loops.iter().any(|open| open.pc == pc) {
+        if self.loops.active.iter().any(|open| open.pc == pc) {
             return false;
         }
         let mut visits = self
@@ -603,7 +693,7 @@ impl<M: Machine> Engine<M> {
             Err(decline) => {
                 decline.report(pc);
                 if decline.counts_as_failure() {
-                    *self.failed_summaries.borrow_mut().entry(pc).or_insert(0) += 1;
+                    self.update_record(pc, |record| record.failures += 1);
                 }
                 None
             }
@@ -622,18 +712,19 @@ impl<M: Machine> Engine<M> {
         let cells = self.abstract_cells(pc, &cycle);
         let mut draft =
             self.draft_summary(pc, expression, &cycle, &attempt, &mut observation, cells);
-        self.loop_attempts.insert(pc, attempt);
+        self.loops.attempts.insert(pc, attempt);
         self.justify_facts(pc, expression, &cycle, &mut draft.summary)?;
         self.install(pc, depth, &cycle, observation, draft)
     }
 
     fn locate_cycle(&self, pc: usize, expression: &AbstractComparison) -> Result<Cycle, Decline> {
-        if self.active_loops.iter().any(|open| open.pc == pc) {
+        if self.loops.active.iter().any(|open| open.pc == pc) {
             return Err(Decline::AlreadyOpen);
         }
         let history = self.jump_history.clone();
         let this_iteration = self
-            .active_loops
+            .loops
+            .active
             .last()
             .map_or(0, |open| open.history_len.min(history.len()));
         let (index, record) = history
@@ -647,8 +738,7 @@ impl<M: Machine> Engine<M> {
         if self.reads_a_changing_load(expression, &previous.state) {
             return Err(Decline::ChangingLoad);
         }
-        let failures = self.failed_summaries.borrow().get(&pc).copied();
-        if failures.is_some_and(|n| n >= MAX_SUMMARY_TRIES) {
+        if self.out_of_tries(pc) {
             return Err(Decline::OutOfTries);
         }
         if let Some((source, header, walked)) =
@@ -663,7 +753,8 @@ impl<M: Machine> Engine<M> {
         }
         if let Some((_, _, walked)) = self.cycle_back_edge(pc, continues, &history[index + 1..])
             && let Some(open) = self
-                .active_loops
+                .loops
+                .active
                 .iter()
                 .find(|open| walked.contains(&open.pc))
         {
@@ -708,7 +799,7 @@ impl<M: Machine> Engine<M> {
 
     fn next_attempt(&self, pc: usize, observation: &Observation) -> Result<LoopAttempt, Decline> {
         let observed = &observation.invariants;
-        let mut attempt = match self.loop_attempts.get(&pc) {
+        let mut attempt = match self.loops.attempts.get(&pc) {
             Some(earlier) if earlier.widened => LoopAttempt {
                 widened: false,
                 ..earlier.clone()
@@ -728,11 +819,9 @@ impl<M: Machine> Engine<M> {
                 rejected_bounds: Vec::new(),
             },
         };
-        if let Some(unstable) = self.unstable_registers.borrow().get(&pc) {
-            for &i in unstable {
-                if let Some(invariant) = attempt.invariants.get_mut(i) {
-                    *invariant = LoopInvariant::Unknown;
-                }
+        for i in self.record_at(pc, |record| record.unstable_registers.clone()) {
+            if let Some(invariant) = attempt.invariants.get_mut(i) {
+                *invariant = LoopInvariant::Unknown;
             }
         }
         if let Some((i, _)) = attempt.invariants.iter().enumerate().find(|(i, inv)| {
@@ -756,12 +845,7 @@ impl<M: Machine> Engine<M> {
             .previous
             .journal_len
             .min(self.computer.write_journal().len());
-        let unstable_cells = self
-            .unstable_cells
-            .borrow()
-            .get(&pc)
-            .cloned()
-            .unwrap_or_default();
+        let unstable_cells = self.record_at(pc, |record| record.unstable_cells.clone());
         let mut cells: Vec<(MemoryCell, LoopInvariant)> =
             cells_written(&self.computer.write_journal()[cycle_start..])
                 .into_iter()
@@ -928,12 +1012,7 @@ impl<M: Machine> Engine<M> {
                 })
             })
             .collect();
-        let uncarried = self
-            .uncarried_branches
-            .borrow()
-            .get(&pc)
-            .cloned()
-            .unwrap_or_default();
+        let uncarried = self.record_at(pc, |record| record.uncarried.clone());
         let unusable: Vec<AbstractComparison> = summary
             .branch_facts
             .iter()
@@ -1058,7 +1137,7 @@ impl<M: Machine> Engine<M> {
         }
 
         self.computer.set_state(summarized);
-        if self.unstable_slots.borrow().contains(&pc) {
+        if self.record_at(pc, |record| record.unstable_slots) {
             self.computer.set_symbolic_slots(Vec::new());
         }
         let kept = self
@@ -1084,7 +1163,9 @@ impl<M: Machine> Engine<M> {
             self.computer.write_cell(cell, generalized);
         }
         let journal_after_summary = self.computer.write_journal().len();
-        self.value_ranges.extend(summary.ranges.iter().cloned());
+        self.loops
+            .value_ranges
+            .extend(summary.ranges.iter().cloned());
         self.computer.set_flags(summary.flags.clone());
         let invariants = summary.invariants.clone();
         let exit_facts = summary.exit_facts.clone();
@@ -1100,9 +1181,9 @@ impl<M: Machine> Engine<M> {
             ledger.next_instance += 1;
             ledger.next_instance
         };
-        self.relied_on.push(instance);
-        self.pending_summary = Some((instance, Box::new(fallback)));
-        self.active_loops.push(ActiveLoop {
+        self.loops.relied_on.push(instance);
+        self.loops.pending = Some((instance, Box::new(fallback)));
+        self.loops.active.push(ActiveLoop {
             id,
             instance,
             pc,
@@ -1226,7 +1307,7 @@ impl<M: Machine> Engine<M> {
     }
 
     fn select_bound(&self, name: &str, fuel: usize) -> Option<i64> {
-        if let Some(bound) = self.value_ranges.get(name) {
+        if let Some(bound) = self.loops.value_ranges.get(name) {
             return Some(*bound);
         }
         let (_, taken, skipped) = self.computer.select_definitions().get(name)?;
@@ -1254,12 +1335,7 @@ impl<M: Machine> Engine<M> {
         entry: &[RegisterValue],
         current: &[RegisterValue],
     ) -> Vec<LoopInvariant> {
-        let unstable = self
-            .unstable_registers
-            .borrow()
-            .get(&pc)
-            .cloned()
-            .unwrap_or_default();
+        let unstable = self.record_at(pc, |record| record.unstable_registers.clone());
         invariants
             .iter()
             .zip(entry.iter().zip(current.iter()))
@@ -1412,6 +1488,7 @@ impl<M: Machine> Engine<M> {
                 .flat_map(|e| e.get_abstracts())
                 .collect();
             let relevant: Vec<&(AbstractExpression, Vec<AbstractExpression>)> = self
+                .loops
                 .closed_counters
                 .iter()
                 .rev()
@@ -1527,6 +1604,7 @@ impl<M: Machine> Engine<M> {
         current: &mut MachineState,
     ) {
         let closed: Vec<String> = self
+            .loops
             .closed_counters
             .iter()
             .filter_map(|(counter, _)| match counter {
@@ -1668,7 +1746,7 @@ impl<M: Machine> Engine<M> {
         ghosts: &[Ghost],
         continuing_now: &AbstractComparison,
     ) -> Vec<SettledSelectStep> {
-        if self.refuted_select_steps.borrow().contains(&summary.pc) {
+        if self.record_at(summary.pc, |record| record.select_refuted) {
             return Vec::new();
         }
         let counter = summary.counter.clone();
@@ -2229,24 +2307,21 @@ impl<M: Machine> Engine<M> {
                 *inv = active.invariants[i].clone();
             }
         }
-        {
-            let mut unstable = self.unstable_registers.borrow_mut();
-            let known = unstable.entry(active.pc).or_default();
+        self.update_record(active.pc, |record| {
             for (i, inv) in joined.iter().enumerate() {
                 if *inv == LoopInvariant::Unknown && active.invariants[i] != LoopInvariant::Unknown
                 {
-                    known.insert(i);
+                    record.unstable_registers.insert(i);
                 }
             }
-        }
-        let failures = self.failed_summaries.borrow().get(&active.pc).copied();
-        if failures.is_some_and(|n| n >= MAX_SUMMARY_TRIES) {
+        });
+        if self.out_of_tries(active.pc) {
             return;
         }
         if joined == active.invariants && unbounded.is_empty() {
             return;
         }
-        let earlier = match self.loop_attempts.get(&active.pc) {
+        let earlier = match self.loops.attempts.get(&active.pc) {
             Some(earlier) => LoopAttempt {
                 id: active.id,
                 ..earlier.clone()
@@ -2263,7 +2338,7 @@ impl<M: Machine> Engine<M> {
             return;
         };
         retry.rejected_bounds.extend(unbounded);
-        self.loop_attempts.insert(active.pc, retry);
+        self.loops.attempts.insert(active.pc, retry);
         log::info!(
             "{} at line {} widening after a failed inductive check",
             active.id,
@@ -2284,7 +2359,7 @@ impl<M: Machine> Engine<M> {
         self.keep_facts(kept);
         self.rebuild_scopes(above);
         self.jump_history.truncate(active.history_len);
-        self.loop_attempts.remove(&active.pc);
+        self.loops.attempts.remove(&active.pc);
     }
 
     fn fresh_bounds_since(&self, from: usize) -> Vec<ast::Bool> {
@@ -2299,13 +2374,13 @@ impl<M: Machine> Engine<M> {
         for fact in &facts {
             self.computer.solver().assert(fact);
         }
-        if let Some(enclosing) = self.active_loops.last_mut() {
+        if let Some(enclosing) = self.loops.active.last_mut() {
             enclosing.nested_facts.extend(facts);
         }
     }
 
     pub(super) fn suspend_for_call(&mut self, pc: usize) {
-        let loops = std::mem::take(&mut self.active_loops);
+        let loops = std::mem::take(&mut self.loops.active);
         log::info!(
             "suspended {} loop(s) across the call at line {pc}",
             loops.len()
@@ -2321,14 +2396,14 @@ impl<M: Machine> Engine<M> {
         let Some(call) = self.suspended.pop() else {
             return;
         };
-        while let Some(inner) = self.active_loops.pop() {
+        while let Some(inner) = self.loops.active.pop() {
             log::info!("{} released at the return", inner.id);
             self.release_loop(&inner);
         }
         self.jump_history
             .truncate(call.history_len.min(self.jump_history.len()));
         log::info!("resumed {} loop(s) after the call", call.loops.len());
-        self.active_loops = call.loops;
+        self.loops.active = call.loops;
     }
 
     fn plausible(
@@ -2528,12 +2603,13 @@ impl<M: Machine> Engine<M> {
     ) -> bool {
         let current = self.computer.get_state();
         let Some(entry) = self
-            .round_entries
+            .loops
+            .rounds
             .get(&pc)
             .filter(|entry| entry.exit == exit)
             .cloned()
         else {
-            self.round_entries.insert(
+            self.loops.rounds.insert(
                 pc,
                 RoundEntry {
                     exit,
@@ -2551,7 +2627,7 @@ impl<M: Machine> Engine<M> {
                 self.path_ends = true;
                 return true;
             }
-            self.round_entries.insert(
+            self.loops.rounds.insert(
                 pc,
                 RoundEntry {
                     exit,
@@ -2576,7 +2652,7 @@ impl<M: Machine> Engine<M> {
                 generalization: None,
             },
         };
-        self.round_entries.insert(pc, entry);
+        self.loops.rounds.insert(pc, entry);
         false
     }
 
@@ -2832,7 +2908,7 @@ impl<M: Machine> Engine<M> {
                 .iter()
                 .map(|record| (record.point.condition.clone(), record.taken))
                 .collect();
-            self.active_loops.pop();
+            self.loops.active.pop();
             self.release_loop(&active);
             self.jump_history
                 .retain(|record| record.point.pc != active.pc);
@@ -2897,7 +2973,7 @@ impl<M: Machine> Engine<M> {
 
         let above = self.scopes_above(active.scope_id);
         self.pop_scope(active.scope_id);
-        self.active_loops.pop();
+        self.loops.active.pop();
         let left_by = if active.entry_decision {
             expression.not()
         } else {
@@ -2922,7 +2998,7 @@ impl<M: Machine> Engine<M> {
                     .collect();
             if !values.is_empty() {
                 log::info!("{} leaves with its counter at one of {values:?}", active.id);
-                self.closed_counters.push((counter, values));
+                self.loops.closed_counters.push((counter, values));
             }
         }
         let mut kept: Vec<ast::Bool> = summary_fact_to_ast(&left_by).into_iter().collect();
@@ -2944,7 +3020,7 @@ impl<M: Machine> Engine<M> {
         for record in &mut self.jump_history {
             record.resolved |= record.point.pc == active.pc;
         }
-        self.loop_attempts.remove(&active.pc);
+        self.loops.attempts.remove(&active.pc);
         self.rebuild_scopes(above);
         if self.computer.solver().check() == SatResult::Unsat {
             log::info!(
@@ -3117,27 +3193,16 @@ impl<M: Machine> Engine<M> {
             }
         }
         let cells_hold = drifting_cells.is_empty();
-        if !cells_hold {
-            self.unstable_cells
-                .borrow_mut()
-                .entry(active.pc)
-                .or_default()
-                .extend(drifting_cells);
-        }
-        if !steps_hold {
-            self.refuted_select_steps.borrow_mut().insert(active.pc);
-        }
-        if !uncarried.is_empty() {
-            let mut known = self.uncarried_branches.borrow_mut();
-            let at_loop = known.entry(active.pc).or_default();
-            let before = at_loop.len();
-            at_loop.extend(uncarried.iter().copied());
-            if at_loop.len() > before {
-                self.loop_attempts.remove(&active.pc);
-            }
-        }
-        if !slots_hold {
-            self.unstable_slots.borrow_mut().insert(active.pc);
+        let newly_uncarried = self.update_record(active.pc, |record| {
+            record.unstable_cells.extend(drifting_cells);
+            record.select_refuted |= !steps_hold;
+            record.unstable_slots |= !slots_hold;
+            let before = record.uncarried.len();
+            record.uncarried.extend(uncarried.iter().copied());
+            record.uncarried.len() > before
+        });
+        if newly_uncarried {
+            self.loops.attempts.remove(&active.pc);
         }
         let read_by_guard = registers_in(expression);
         let current = self.computer.get_state();
@@ -3148,31 +3213,28 @@ impl<M: Machine> Engine<M> {
                     .into_iter()
                     .all(|r| !self.computer.carries_region(r) && !read_by_guard.contains(r))
             });
-        if !only_data_moved
-            && self
-                .counted_failures
-                .borrow_mut()
-                .insert((active.pc, active.id, active.round))
-        {
-            *self
-                .failed_summaries
-                .borrow_mut()
-                .entry(active.pc)
-                .or_insert(0) += 1;
+        if !only_data_moved {
+            self.update_record(active.pc, |record| {
+                if record.counted.insert((active.id, active.round)) {
+                    record.failures += 1;
+                }
+            });
         }
         self.widen_for_retry(active, observed, unbounded);
         if !cells_hold || !slots_hold {
-            let mut retries = self.cell_retries.borrow_mut();
-            let used = retries.entry(active.pc).or_insert(0);
-            if *used < MAX_CELL_RETRIES {
-                *used += 1;
-                self.loop_attempts.remove(&active.pc);
+            let retried = self.update_record(active.pc, |record| {
+                let retried = record.cell_retries < LOOP_BUDGET.cell_retries;
+                record.cell_retries += usize::from(retried);
+                retried
+            });
+            if retried {
+                self.loops.attempts.remove(&active.pc);
             }
         }
         self.ledger.borrow_mut().failures.push(FailedDischarge {
             instance: active.instance,
-            relied_on: self.relied_on.clone(),
-            retry: self.loop_attempts.get(&active.pc).cloned(),
+            relied_on: self.loops.relied_on.clone(),
+            retry: self.loops.attempts.get(&active.pc).cloned(),
         });
     }
 }

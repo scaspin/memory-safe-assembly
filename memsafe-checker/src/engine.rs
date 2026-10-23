@@ -8,8 +8,6 @@ const MAX_BRANCH_DEPTH: usize = 32;
 const MAX_JUMP_HISTORY: usize = 30;
 const MIN_REVISITS_PER_BRANCH: usize = 20;
 const MAX_SPLIT_VALUES: usize = 4;
-const MAX_SUMMARY_TRIES: usize = 3;
-const MAX_REFUTATIONS: usize = 8;
 const MAX_SELECT_CHAIN: usize = 16;
 const SUMMARY_ITERATION: i64 = 3;
 const DECIDED_REPEATS_BEFORE_SUMMARY: usize = 3;
@@ -232,38 +230,23 @@ pub type ExecutionEngine = Engine<ARMCORTEXA>;
 pub struct Engine<M: Machine> {
     program: Rc<Program<M::Instruction>>,
     computer: M,
-    active_loops: Vec<ActiveLoop>,
-    loop_attempts: BTreeMap<usize, LoopAttempt>,
+    loops: PathLoops<M>,
+    loop_history: Rc<RefCell<LoopHistory>>,
     jump_history: Vec<JumpRecord>,
     concrete_decisions: BTreeMap<usize, bool>,
-    closed_counters: Vec<(AbstractExpression, Vec<AbstractExpression>)>,
     instructions_run: usize,
-    concrete_latch_visits: BTreeMap<usize, (usize, i64)>,
-    costly_latches: BTreeSet<usize>,
     select_history: Vec<usize>,
-    value_ranges: BTreeMap<String, i64>,
     fail_fast: bool,
     summaries: Rc<RefCell<Vec<Summary>>>,
-    failed_summaries: Rc<RefCell<BTreeMap<usize, usize>>>,
     dead_registers: Rc<RefCell<BTreeMap<usize, Rc<Vec<usize>>>>>,
-    unstable_registers: Rc<RefCell<BTreeMap<usize, BTreeSet<usize>>>>,
-    unstable_cells: Rc<RefCell<BTreeMap<usize, BTreeSet<MemoryCell>>>>,
-    unstable_slots: Rc<RefCell<BTreeSet<usize>>>,
-    cell_retries: Rc<RefCell<BTreeMap<usize, usize>>>,
-    refuted_select_steps: Rc<RefCell<BTreeSet<usize>>>,
-    uncarried_branches: Rc<RefCell<BTreeMap<usize, BTreeSet<usize>>>>,
-    counted_failures: Rc<RefCell<BTreeSet<(usize, LoopId, usize)>>>,
     next_loop_id: Rc<Cell<usize>>,
     steps_left: Rc<Cell<usize>>,
     explored: Rc<RefCell<Explored>>,
     scopes: Vec<Scope>,
     next_scope_id: usize,
-    round_entries: BTreeMap<usize, RoundEntry>,
     path_ends: bool,
     suspended: Vec<SuspendedCall>,
     ledger: Rc<RefCell<SummaryLedger>>,
-    relied_on: Vec<usize>,
-    pending_summary: Option<(usize, Box<Engine<M>>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -333,38 +316,23 @@ impl<M: Machine> Engine<M> {
                 addresses,
             }),
             computer,
+            loops: PathLoops::new(),
+            loop_history: Rc::default(),
             jump_history: Vec::new(),
             concrete_decisions: BTreeMap::new(),
-            closed_counters: Vec::new(),
             instructions_run: 0,
-            concrete_latch_visits: BTreeMap::new(),
-            costly_latches: BTreeSet::new(),
             select_history: Vec::new(),
-            value_ranges: BTreeMap::new(),
-            active_loops: Vec::new(),
             fail_fast: true,
             summaries: Rc::new(RefCell::new(Vec::new())),
-            failed_summaries: Rc::new(RefCell::new(BTreeMap::new())),
             dead_registers: Rc::new(RefCell::new(BTreeMap::new())),
-            unstable_registers: Rc::new(RefCell::new(BTreeMap::new())),
-            unstable_cells: Rc::new(RefCell::new(BTreeMap::new())),
-            unstable_slots: Rc::new(RefCell::new(BTreeSet::new())),
-            cell_retries: Rc::new(RefCell::new(BTreeMap::new())),
-            refuted_select_steps: Rc::new(RefCell::new(BTreeSet::new())),
-            uncarried_branches: Rc::new(RefCell::new(BTreeMap::new())),
-            counted_failures: Rc::new(RefCell::new(BTreeSet::new())),
             next_loop_id: Rc::new(Cell::new(0)),
             steps_left: Rc::new(Cell::new(limit_from_env("BUMS_MAX_STEPS", steps))),
             explored: Rc::default(),
-            loop_attempts: BTreeMap::new(),
             scopes: Vec::new(),
             next_scope_id: 0,
-            round_entries: BTreeMap::new(),
             path_ends: false,
             suspended: Vec::new(),
             ledger: Rc::default(),
-            relied_on: Vec::new(),
-            pending_summary: None,
         }
     }
 
@@ -656,12 +624,12 @@ impl<M: Machine> Engine<M> {
 
     fn run(&mut self, start_pc: usize, depth: usize) -> std::io::Result<()> {
         let result = self.run_from(start_pc, depth);
-        while let Some(active) = self.active_loops.last()
+        while let Some(active) = self.loops.active.last()
             && active.depth == depth
         {
             log::info!("{} abandoned at line {}", active.id, active.pc);
             let scope_id = active.scope_id;
-            self.active_loops.pop();
+            self.loops.active.pop();
             self.pop_scope(scope_id);
         }
         result
@@ -709,15 +677,15 @@ impl<M: Machine> Engine<M> {
             .fingerprint(!M::Instruction::flags_dead(&self.program.code, pc))?;
         let mut state = format!(
             "{pc}|{fingerprint}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
-            self.active_loops,
-            self.loop_attempts,
+            self.loops.active,
+            self.loops.attempts,
             self.concrete_decisions,
-            self.closed_counters,
-            self.concrete_latch_visits,
-            self.costly_latches,
-            self.value_ranges,
-            self.round_entries,
-            self.relied_on,
+            self.loops.closed_counters,
+            self.loops.concrete_latch_visits,
+            self.loops.costly_latches,
+            self.loops.value_ranges,
+            self.loops.rounds,
+            self.loops.relied_on,
             self.suspended,
             self.scopes.iter().map(|scope| scope.id).collect::<Vec<_>>(),
         );
@@ -1154,7 +1122,7 @@ impl<M: Machine> Engine<M> {
         jump_dest: usize,
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
-        if self.active_loops.is_empty()
+        if self.loops.active.is_empty()
             && let Some((symbol, values)) = self.concrete_split(&condition)
         {
             return self.split_on(&symbol, &values, pc, depth);
@@ -1171,7 +1139,7 @@ impl<M: Machine> Engine<M> {
         jump_dest: usize,
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
-        let pending_summary = self.pending_summary.take();
+        let pending_summary = self.loops.pending.take();
         if std::mem::take(&mut self.path_ends) {
             return Ok(BranchOutcome::BothExplored);
         }
@@ -1202,7 +1170,7 @@ impl<M: Machine> Engine<M> {
                     resolved: false,
                 });
                 self.computer.clear_rw_queue();
-                if self.active_loops.last().is_none_or(|open| open.pc != pc) {
+                if self.loops.active.last().is_none_or(|open| open.pc != pc) {
                     self.add_constraint(condition.clone(), taken);
                     self.order_a_monotone_guard(pc, &condition, taken);
                 }
@@ -1308,7 +1276,7 @@ impl<M: Machine> Engine<M> {
         condition: &AbstractComparison,
         jump_dest: usize,
     ) -> Option<usize> {
-        if self.active_loops.iter().any(|open| open.pc == pc)
+        if self.loops.active.iter().any(|open| open.pc == pc)
             || comparison_to_ast(condition.clone()).is_none()
         {
             return None;
@@ -1463,7 +1431,7 @@ impl<M: Machine> Engine<M> {
         if held.op != "!=" {
             return None;
         }
-        let active = self.active_loops.last()?;
+        let active = self.loops.active.last()?;
         if active.entry_decision || !self.straight_from_the_loop_branch(pc, active.pc) {
             return None;
         }
@@ -2025,7 +1993,7 @@ mod tests {
         let _ = engine.start("start");
 
         assert!(!engine.summaries.borrow().is_empty(), "no acceleration");
-        assert!(engine.active_loops.is_empty());
+        assert!(engine.loops.active.is_empty());
     }
 
     #[test]

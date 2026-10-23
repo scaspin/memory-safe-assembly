@@ -4,7 +4,6 @@ pub(super) const WIDEST_STORED_VALUE: i64 = 16;
 const MAX_EXIT_WINDOW: i64 = 8;
 pub(super) const MAX_SETTLING_CHOICES: usize = 64;
 pub(super) const CANDIDATE_PROOF_RESOURCE_LIMIT: u32 = 50_000_000;
-pub(super) const MAX_CELL_RETRIES: usize = 4;
 
 #[derive(Debug, Clone)]
 pub(super) struct Summary {
