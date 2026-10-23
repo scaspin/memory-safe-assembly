@@ -365,6 +365,11 @@ proves the cell disjoint from $[e{+}n, e{+}n{+}w)$, bumps those regions' epochs,
 the slots it may overlap (`forget_slots_overlapping`), and records a new slot. A store
 whose region is `sp` is also recorded in `blind_stack_writes` (§6.5).
 
+**Returns (AArch64).** `x30` starts as $\langle\mathtt{return}\rangle$ and `bl`/`blr` set
+it to $\langle\mathtt{return\_to}\rangle{+}(pc{+}1)$. `ret` through $\langle\mathtt{return}\rangle$
+ends the path, through $\langle\mathtt{return\_to}\rangle{+}n$ jumps to line $n$, and
+through any other value (a literal, $\top$, a data symbol) is an error.
+
 **x86-64.** `push`/`pop`/`call`/`ret` move through the modelled stack, whose cell 0 holds
 the return address; `ret` through any other value is an error. `rep` string operations
 check the whole range they move (`store_range`, `load_range`).
@@ -411,6 +416,14 @@ $$
 An inexpressible $c$ adds nothing (a weaker $\Pi$). When the added side is an equality
 that $\Pi$ then pins to $\alpha = n$, $\alpha$ is replaced by $n$ throughout $\sigma$
 (`substitute_decided_symbol`).
+
+**Monotone guard order** (`order_a_monotone_guard`). On the $\ne$ side of a guard
+$w \ne b$ in an open loop's body, reached straight-line from the loop's branch, where
+$w = s \pm \kappa$ walks by one per round, $b$ is the same bound in the previous round,
+and $\Pi \vdash s < b$ (resp. $s > b$), $\Pi$ gains $w < b$ (resp. $w > b$). This needs
+every earlier round with $w = b$ to have left the loop, so the rule applies only when the
+$=$ arm cannot reach the loop's back edge without passing its header (`stays_in_loop`
+on the cycle of the last unrolled round).
 
 ---
 
