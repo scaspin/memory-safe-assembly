@@ -712,3 +712,76 @@ fn an_unsupported_vector_memory_instruction_is_refused() {
     let err = r.expect_err("ran a vector memory instruction it does not model");
     assert!(err.contains("unsupported memory instruction"), "{err}");
 }
+
+fn run_x86(program: &[&str], input: i64) -> Result<(), String> {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let mut engine = bums::x86::engine::ExecutionEngine::new(
+        program.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+    );
+    engine.add_abstract_from(0, "out");
+    engine.add_region(RegionType::WRITE, "out", AbstractExpression::Immediate(16));
+    engine.add_abstract_from(1, "in");
+    engine.add_region(RegionType::READ, "in", AbstractExpression::Immediate(input));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+fn x86_access(line: &str, input: i64) -> Result<(), String> {
+    run_x86(&["start:", line, "retq"], input)
+}
+
+#[test]
+fn a_narrowing_conversion_reads_its_whole_memory_source() {
+    for line in [
+        "vcvtpd2psy (%rsi), %xmm0",
+        "vcvttpd2dqy (%rsi), %xmm0",
+        "vcvtpd2dqy (%rsi), %xmm0",
+        "vcvtpd2udqy (%rsi), %xmm0",
+        "vcvtqq2psy (%rsi), %xmm0",
+        "vcvtneps2bf16y (%rsi), %xmm0",
+    ] {
+        assert!(
+            x86_access(line, 31).is_err(),
+            "{line} read fewer than 32 bytes"
+        );
+        assert_eq!(x86_access(line, 32), Ok(()), "{line}");
+    }
+    for line in ["vcvtpd2psx (%rsi), %xmm0", "cvtpd2ps (%rsi), %xmm0"] {
+        assert!(
+            x86_access(line, 15).is_err(),
+            "{line} read fewer than 16 bytes"
+        );
+        assert_eq!(x86_access(line, 16), Ok(()), "{line}");
+    }
+    for line in [
+        "vcvtpd2ps (%rsi), %ymm0",
+        "vcvttpd2dq (%rsi), %ymm0",
+        "vcvtpd2phz (%rsi), %xmm0",
+        "vfpclasspdz $1, (%rsi), %k0",
+    ] {
+        assert!(
+            x86_access(line, 63).is_err(),
+            "{line} read fewer than 64 bytes"
+        );
+    }
+    assert!(x86_access("vcvtpd2ps (%rsi), %xmm0", 31).is_err());
+    assert!(x86_access("vfpclasspdy $1, (%rsi), %k0", 31).is_err());
+}
+
+#[test]
+fn a_duplicating_load_into_a_ymm_reads_all_of_it() {
+    assert!(x86_access("vmovddup (%rsi), %ymm0", 31).is_err());
+    assert_eq!(x86_access("vmovddup (%rsi), %xmm0", 8), Ok(()));
+}
+
+#[test]
+fn narrowing_and_widening_memory_forms_are_sized_by_memory() {
+    let store = |line: &str| run_x86(&["start:", line, "retq"], 16);
+    assert_eq!(store("vpmovqd %ymm0, (%rdi)"), Ok(()));
+    assert_eq!(store("vpmovusqb %zmm0, 8(%rdi)"), Ok(()));
+    assert!(store("vpmovqb %zmm0, 9(%rdi)").is_err());
+    assert_eq!(store("vcvtps2ph $0, %ymm0, (%rdi)"), Ok(()));
+    assert_eq!(x86_access("vcvtps2pd (%rsi), %ymm0", 16), Ok(()));
+    assert!(x86_access("vcvtps2pd (%rsi), %ymm0", 15).is_err());
+    assert_eq!(x86_access("kmovw (%rsi), %k1", 2), Ok(()));
+    assert!(x86_access("kmovq (%rsi), %k1", 7).is_err());
+}

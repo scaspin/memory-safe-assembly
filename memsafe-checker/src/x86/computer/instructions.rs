@@ -250,28 +250,108 @@ fn condition_code<'a>(mnemonic: &'a str, stem: &str) -> Option<&'a str> {
         .filter(|cc| CONDITION_CODES.contains(cc))
 }
 
+const NARROWING_SOURCES: [(&str, i64); 14] = [
+    ("cvtpd2ps", 2),
+    ("cvtpd2dq", 2),
+    ("cvttpd2dq", 2),
+    ("cvtpd2udq", 2),
+    ("cvttpd2udq", 2),
+    ("cvtqq2ps", 2),
+    ("cvtuqq2ps", 2),
+    ("cvtneps2bf16", 2),
+    ("cvtps2phx", 2),
+    ("cvtdq2ph", 2),
+    ("cvtudq2ph", 2),
+    ("cvtpd2ph", 4),
+    ("cvtqq2ph", 4),
+    ("cvtuqq2ph", 4),
+];
+
+const MASK_RESULT_SOURCES: [&str; 3] = ["fpclassps", "fpclasspd", "fpclassph"];
+
+fn narrowing_source_width(m: &str, vex: bool, widest: Option<i64>) -> Option<i64> {
+    let stems = NARROWING_SOURCES
+        .iter()
+        .copied()
+        .chain(MASK_RESULT_SOURCES.iter().map(|stem| (*stem, 1)));
+    for (stem, ratio) in stems {
+        let Some(size_suffix) = m.strip_prefix(stem) else {
+            continue;
+        };
+        match size_suffix {
+            "x" => return Some(16),
+            "y" => return Some(32),
+            "z" => return Some(64),
+            "" if !vex => return Some(16),
+            "" => return Some(widest.map_or(64, |w| (w * ratio).min(64))),
+            _ => continue,
+        }
+    }
+    None
+}
+
+fn element_bytes(letter: char) -> Option<i64> {
+    match letter {
+        'b' => Some(1),
+        'w' => Some(2),
+        'd' => Some(4),
+        'q' => Some(8),
+        _ => None,
+    }
+}
+
+fn narrowing_store_ratio(m: &str) -> Option<i64> {
+    let elements = m.strip_prefix("pmov")?;
+    let elements = elements
+        .strip_prefix("us")
+        .or_else(|| elements.strip_prefix('s'))
+        .unwrap_or(elements);
+    let mut letters = elements.chars();
+    let (from, to) = (letters.next()?, letters.next()?);
+    if letters.next().is_some() {
+        return None;
+    }
+    let (from, to) = (element_bytes(from)?, element_bytes(to)?);
+    (from > to).then_some(from / to)
+}
+
 fn vector_access_width(i: &Instruction) -> i64 {
     let m = i.mnemonic.trim_start_matches('v');
-    let widest = i
+    let widest_register = i
         .operands
         .iter()
         .filter_map(|o| o.register().filter(|r| r.is_vector()).map(|r| r.width()))
-        .max()
-        .unwrap_or(16);
+        .max();
+    if let Some(width) = narrowing_source_width(m, i.mnemonic.starts_with('v'), widest_register) {
+        return width;
+    }
+    let widest = widest_register.unwrap_or(64);
+    if let Some(ratio) = narrowing_store_ratio(m) {
+        return widest / ratio;
+    }
     match m {
+        "kmovb" => 1,
+        "kmovw" => 2,
+        "kmovd" => 4,
+        "kmovq" => 8,
         "movd" | "movss" | "pinsrd" | "pextrd" | "broadcastss" | "pbroadcastd" | "insertps"
         | "extractps" | "cvtsi2ssl" | "cvtsi2sdl" => 4,
+        "movddup" if widest > 16 => widest,
         "movq" | "movsd" | "pinsrq" | "pextrq" | "movhps" | "movlps" | "movhpd" | "movlpd"
         | "broadcastsd" | "pbroadcastq" | "movddup" | "cvtsi2ssq" | "cvtsi2sdq" => 8,
         "pinsrb" | "pextrb" | "pbroadcastb" => 1,
         "pinsrw" | "pextrw" | "pbroadcastw" => 2,
         "broadcasti128" | "broadcastf128" | "inserti128" | "insertf128" | "extracti128"
         | "extractf128" | "broadcasti32x4" | "broadcastf32x4" | "broadcasti64x2"
-        | "broadcastf64x2" | "inserti32x4" | "inserti64x2" | "extracti32x4" | "extracti64x2" => 16,
+        | "broadcastf64x2" | "inserti32x4" | "inserti64x2" | "extracti32x4" | "extracti64x2"
+        | "insertf32x4" | "insertf64x2" | "extractf32x4" | "extractf64x2" => 16,
+        "broadcasti32x8" | "broadcastf32x8" | "broadcasti64x4" | "broadcastf64x4"
+        | "inserti32x8" | "insertf32x8" | "inserti64x4" | "insertf64x4" | "extracti32x8"
+        | "extractf32x8" | "extracti64x4" | "extractf64x4" => 32,
         "pmovzxbw" | "pmovsxbw" | "pmovzxwd" | "pmovsxwd" | "pmovzxdq" | "pmovsxdq" => widest / 2,
         "pmovzxbd" | "pmovsxbd" | "pmovzxwq" | "pmovsxwq" => widest / 4,
         "pmovzxbq" | "pmovsxbq" => widest / 8,
-        "cvtph2ps" => widest / 2,
+        "cvtph2ps" | "cvtps2ph" | "cvtps2pd" | "cvtdq2pd" | "cvtudq2pd" => widest / 2,
         "cvtsd2ss" | "cvtsd2si" | "cvttsd2si" => 8,
         "cvtss2sd" | "cvtss2si" | "cvttss2si" => 4,
         m if !m.starts_with('p') && m.ends_with("sd") => 8,
