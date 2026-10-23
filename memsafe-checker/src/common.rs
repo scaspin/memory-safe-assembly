@@ -477,8 +477,11 @@ pub fn generate_expression(
     b: AbstractExpression,
 ) -> AbstractExpression {
     if let AbstractExpression::Expression(inner, x, t) = &a {
-        let undone = match (op, inner.as_str()) {
-            ("asr", "lsl") | ("-", "+") | ("+", "-") => **t == b,
+        let undone = match (op, inner.as_str(), &b) {
+            ("asr", "lsl", AbstractExpression::Immediate(k)) if (0..64).contains(k) => {
+                **t == b && fits_signed(x, 64 - *k as u32)
+            }
+            ("-", "+", _) | ("+", "-", _) => **t == b,
             _ => false,
         };
         if undone {
@@ -1095,6 +1098,22 @@ fn mask_modulus(expression: &AbstractExpression) -> Option<i64> {
                 .then_some(mask + 1)
         }
         _ => None,
+    }
+}
+
+fn fits_signed(expression: &AbstractExpression, bits: u32) -> bool {
+    match expression {
+        AbstractExpression::Immediate(v) => {
+            let half = 1i128 << (bits - 1);
+            (-half..half).contains(&(*v as i128))
+        }
+        AbstractExpression::Expression(op, _, width) => match (op.as_str(), width.as_ref()) {
+            ("sext", AbstractExpression::Immediate(w)) => (1..=bits as i64).contains(w),
+            ("zext", AbstractExpression::Immediate(w)) => (1..bits as i64).contains(w),
+            ("&", mask) => mask_modulus(mask).is_some_and(|m| m as i128 <= 1i128 << (bits - 1)),
+            _ => false,
+        },
+        _ => false,
     }
 }
 

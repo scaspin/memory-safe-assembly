@@ -40,7 +40,6 @@
 - [ ] round generalization does not check that a covered round took the same prefix decisions as the generalized one
 - [ ] running past the end of the listing returns Ok instead of an error
 - [ ] AArch64 32-bit arguments assume clean upper bits (the ABI leaves bits 32-63 unspecified)
-- [ ] `lsl` then `asr` by the same amount cancels syntactically (§7); it is `sext` of the low 64-k bits
 
 ## Verification (sweep of 2026-10-23, `bums-check`)
 

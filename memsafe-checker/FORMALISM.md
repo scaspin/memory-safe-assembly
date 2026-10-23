@@ -174,7 +174,8 @@ A configuration is $\Gamma \vdash \langle pc, \sigma\rangle$.
 
 Terms are only ever built through $\boxplus_\oplus$, never with the raw node. It undoes
 an immediately inverted step ($(x + t) - t = x$, $(x - t) + t = x$,
-$(x \mathbin{\mathsf{lsl}} t) \mathbin{\mathsf{asr}} t = x$). For $\oplus \in \{+,-\}$ it
+$(x \mathbin{\mathsf{lsl}} k) \mathbin{\mathsf{asr}} k = x$ when $x$ is a literal, a
+$\mathsf{sext}$ or $\mathsf{zext}$, or a low-bit mask that fits in $64-k$ signed bits). For $\oplus \in \{+,-\}$ it
 flattens both sides into a signed list of atoms and a constant, cancels opposite equal
 atoms, and folds literals:
 
@@ -1045,7 +1046,7 @@ for some extension of $\theta$:
 
 | Rule | Obligation | Status |
 |---|---|---|
-| §2.1–§2.3 | Value operations and $[\![\cdot]\!]$ agree with machine arithmetic | **Only modulo wrap.** $[\![\cdot]\!]$ is over $\mathbb{Z}$, literals fold with saturation, and $\mathsf{lsl}$ then $\mathsf{asr}$ cancels syntactically. An access reached through 64-bit overflow is not modelled (open TODO). |
+| §2.1–§2.3 | Value operations and $[\![\cdot]\!]$ agree with machine arithmetic | **Only modulo wrap.** $[\![\cdot]\!]$ is over $\mathbb{Z}$ and literals fold with saturation. An access reached through 64-bit overflow is not modelled (open TODO). |
 | $\mathsf{opaque}$, $\top$, $\mathsf{cap}$ | Over-approximation: any concrete value extends $\theta$ | Holds: all are unconstrained symbols. |
 | §3 loads and stores | Cells, slots and names describe memory | Holds by construction: a write the engine cannot place forgets every cell not proved disjoint and bumps the epoch. |
 | **(Br-\*)**, **(Split)** | Every concrete successor is covered | Holds: an arm is pruned only on `Unsat`; an inexpressible guard explores both; **(Split)** covers all values because the enumeration ran to `Unsat`. |

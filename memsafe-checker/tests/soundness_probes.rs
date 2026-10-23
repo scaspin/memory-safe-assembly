@@ -834,3 +834,37 @@ fn a_return_through_the_restored_link_is_accepted() {
     );
     assert_eq!(r, Ok(()));
 }
+
+#[test]
+fn shift_pair_does_not_cancel_past_the_sign_bit() {
+    let r = run(
+        &[
+            "start:",
+            "ldrb w1, [x0]",
+            "lsl x1, x1, #60",
+            "asr x1, x1, #60",
+            "ldrb w2, [x0, x1]",
+            "ret",
+        ],
+        Some(256),
+        &[],
+    );
+    assert!(r.is_err(), "unsafe program accepted: {:?}", r);
+}
+
+#[test]
+fn shift_pair_within_the_sign_bit_keeps_the_value() {
+    let r = run(
+        &[
+            "start:",
+            "ldrb w1, [x0]",
+            "lsl x1, x1, #32",
+            "asr x1, x1, #32",
+            "ldrb w2, [x0, x1]",
+            "ret",
+        ],
+        Some(256),
+        &[],
+    );
+    assert!(r.is_ok(), "{:?}", r);
+}
