@@ -17,6 +17,7 @@ pub(crate) use simd::{
     arrangement_of, range_fits_lane, split_vector_operands, vector_access_width, vector_index,
 };
 
+pub const RETURN_TO: &str = "return_to";
 pub const MAX_EXPRESSION_NODES: usize = 150;
 const WORD_FIT_RESOURCE_LIMIT: u32 = 5_000_000;
 

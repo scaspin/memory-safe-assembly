@@ -810,8 +810,8 @@ impl ARMCORTEXA {
                     let target = self.get_register(&instruction.operands[0]);
                     self.set_register(
                         &Operand::Register(RePrefix::X, 30),
-                        RegisterKind::Immediate,
-                        None,
+                        RegisterKind::RegisterBase,
+                        Some(AbstractExpression::Abstract(RETURN_TO.to_string())),
                         (pc + 1) as i64,
                     );
                     return Ok(ExecuteReturnType::JumpIndirect(target));
@@ -855,8 +855,8 @@ impl ARMCORTEXA {
                     if let Operand::Label(label) = &instruction.operands[0] {
                         self.set_register(
                             &Operand::Register(RePrefix::X, 30),
-                            RegisterKind::Immediate,
-                            None,
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(RETURN_TO.to_string())),
                             (pc + 1) as i64,
                         );
                         return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
@@ -1551,32 +1551,21 @@ impl ARMCORTEXA {
                         .cloned()
                         .unwrap_or(Operand::Register(RePrefix::X, 30));
                     let x30 = self.get_register(&link);
-                    match x30.kind {
-                        RegisterKind::RegisterBase => {
-                            if let Some(AbstractExpression::Abstract(address)) = x30.base {
-                                if address == "return" && x30.offset == 0 {
-                                    return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                                } else {
-                                    return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
-                                }
-                            }
-                            return Ok(ExecuteReturnType::JumpAddress(
-                                x30.offset
-                                    .try_into()
-                                    .expect("ret: return address must be non-negative"),
-                            ));
+                    return match (&x30.kind, &x30.base) {
+                        (RegisterKind::RegisterBase, Some(AbstractExpression::Abstract(name)))
+                            if name == RETURN_TO =>
+                        {
+                            usize::try_from(x30.offset)
+                                .map(|line| ExecuteReturnType::JumpAddress(line as u128))
+                                .map_err(|_| "return to a negative line".to_string())
                         }
-                        RegisterKind::Immediate => {
-                            return Ok(ExecuteReturnType::JumpAddress(
-                                x30.offset
-                                    .try_into()
-                                    .expect("ret: return address must be non-negative"),
-                            ));
+                        (RegisterKind::RegisterBase, Some(AbstractExpression::Abstract(name)))
+                            if name == "return" && x30.offset == 0 =>
+                        {
+                            Ok(ExecuteReturnType::JumpLabel(name.clone()))
                         }
-                        RegisterKind::Number => {
-                            return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                        }
-                    }
+                        _ => Err(format!("return to an unknown address {}", x30.expression())),
+                    };
                 }
                 "mov" | "movz" | "movk" => {
                     let mut reg_iter = instruction.operands.iter().clone();

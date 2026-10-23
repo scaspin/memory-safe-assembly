@@ -785,3 +785,52 @@ fn narrowing_and_widening_memory_forms_are_sized_by_memory() {
     assert_eq!(x86_access("kmovw (%rsi), %k1", 2), Ok(()));
     assert!(x86_access("kmovq (%rsi), %k1", 7).is_err());
 }
+
+#[test]
+fn a_return_through_a_saved_link_overwritten_with_data_is_refused() {
+    let r = run(
+        &[
+            "start:",
+            "stp x29, x30, [sp, #-48]!",
+            "ldr w2, [x0]",
+            "smull x2, w2, w2",
+            "add x4, sp, #16",
+            "str x2, [x4, #-8]",
+            "ldp x29, x30, [sp], #48",
+            "ret",
+        ],
+        Some(8),
+        &[],
+    );
+    let err = r.expect_err("returned through a link register computed from data");
+    assert!(err.contains("return to an unknown address"), "{err}");
+}
+
+#[test]
+fn a_return_through_a_constant_link_is_refused() {
+    let r = run(&["start:", "mov x30, #1", "ret"], Some(8), &[]);
+    assert!(
+        r.is_err(),
+        "returned to a line number as if it were an address"
+    );
+}
+
+#[test]
+fn a_return_through_the_restored_link_is_accepted() {
+    let r = run(
+        &[
+            "start:",
+            "stp x29, x30, [sp, #-32]!",
+            "mov x29, sp",
+            "bl helper",
+            "ldp x29, x30, [sp], #32",
+            "ret",
+            "helper:",
+            "ldr x3, [x0]",
+            "ret",
+        ],
+        Some(8),
+        &[],
+    );
+    assert_eq!(r, Ok(()));
+}
