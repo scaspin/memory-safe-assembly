@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 use z3::*;
 
 use crate::instruction_parser::{self, Arrangement};
+pub use crate::profile::TimedSolver;
+use crate::profile::{self, Phase};
 
 const PATH_RESOURCE_LIMIT: u32 = 2_000_000;
 const ESCALATION: [(ArithmeticEngine, u32, Duration); 5] = [
@@ -71,6 +73,7 @@ pub fn check(solver: &Solver, assumptions: &[ast::Bool]) -> SatResult {
 }
 
 pub fn check_within(solver: &Solver, assumptions: &[ast::Bool], budget: Duration) -> SatResult {
+    let _solving = profile::enter(Phase::Solver);
     let deadline = Instant::now() + budget;
     let left = |cap: Duration| deadline.saturating_duration_since(Instant::now()).min(cap);
     let bounded = |solver: &Solver, units: u32, cap: Duration, run: &dyn Fn() -> SatResult| {

@@ -4,6 +4,7 @@ pub mod engine;
 pub mod instruction_parser;
 pub mod loader;
 pub mod machine;
+pub mod profile;
 pub mod widening;
 pub mod x86;
 

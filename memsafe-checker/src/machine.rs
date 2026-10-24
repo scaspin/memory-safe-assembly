@@ -444,7 +444,7 @@ pub trait Machine: Clone {
                     let slot_end = ast::Int::add(&[&slot_start, &ast::Int::from_i64(slot_width)]);
                     let end = ast::Int::add(&[start, &ast::Int::from_i64(width)]);
                     let overlap = ast::Bool::and(&[&start.lt(&slot_end), &slot_start.lt(&end)]);
-                    self.solver().check_assumptions(&[overlap]) == SatResult::Unsat
+                    self.solver().check_timed(&[overlap]) == SatResult::Unsat
                 });
                 if !apart {
                     self.forget_cell(&name, k);
@@ -538,7 +538,7 @@ pub trait Machine: Clone {
                 .iter()
                 .map(|v| var.eq(ast::Int::from_i64(*v)).not())
                 .collect();
-            match self.solver().check_assumptions(&excluded) {
+            match self.solver().check_timed(&excluded) {
                 SatResult::Unsat => return Some(found),
                 SatResult::Unknown => return None,
                 SatResult::Sat => {
@@ -561,7 +561,7 @@ pub trait Machine: Clone {
         .into_iter()
         .all(|fact| {
             comparison_to_ast(fact)
-                .is_some_and(|c| self.solver().check_assumptions(&[c.not()]) == SatResult::Unsat)
+                .is_some_and(|c| self.solver().check_timed(&[c.not()]) == SatResult::Unsat)
         })
     }
 }

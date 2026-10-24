@@ -77,7 +77,7 @@ impl ARMCORTEXA {
         let Some(term) = expression_to_ast(displacement) else {
             return address;
         };
-        if self.solver.check() != SatResult::Sat {
+        if self.solver.check_timed(&[]) != SatResult::Sat {
             return address;
         }
         let Some(value) = self
@@ -90,7 +90,7 @@ impl ARMCORTEXA {
         };
         if self
             .solver
-            .check_assumptions(&[term.eq(ast::Int::from_i64(value)).not()])
+            .check_timed(&[term.eq(ast::Int::from_i64(value)).not()])
             != SatResult::Unsat
         {
             return address;
@@ -234,7 +234,7 @@ impl ARMCORTEXA {
             generate_expression("%", within, AbstractExpression::Immediate(width)),
             AbstractExpression::Immediate(0),
         ))
-        .is_some_and(|misaligned| self.solver.check_assumptions(&[misaligned]) == SatResult::Unsat)
+        .is_some_and(|misaligned| self.solver.check_timed(&[misaligned]) == SatResult::Unsat)
     }
 
     fn element_read(&self, region: &str, address: &RegisterValue, width: i64) -> bool {
@@ -298,7 +298,7 @@ impl ARMCORTEXA {
         needed
             .into_iter()
             .all(|fact| match comparison_to_ast(fact) {
-                Some(c) => self.solver.check_assumptions(&[c.not()]) == SatResult::Unsat,
+                Some(c) => self.solver.check_timed(&[c.not()]) == SatResult::Unsat,
                 None => false,
             })
     }
@@ -573,15 +573,15 @@ impl ARMCORTEXA {
             &index_ast.lt(ast::Int::from_i64(0)),
             &index_ast.gt(ast::Int::from_i64(length - width)),
         ]);
-        if self.solver.check_assumptions(&[misaligned]) != SatResult::Unsat
-            || self.solver.check_assumptions(&[outside]) != SatResult::Unsat
+        if self.solver.check_timed(&[misaligned]) != SatResult::Unsat
+            || self.solver.check_timed(&[outside]) != SatResult::Unsat
         {
             return TableLoad::NotATable;
         }
         let mut entries = Vec::new();
         for entry in (0..=length - width).step_by(width as usize) {
             let pinned = index_ast.eq(ast::Int::from_i64(entry));
-            if self.solver.check_assumptions(&[pinned]) != SatResult::Unsat {
+            if self.solver.check_timed(&[pinned]) != SatResult::Unsat {
                 if entries.len() == MAX_CASES {
                     return TableLoad::NotATable;
                 }
@@ -611,7 +611,7 @@ impl ARMCORTEXA {
     }
 
     pub(crate) fn model_symbols(&self) -> Vec<String> {
-        if self.solver.check() != SatResult::Sat {
+        if self.solver.check_timed(&[]) != SatResult::Sat {
             return Vec::new();
         }
         let Some(model) = self.solver.get_model() else {
@@ -631,8 +631,8 @@ impl ARMCORTEXA {
             let var = ast::Int::new_const(symbol.to_string());
             let settled = values.iter().all(|v| {
                 let pin = var.eq(ast::Int::from_i64(*v));
-                self.solver.check_assumptions(&[pin.clone(), l.clone()]) == SatResult::Unsat
-                    && self.solver.check_assumptions(&[pin, u.clone()]) == SatResult::Unsat
+                self.solver.check_timed(&[pin.clone(), l.clone()]) == SatResult::Unsat
+                    && self.solver.check_timed(&[pin, u.clone()]) == SatResult::Unsat
             });
             if settled {
                 log::info!("bounds settled by splitting {symbol} over {values:?}");
@@ -882,8 +882,8 @@ impl ARMCORTEXA {
                 }
                 if b == SatResult::Unsat
                     && let Some(below) = &below_red_zone
-                    && self.solver.check_assumptions(&with(below)) == SatResult::Unsat
-                    && self.solver.check_assumptions(&selects) == SatResult::Sat
+                    && self.solver.check_timed(&with(below)) == SatResult::Unsat
+                    && self.solver.check_timed(&selects) == SatResult::Sat
                 {
                     self.note_finding(&format!(
                         "{ty} of {width} bytes at {} is below the stack pointer, in the \
