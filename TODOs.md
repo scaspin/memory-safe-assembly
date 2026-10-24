@@ -33,7 +33,6 @@
 - [ ] pinned trip counts check only the first and last iteration; sound only for addresses affine in the loop counter (`%`, `&`, counter·symbol terms break it)
 - [ ] `&[*const T]` pointer arrays: row lengths cannot be checked at run time (reported as a finding)
 - [ ] red zone is trusted per annotation (`red_zone = 128` on `ccaes_arm_decrypt_key`)
-- [ ] bounds on fresh symbols asserted outside a scope are lost on scope rebuild (precision only; fixed on loop release)
 - [ ] AArch64 32-bit arguments assume clean upper bits (the ABI leaves bits 32-63 unspecified)
 
 ## Loop acceleration structure

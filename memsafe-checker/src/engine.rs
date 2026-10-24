@@ -276,6 +276,7 @@ struct Scope {
     id: usize,
     base: usize,
     facts: Vec<ast::Bool>,
+    fresh_bounds_before: usize,
 }
 
 impl<M: Machine> Engine<M> {
@@ -584,6 +585,7 @@ impl<M: Machine> Engine<M> {
             id,
             base,
             facts: Vec::new(),
+            fresh_bounds_before: self.computer.fresh_bounds().len(),
         });
     }
 
@@ -614,6 +616,9 @@ impl<M: Machine> Engine<M> {
         while let Some(top) = self.scopes.pop() {
             self.computer.solver().pop(1);
             if top.id == id {
+                for bound in &self.computer.fresh_bounds()[top.fresh_bounds_before..] {
+                    self.computer.solver().assert(bound);
+                }
                 break;
             }
         }
@@ -2128,6 +2133,32 @@ mod tests {
         assert!(engine.round_covers(&generalized, &next_round(0), &generalization));
         assert!(!engine.round_covers(&generalized, &next_round(16), &generalization));
     }
+
+    #[test]
+    fn a_bound_on_a_fresh_symbol_outlives_the_scope_it_was_made_in() {
+        let mut engine = ExecutionEngine::new(vec!["start:", "ret"]);
+        let dropped = ast::Int::new_const("realigned_0");
+        let outer = engine.push_scope();
+        let inner = engine.push_scope();
+        engine
+            .computer
+            .bound_fresh(dropped.ge(ast::Int::from_i64(0)));
+        let above = engine.scopes_above(outer);
+        engine.pop_scope(outer);
+        engine.rebuild_scopes(above);
+        engine.pop_scope(inner);
+        let forked = engine.fork();
+        for engine in [&engine, &forked] {
+            assert_eq!(
+                engine
+                    .computer
+                    .solver
+                    .check_assumptions(&[dropped.lt(ast::Int::from_i64(0))]),
+                SatResult::Unsat
+            );
+        }
+    }
+
     #[test]
     fn engine_stays_small_enough_to_clone_per_branch() {
         assert!(

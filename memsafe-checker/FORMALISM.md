@@ -958,7 +958,9 @@ $$
 the body sit above $S$, so they are rebuilt afterwards (`scopes_above`,
 `rebuild_scopes`). The facts are then re-asserted *outside* the loop's scope, together
 with the leaving condition (`keep_facts`); if another loop is open, they are also kept in
-its `nested_facts`, so they survive when that loop's scope is popped. From here on,
+its `nested_facts`, so they survive when that loop's scope is popped. Bounds on fresh
+symbols (`bound_fresh`) are re-asserted whenever the scope they were made in is popped,
+so no pop, rebuild or fork loses them. From here on,
 $\kappa$ is the exit iteration: inside the body it was arbitrary, and at the exit it is
 pinned. If the leaving condition is affine in $\kappa$, its possible exit values $V$ (a
 window of at most 8, `exit_window`, `counter_value_at_exit`) are recorded in

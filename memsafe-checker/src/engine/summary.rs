@@ -1602,7 +1602,6 @@ pub(super) struct ActiveLoop {
     pub(super) branch_facts: Vec<(usize, AbstractComparison)>,
     pub(super) round: usize,
     pub(super) nested_facts: Vec<ast::Bool>,
-    pub(super) fresh_bounds_at_entry: usize,
     pub(super) ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
     pub(super) operand_checks: Vec<(Vec<bool>, usize)>,
     pub(super) cells: Vec<(MemoryCell, LoopInvariant)>,

@@ -1324,7 +1324,6 @@ impl<M: Machine> Engine<M> {
             branch_facts,
             round,
             nested_facts: Vec::new(),
-            fresh_bounds_at_entry: self.computer.fresh_bounds().len(),
             ghost_checks,
             operand_checks,
             cells,
@@ -2479,19 +2478,10 @@ impl<M: Machine> Engine<M> {
             .filter_map(summary_fact_to_ast)
             .collect();
         kept.extend(active.nested_facts.iter().cloned());
-        kept.extend(self.fresh_bounds_since(active.fresh_bounds_at_entry));
         self.keep_facts(kept);
         self.rebuild_scopes(above);
         self.jump_history.truncate(active.history_len);
         self.loops.attempts.remove(&active.pc);
-    }
-
-    fn fresh_bounds_since(&self, from: usize) -> Vec<ast::Bool> {
-        self.computer
-            .fresh_bounds()
-            .get(from..)
-            .unwrap_or_default()
-            .to_vec()
     }
 
     fn keep_facts(&mut self, facts: Vec<ast::Bool>) {
@@ -3149,7 +3139,6 @@ impl<M: Machine> Engine<M> {
                 .filter_map(summary_fact_to_ast),
         );
         kept.extend(active.nested_facts.iter().cloned());
-        kept.extend(self.fresh_bounds_since(active.fresh_bounds_at_entry));
         for bound in active.bounds.iter().map(|bound| bound.at(&current.0)) {
             kept.extend(self.select_definitions_in(&bound));
             kept.extend(comparison_to_ast(bound));
