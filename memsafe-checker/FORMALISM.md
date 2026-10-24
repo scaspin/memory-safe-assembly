@@ -462,7 +462,8 @@ $$
 `fail_fast`, **(Fail)** logs the error and continues at $pc{+}1$. Unconditional jumps to
 one target are capped at 1000 per path, and a branch revisited too often without being
 summarized is an error (`check_not_stuck`), so a stuck loop is reported rather than
-diverging. A call suspends the open loops until the matching return
+diverging. A path whose next instruction lies past the end of the listing is an error
+(`runs_past_the_end`): only a return or a trap ends a path. A call suspends the open loops until the matching return
 (`suspend_for_call`, `resume_suspended`).
 
 **Branches.** Let $\sigma \vdash P[pc] \Rightarrow \sigma;\ \mathsf{jmp?}\ c\ \ell$,

@@ -209,7 +209,7 @@ fn example_unrelated_unknowns_not_treated_as_equal_cmn() -> std::io::Result<()> 
 fn example_z3_real_bound_safe() -> std::io::Result<()> {
     init();
 
-    let program = vec!["start:", "ldr x1,[x0,#0]", "ldr x1,[x0,#4]"];
+    let program = vec!["start:", "ldr x1,[x0,#0]", "ldr x1,[x0,#4]", "ret"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
@@ -241,7 +241,7 @@ fn example_z3_symbolic_base_boundary_unsafe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
     init();
 
-    let program = vec!["start:", "add x0,x0,#4", "ldr x1,[x0,#0]"];
+    let program = vec!["start:", "add x0,x0,#4", "ldr x1,[x0,#0]", "ret"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
@@ -257,7 +257,7 @@ fn example_z3_symbolic_base_boundary_safe() -> std::io::Result<()> {
 fn example_z3_symbolic_base_last_byte_safe() -> std::io::Result<()> {
     init();
 
-    let program = vec!["start:", "add x0,x0,#7", "ldrb w1,[x0,#0]"];
+    let program = vec!["start:", "add x0,x0,#7", "ldrb w1,[x0,#0]", "ret"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 
@@ -305,7 +305,7 @@ fn example_z3_write_to_read_only_region_unsafe() -> std::io::Result<()> {
 fn example_z3_read_from_write_region_safe() -> std::io::Result<()> {
     init();
 
-    let program = vec!["start:", "ldr x1,[x0,#0]"];
+    let program = vec!["start:", "ldr x1,[x0,#0]", "ret"];
 
     let mut engine = bums::engine::ExecutionEngine::new(program);
 

@@ -49,7 +49,13 @@ enum BranchOutcome {
 enum Step {
     Continue(usize),
     Stop,
-    Done,
+    Return,
+}
+
+fn runs_past_the_end(pc: usize) -> Error {
+    Error::other(format!(
+        "line {pc}: execution runs past the end of the code"
+    ))
 }
 
 const MAX_EXPLORED_KEY_BYTES: usize = 256 << 20;
@@ -664,11 +670,13 @@ impl<M: Machine> Engine<M> {
             match self.step(pc, depth, &mut unconditional_visits, reached)? {
                 Step::Continue(next) => pc = next,
                 Step::Stop => return Ok(()),
-                Step::Done => break,
+                Step::Return => {
+                    self.computer.check_stack_pointer_restored(pc);
+                    return Ok(());
+                }
             }
         }
-        self.computer.check_stack_pointer_restored(pc);
-        Ok(())
+        Err(runs_past_the_end(pc))
     }
 
     fn merge_key(&self, pc: usize) -> Option<String> {
@@ -747,7 +755,7 @@ impl<M: Machine> Engine<M> {
             while instruction.is_label() {
                 pc += 1;
                 if pc >= self.program.code.len() {
-                    return Ok(Step::Done);
+                    return Err(runs_past_the_end(pc));
                 }
                 instruction = self.program.code[pc].clone();
             }
@@ -790,7 +798,7 @@ impl<M: Machine> Engine<M> {
                     }
                     ExecuteReturnType::JumpLabel(label) => {
                         if &label == "return" {
-                            return Ok(Step::Done);
+                            return Ok(Step::Return);
                         }
                         match self.get_linenumber_of_label(label.clone(), pc) {
                             Some(n) => {
@@ -2072,11 +2080,15 @@ mod tests {
 
     #[test]
     fn test_running_small_program_no_mem_access() {
-        let asm = vec!["start:".to_string(), "add x0, x1, x2".to_string()];
+        let asm = vec![
+            "start:".to_string(),
+            "add x0, x1, x2".to_string(),
+            "ret".to_string(),
+        ];
 
         let mut engine = ExecutionEngine::new(asm);
 
-        let _ = engine.start("start".to_string());
+        assert!(engine.start("start".to_string()).is_ok());
         assert_eq!(
             engine.computer.registers[0],
             RegisterValue {

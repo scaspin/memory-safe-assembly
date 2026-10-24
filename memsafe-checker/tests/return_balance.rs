@@ -121,3 +121,32 @@ fn a_trap_ends_the_path() {
     );
     assert!(engine.start("start".to_string()).is_err());
 }
+
+fn outcome_of(lines: &[&str]) -> Result<(), String> {
+    let program = lines.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(1, "buf".to_string());
+    engine.add_region(
+        bums::common::RegionType::READ,
+        "buf".to_string(),
+        bums::common::AbstractExpression::Immediate(8),
+    );
+    engine.start("start".to_string()).map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_path_that_runs_past_the_end_of_the_code_is_rejected() {
+    for lines in [
+        &["start:", "ldr x0,[x1]"][..],
+        &["start:", "cbz x0,end", "ret", "end:"][..],
+    ] {
+        let outcome = outcome_of(lines);
+        assert!(
+            outcome
+                .as_ref()
+                .is_err_and(|e| e.contains("runs past the end of the code")),
+            "{lines:?}: {outcome:?}"
+        );
+    }
+    assert_eq!(outcome_of(&["start:", "ldr x0,[x1]", "ret"]), Ok(()));
+}
