@@ -10,3 +10,4 @@ s2n-bignum/
 scrape-asm/crates/
 bugs/cve-examples/
 __pycache__/
+evaluation/results/
