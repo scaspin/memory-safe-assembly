@@ -1092,7 +1092,10 @@ for some extension of $\theta$:
 
 - **Preconditions.** Declared regions, lengths, element facts and ranges, pointer arrays,
   pinned symbols and invariants (`add_region`, `add_element_fact`, `add_element_range`,
-  `add_pointer_elements`, `pin`, `add_invariant`) are asserted, not proved.
+  `add_pointer_elements`, `pin`, `add_invariant`) are asserted, not proved. Integer
+  arguments of 32 bits or fewer (`bool`, `u8`…`i32`) are asserted to lie in their type's
+  range, and their 64-bit register is $v + 2^{32}h$ with $h$ unconstrained: AAPCS64 and
+  the System V x86-64 ABI leave the upper half unspecified.
 - **Stack conventions.** The AArch64 frame $[\min(s,0), \mathit{args})$; the red zone,
   accepted only when the caller opts in (`allow_red_zone`) and then reported as a
   finding; on x86-64, no lower bound below `rsp`.

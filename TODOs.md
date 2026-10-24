@@ -32,7 +32,6 @@
 
 - [ ] `&[*const T]` pointer arrays: row lengths cannot be checked at run time (reported as a finding)
 - [ ] red zone is trusted per annotation (`red_zone = 128` on `ccaes_arm_decrypt_key`)
-- [ ] AArch64 32-bit arguments assume clean upper bits (the ABI leaves bits 32-63 unspecified)
 
 ## Loop acceleration structure
 

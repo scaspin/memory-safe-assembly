@@ -57,6 +57,34 @@ impl Parse for AttributeList {
     }
 }
 
+fn narrow_argument_range(ty: &TypePath) -> Option<(i64, i64)> {
+    let ranges = [
+        ("bool", 0, 1),
+        ("u8", 0, u8::MAX as i64),
+        ("i8", i8::MIN as i64, i8::MAX as i64),
+        ("u16", 0, u16::MAX as i64),
+        ("i16", i16::MIN as i64, i16::MAX as i64),
+        ("u32", 0, u32::MAX as i64),
+        ("i32", i32::MIN as i64, i32::MAX as i64),
+    ];
+    ranges
+        .into_iter()
+        .find(|(name, ..)| ty.path.is_ident(name))
+        .map(|(_, least, most)| (least, most))
+}
+
+fn with_unspecified_upper_bits(name: &str) -> AbstractExpression {
+    generate_expression(
+        "+",
+        AbstractExpression::Abstract(name.to_string()),
+        generate_expression(
+            "*",
+            AbstractExpression::Immediate(1i64 << 32),
+            AbstractExpression::Abstract(format!("{name}_upper_bits")),
+        ),
+    )
+}
+
 fn calculate_size_of(ty: String) -> usize {
     match ty.as_str() {
         "i8" => std::mem::size_of::<i8>(),
@@ -1311,6 +1339,19 @@ impl Annotation {
                                             );
                                         }
                                     }
+                                } else if let Some((least, most)) = narrow_argument_range(p) {
+                                    let value = AbstractExpression::Abstract(name.clone());
+                                    for (op, bound) in [(">=", least), ("<=", most)] {
+                                        engine.add_invariant(AbstractComparison::new(
+                                            op,
+                                            value.clone(),
+                                            AbstractExpression::Immediate(bound),
+                                        ));
+                                    }
+                                    engine.add_abstract_expression_from(
+                                        i,
+                                        with_unspecified_upper_bits(&name),
+                                    );
                                 } else {
                                     engine.add_abstract_from(i, name.clone());
                                 }
@@ -1832,6 +1873,28 @@ mod tests {
         assert!(
             expansion.contains(&format!("assert!({}=={exact});", fits("n*inc_x"))),
             "{expansion}"
+        );
+    }
+
+    #[test]
+    fn a_32_bit_argument_read_through_its_64_bit_register_is_rejected() {
+        let verdict_for = |body: &[&str]| {
+            let attr: TokenStream = quote! { "f.S", table.as_ptr(), i, [i < 16] };
+            let item: TokenStream = quote! { fn f(table: &[u8; 16], i: u32); };
+            let annotation = parse_annotation(attr, item).expect("annotation parses");
+            let mut program = vec!["f:".to_string()];
+            program.extend(body.iter().map(|line| line.to_string()));
+            annotation.check(&program).expect("the check runs").failures
+        };
+        assert!(!verdict_for(&["ldrb w2,[x0,x1]", "ret"]).is_empty());
+        assert_eq!(
+            verdict_for(&["ldrb w2,[x0,w1,uxtw]", "ret"]),
+            Vec::<String>::new()
+        );
+        assert!(!verdict_for(&["movzbl (%rdi,%rsi),%eax", "ret"]).is_empty());
+        assert_eq!(
+            verdict_for(&["movl %esi,%esi", "movzbl (%rdi,%rsi),%eax", "ret"]),
+            Vec::<String>::new()
         );
     }
 }
