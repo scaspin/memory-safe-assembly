@@ -48,7 +48,7 @@
 - [ ] state the join of invariants, cells and bounds as one lattice operation with documented semantics
 - [ ] an explicit lifecycle state machine for a loop (attempted, open, closed, refuted, abandoned) in place of scattered flags
 
-## Verification (sweep of 2026-10-23, `bums-check`)
+## Verification (final sweep of 2026-10-23, `bums-check`, after the soundness fixes)
 
 | playground | verified |
 |---|---|
@@ -58,15 +58,17 @@
 | candle | 15/15 |
 | crypto aarch64 / x86 | 82/84, 37/38 |
 | bignum | 65/73 |
-| rav1d aarch64 / x86 | 375/549, 2/2 |
-| ffmpeg | 1206/1391 |
+| rav1d aarch64 / x86 | 374/549, 2/2 |
+| ffmpeg | 1208/1391 |
 
-- [ ] timeouts since the summary-validation fixes: p256/p384_montjscalarmul (latch counter reloaded from memory, so no summary), edwards25519_scalarmuldouble, chacha20_poly1305_open/seal, ff_simple_idct*, w_mask_420_16bpc, openblas x86 dscal (borderline) and idamax_k
+- [ ] timeouts since the summary-validation fixes: p256/p384_montjscalarmul (latch counter reloaded from memory, so no summary), chacha20_poly1305_open/seal, ff_simple_idct*, w_mask_420_16bpc, openblas x86 dscal (borderline) and idamax_k
 - [ ] rav1d ipred_pixel_set_8bpc times out (also at 08a11aa1; its `verified` row was stale). Re-sweep after the seven soundness fixes: candle, openblas, crypto, corecrypto and rav1d ipred/mc lost no verdict
 - [ ] bignum_kmul_32_64 / ksqr_32_64: select condition the engine does not model
 - [ ] x86 idamax_k: a concretely decided latch leaves no jump record, so the summary has no counter bound
 - [ ] rav1d ipred_z1/z3_fill2: the height latch compares the value before `subs`, which is not in the exit state
 - [ ] rav1d main.rs ipred_reverse_8bpc annotation passes n = 1 against an `n % 16` precondition
+- [ ] rav1d ipred.rs ipred_z2_upsample_edge_8bpc annotation allows hsz = 4 (out.len() == 8) while the code writes 17 bytes (also FAIL at 2dfe44dd; its `verified` row was stale)
+- [ ] ffmpeg hevc epel/qpel_uni_w_h32_8 pass the 4 GB cap of bums-check (verified with --mem-gb 10); qpel_hv24_8_i8mm, curve25519_x25519_byte_alt and rav1d fguv_32x32_422_8bpc / wiener_filter5 sit at the timeout
 - [ ] chunks_counted_by_a_clamped_length_are_bounded_by_the_clamp: no relational invariant for a pointer stepped by a fresh `min`
 - [ ] sha1_block_data_order_avx2: a loop with two back edges
 - [ ] yuv2rgb (64) and the remaining ffmpeg FAILs (59) are untriaged
