@@ -9,6 +9,7 @@ use std::process::{Child, Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 const RESULT_MARKER: &str = "bums-check-result";
+const TARGET_VENDOR_VARIABLE: &str = "BUMS_CHECK_TARGET_VENDOR";
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Status {
@@ -87,6 +88,10 @@ fn evaluate(asm_file: &Path, attr: &str, item: &str) -> (Status, String) {
     };
     if !annotation.diagnostics.is_empty() {
         return (Status::Error, annotation.diagnostics.join("; "));
+    }
+    let target_vendor = std::env::var(TARGET_VENDOR_VARIABLE).unwrap_or_default();
+    if let Some(unsupported) = annotation.unsupported_on(&target_vendor) {
+        return (Status::Error, unsupported);
     }
     let program = match bums_annotations::read_program(asm_file) {
         Ok(program) => program,
@@ -203,7 +208,7 @@ fn last_log_line(log: &Path) -> String {
         .unwrap_or_default()
 }
 
-fn spawn(job: &Job, asm_dir: &Path) -> Result<Child, String> {
+fn spawn(job: &Job, asm_dir: &Path, target_vendor: &str) -> Result<Child, String> {
     let log = File::create(&job.log).map_err(|error| format!("{}: {error}", job.log.display()))?;
     let log_for_stderr = log
         .try_clone()
@@ -216,6 +221,7 @@ fn spawn(job: &Job, asm_dir: &Path) -> Result<Child, String> {
         .arg(asm_dir.join(&job.found.asm_file))
         .arg(job.found.attr.to_string())
         .arg(job.found.item.to_string())
+        .env(TARGET_VENDOR_VARIABLE, target_vendor)
         .stdin(Stdio::null())
         .stdout(log)
         .stderr(log_for_stderr)
@@ -322,7 +328,7 @@ pub fn all(options: Options) -> Result<ExitCode, String> {
     let mut last_poll = Instant::now() - Duration::from_secs(1);
     while finished < jobs.len() {
         while running.len() < options.jobs && next < jobs.len() {
-            match spawn(&jobs[next], &asm_dir) {
+            match spawn(&jobs[next], &asm_dir, &cfg.target_vendor) {
                 Ok(child) => running.push(Running {
                     job: next,
                     child,

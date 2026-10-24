@@ -10,6 +10,7 @@ pub struct CfgContext {
     pub target_arch: String,
     pub target_os: String,
     pub target_family: String,
+    pub target_vendor: String,
     pub features: BTreeSet<String>,
 }
 
@@ -30,10 +31,12 @@ impl CfgContext {
         } else {
             "unix"
         };
+        let target_vendor = target.split('-').nth(1).unwrap_or_default().to_string();
         CfgContext {
             target_arch,
             target_os: target_os.to_string(),
             target_family: target_family.to_string(),
+            target_vendor,
             features,
         }
     }
@@ -56,6 +59,7 @@ impl CfgContext {
                     "target_arch" => value == self.target_arch,
                     "target_os" => value == self.target_os,
                     "target_family" => value == self.target_family,
+                    "target_vendor" => value == self.target_vendor,
                     "target_pointer_width" => value == "64",
                     "target_endian" => value == "little",
                     "feature" => self.features.contains(&value),

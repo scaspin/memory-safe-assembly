@@ -28,10 +28,6 @@
 - [ ] lean backend from sail? 
 - [ ] derive preconditions? 
 - [ ] before/after comparison to make sure asm optimizations are safe? (rav1d bounty)
-## Soundness
-
-- [ ] red zone is trusted per annotation (`red_zone = 128` on `ccaes_arm_decrypt_key`)
-
 ## Loop acceleration structure
 
 - [ ] a `LoopFact` type that carries its justification (defining, proved, or assumed) instead of plain comparisons

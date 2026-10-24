@@ -31,6 +31,10 @@ struct AttributeList {
     argument_list: Punctuated<Expr, Token![,]>,
 }
 
+const APPLE_ARM64_RED_ZONE: i64 = 128;
+const RED_ZONE_NEEDS_APPLE: &str =
+    "red_zone relies on the Apple arm64 ABI and is accepted only for an Apple target";
+
 fn parse_red_zone(input: ParseStream) -> Result<Option<LitInt>> {
     let names_red_zone = input
         .fork()
@@ -704,7 +708,18 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
     let red_zone = attributes
         .red_zone
         .as_ref()
-        .map(|bytes| bytes.base10_parse::<i64>())
+        .map(|bytes| {
+            let parsed = bytes.base10_parse::<i64>()?;
+            if !(0..=APPLE_ARM64_RED_ZONE).contains(&parsed) {
+                return Err(syn::Error::new_spanned(
+                    bytes,
+                    format!(
+                        "red_zone must be at most {APPLE_ARM64_RED_ZONE} bytes, the red zone the Apple arm64 ABI guarantees"
+                    ),
+                ));
+            }
+            Ok(parsed)
+        })
         .transpose()?;
     let mut diagnostics = Vec::new();
     let fn_name = &vars.item_fn.ident;
@@ -1204,6 +1219,13 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         };
     }
 
+    let red_zone_target_check = red_zone.map(|_| {
+        quote! {
+            #[cfg(not(target_vendor = "apple"))]
+            compile_error!(#RED_ZONE_NEEDS_APPLE);
+        }
+    });
+
     let unchecked_pointer_fields: Vec<(String, usize)> = new_structs
         .iter()
         .flat_map(|(name, declared)| {
@@ -1255,7 +1277,10 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         label: vars.item_fn.ident.to_string(),
         asm_file: attributes.filename.value(),
         diagnostics,
-        expansion: quote!(#unsafe_block),
+        expansion: quote! {
+            #unsafe_block
+            #red_zone_target_check
+        },
         signature: vars.item_fn.clone(),
         red_zone,
         argument_list,
@@ -1278,6 +1303,11 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
 }
 
 impl Annotation {
+    pub fn unsupported_on(&self, target_vendor: &str) -> Option<String> {
+        (self.red_zone.is_some() && target_vendor != "apple")
+            .then(|| RED_ZONE_NEEDS_APPLE.to_string())
+    }
+
     pub fn check(&self, program: &[String]) -> std::result::Result<Verdict, String> {
         let Annotation {
             label,
@@ -1894,6 +1924,23 @@ mod tests {
         );
         assert!(
             expansion.contains(&format!("assert!({}=={exact});", fits("n*inc_x"))),
+            "{expansion}"
+        );
+    }
+
+    #[test]
+    fn a_red_zone_is_accepted_only_within_the_apple_guarantee() {
+        let item: TokenStream = quote! { fn f(x: &mut [u8; 16]); };
+        let too_deep = quote! { "f.S", red_zone = 256, x.as_mut_ptr() };
+        assert!(parse_annotation(too_deep, item.clone()).is_err());
+
+        let attr: TokenStream = quote! { "f.S", red_zone = 128, x.as_mut_ptr() };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        assert_eq!(annotation.unsupported_on("apple"), None);
+        assert!(annotation.unsupported_on("unknown").is_some());
+        let expansion = without_spaces(&annotation.expansion.to_string());
+        assert!(
+            expansion.contains("#[cfg(not(target_vendor=\"apple\"))]compile_error!"),
             "{expansion}"
         );
     }

@@ -646,7 +646,8 @@ $$
      {\Gamma \vdash \mathsf{safe}_\kappa(\langle e\rangle{+}n, w)}\ \textsc{(Safe-Split)}
 $$
 
-**Red zone** (opt-in, `allow_red_zone(z)`). A stack access whose upper bound holds and
+**Red zone** (opt-in, `allow_red_zone(z)`; an annotation's `red_zone = z` needs
+$z \le 128$ and an Apple target, whose arm64 ABI guarantees it). A stack access whose upper bound holds and
 whose displacement provably stays at or above $\mathit{low} - z$ is accepted with a
 *finding* rather than an error:
 
@@ -1099,9 +1100,10 @@ for some extension of $\theta$:
   arguments of 32 bits or fewer (`bool`, `u8`…`i32`) are asserted to lie in their type's
   range, and their 64-bit register is $v + 2^{32}h$ with $h$ unconstrained: AAPCS64 and
   the System V x86-64 ABI leave the upper half unspecified.
-- **Stack conventions.** The AArch64 frame $[\min(s,0), \mathit{args})$; the red zone,
-  accepted only when the caller opts in (`allow_red_zone`) and then reported as a
-  finding; on x86-64, no lower bound below `rsp`.
+- **Stack conventions.** The AArch64 frame $[\min(s,0), \mathit{args})$; on x86-64, no lower
+  bound below `rsp`. The red zone is not trusted: an annotation may claim at most the 128
+  bytes the Apple arm64 ABI guarantees, and only for an Apple target, and each use is
+  reported as a finding.
 - **The machine models.** Instruction semantics, decoded `.byte` encodings, and the
   choice of which flags an instruction sets.
 
