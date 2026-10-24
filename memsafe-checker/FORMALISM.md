@@ -563,7 +563,8 @@ $\mathsf{fp}$ (`fingerprint`) prints every register, lane, cell, slot, select de
 counter of the machine; flags are left out when no instruction reads them before they are
 written (`flags_dead`). $\Pi\!\restriction_{\text{live}}$ keeps every assertion except
 those that only constrain fresh flag symbols unconnected to the rest (`facts_about_live_symbols`).
-$H$ is **not** in the key. Keys are recorded on first reach and marked finished when the
+$H$ is in the key as a digest of its records (`history_digest`), and so are the select
+revisit counts. Keys are recorded on first reach and marked finished when the
 path that reached them ends:
 
 $$
@@ -576,9 +577,8 @@ same open summaries and the same facts about every symbol the state mentions, so
 describe the same concrete states (§7), and the finished one has already been explored
 from that key. An error on the finished path was already reported. The relied-on summary
 instances are part of $\mathcal{L}$, so a path explored under a summary never stands in for
-a path that does not rely on it, and vice versa. What differs is $H$, which steers only
-which rule applies next (loop triggers, round replay, exit detection); the argument
-assumes every such choice is sound on its own, which is why $H$ can be left out (§7).
+a path that does not rely on it, and vice versa. Their $H$ is the same too, so every rule
+that reads it (loop triggers, round replay, exit detection) chooses the same way.
 
 ### 5.2 The safety judgment (`mem_safe_access`)
 
@@ -1076,7 +1076,7 @@ for some extension of $\theta$:
 | **(Br-\*)**, **(Split)** | Every concrete successor is covered | Holds: an arm is pruned only on `Unsat`; an inexpressible guard explores both; **(Split)** covers all values because the enumeration ran to `Unsat`. |
 | **(Cases)** | The cases cover every feasible index | **Open.** `table_load` proves the index aligned and in range, but keeps an entry only if its query is `Sat`; an entry whose query is `Unknown` is dropped. It should be kept. |
 | **(Merge)**, selects | $\Delta$ is exact | Holds by construction. |
-| **(Explored)** | The finished path covers the merged one | Trusted, see below. |
+| **(Explored)** | The finished path covers the merged one | Holds by construction: the key holds the machine state, the facts about it, and everything that steers later rules, $H$ included. |
 | **(Safe)** | Both bound queries unsat, and the path is feasible | Holds. The frame $[\min(s,0), \mathit{args})$ around `sp` is a convention, not a property proved. |
 | **(Acc-Open)** | $\Phi(\kappa)$ holds for every real iteration $\kappa \ge N$ | Holds: the definitions of $T$, $p_i$, $w_i$ and $\alpha_i$ are solvable for any path, every other fact is proved implied at $\kappa = N$ (the base case), and (IND) carries it on; landing facts are kept only when their requirements are proved. Each refinement is backed by a proof, not a model. |
 | **(Acc-Close)** | Induction: the base case is the explored iterations and the exit at the summarizing visit, the step is $\mathsf{IND}$ | Holds for the components $\mathsf{IND}$ inspects. Cells and stack writes are covered by the journal and the blind-write check. |
@@ -1098,9 +1098,6 @@ for some extension of $\theta$:
 - **Stack conventions.** The AArch64 frame $[\min(s,0), \mathit{args})$; the red zone,
   accepted only when the caller opts in (`allow_red_zone`) and then reported as a
   finding; on x86-64, no lower bound below `rsp`.
-- **Merging key.** **(Explored)** leaves $H$ out of the key. That is sound only if every
-  rule $H$ selects (loop trigger, round replay, exit detection) is sound whichever way it
-  is selected, so that the finished path's derivation also serves the merged one.
 - **The machine models.** Instruction semantics, decoded `.byte` encodings, and the
   choice of which flags an instruction sets.
 

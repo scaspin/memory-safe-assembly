@@ -31,7 +31,6 @@
 ## Soundness
 
 - [ ] pinned trip counts check only the first and last iteration; sound only for addresses affine in the loop counter (`%`, `&`, counter·symbol terms break it)
-- [ ] path merging leaves jump history out of the key; argued sound, not proved for history-dependent discharge
 - [ ] `&[*const T]` pointer arrays: row lengths cannot be checked at run time (reported as a finding)
 - [ ] red zone is trusted per annotation (`red_zone = 128` on `ccaes_arm_decrypt_key`)
 - [ ] bounds on fresh symbols asserted outside a scope are lost on scope rebuild (precision only; fixed on loop release)

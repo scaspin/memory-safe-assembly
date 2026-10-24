@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Error;
 use std::rc::Rc;
 
@@ -79,6 +80,12 @@ fn is_fresh_flag(symbol: &str) -> bool {
     symbol.rsplit_once('_').is_some_and(|(prefix, n)| {
         !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) && prefix.ends_with("_flag")
     })
+}
+
+fn history_digest(history: &[JumpRecord]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    format!("{history:?}").hash(&mut hasher);
+    hasher.finish()
 }
 
 fn facts_about_live_symbols(facts: Vec<String>, state: &str) -> Vec<String> {
@@ -693,7 +700,7 @@ impl<M: Machine> Engine<M> {
             .computer
             .fingerprint(!M::Instruction::flags_dead(&self.program.code, pc))?;
         let mut state = format!(
-            "{pc}|{fingerprint}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            "{pc}|{fingerprint}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:x}",
             self.loops.active,
             self.loops.attempts,
             self.concrete_decisions,
@@ -705,6 +712,8 @@ impl<M: Machine> Engine<M> {
             self.loops.relied_on,
             self.suspended,
             self.scopes.iter().map(|scope| scope.id).collect::<Vec<_>>(),
+            self.select_history,
+            history_digest(&self.jump_history),
         );
         let facts = self
             .computer
@@ -2060,6 +2069,13 @@ mod tests {
         assert_eq!(forked.computer.solver.check(), SatResult::Sat);
     }
 
+    #[test]
+    fn paths_that_differ_only_in_their_jump_history_are_not_merged() {
+        let mut engine = ExecutionEngine::new(vec!["start:", "ret"]);
+        let before = engine.merge_key(1);
+        engine.jump_history.extend(history(&[(7, true, 1)]));
+        assert_ne!(engine.merge_key(1), before);
+    }
 
     #[test]
     fn a_round_is_covered_only_where_the_replayed_decisions_hold() {
