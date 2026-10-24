@@ -45,7 +45,7 @@ pub struct X86_64 {
     rw_queue: Vec<MemoryAccess>,
     unknown_counter: usize,
     stack_top: i64,
-    pub solver: Solver,
+    pub solver: EmptiedOnClone,
 }
 
 impl fmt::Debug for X86_64 {
@@ -111,7 +111,7 @@ impl X86_64 {
             rw_queue: Vec::new(),
             unknown_counter: 0,
             stack_top: 8,
-            solver,
+            solver: EmptiedOnClone::new(solver),
         }
     }
 

@@ -7,6 +7,28 @@ use z3::*;
 
 use crate::instruction_parser::{self, Arrangement};
 pub use crate::profile::TimedSolver;
+
+pub struct EmptiedOnClone(Solver);
+
+impl EmptiedOnClone {
+    pub fn new(solver: Solver) -> Self {
+        EmptiedOnClone(solver)
+    }
+}
+
+impl Clone for EmptiedOnClone {
+    fn clone(&self) -> Self {
+        EmptiedOnClone(Solver::new())
+    }
+}
+
+impl std::ops::Deref for EmptiedOnClone {
+    type Target = Solver;
+
+    fn deref(&self) -> &Solver {
+        &self.0
+    }
+}
 use crate::profile::{self, Phase};
 
 const PATH_RESOURCE_LIMIT: u32 = 2_000_000;

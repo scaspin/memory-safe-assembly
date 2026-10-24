@@ -338,7 +338,7 @@ impl Machine for ARMCORTEXA {
     }
 
     fn set_solver(&mut self, solver: Solver) {
-        self.solver = solver;
+        self.solver = EmptiedOnClone::new(solver);
     }
 
     fn get_state(&self) -> MachineState {

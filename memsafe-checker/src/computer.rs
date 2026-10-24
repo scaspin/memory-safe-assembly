@@ -44,7 +44,7 @@ pub struct ARMCORTEXA {
     current_line: usize,
     alignment: i64,
     flag_counter: usize,
-    pub solver: Solver,
+    pub solver: EmptiedOnClone,
     pub lane_bounds: Box<LaneBounds>,
     pub fresh_bounds: Vec<ast::Bool>,
     pub write_journal: Vec<CellWrite>,
@@ -209,7 +209,7 @@ impl ARMCORTEXA {
             pointer_elements: BTreeMap::new(),
             element_ranges: BTreeMap::new(),
             pristine_read: None,
-            solver,
+            solver: EmptiedOnClone::new(solver),
         }
     }
 
