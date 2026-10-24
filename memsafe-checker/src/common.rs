@@ -1287,13 +1287,14 @@ fn bit_of(value: &ast::Int, bit: i64) -> ast::Int {
     ast::Int::mul(&[&value.div(&weight).modulo(&two), &weight])
 }
 
-fn signed_word(value: &ast::Int) -> ast::Int {
+fn signed_word(value: &ast::Int, operand: &AbstractExpression) -> ast::Int {
     let modulus = ast::Int::from_str(&(1u128 << 64).to_string()).expect("modulus");
     let half = ast::Int::from_str(&(1u128 << 63).to_string()).expect("half");
-    let wrapped = ast::Int::sub(&[&ast::Int::add(&[value, &half]).modulo(&modulus), &half]);
-    let already_signed = value.ge(half.unary_minus()) & value.lt(&half);
+    let in_signed_range = |v: &ast::Int| v.ge(half.unary_minus()) & v.lt(&half);
+    let wrapped = ast::Int::new_const(opaque_name("signed_word", operand));
+    let wrapped = in_signed_range(&wrapped).ite(&wrapped, &ast::Int::from_i64(0));
     let unsigned_high = value.ge(&half) & value.lt(&modulus);
-    already_signed.ite(
+    in_signed_range(value).ite(
         value,
         &unsigned_high.ite(&ast::Int::sub(&[value, &modulus]), &wrapped),
     )
@@ -1321,7 +1322,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 && shifted.as_ref() == old1.as_ref()
                 && **amount == AbstractExpression::Immediate(63)
             {
-                let value = signed_word(&expression_to_ast(*old1.clone())?);
+                let value = signed_word(&expression_to_ast(*old1.clone())?, &old1);
                 let zero = ast::Int::from_i64(0);
                 return Some(value.ge(&zero).ite(&value, &zero));
             }
@@ -1344,7 +1345,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 "asr" if constant_shift.is_some() => {
                     let shift = constant_shift.unwrap();
                     let zero = ast::Int::from_i64(0);
-                    let new1 = signed_word(&new1);
+                    let new1 = signed_word(&new1, &old1);
                     if shift >= 63 {
                         let minus_one = ast::Int::from_i64(-1);
                         return Some(new1.ge(&zero).ite(&zero, &minus_one));

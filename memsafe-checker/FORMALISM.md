@@ -243,7 +243,10 @@ $$
 $\mathsf{opaque}_e$ is an uninterpreted constant *named by $e$*. Two syntactically equal
 opaque terms are therefore equal, and nothing else is known about them. Opaque terms and
 fresh symbols are the calculus's over-approximation; every other rule is exact over
-$\mathbb{Z}$.
+$\mathbb{Z}$, except that $\mathsf{sext}_{64}$ under $\mathsf{asr}$ is exact only on
+$[-2^{63}, 2^{64})$: past it, the word is $\mathsf{opaque}_e$ when that lies in
+$[-2^{63}, 2^{63})$ and $0$ otherwise, since a reduction modulo $2^{64}$ there left later
+queries on the path undecided.
 
 Under $\Delta$, a symbol defined by a select carries its definition. For a term $t$,
 $\Delta^\ast(t)$ is the closure of `select_assumptions` / `select_definitions_in`:

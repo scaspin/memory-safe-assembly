@@ -853,6 +853,24 @@ fn shift_pair_does_not_cancel_past_the_sign_bit() {
 }
 
 #[test]
+fn asr_of_a_value_past_64_bits_stays_within_a_signed_word() {
+    let r = run(
+        &[
+            "start:",
+            "ldrb w1, [x0]",
+            "lsl x1, x1, #60",
+            "asr x1, x1, #60",
+            "add x3, x0, #8",
+            "ldrb w2, [x3, x1]",
+            "ret",
+        ],
+        Some(16),
+        &[],
+    );
+    assert!(r.is_ok(), "{:?}", r);
+}
+
+#[test]
 fn shift_pair_within_the_sign_bit_keeps_the_value() {
     let r = run(
         &[
