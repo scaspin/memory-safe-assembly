@@ -1067,10 +1067,134 @@ impl<M: Machine> Engine<M> {
                 })
                 .find(|fact| !engine.proves(fact.clone()))
         });
-        match unproved_at_base {
-            Some(fact) => Err(Decline::UnprovedAtBase(id, fact)),
-            None => Ok(()),
+        if let Some(fact) = unproved_at_base {
+            return Err(Decline::UnprovedAtBase(id, fact));
         }
+        let unimplied = self
+            .facts_not_implied_at_base(summary, expression, cycle.continues)
+            .ok_or(Decline::Contradicts(id))?;
+        for fact in &unimplied {
+            log::info!(
+                "{id} at line {pc} does not imply {fact} where it is summarized, dropping it"
+            );
+        }
+        summary.facts.retain(|fact| !unimplied.contains(fact));
+        summary
+            .branch_facts
+            .retain(|(_, fact)| !unimplied.contains(fact));
+        summary.exit_facts.retain(|fact| !unimplied.contains(fact));
+        Ok(())
+    }
+
+    fn facts_not_implied_at_base(
+        &self,
+        summary: &Summary,
+        expression: &AbstractComparison,
+        continues: bool,
+    ) -> Option<Vec<AbstractComparison>> {
+        let id = summary.id;
+        let roles_in = |names: Vec<String>| -> Vec<LoopRole> {
+            names
+                .iter()
+                .filter_map(|name| LoopSymbol::parse(name))
+                .filter(|symbol| symbol.id == id)
+                .map(|symbol| symbol.role)
+                .collect()
+        };
+        let current = self.computer.get_state();
+        let mut definitions: Vec<AbstractComparison> = summary
+            .updates
+            .iter()
+            .filter_map(|(i, update)| {
+                let summarized = value_of(update);
+                let own = [
+                    LoopRole::Widened(*i),
+                    LoopRole::Within(*i),
+                    LoopRole::Progress(*i),
+                ];
+                let roles = roles_in(summarized.get_abstracts());
+                let defines_its_own_symbol = roles
+                    .first()
+                    .is_some_and(|first| own.contains(first) && roles.iter().all(|r| r == first));
+                if !defines_its_own_symbol {
+                    return None;
+                }
+                let held = current.0[*i].expression();
+                match confined_load_width(&summarized) {
+                    Some(width) if confined_load_width(&held) != Some(width) => None,
+                    _ => Some(AbstractComparison::new("==", summarized, held)),
+                }
+            })
+            .collect();
+        let trips_in = |fact: &AbstractComparison| -> Vec<String> {
+            fact.get_abstracts()
+                .into_iter()
+                .filter(|name| {
+                    LoopSymbol::parse(name).is_some_and(|symbol| {
+                        symbol.id == id && matches!(symbol.role, LoopRole::Trips(_))
+                    })
+                })
+                .collect()
+        };
+        let mentions_the_counter =
+            |fact: &AbstractComparison| roles_in(fact.get_abstracts()).contains(&LoopRole::Counter);
+        let mut trip_definitions: Vec<AbstractComparison> = summary
+            .facts
+            .iter()
+            .filter(|fact| !trips_in(fact).is_empty() && !mentions_the_counter(fact))
+            .cloned()
+            .collect();
+        let defined: Vec<String> = trip_definitions.iter().flat_map(&trips_in).collect();
+        let bounds_a_free_trip_count = |fact: &AbstractComparison| {
+            let trips = trips_in(fact);
+            let [trip] = &trips[..] else {
+                return false;
+            };
+            !matches!(fact.op.as_str(), "==" | "!=")
+                && !defined.contains(trip)
+                && summary
+                    .facts
+                    .iter()
+                    .filter(|other| other.get_abstracts().contains(trip))
+                    .count()
+                    == 1
+        };
+        trip_definitions.extend(
+            summary
+                .facts
+                .iter()
+                .filter(|fact| bounds_a_free_trip_count(fact))
+                .cloned(),
+        );
+        definitions.extend(trip_definitions.iter().cloned());
+        definitions.push(AbstractComparison::new(
+            "==",
+            summary.counter.expression(),
+            AbstractExpression::Immediate(SUMMARY_ITERATION),
+        ));
+        self.while_staying(expression, continues, |engine| {
+            let solver = engine.computer.solver();
+            solver.push();
+            for definition in &definitions {
+                for fact in engine
+                    .select_definitions_in(definition)
+                    .into_iter()
+                    .chain(summary_fact_to_ast(definition))
+                {
+                    solver.assert(fact);
+                }
+            }
+            let unimplied = (check(solver, &[]) == SatResult::Sat).then(|| {
+                summary
+                    .facts
+                    .iter()
+                    .filter(|fact| !trip_definitions.contains(fact) && !engine.implied(fact))
+                    .cloned()
+                    .collect()
+            });
+            solver.pop(1);
+            unimplied
+        })
     }
 
     fn install(

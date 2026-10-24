@@ -58,6 +58,8 @@ fn runs_past_the_end(pc: usize) -> Error {
     ))
 }
 
+const LARGEST_OBJECT_BYTES: i64 = i64::MAX;
+
 const MAX_EXPLORED_KEY_BYTES: usize = 256 << 20;
 
 fn symbols_of(fact: &str) -> impl Iterator<Item = &str> {
@@ -353,6 +355,11 @@ impl<M: Machine> Engine<M> {
             let temp = ast::Int::new_const(a);
             self.computer.solver().assert(temp.ge(&zero));
         }
+        if let Some(bytes) = expression_to_ast(length.clone()) {
+            self.computer
+                .solver()
+                .assert(bytes.le(ast::Int::from_i64(LARGEST_OBJECT_BYTES)));
+        }
         let base = base.into();
         self.computer
             .solver()
@@ -499,7 +506,7 @@ impl<M: Machine> Engine<M> {
             let mut branch = self.fork();
             let pinned = ast::Int::new_const(symbol.to_string()).eq(ast::Int::from_i64(*value));
             branch.computer.solver().assert(&pinned);
-            branch.computer.substitute_symbol(symbol, *value);
+            branch.substitute_symbol(symbol, *value);
             if let Err(e) = branch.run(pc, depth + 1) {
                 let text = e.to_string();
                 if !failures.contains(&text) {
@@ -1403,7 +1410,7 @@ impl<M: Machine> Engine<M> {
             AbstractExpression::Immediate(value),
         )) {
             log::info!("{symbol} is {value} on this path");
-            self.computer.substitute_symbol(&symbol, value);
+            self.substitute_symbol(&symbol, value);
         }
     }
 
@@ -1413,7 +1420,18 @@ impl<M: Machine> Engine<M> {
             AbstractExpression::Abstract(symbol.to_string()),
             AbstractExpression::Immediate(value),
         ));
+        self.substitute_symbol(symbol, value);
+    }
+
+    fn substitute_symbol(&mut self, symbol: &str, value: i64) {
         self.computer.substitute_symbol(symbol, value);
+        for record in &mut self.jump_history {
+            for register in &mut record.point.state.0 {
+                if let Some(respelled) = respelled(register, symbol, value) {
+                    *register = respelled;
+                }
+            }
+        }
     }
 
     fn order_a_monotone_guard(&mut self, pc: usize, condition: &AbstractComparison, taken: bool) {

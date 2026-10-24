@@ -866,6 +866,19 @@ $$
   (dually for negative steps), kept only if they held at both visits or moved that way.
   They are assumed at the summary state and must be re-established one iteration on (§6.5).
 
+**Base case** (`facts_not_implied_at_base`). The current state must be the instance
+$\kappa = N$ of $\sigma^\sharp$ with $\Phi(N)$ true. The *definitions* are: $\kappa = N$;
+$\rho^\sharp(N)(i) = \rho_c(i)$ for every register whose summary introduces its own fresh
+symbol ($w_i$, $p_i$ or $\alpha_i$; a confined $\alpha_i$ only when $\rho_c(i)$ is a confined
+load of the same width); every trip fact that does not mention $\kappa$; and a lone
+inequality on a trip total no other fact mentions. Each definition is solvable for its
+fresh symbol whatever the path, so assuming them loses no concrete state. Under the stay
+condition, every other fact of $\Phi$ must then be *implied*: $\Pi \wedge \mathit{defs}
+\wedge \neg\phi$ unsat. A fact that is not is dropped, and if the definitions contradict
+the path the summary is declined. Region lengths are at most $2^{63}{-}1$ bytes
+(`add_region`), the largest object Rust or C can hold, so a walk bounded by a length
+does not wrap.
+
 Trip facts are linear, and division appears only in the closed-counter window (§6.5).
 Counters are recorded in `symbols_bounding_counter`, so $\Delta^\ast$ of any term that
 mentions $\kappa$ brings in the facts that bound it.
@@ -1064,7 +1077,7 @@ for some extension of $\theta$:
 | **(Merge)**, selects | $\Delta$ is exact | Holds by construction. |
 | **(Explored)** | The finished path covers the merged one | Trusted, see below. |
 | **(Safe)** | Both bound queries unsat, and the path is feasible | Holds. The frame $[\min(s,0), \mathit{args})$ around `sp` is a convention, not a property proved. |
-| **(Acc-Open)** | $\Phi(\kappa)$ holds for every real iteration $\kappa \ge N$ | Holds for trip, progress and geometric facts because $T$, $p_i$ and $w_i$ are fresh, so the facts *define* them; landing facts are kept only when their requirements are proved. Each refinement is backed by a proof, not a model. |
+| **(Acc-Open)** | $\Phi(\kappa)$ holds for every real iteration $\kappa \ge N$ | Holds: the definitions of $T$, $p_i$, $w_i$ and $\alpha_i$ are solvable for any path, every other fact is proved implied at $\kappa = N$ (the base case), and (IND) carries it on; landing facts are kept only when their requirements are proved. Each refinement is backed by a proof, not a model. |
 | **(Acc-Close)** | Induction: the base case is the explored iterations and the exit at the summarizing visit, the step is $\mathsf{IND}$ | Holds for the components $\mathsf{IND}$ inspects. Cells and stack writes are covered by the journal and the blind-write check. |
 | **(Validate)**, **(Refuted)** | A result under a summary counts only if the summary's inductive check never failed | Holds: a refuted summary's result is discarded and the loop re-explored from the fallback. The ledger only lets a failure count when the failing path relied on no refuted instance. |
 | **(Havoc)** | Fresh symbols over-approximate any number of iterations | Holds: the body has no memory access to check, and every register it writes is havocked, as are all four flags. |

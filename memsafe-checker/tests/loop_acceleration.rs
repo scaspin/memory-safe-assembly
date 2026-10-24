@@ -3180,3 +3180,44 @@ fn an_exit_at_the_visit_that_summarizes_the_loop_is_explored() {
     let program = walking_loop_with_tail(4, &["ldr w2,[x0,#0]"], &["ldr w3,[x0,#-8]"]);
     assert_rejected_access(analyze_accelerated(program, 4, 4));
 }
+
+fn analyze_counted_walk(count_bound: i64) -> Result<(), String> {
+    init();
+    let program = [
+        "start:",
+        "mov x2,x1",
+        "loop:",
+        "ldr w3,[x0]",
+        "add x0,x0,#4",
+        "sub x2,x2,#1",
+        "cbnz x2,loop",
+        "ret",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(RegionType::READ, "base", AbstractExpression::Immediate(64));
+    engine.add_abstract_from(1, "count");
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("count"),
+        AbstractExpression::Immediate(count_bound),
+    ));
+    engine.add_invariant(AbstractComparison::new(
+        "<=",
+        abstract_of("count"),
+        AbstractExpression::Immediate(16),
+    ));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_counted_walk_within_its_region_is_proved_safe() {
+    assert_eq!(analyze_counted_walk(1), Ok(()));
+}
+
+#[test]
+fn a_zero_count_that_wraps_the_counter_is_rejected() {
+    assert_rejected_access(analyze_counted_walk(0));
+}
