@@ -2388,16 +2388,24 @@ fn a_select_latch_that_grows_is_not_given_a_range() {
 }
 
 fn analyze_long_concrete_loop(region_words: i64) -> Result<(), String> {
+    analyze_long_concrete_loop_indexed(200, &[], region_words)
+}
+
+fn analyze_long_concrete_loop_indexed(
+    trips: i64,
+    shape_index: &[&str],
+    region_words: i64,
+) -> Result<(), String> {
     init();
-    let trips = 200;
     let mut program = vec![
         "start:".to_string(),
         format!("mov x2,#{trips}"),
         "work:".to_string(),
         format!("mov x4,#{trips}"),
         "sub x4,x4,x2".to_string(),
-        "ldr x3,[x0,x4,lsl #3]".to_string(),
     ];
+    program.extend(shape_index.iter().map(|s| s.to_string()));
+    program.push("ldr x3,[x0,x4,lsl #3]".to_string());
     program.extend(std::iter::repeat_n("add x5,x5,#1".to_string(), 2000));
     program.extend(["sub x2,x2,#1", "cbnz x2,work", "ret"].map(String::from));
     let mut engine = bums::engine::ExecutionEngine::new(program);
@@ -2418,6 +2426,23 @@ fn a_long_concrete_loop_with_a_heavy_body_is_summarized_and_proved_safe() {
 #[test]
 fn a_long_concrete_loop_with_a_heavy_body_still_catches_its_last_read() {
     assert!(analyze_long_concrete_loop(199).is_err());
+}
+
+#[test]
+fn a_long_concrete_loop_masking_its_index_stays_within_the_mask() {
+    assert_eq!(
+        analyze_long_concrete_loop_indexed(192, &["and x4,x4,#63"], 64),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_long_concrete_loop_catches_a_masked_read_past_the_end_in_a_middle_iteration() {
+    assert_rejected_access(analyze_long_concrete_loop_indexed(
+        192,
+        &["and x4,x4,#64"],
+        64,
+    ));
 }
 
 fn analyze_chunks_counted_by_a_clamp(bytes_short: i64) -> Result<(), String> {

@@ -680,7 +680,9 @@ $$
 \tag{IND}
 $$
 
-Every access in the body was proved for an arbitrary $\kappa \ge N$ satisfying $\Phi$. The
+Every access in the body was proved for an arbitrary $\kappa \ge N$ satisfying $\Phi$, by one
+solver query over all such $\kappa$, whatever the shape of the address (affine in $\kappa$
+or not), even when $\Phi$ pins the trip count. The
 iterations before the summarizing visit were explored concretely, and the exit at the
 summarizing visit is explored from the state before summarizing (§6.6). By induction on
 $\kappa$, every access in every iteration is safe. After the loop exits, $\kappa$ is no
@@ -1088,12 +1090,6 @@ for some extension of $\theta$:
 
 **Trusted assumptions.** These are relied on, not checked:
 
-- **Pinned trip counts.** When $\Phi$ and $\Pi$ pin the trip count $T$, the body's
-  accesses are in effect established at the first and the last summarized iteration
-  ($\kappa = N$ and $\kappa = T$), and the iterations between are taken to follow. That
-  is valid only for addresses **affine in $\kappa$**, where in bounds at both ends implies
-  in bounds between. A term in $\%$ or $\&$ of $\kappa$, or a product $\kappa\cdot\alpha$
-  with $\alpha$ symbolic, breaks it.
 - **Preconditions.** Declared regions, lengths, element facts and ranges, pointer arrays,
   pinned symbols and invariants (`add_region`, `add_element_fact`, `add_element_range`,
   `add_pointer_elements`, `pin`, `add_invariant`) are asserted, not proved.

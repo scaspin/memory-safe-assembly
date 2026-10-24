@@ -30,7 +30,6 @@
 - [ ] before/after comparison to make sure asm optimizations are safe? (rav1d bounty)
 ## Soundness
 
-- [ ] pinned trip counts check only the first and last iteration; sound only for addresses affine in the loop counter (`%`, `&`, counter·symbol terms break it)
 - [ ] `&[*const T]` pointer arrays: row lengths cannot be checked at run time (reported as a finding)
 - [ ] red zone is trusted per annotation (`red_zone = 128` on `ccaes_arm_decrypt_key`)
 - [ ] AArch64 32-bit arguments assume clean upper bits (the ABI leaves bits 32-63 unspecified)
