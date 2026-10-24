@@ -48,6 +48,14 @@
 | rav1d aarch64 / x86 | 374/549, 2/2 |
 | ffmpeg | 1208/1391 |
 
+Re-sweep of 2026-10-24 after the eleven soundness fixes (end of listing, stack balance at
+`ret`, solver wall clock, implied base case, round prefixes, history in the merge key,
+fresh bounds, pinned counts, unspecified upper halves of 32-bit arguments, unsafe wrappers,
+Apple-only red zone): corecrypto, graviola, openblas, candle, crypto and bignum give the
+counts above, function for function, except that bignum curve25519_x25519_byte and
+curve25519_x25519_byte_alt swapped places at the 300 s timeout. Samples of 40 functions
+with 32-bit arguments each: rav1d 40/40, ffmpeg 40/40 (epel_uni_w_h32_8 with --mem-gb 10).
+
 - [ ] timeouts since the summary-validation fixes: p256/p384_montjscalarmul (latch counter reloaded from memory, so no summary), chacha20_poly1305_open/seal, ff_simple_idct*, w_mask_420_16bpc, openblas x86 dscal (borderline) and idamax_k
 - [ ] rav1d ipred_pixel_set_8bpc times out (also at 08a11aa1; its `verified` row was stale). Re-sweep after the seven soundness fixes: candle, openblas, crypto, corecrypto and rav1d ipred/mc lost no verdict
 - [ ] bignum_kmul_32_64 / ksqr_32_64: select condition the engine does not model
