@@ -1623,8 +1623,10 @@ pub(super) struct RoundEntry {
 
 #[derive(Debug, Clone)]
 pub(super) struct Generalization {
+    pub(super) progress: LoopCounter,
     pub(super) steps: Vec<(usize, i64)>,
     pub(super) free_registers: Vec<usize>,
     pub(super) free_flags: Vec<usize>,
     pub(super) nonnegative: Vec<usize>,
+    pub(super) guards: Vec<AbstractComparison>,
 }

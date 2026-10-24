@@ -2870,11 +2870,12 @@ impl<M: Machine> Engine<M> {
             ))
         };
         let condition = rewritten(expression)?;
-        let guards: Vec<ast::Bool> = prefix
+        let guards: Vec<AbstractComparison> = prefix
             .iter()
             .filter_map(|(guard, taken)| {
-                let c = comparison_to_ast(rewritten(guard)?)?;
-                Some(if *taken { c } else { c.not() })
+                let held = rewritten(guard)?;
+                let held = if *taken { held } else { held.not() };
+                comparison_to_ast(held.clone()).is_some().then_some(held)
             })
             .collect();
         let mut free_flags = Vec::new();
@@ -2901,7 +2902,10 @@ impl<M: Machine> Engine<M> {
             .collect();
         let progresses = comparison_to_ast(AbstractComparison::new(">=", progress, zero))?;
         self.computer.solver().assert(progresses);
-        for guard in guards {
+        for guard in guards
+            .iter()
+            .filter_map(|guard| comparison_to_ast(guard.clone()))
+        {
             self.computer.solver().assert(guard);
         }
         for (i, register) in updates {
@@ -2917,15 +2921,17 @@ impl<M: Machine> Engine<M> {
         Some((
             self.computer.get_state(),
             Generalization {
+                progress: counter,
                 steps,
                 free_registers,
                 free_flags,
                 nonnegative,
+                guards,
             },
         ))
     }
 
-    fn round_covers(
+    pub(super) fn round_covers(
         &self,
         generalized: &MachineState,
         next: &MachineState,
@@ -2964,11 +2970,20 @@ impl<M: Machine> Engine<M> {
                 }
             }
         });
+        let progress = &generalization.progress;
+        let shifted_progress = generate_expression("+", progress.expression(), shift.clone());
         if !registers
             || !generalization
                 .nonnegative
                 .iter()
                 .all(|&i| self.proves(at_least_zero(&next.0[i])))
+            || !generalization.guards.iter().all(|guard| {
+                self.implied(&comparison_with_counter_at(
+                    guard,
+                    progress.name(),
+                    &shifted_progress,
+                ))
+            })
         {
             return false;
         }

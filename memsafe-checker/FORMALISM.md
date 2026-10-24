@@ -989,8 +989,9 @@ back. The loop at $pc$ is then treated as a sequence of *rounds* through that ex
 first round records its state; the second generalizes the drift between the two rounds
 to a fresh progress symbol $p \ge 0$, widening registers that do not move in step and
 re-asserting the replayed branch decisions (`generalize_round`); a later round whose
-state is an instance of the generalized one at some $p \ge 0$ ends its path
-(`round_covers`), since the generalized state has already been explored.
+state is an instance of the generalized one at some $p \ge 0$, and at which every replayed
+decision is proved to hold, ends its path (`round_covers`), since the generalized state
+has already been explored.
 
 **Abandoning.** If a path started at the depth that opened $L$ ends without returning to
 $pc$, the epilogue of `run` pops $S$. Every push therefore has exactly one pop.
@@ -1081,7 +1082,7 @@ for some extension of $\theta$:
 | **(Acc-Close)** | Induction: the base case is the explored iterations and the exit at the summarizing visit, the step is $\mathsf{IND}$ | Holds for the components $\mathsf{IND}$ inspects. Cells and stack writes are covered by the journal and the blind-write check. |
 | **(Validate)**, **(Refuted)** | A result under a summary counts only if the summary's inductive check never failed | Holds: a refuted summary's result is discarded and the loop re-explored from the fallback. The ledger only lets a failure count when the failing path relied on no refuted instance. |
 | **(Havoc)** | Fresh symbols over-approximate any number of iterations | Holds: the body has no memory access to check, and every register it writes is havocked, as are all four flags. |
-| Rounds | A covered round is an instance of an explored generalized round | Holds if the generalization contains the round it came from ($p = 0$). |
+| Rounds | A covered round is an instance of an explored generalized round | Holds: the covered round is the generalized state at its shift, and the replayed decisions the generalized exploration assumed are proved there. |
 
 **Trusted assumptions.** These are relied on, not checked:
 

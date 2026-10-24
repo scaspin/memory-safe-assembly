@@ -2060,6 +2060,58 @@ mod tests {
         assert_eq!(forked.computer.solver.check(), SatResult::Sat);
     }
 
+
+    #[test]
+    fn a_round_is_covered_only_where_the_replayed_decisions_hold() {
+        let engine = ExecutionEngine::new(vec!["start:", "ret"]);
+        let progress = LoopCounter::for_loop(LoopId::new(9));
+        let walker_at = |shift: AbstractExpression| {
+            RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(generate_expression("+", abstract_of("base"), shift)),
+                0,
+            )
+        };
+        let replayed = AbstractComparison::new(
+            "<=",
+            progress.expression(),
+            AbstractExpression::Immediate(8),
+        );
+        for fact in [
+            AbstractComparison::new(
+                ">=",
+                progress.expression(),
+                AbstractExpression::Immediate(0),
+            ),
+            replayed.clone(),
+        ] {
+            engine
+                .computer
+                .solver
+                .assert(comparison_to_ast(fact).expect("a linear fact"));
+        }
+        let mut generalized = engine.computer.get_state();
+        generalized.0[0] = walker_at(progress.expression());
+        let generalization = Generalization {
+            progress: progress.clone(),
+            steps: vec![(0, 1)],
+            free_registers: Vec::new(),
+            free_flags: Vec::new(),
+            nonnegative: Vec::new(),
+            guards: vec![replayed],
+        };
+        let next_round = |by: i64| {
+            let mut next = generalized.clone();
+            next.0[0] = walker_at(generate_expression(
+                "+",
+                progress.expression(),
+                AbstractExpression::Immediate(by),
+            ));
+            next
+        };
+        assert!(engine.round_covers(&generalized, &next_round(0), &generalization));
+        assert!(!engine.round_covers(&generalized, &next_round(16), &generalization));
+    }
     #[test]
     fn engine_stays_small_enough_to_clone_per_branch() {
         assert!(
