@@ -682,6 +682,7 @@ pub struct Annotation {
     invariants: Vec<AbstractComparison>,
     combinations: Vec<Vec<AbstractComparison>>,
     unchecked_rows: Vec<String>,
+    unchecked_pointer_fields: Vec<(String, usize)>,
 }
 
 pub struct Verdict {
@@ -1203,7 +1204,21 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         };
     }
 
-    let original_fn_call = vars.item_fn.clone();
+    let unchecked_pointer_fields: Vec<(String, usize)> = new_structs
+        .iter()
+        .flat_map(|(name, declared)| {
+            declared
+                .fields
+                .iter()
+                .enumerate()
+                .filter(|(_, field)| matches!(field.ty, Type::Ptr(_)))
+                .map(move |(index, _)| (name.clone(), index))
+        })
+        .collect();
+    let mut original_fn_call = vars.item_fn.clone();
+    if !unchecked_rows.is_empty() || !unchecked_pointer_fields.is_empty() {
+        original_fn_call.unsafety = Some(Default::default());
+    }
     let unsafe_block: Stmt = parse_quote! {
         #original_fn_call {
 
@@ -1258,6 +1273,7 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         invariants,
         combinations,
         unchecked_rows,
+        unchecked_pointer_fields,
     })
 }
 
@@ -1281,7 +1297,6 @@ impl Annotation {
             pointer_arrays,
             invariants,
             combinations,
-            unchecked_rows,
             ..
         } = self;
         let fn_name = &signature.ident;
@@ -1776,9 +1791,16 @@ impl Annotation {
                 }
             }
         }
-        for array in unchecked_rows {
+        for array in &self.unchecked_rows {
             findings.push(format!(
-                "the rows of {array} are raw pointers, so their length is not checked at run time"
+                "the rows of {array} are raw pointers whose lengths cannot be checked at run time: \
+                 they are the caller's contract, so the wrapper is an unsafe fn"
+            ));
+        }
+        for (tuple, index) in &self.unchecked_pointer_fields {
+            findings.push(format!(
+                "field {index} of {tuple} is a raw pointer whose length cannot be checked at run time: \
+                 it is the caller's contract, so the wrapper is an unsafe fn"
             ));
         }
         let mut distinct_diagnostics: Vec<String> = Vec::new();
@@ -1874,6 +1896,29 @@ mod tests {
             expansion.contains(&format!("assert!({}=={exact});", fits("n*inc_x"))),
             "{expansion}"
         );
+    }
+
+    #[test]
+    fn a_wrapper_relying_on_unchecked_raw_pointers_is_unsafe() {
+        let wrapper_of = |attr: TokenStream, item: TokenStream| {
+            let annotation = parse_annotation(attr, item).expect("annotation parses");
+            without_spaces(&annotation.expansion.to_string())
+        };
+        let rows = wrapper_of(
+            quote! { "f.S", src.as_ptr(), n, k, [src == [&[i16; n]; k], src.len() == k] },
+            quote! { fn f(src: &[*const i16], n: usize, k: usize); },
+        );
+        assert!(rows.starts_with("unsafefnf("), "{rows}");
+        let field = wrapper_of(
+            quote! { "f.S", data as *mut _ },
+            quote! { fn f(data: &mut ([u8; 4], *const u8, usize)); },
+        );
+        assert!(field.starts_with("unsafefnf("), "{field}");
+        let checked = wrapper_of(
+            quote! { "f.S", src.as_ptr(), n, k, [src == [&[i16; n]; k], src.len() == k] },
+            quote! { fn f(src: &[&[i16]], n: usize, k: usize); },
+        );
+        assert!(checked.starts_with("fnf("), "{checked}");
     }
 
     #[test]

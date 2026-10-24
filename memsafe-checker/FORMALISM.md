@@ -1092,7 +1092,10 @@ for some extension of $\theta$:
 
 - **Preconditions.** Declared regions, lengths, element facts and ranges, pointer arrays,
   pinned symbols and invariants (`add_region`, `add_element_fact`, `add_element_range`,
-  `add_pointer_elements`, `pin`, `add_invariant`) are asserted, not proved. Integer
+  `add_pointer_elements`, `pin`, `add_invariant`) are asserted, not proved. The generated
+  wrapper checks each at run time; one it cannot check (the lengths behind raw pointers in
+  a pointer array or a tuple field) makes the wrapper an `unsafe fn`, the length being the
+  caller's contract. Integer
   arguments of 32 bits or fewer (`bool`, `u8`…`i32`) are asserted to lie in their type's
   range, and their 64-bit register is $v + 2^{32}h$ with $h$ unconstrained: AAPCS64 and
   the System V x86-64 ABI leave the upper half unspecified.

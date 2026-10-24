@@ -30,7 +30,6 @@
 - [ ] before/after comparison to make sure asm optimizations are safe? (rav1d bounty)
 ## Soundness
 
-- [ ] `&[*const T]` pointer arrays: row lengths cannot be checked at run time (reported as a finding)
 - [ ] red zone is trusted per annotation (`red_zone = 128` on `ccaes_arm_decrypt_key`)
 
 ## Loop acceleration structure
