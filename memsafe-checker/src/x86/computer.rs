@@ -22,6 +22,7 @@ const EXTERNAL_REGIONS: [(&str, i64); 1] = [("OPENSSL_ia32cap_P", 16)];
 pub const STACK: &str = "sp";
 pub const RETURN: &str = "return";
 pub const RETURN_TO: &str = "return_to";
+pub const RETURN_ADDRESS_BYTES: i64 = 8;
 
 #[derive(Clone)]
 pub struct X86_64 {
@@ -348,15 +349,6 @@ impl X86_64 {
             if let Some(register) = respelled(&self.register_at(i), symbol, value) {
                 self.set_register_at(i, register);
             }
-        }
-    }
-
-    pub fn check_stack_pointer_restored(&self, pc: usize) {
-        let s = &self.registers[RSP];
-        if s.base == Some(abstract_of(STACK)) && (s.offset == 8 || s.offset == 0) {
-            log::info!("Stack pointer restored to start");
-        } else {
-            log::error!("line {pc}: stack pointer not restored on return: {s:?}");
         }
     }
 }

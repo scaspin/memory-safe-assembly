@@ -671,8 +671,10 @@ impl<M: Machine> Engine<M> {
                 Step::Continue(next) => pc = next,
                 Step::Stop => return Ok(()),
                 Step::Return => {
-                    self.computer.check_stack_pointer_restored(pc);
-                    return Ok(());
+                    return self
+                        .computer
+                        .check_stack_pointer_restored(pc)
+                        .map_err(Error::other);
                 }
             }
         }

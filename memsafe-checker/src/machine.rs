@@ -146,7 +146,35 @@ pub trait Machine: Clone {
     fn set_unknown_flags(&mut self);
     fn fresh_index(&mut self) -> usize;
     fn substitute_symbol(&mut self, symbol: &str, value: i64);
-    fn check_stack_pointer_restored(&self, pc: usize);
+    fn stack_pointer_at_return(&self) -> (RegisterValue, i64);
+
+    fn check_stack_pointer_restored(&self, pc: usize) -> Result<(), String> {
+        let (sp, past_entry) = self.stack_pointer_at_return();
+        let value = sp.expression();
+        let expected = generate_expression(
+            "+",
+            AbstractExpression::Abstract("sp".to_string()),
+            AbstractExpression::Immediate(past_entry),
+        );
+        let restored = comparison_to_ast(AbstractComparison::new(
+            "!=",
+            value.clone(),
+            expected.clone(),
+        ))
+        .is_some_and(|moved| {
+            let mut assuming = self.select_assumptions(&value);
+            assuming.push(moved);
+            check(self.solver(), &assuming) == SatResult::Unsat
+        });
+        if restored {
+            log::info!("Stack pointer restored to start");
+            Ok(())
+        } else {
+            Err(format!(
+                "line {pc}: stack pointer not restored on return: sp is {value}, not {expected}"
+            ))
+        }
+    }
     fn read_rw_queue(&self) -> Vec<MemoryAccess>;
     fn clear_rw_queue(&mut self);
 

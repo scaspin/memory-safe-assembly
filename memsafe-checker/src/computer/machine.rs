@@ -400,8 +400,8 @@ impl Machine for ARMCORTEXA {
         ARMCORTEXA::substitute_symbol(self, symbol, value)
     }
 
-    fn check_stack_pointer_restored(&self, pc: usize) {
-        ARMCORTEXA::check_stack_pointer_restored(self, pc)
+    fn stack_pointer_at_return(&self) -> (RegisterValue, i64) {
+        (self.registers[31].clone(), 0)
     }
 
     fn read_rw_queue(&self) -> Vec<MemoryAccess> {

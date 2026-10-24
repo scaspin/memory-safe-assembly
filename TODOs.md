@@ -31,7 +31,6 @@
 ## Soundness
 
 - [ ] pinned trip counts check only the first and last iteration; sound only for addresses affine in the loop counter (`%`, `&`, counter·symbol terms break it)
-- [ ] an unbalanced stack pointer at `ret` is only logged, not rejected
 - [ ] base-case check of a summary proves facts with trip symbols satisfiable, not implied
 - [ ] path merging leaves jump history out of the key; argued sound, not proved for history-dependent discharge
 - [ ] `&[*const T]` pointer arrays: row lengths cannot be checked at run time (reported as a finding)

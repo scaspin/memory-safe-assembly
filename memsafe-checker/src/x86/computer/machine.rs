@@ -270,8 +270,8 @@ impl Machine for X86_64 {
         X86_64::substitute_symbol(self, symbol, value)
     }
 
-    fn check_stack_pointer_restored(&self, pc: usize) {
-        X86_64::check_stack_pointer_restored(self, pc)
+    fn stack_pointer_at_return(&self) -> (RegisterValue, i64) {
+        (self.registers[RSP].clone(), RETURN_ADDRESS_BYTES)
     }
 
     fn read_rw_queue(&self) -> Vec<MemoryAccess> {

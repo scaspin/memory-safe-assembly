@@ -372,10 +372,14 @@ whose region is `sp` is also recorded in `blind_stack_writes` (§6.5).
 **Returns (AArch64).** `x30` starts as $\langle\mathtt{return}\rangle$ and `bl`/`blr` set
 it to $\langle\mathtt{return\_to}\rangle{+}(pc{+}1)$. `ret` through $\langle\mathtt{return}\rangle$
 ends the path, through $\langle\mathtt{return\_to}\rangle{+}n$ jumps to line $n$, and
-through any other value (a literal, $\top$, a data symbol) is an error.
+through any other value (a literal, $\top$, a data symbol) is an error. A return through
+$\langle\mathtt{return}\rangle$ ends the path only if $\Pi \vDash \mathtt{sp} = \mathtt{sp}_0$, the
+entry value, however the two are spelled (`check_stack_pointer_restored`); otherwise it
+is an error.
 
 **x86-64.** `push`/`pop`/`call`/`ret` move through the modelled stack, whose cell 0 holds
-the return address; `ret` through any other value is an error. `rep` string operations
+the return address; `ret` through any other value is an error, and a return to the
+caller must leave $\Pi \vDash \mathtt{rsp} = \mathtt{rsp}_0 + 8$. `rep` string operations
 check the whole range they move (`store_range`, `load_range`).
 
 ---
