@@ -38,7 +38,6 @@
 - [ ] bounds on fresh symbols asserted outside a scope are lost on scope rebuild (precision only; fixed on loop release)
 - [ ] round generalization does not check that a covered round took the same prefix decisions as the generalized one
 - [ ] AArch64 32-bit arguments assume clean upper bits (the ABI leaves bits 32-63 unspecified)
-- [ ] the legacy-arith escalation in `common::check` can hang in z3's Gröbner step past its resource limit; add a wall-clock guard
 
 ## Loop acceleration structure
 

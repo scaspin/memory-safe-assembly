@@ -46,3 +46,29 @@ fn a_query_the_default_engine_gives_up_on_is_still_decided() {
     assert_eq!(check(&solver, &[]), SatResult::Unsat);
     assert_eq!(z3::get_global_param("smt.arith.solver"), before);
 }
+
+const SUM_OF_TWO_CUBES: &str = r#"
+(declare-fun x () Int)
+(declare-fun y () Int)
+(declare-fun z () Int)
+(assert (> x 0))
+(assert (> y 0))
+(assert (> z 0))
+(assert (= (+ (* x x x) (* y y y)) (* z z z)))
+"#;
+
+#[test]
+fn a_query_no_engine_decides_gives_up_within_its_budget() {
+    let solver = z3::Solver::new();
+    solver.from_string(SUM_OF_TWO_CUBES);
+    let started = std::time::Instant::now();
+    assert_eq!(
+        check_within(&solver, &[], std::time::Duration::from_secs(3)),
+        SatResult::Unknown
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(30),
+        "took {:?}",
+        started.elapsed()
+    );
+}

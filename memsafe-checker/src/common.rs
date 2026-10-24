@@ -1,20 +1,40 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 use z3::*;
 
 use crate::instruction_parser::{self, Arrangement};
 
 const PATH_RESOURCE_LIMIT: u32 = 2_000_000;
-const ESCALATION: [(ArithmeticEngine, u32); 5] = [
-    (ArithmeticEngine::Legacy, 5_000_000),
-    (ArithmeticEngine::Default, 20_000_000),
-    (ArithmeticEngine::Legacy, 50_000_000),
-    (ArithmeticEngine::Default, 200_000_000),
-    (ArithmeticEngine::Legacy, 500_000_000),
+const ESCALATION: [(ArithmeticEngine, u32, Duration); 5] = [
+    (ArithmeticEngine::Legacy, 5_000_000, Duration::from_secs(5)),
+    (
+        ArithmeticEngine::Default,
+        20_000_000,
+        Duration::from_secs(15),
+    ),
+    (
+        ArithmeticEngine::Legacy,
+        50_000_000,
+        Duration::from_secs(30),
+    ),
+    (
+        ArithmeticEngine::Default,
+        200_000_000,
+        Duration::from_secs(60),
+    ),
+    (
+        ArithmeticEngine::Legacy,
+        500_000_000,
+        Duration::from_secs(120),
+    ),
 ];
 const UNLIMITED: u32 = 0;
+const NO_TIMEOUT_MS: u32 = u32::MAX;
 const LEGACY_ARITHMETIC_ENGINE: u32 = 2;
+const DEFAULT_CHECK_TIMEOUT: Duration = Duration::from_secs(600);
 
 #[derive(Clone, Copy)]
 enum ArithmeticEngine {
@@ -35,10 +55,37 @@ impl ArithmeticEngine {
     }
 }
 
+fn check_timeout() -> Duration {
+    static CONFIGURED: OnceLock<Duration> = OnceLock::new();
+    *CONFIGURED.get_or_init(|| {
+        std::env::var("BUMS_CHECK_TIMEOUT_SECS")
+            .ok()
+            .and_then(|seconds| seconds.trim().parse().ok())
+            .map(Duration::from_secs)
+            .unwrap_or(DEFAULT_CHECK_TIMEOUT)
+    })
+}
+
 pub fn check(solver: &Solver, assumptions: &[ast::Bool]) -> SatResult {
-    set_resource_limit(solver, PATH_RESOURCE_LIMIT);
-    let decided = solver.check_assumptions(assumptions);
-    set_resource_limit(solver, UNLIMITED);
+    check_within(solver, assumptions, check_timeout())
+}
+
+pub fn check_within(solver: &Solver, assumptions: &[ast::Bool], budget: Duration) -> SatResult {
+    let deadline = Instant::now() + budget;
+    let left = |cap: Duration| deadline.saturating_duration_since(Instant::now()).min(cap);
+    let bounded = |solver: &Solver, units: u32, cap: Duration, run: &dyn Fn() -> SatResult| {
+        let time = left(cap);
+        if time.is_zero() {
+            return SatResult::Unknown;
+        }
+        set_limits(solver, units, milliseconds(time));
+        let decided = run();
+        set_limits(solver, UNLIMITED, NO_TIMEOUT_MS);
+        decided
+    };
+    let decided = bounded(solver, PATH_RESOURCE_LIMIT, budget, &|| {
+        solver.check_assumptions(assumptions)
+    });
     if decided != SatResult::Unknown {
         return decided;
     }
@@ -47,23 +94,31 @@ pub fn check(solver: &Solver, assumptions: &[ast::Bool]) -> SatResult {
         .into_iter()
         .chain(assumptions.iter().cloned())
         .collect();
-    for (engine, units) in ESCALATION {
+    for (engine, units, cap) in ESCALATION {
         let fresh = engine.solver();
-        set_resource_limit(&fresh, units);
         for fact in &facts {
             fresh.assert(fact);
         }
-        let decided = fresh.check();
+        let decided = bounded(&fresh, units, cap, &|| fresh.check());
         if decided != SatResult::Unknown {
             return decided;
         }
     }
-    solver.check_assumptions(assumptions)
+    bounded(solver, UNLIMITED, budget, &|| {
+        solver.check_assumptions(assumptions)
+    })
 }
 
-fn set_resource_limit(solver: &Solver, units: u32) {
+fn milliseconds(time: Duration) -> u32 {
+    u32::try_from(time.as_millis())
+        .unwrap_or(NO_TIMEOUT_MS - 1)
+        .clamp(1, NO_TIMEOUT_MS - 1)
+}
+
+fn set_limits(solver: &Solver, units: u32, timeout_ms: u32) {
     let mut params = Params::new();
     params.set_u32("rlimit", units);
+    params.set_u32("timeout", timeout_ms);
     solver.set_params(&params);
 }
 

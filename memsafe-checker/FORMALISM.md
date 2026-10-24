@@ -45,8 +45,11 @@ permanently. "unsat" always means z3 returned `Unsat`. `Unknown` is never treate
 **Escalation** (`common::check`). Most path queries go through `check`: the path solver
 first runs with a resource limit; on `Unknown` the assertions and assumptions are copied
 into fresh solvers that alternate z3's two arithmetic engines under growing limits
-(`ESCALATION`), and only then is the path solver asked again without a limit. Escalation
-changes how often `Unknown` comes back, never what `Sat`/`Unsat` mean.
+(`ESCALATION`), and only then is the path solver asked again without a resource limit.
+Every step also has a wall clock (z3's `timeout`): each escalation step its own, and the
+whole query at most `BUMS_CHECK_TIMEOUT_SECS` (600 s by default), so a step that ignores
+its resource limit returns `Unknown` (`check_within`). Escalation changes how often
+`Unknown` comes back, never what `Sat`/`Unsat` mean.
 
 ---
 
