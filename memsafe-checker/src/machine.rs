@@ -15,6 +15,8 @@ pub type MachineState = (
     Option<FlagValue>,
 );
 
+const FINITE_VALUES_RESOURCE_LIMIT: u32 = 5_000_000;
+
 pub type SelectDefinitions =
     BTreeMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>;
 
@@ -392,6 +394,8 @@ pub trait Machine: Clone {
         let Some(region) = self.memory().get(&cell.region) else {
             return;
         };
+        let kept =
+            self.indexed_facts_apart(&cell.region, Some(ast::Int::from_i64(cell.offset)), width);
         for k in region.overlapping(cell.offset, width) {
             self.forget_cell(&cell.region, k);
         }
@@ -405,10 +409,126 @@ pub trait Machine: Clone {
         };
         region.put(cell.offset, Some((value, Some(width))));
         region.mark_written(cell.offset, width);
+        region.keep_indexed_facts(kept);
         self.write_journal_mut().push(CellWrite {
             cell: cell.clone(),
             previous: None,
         });
+    }
+
+    fn indexed_facts_apart(
+        &self,
+        region: &str,
+        start: Option<ast::Int>,
+        width: i64,
+    ) -> Vec<IndexedFact> {
+        let (Some(region), Some(start)) = (self.memory().get(region), start) else {
+            return Vec::new();
+        };
+        let end = ast::Int::add(&[&start, &ast::Int::from_i64(width)]);
+        region
+            .indexed_facts()
+            .iter()
+            .filter(|fact| {
+                fact.byte_span().is_some_and(|(first, last)| {
+                    let overlap = ast::Bool::and(&[&start.lt(&last), &first.lt(&end)]);
+                    refuted_for_indexed_fact(self.solver(), &overlap)
+                })
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn add_indexed_fact(&mut self, region: &str, fact: IndexedFact) -> Result<(), String> {
+        let Some(declared) = self.memory().get(region) else {
+            return Err(format!("no region {region} to state {} about", fact.label));
+        };
+        let length = expression_to_ast(declared.get_length());
+        let spans = fact.byte_span().zip(fact.is_empty_ast());
+        let inside = fact.stride > 0
+            && fact.width > 0
+            && spans
+                .zip(length)
+                .is_some_and(|(((start, stop), empty), length)| {
+                    let first = expression_to_ast(fact.first.clone());
+                    let end = expression_to_ast(fact.end.clone());
+                    let (Some(first), Some(end)) = (first, end) else {
+                        return false;
+                    };
+                    let zero = ast::Int::from_i64(0);
+                    let outside = ast::Bool::or(&[
+                        &end.lt(&first),
+                        &ast::Bool::and(&[
+                            &empty.not(),
+                            &ast::Bool::or(&[&start.lt(&zero), &stop.gt(&length)]),
+                        ]),
+                    ]);
+                    check(self.solver(), &[outside]) == SatResult::Unsat
+                });
+        if !inside {
+            return Err(format!(
+                "{} may index outside {region}: its index is not provably within the length",
+                fact.label
+            ));
+        }
+        let key = (
+            region.to_string(),
+            -1 - declared.indexed_facts().len() as i64,
+        );
+        self.element_facts()
+            .borrow_mut()
+            .insert(key, (fact.label.clone(), false));
+        if let Some(declared) = self.memory_mut().get_mut(region) {
+            declared.add_indexed_fact(fact);
+        }
+        Ok(())
+    }
+
+    fn proves(&self, fact: &AbstractComparison) -> bool {
+        comparison_to_ast(fact.clone())
+            .is_some_and(|holds| check(self.solver(), &[holds.not()]) == SatResult::Unsat)
+    }
+
+    fn add_field(
+        &mut self,
+        region: &str,
+        offset: i64,
+        width: i64,
+        value: AbstractExpression,
+    ) -> Result<(), String> {
+        let Some(declared) = self.memory().get(region) else {
+            return Err(format!(
+                "no region {region} holds the field at byte {offset}"
+            ));
+        };
+        let inside = AbstractComparison::new(
+            "<=",
+            AbstractExpression::Immediate(offset + width),
+            declared.get_length(),
+        );
+        if offset < 0 || !self.proves(&inside) {
+            return Err(format!(
+                "the {width}-byte field at byte {offset} of {region} is not provably inside it"
+            ));
+        }
+        if !declared.overlapping(offset, width).is_empty() {
+            return Err(format!(
+                "the {width}-byte field at byte {offset} of {region} overlaps another declared value"
+            ));
+        }
+        let value = RegisterValue::new(RegisterKind::RegisterBase, Some(value), 0);
+        if let Some(declared) = self.memory_mut().get_mut(region) {
+            declared.insert_sized(offset, value, width);
+        }
+        Ok(())
+    }
+
+    fn note_indexed_read(&self, region: &str, fact: &IndexedFact) {
+        for ((named, key), (label, read)) in self.element_facts().borrow_mut().iter_mut() {
+            if named == region && *key < 0 && *label == fact.label {
+                *read = true;
+            }
+        }
     }
 
     fn forget_where_written(&mut self, base: &AbstractExpression, offset: i64, width: i64) {
@@ -429,6 +549,10 @@ pub trait Machine: Clone {
         let start = expression_to_ast(base.clone())
             .map(|b| ast::Int::add(&[&b, &ast::Int::from_i64(offset)]));
         for name in regions {
+            let within = start
+                .as_ref()
+                .map(|start| ast::Int::sub(&[start, &ast::Int::new_const(name.clone())]));
+            let kept = self.indexed_facts_apart(&name, within, width);
             let region = &self.memory()[&name];
             let slots: Vec<(i64, i64)> = region
                 .content
@@ -452,6 +576,7 @@ pub trait Machine: Clone {
             }
             if let Some(region) = self.memory_mut().get_mut(&name) {
                 region.renew_unwritten();
+                region.keep_indexed_facts(kept);
             }
         }
     }
@@ -531,6 +656,20 @@ pub trait Machine: Clone {
     }
 
     fn finite_values(&self, symbol: &str, cap: usize) -> Option<Vec<i64>> {
+        let solver = self.solver();
+        let mut bounded = Params::new();
+        bounded.set_u32("rlimit", FINITE_VALUES_RESOURCE_LIMIT);
+        solver.set_params(&bounded);
+        solver.push();
+        let found = self.enumerated_values(symbol, cap);
+        solver.pop(1);
+        let mut unbounded = Params::new();
+        unbounded.set_u32("rlimit", 0);
+        solver.set_params(&unbounded);
+        found
+    }
+
+    fn enumerated_values(&self, symbol: &str, cap: usize) -> Option<Vec<i64>> {
         let var = ast::Int::new_const(symbol.to_string());
         let mut found: Vec<i64> = Vec::new();
         loop {

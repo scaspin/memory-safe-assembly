@@ -427,3 +427,55 @@ fn a_signed_greater_branch_after_a_compare_is_exact() {
     );
     assert!(read_indexed_by_a_condition(&["cmp x0,x1", "b.le skip", "cset x3, gt"]).is_err());
 }
+
+fn word_countdown_walk(prologue: &[&str], slack: i64) -> Result<(), String> {
+    init();
+    let program: Vec<String> = std::iter::once("start:")
+        .chain(prologue.iter().copied())
+        .chain([
+            "walk:",
+            "ld1 { v0.16b, v1.16b }, [x0], #32",
+            "subs w1, w1, #32",
+            "b.pl walk",
+            "done:",
+            "ret",
+        ])
+        .map(str::to_string)
+        .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "src");
+    engine.add_region(
+        RegionType::READ,
+        "src",
+        generate_expression(
+            "+",
+            abstract_of("size"),
+            AbstractExpression::Immediate(slack),
+        ),
+    );
+    engine.add_abstract_from(1, "size");
+    for (op, bound) in [(">=", 0), ("<=", 1 << 30)] {
+        engine.add_invariant(AbstractComparison::new(
+            op,
+            abstract_of("size"),
+            AbstractExpression::Immediate(bound),
+        ));
+    }
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_word_countdown_latched_on_its_sign_bounds_its_walk() {
+    assert_eq!(
+        word_countdown_walk(&["subs w1, w1, #32", "b.mi done"], 0),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_word_countdown_rebased_before_its_walk_bounds_its_walk() {
+    assert_eq!(
+        word_countdown_walk(&["subs w1, w1, #48", "b.mi done", "add w1, w1, #16"], 0),
+        Ok(())
+    );
+}

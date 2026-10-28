@@ -88,7 +88,7 @@ fn ff_bwdif_filter_intra_neon(dst: &mut [u8], cur: &[u8], w: usize, prefs: i64, 
 #[bums::check_mem_safe("swscale_unscaled_neon.S", dst1.as_mut_ptr(), ds1, dst2.as_mut_ptr(), ds2, src.as_ptr(), ss, w, h,
     [dst1.len() == (h / 2 - 1) * ds1 + w, dst2.len() == (h / 2 - 1) * ds2 + w, src.len() == (h - 1) * ss + 4 * w,
      ds1 >= w, ds2 >= w, ss >= 4 * w, ds1 <= 1073741824, ds2 <= 1073741824, ss <= 1073741824,
-     w >= 1, w <= 8192, h % 2 == 0, h >= 2, h <= 16384])]
+     w % 8 == 0, w >= 8, w <= 8192, h % 2 == 0, h >= 2, h <= 16384])]
 fn ff_nv24_to_yuv420p_chroma_neon(dst1: &mut [u8], ds1: usize, dst2: &mut [u8], ds2: usize, src: &[u8], ss: usize, w: usize, h: usize);
 
 #[bums::check_mem_safe("vf_nlmeans_neon.S", ii.as_mut_ptr().add(stride + 4), stride, s1.as_ptr(), linesize1, s2.as_ptr(), linesize2, w, h,

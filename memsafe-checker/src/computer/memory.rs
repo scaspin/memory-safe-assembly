@@ -109,12 +109,16 @@ impl ARMCORTEXA {
         address: RegisterValue,
         width: i64,
     ) -> Result<(), MemorySafetyError> {
+        self.indexed_read = None;
         let res = self.mem_safe_access(
             region_base(&address, RegionType::READ, width)?,
             address.offset,
             RegionType::READ,
             width,
         );
+        if res.is_ok() {
+            self.indexed_read = self.indexed_read_at(&address, width);
+        }
         let address = match &address.base {
             Some(base) if self.recall_slot(base, address.offset, width).is_none() => {
                 self.settled_stack_address(address)
@@ -122,6 +126,21 @@ impl ARMCORTEXA {
             _ => address,
         };
 
+        if res.is_ok()
+            && let Some(base) = address.base.clone()
+            && self.holds_many(&base)
+        {
+            self.pristine_read = None;
+            let value = self.unknown_load(width);
+            self.set_register(&t, value.kind, value.base, value.offset);
+            self.mark_loaded(&t);
+            self.rw_queue.push(MemoryAccess {
+                kind: RegionType::READ,
+                base,
+                offset: address.offset,
+            });
+            return Ok(());
+        }
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = address.base.clone() {
                 let (region_name, offset) = self.get_memory_pointer(base.clone(), address.offset);
@@ -132,7 +151,9 @@ impl ARMCORTEXA {
                 let pristine = region.epoch == 0;
                 let value = match region.read(offset, width) {
                     Some(v) => {
-                        self.note_element_read(&region_name, offset);
+                        for cell in region.overlapping(offset, width) {
+                            self.note_element_read(&region_name, cell);
+                        }
                         self.pristine_read = None;
                         Some(v)
                     }
@@ -152,7 +173,7 @@ impl ARMCORTEXA {
                         )
                     }
                 };
-                match value {
+                match value.map(|v| self.distinct_row(v)) {
                     Some(v) => {
                         self.set_register(&t, v.kind.clone(), v.base.clone(), v.offset);
                         self.mark_loaded(&t);
@@ -191,6 +212,7 @@ impl ARMCORTEXA {
                         .recall_slot(&base, address.offset, width)
                         .unwrap_or_else(|| self.unknown_load(width)),
                 };
+                let value = self.distinct_row(value);
                 self.pristine_read =
                     pristine.filter(|region| self.element_read(region, &address, width));
                 self.rw_queue.push(MemoryAccess {
@@ -205,6 +227,295 @@ impl ARMCORTEXA {
         } else {
             res
         }
+    }
+
+    fn indexed_read_at(&self, address: &RegisterValue, width: i64) -> Option<IndexedRead> {
+        let base = address.base.as_ref()?;
+        let (region, symbol, label_offset) = self.region_of(base)?;
+        if self.memory.get(&region)?.indexed_facts().is_empty() {
+            return None;
+        }
+        let offset = generate_expression(
+            "+",
+            generate_expression("-", base.clone(), AbstractExpression::Abstract(symbol)),
+            AbstractExpression::Immediate(address.offset + label_offset),
+        );
+        Some(IndexedRead {
+            region,
+            offset,
+            width,
+        })
+    }
+
+    pub(crate) fn apply_indexed_facts(&mut self, dst: &Operand, width: i64, signed: bool) {
+        let Some(read) = self.indexed_read.take() else {
+            return;
+        };
+        if read.width != width {
+            return;
+        }
+        let Some(facts) = self
+            .memory
+            .get(&read.region)
+            .map(|region| region.indexed_facts().to_vec())
+        else {
+            return;
+        };
+        if facts.iter().all(|fact| fact.width != width) {
+            return;
+        }
+        if self.get_register(dst).kind == RegisterKind::Number {
+            let unknown = self.fresh_symbol("indexed_read");
+            self.set_register(
+                dst,
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(unknown)),
+                0,
+            );
+            self.mark_loaded(dst);
+        }
+        let Some(loaded) = expression_to_ast(instruction_aux::full_value(&self.get_register(dst)))
+        else {
+            return;
+        };
+        let word_destination = matches!(dst, Operand::Register(RePrefix::W, _));
+        self.bind_indexed_facts(&read, &loaded, &|fact, element| {
+            let bits = AbstractExpression::Immediate(8 * width);
+            let extended = match (width < 8, fact.signed == signed) {
+                (true, false) => {
+                    generate_expression(if signed { "sext" } else { "zext" }, element, bits)
+                }
+                _ => element,
+            };
+            if word_destination && (signed || fact.signed) {
+                generate_expression("zext", extended, AbstractExpression::Immediate(32))
+            } else {
+                extended
+            }
+        });
+    }
+
+    pub(crate) fn bind_indexed_facts(
+        &mut self,
+        read: &IndexedRead,
+        loaded: &ast::Int,
+        view: &dyn Fn(&IndexedFact, AbstractExpression) -> AbstractExpression,
+    ) {
+        let Some(facts) = self
+            .memory
+            .get(&read.region)
+            .map(|region| region.indexed_facts().to_vec())
+        else {
+            return;
+        };
+        let Some(offset) = expression_to_ast(read.offset.clone()) else {
+            return;
+        };
+        for fact in facts {
+            if fact.width != read.width {
+                continue;
+            }
+            let Some(covered) = fact.covers(&offset) else {
+                continue;
+            };
+            if refuted_for_indexed_fact(&self.solver, &covered) {
+                continue;
+            }
+            let name = self.fresh_symbol("indexed");
+            let element = AbstractExpression::Abstract(name.clone());
+            let (Some(holds), Some(viewed)) = (
+                comparison_to_ast(AbstractComparison::new(
+                    &fact.op,
+                    element.clone(),
+                    fact.bound.clone(),
+                )),
+                expression_to_ast(view(&fact, element)),
+            ) else {
+                continue;
+            };
+            self.note_indexed_read(&read.region, &fact);
+            let value = ast::Int::new_const(name.clone());
+            let mut described = vec![holds, loaded.eq(&viewed)];
+            if let Some((least, most)) = fact.value_range() {
+                described.push(value.ge(ast::Int::from_i64(least)));
+                described.push(value.le(ast::Int::from_i64(most)));
+            }
+            let described = ast::Bool::and(&described);
+            if refuted_for_indexed_fact(&self.solver, &covered.not()) {
+                self.solver.assert(&described);
+            } else {
+                self.solver.assert(covered.implies(&described));
+            }
+            log::info!(
+                "{} may be read at {}: element {name}",
+                fact.label,
+                read.offset
+            );
+        }
+    }
+
+    pub(crate) fn peek(
+        &mut self,
+        address: &RegisterValue,
+        offset: i64,
+        width: i64,
+    ) -> Option<(AbstractExpression, Option<IndexedRead>)> {
+        let base = address.base.clone()?;
+        if !(1..=8).contains(&width) || self.holds_many(&base) {
+            return None;
+        }
+        let at = RegisterValue {
+            offset: address.offset + offset,
+            ..address.clone()
+        };
+        let read = self.indexed_read_at(&at, width);
+        let value = match &base {
+            AbstractExpression::Abstract(name) => {
+                let (region_name, within) = self.get_memory_pointer(name.clone(), at.offset);
+                let region = self.memory.get(&region_name)?;
+                match region.read(within, width) {
+                    Some(stored) if stored.kind != RegisterKind::Number => {
+                        self.as_unsigned(instruction_aux::full_value(&stored), width)
+                    }
+                    Some(_) => return None,
+                    None if region.overwritten(within, width) => return None,
+                    None => {
+                        let unwritten = content_symbol(&region_name, within, width, region.epoch);
+                        self.as_unsigned(instruction_aux::full_value(&unwritten), width)
+                    }
+                }
+            }
+            _ => self.constant_table_entry(&base, at.offset, width)?,
+        };
+        Some((value, read))
+    }
+
+    fn as_unsigned(&self, value: AbstractExpression, width: i64) -> AbstractExpression {
+        if width < 8 && self.provably_between(&value, 0, (1i64 << (8 * width)) - 1) {
+            return value;
+        }
+        generate_expression("zext", value, AbstractExpression::Immediate(8 * width))
+    }
+
+    fn constant_table_entry(
+        &mut self,
+        base: &AbstractExpression,
+        offset: i64,
+        width: i64,
+    ) -> Option<AbstractExpression> {
+        const MAX_ENTRIES: usize = 32;
+        let (section, symbol, label_offset) = self.region_of(base)?;
+        let region = self.memory.get(&section)?;
+        if region.content.is_empty() || region.kind != RegionType::READ || !region.pristine() {
+            return None;
+        }
+        let within = generate_expression(
+            "+",
+            generate_expression("-", base.clone(), AbstractExpression::Abstract(symbol)),
+            AbstractExpression::Immediate(offset + label_offset),
+        );
+        let within = expression_to_ast(within)?;
+        let assumptions = self.select_assumptions(base);
+        self.solver.push();
+        let found = self.table_offsets(&within, &assumptions, MAX_ENTRIES);
+        self.solver.pop(1);
+        let found = found?;
+        let region = self.memory.get(&section)?;
+        let mut cases = Vec::new();
+        for at in &found {
+            let entry = region.read(*at, width)?;
+            if entry.kind != RegisterKind::Immediate || entry.base.is_some() {
+                return None;
+            }
+            let bits = 8 * width as u32;
+            let unsigned = if bits == 64 {
+                return None;
+            } else {
+                (entry.offset as u64) & ((1u64 << bits) - 1)
+            };
+            cases.push((*at, unsigned as i64));
+        }
+        let name = self.fresh_symbol("table_entry");
+        let entry = ast::Int::new_const(name.clone());
+        for (at, value) in cases {
+            self.bound_fresh(
+                within
+                    .eq(ast::Int::from_i64(at))
+                    .implies(entry.eq(ast::Int::from_i64(value))),
+            );
+        }
+        Some(AbstractExpression::Abstract(name))
+    }
+
+    fn table_offsets(
+        &self,
+        within: &ast::Int,
+        assumptions: &[ast::Bool],
+        most: usize,
+    ) -> Option<Vec<i64>> {
+        let mut found: Vec<i64> = Vec::new();
+        loop {
+            let mut excluded: Vec<ast::Bool> = found
+                .iter()
+                .map(|v| within.eq(ast::Int::from_i64(*v)).not())
+                .collect();
+            excluded.extend(assumptions.iter().cloned());
+            match check(&self.solver, &excluded) {
+                SatResult::Unsat => return Some(found),
+                SatResult::Unknown => return None,
+                SatResult::Sat => {
+                    let value = self.solver.get_model()?.eval(within, true)?.as_i64()?;
+                    if found.contains(&value) || found.len() >= most {
+                        return None;
+                    }
+                    found.push(value);
+                }
+            }
+        }
+    }
+
+    fn wrote_into_many(
+        &mut self,
+        region: &Option<AbstractExpression>,
+        offset: i64,
+        width: i64,
+    ) -> bool {
+        let Some(base) = region.clone().filter(|base| self.holds_many(base)) else {
+            return false;
+        };
+        if let Some((name, symbol, label_offset)) = self.region_of(&base) {
+            let within = expression_to_ast(generate_expression(
+                "+",
+                generate_expression("-", base.clone(), AbstractExpression::Abstract(symbol)),
+                AbstractExpression::Immediate(offset + label_offset),
+            ));
+            let kept = self.indexed_facts_apart(&name, within, width);
+            if let Some(region) = self.memory.get_mut(&name) {
+                region.keep_indexed_facts(kept);
+            }
+        }
+        self.rw_queue.push(MemoryAccess {
+            kind: RegionType::WRITE,
+            base,
+            offset,
+        });
+        true
+    }
+
+    fn distinct_row(&mut self, value: RegisterValue) -> RegisterValue {
+        let Some(AbstractExpression::Abstract(rows)) = &value.base else {
+            return value;
+        };
+        if !self.pointer_elements.values().any(|target| target == rows) {
+            return value;
+        }
+        let row = self.fresh_symbol(&format!("{rows}@row"));
+        self.memory_labels.insert(row.clone(), (rows.clone(), 0));
+        RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract(row)),
+            value.offset,
+        )
     }
 
     fn element_pointer(
@@ -334,6 +645,18 @@ impl ARMCORTEXA {
             width,
         );
 
+        if res.is_ok()
+            && let Some(base) = address.base.clone()
+            && self.holds_many(&base)
+        {
+            self.rw_queue.push(MemoryAccess {
+                kind: RegionType::READ,
+                base,
+                offset: address.offset,
+            });
+            self.set_register(&t, RegisterKind::Number, None, 0);
+            return Ok(());
+        }
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = address.base {
                 let (region_name, offset) = self.get_memory_pointer(base.clone(), address.offset);
@@ -393,6 +716,9 @@ impl ARMCORTEXA {
             RegionType::WRITE,
             width,
         );
+        if res.is_ok() && self.wrote_into_many(&region, address.offset, width) {
+            return Ok(());
+        }
 
         if res.is_ok() {
             if let Some(base) = &region {
@@ -458,6 +784,9 @@ impl ARMCORTEXA {
             RegionType::WRITE,
             width,
         );
+        if res.is_ok() && self.wrote_into_many(&region, address.offset, width) {
+            return Ok(());
+        }
 
         if res.is_ok() {
             if let Some(base) = &region {
@@ -510,7 +839,9 @@ impl ARMCORTEXA {
         self.memory_labels
             .iter()
             .filter(|(_, (placed_in, start))| placed_in == section && *start <= offset)
-            .max_by_key(|(name, (_, start))| (*start, *name))
+            .max_by_key(|(name, (_, start))| {
+                (*start, self.data_symbol_sizes.contains_key(*name), *name)
+            })
             .map(|(name, (_, start))| (name.clone(), section.to_string(), *start))
     }
 

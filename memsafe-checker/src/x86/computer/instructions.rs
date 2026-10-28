@@ -511,6 +511,10 @@ impl X86_64 {
                 if matches!(m, "add" | "sub") {
                     self.set_arithmetic_carry(m == "add", (&dst, &src, &written), width);
                 }
+                if m == "add" || (m == "sub" && !same_register) {
+                    let op = if m == "add" { "+" } else { "-" };
+                    self.set_signed_order(op, (&dst, &src, 0), width, !ops[1].is_memory());
+                }
             }
             "adc" | "sbb" => return self.with_carry(m, ops, width),
             "adcx" | "adox" => {
@@ -537,23 +541,27 @@ impl X86_64 {
                 if m == "adcx" {
                     self.carry = flag;
                 } else {
-                    self.overflow = flag;
+                    self.forget_signed_order();
                 }
             }
             "inc" | "dec" => {
                 let dst = self.read(&ops[0], width)?;
                 let step = RegisterValue::new_imm(1);
-                let result = combine(if m == "inc" { "+" } else { "-" }, &dst, &step);
+                let op = if m == "inc" { "+" } else { "-" };
+                let result = combine(op, &dst, &step);
                 self.write(&ops[0], width, result)?;
                 let written = self.read(&ops[0], width)?;
                 self.flags_of_result(&written, width, Carry::Kept);
+                self.set_signed_order(op, (&dst, &step, 0), width, !ops[0].is_memory());
             }
             "neg" => {
                 let dst = self.read(&ops[0], width)?;
-                let result = combine("-", &RegisterValue::new_imm(0), &dst);
+                let zero = RegisterValue::new_imm(0);
+                let result = combine("-", &zero, &dst);
                 self.write(&ops[0], width, result)?;
                 let written = self.read(&ops[0], width)?;
                 self.flags_of_result(&written, width, Carry::Unknown);
+                self.set_signed_order("-", (&zero, &dst, 0), width, !ops[0].is_memory());
                 if dst.kind == RegisterKind::Immediate {
                     self.set_carry(Some(dst.offset != 0));
                 }
@@ -587,6 +595,7 @@ impl X86_64 {
                     self.write(&ops[1], width, unknown())?;
                 }
                 self.set_carry(None);
+                self.forget_signed_order();
             }
 
             "shl" | "sal" | "shr" | "sar" | "rol" | "ror" | "rcl" | "rcr" => {
@@ -614,6 +623,9 @@ impl X86_64 {
                         self.set_carry(None);
                     } else {
                         self.flags_of_result(&written, width, Carry::Unknown);
+                    }
+                    if m != "sar" {
+                        self.forget_signed_order();
                     }
                 }
             }
@@ -1040,6 +1052,10 @@ impl X86_64 {
         let without = combine(op, &dst, &src);
         let with = combine(op, &without, &RegisterValue::new_imm(1));
         let carry = self.carry.clone();
+        let carry_in = match carry {
+            Some(FlagValue::Real(c)) => Some(c),
+            _ => None,
+        };
         let result = match carry {
             Some(FlagValue::Real(c)) => {
                 if c {
@@ -1059,6 +1075,12 @@ impl X86_64 {
         self.write(&ops[1], width, result)?;
         let written = self.read(&ops[1], width)?;
         self.flags_of_result(&written, width, Carry::Unknown);
+        match carry_in {
+            Some(c) => {
+                self.set_signed_order(op, (&dst, &src, c as i64), width, !ops[1].is_memory())
+            }
+            None => self.forget_signed_order(),
+        }
         Ok(ExecuteReturnType::Next)
     }
 

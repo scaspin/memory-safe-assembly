@@ -48,8 +48,8 @@ pub fn call_reverse<BD: BitDepth + CallReverse>(dst: &mut [BD::Pixel], src: &[BD
 }
 
 #[cfg(target_arch = "aarch64")]
-#[bums::check_mem_safe("edited-ipred.S", out.as_mut_ptr(), out.len(), in_0.as_ptr(), in_0.len(), 8, [in_0.len() == out.len() * 2 + 1, out.len()>=4, out.len()<=16, out.len()%4==0])]
-fn ipred_z1_upsample_edge_8bpc_neon(out: &mut [usize], in_0: &[usize]) -> ();
+#[bums::check_mem_safe("edited-ipred.S", out.as_mut_ptr(), out.len(), in_0.as_ptr(), end, 8, [in_0.len() == out.len() * 2 + 1, out.len()>=4, out.len()<=16, out.len()%4==0, end <= out.len()])]
+fn ipred_z1_upsample_edge_8bpc_neon(out: &mut [usize], in_0: &[usize], end: usize) -> ();
 
 #[cfg(target_arch = "aarch64")]
 #[bums::check_mem_safe("edited-ipred.S", out.as_mut_ptr(), out.len() , in_0.as_ptr(),  in_0.len(), [in_0.len() == out.len() * 2 + 1, out.len()>=4, out.len()<=8, out.len()%4==0])]

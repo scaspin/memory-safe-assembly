@@ -121,51 +121,51 @@ fn ff_vvc_put_epel_h8_8_neon(dst: &mut [i16], src: &[u8], src_stride: usize, hei
 fn ff_vvc_put_epel_h8_8_neon_i8mm(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 131, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 128, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 131, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 128, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv128_8_neon(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 131, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 128, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 131, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 128, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv128_8_neon_i8mm(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 19, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 16, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 19, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 16, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv16_8_neon(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 19, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 16, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 19, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 16, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv16_8_neon_i8mm(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 35, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 32, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 35, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 32, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv32_8_neon(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 35, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 32, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 35, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 32, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv32_8_neon_i8mm(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 7, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 4, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 7, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 4, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv4_8_neon(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 7, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 4, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 7, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 4, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv4_8_neon_i8mm(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 67, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 64, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 67, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 64, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv64_8_neon(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 67, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 64, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 67, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 64, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv64_8_neon_i8mm(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 11, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 8, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 11, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 8, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv8_8_neon(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(1 * src_stride + 1), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 11, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 8, hf.len() == 4, vf.len() == 4])]
+    [dst.len() == 16384, src.len() == (height + 4) * src_stride + 16, src_stride >= 11, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 8, hf.len() == 4, vf.len() == 8])]
 fn ff_vvc_put_epel_hv8_8_neon_i8mm(dst: &mut [i16], src: &[u8], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
@@ -193,35 +193,35 @@ fn ff_vvc_put_luma_h_x16_10_neon(dst: &mut [i16], src: &[u16], src_stride: usize
 fn ff_vvc_put_luma_h_x16_12_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 3), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 46, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 16, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 46, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 16, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_hv16_10_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 3), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 46, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 16, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 46, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 16, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_hv16_12_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 3), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 30, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 8, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 30, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 8, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_hv8_10_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 3), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 30, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 8, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 30, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 8, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_hv8_12_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 3), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 270, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 32 || width == 64 || width == 128, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 270, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 32 || width == 64 || width == 128, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_hv_x16_10_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 3), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 270, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 32 || width == 64 || width == 128, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 270, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 32 || width == 64 || width == 128, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_hv_x16_12_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 0), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 32, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 16, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 32, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 16, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_v16_10_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 0), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 32, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 16, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 32, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 16, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_v16_12_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 0), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
@@ -241,11 +241,11 @@ fn ff_vvc_put_luma_v8_10_neon(dst: &mut [i16], src: &[u16], src_stride: usize, h
 fn ff_vvc_put_luma_v8_12_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 0), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 256, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 32 || width == 64 || width == 128, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 256, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 32 || width == 64 || width == 128, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_v_x16_10_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("inter.S", dst.as_mut_ptr(), src.as_ptr().add(3 * src_stride / 2 + 0), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,
-    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 256, src_stride <= 1073741824, height % 2 == 0, height >= 2, height <= 128, width == 32 || width == 64 || width == 128, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
+    [dst.len() == 16384, src.len() == (height + 8) * src_stride / 2 + 8, src_stride >= 256, src_stride <= 1073741824, height % 4 == 0, height >= 4, height <= 128, width == 32 || width == 64 || width == 128, hf.len() == 8, vf.len() == 8, src_stride % 2 == 0])]
 fn ff_vvc_put_luma_v_x16_12_neon(dst: &mut [i16], src: &[u16], src_stride: usize, height: usize, hf: &[i8], vf: &[i8], width: usize);
 
 #[bums::check_mem_safe("epel_neon.S", dst.as_mut_ptr(), src.as_ptr().add(0 * src_stride + 0), src_stride, height, hf.as_ptr(), vf.as_ptr(), width,

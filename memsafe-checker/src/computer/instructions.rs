@@ -1,4 +1,5 @@
 use crate::computer::*;
+use std::str::FromStr;
 
 fn immediate(value: i64) -> RegisterValue {
     RegisterValue {
@@ -85,13 +86,27 @@ impl ARMCORTEXA {
         };
         let holds = match tested {
             "al" => FlagValue::Real(true),
-            "eq" => flag(&self.zero)?,
+            "eq" => match flag(&self.zero)? {
+                FlagValue::Abstract(zero) => FlagValue::Abstract(self.unwrapped_zero(zero)),
+                real => real,
+            },
             "cs" => flag(&self.carry)?,
             "vs" => flag(&self.overflow)?,
             "lt" => flag(&self.neg)?,
             "mi" => match (flag(&self.neg)?, flag(&self.overflow)?) {
                 (negative, FlagValue::Real(false)) => negative,
                 (FlagValue::Real(n), FlagValue::Real(v)) => FlagValue::Real(n != v),
+                (negative, FlagValue::Abstract(overflow)) => {
+                    if self.refutes_within_budget(&overflow) {
+                        negative
+                    } else if let Some(sign) =
+                        super::instruction_aux::narrow_wrapped_sign(&overflow)
+                    {
+                        FlagValue::Abstract(sign)
+                    } else {
+                        self.unknown_condition()
+                    }
+                }
                 _ => self.unknown_condition(),
             },
             "gt" => match (flag(&self.neg)?, flag(&self.zero)?) {
@@ -117,6 +132,33 @@ impl ARMCORTEXA {
             _ => return Err(format!("unknown condition {condition}")),
         };
         Ok(if negated { holds.not() } else { holds })
+    }
+
+    fn unwrapped_zero(&self, zero: AbstractComparison) -> AbstractComparison {
+        let wrapped = match (&*zero.left, &*zero.right) {
+            (AbstractExpression::Expression(op, sum, width), AbstractExpression::Immediate(0))
+                if zero.op == "==" && op == "sext" =>
+            {
+                match **width {
+                    AbstractExpression::Immediate(bits @ 1..=64) => Some((sum.clone(), bits)),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        let Some((sum, bits)) = wrapped else {
+            return zero;
+        };
+        let Some(value) = expression_to_ast((*sum).clone()) else {
+            return zero;
+        };
+        let modulus = ast::Int::from_str(&(1i128 << bits).to_string()).expect("modulus");
+        let beyond_one_turn = ast::Bool::or(&[value.ge(&modulus), value.le(modulus.unary_minus())]);
+        if self.refutes_ast_within_budget(beyond_one_turn) {
+            AbstractComparison::new("==", *sum, AbstractExpression::Immediate(0))
+        } else {
+            zero
+        }
     }
 
     fn is_signed_difference(less: &AbstractComparison) -> bool {
@@ -165,8 +207,16 @@ impl ARMCORTEXA {
             matches!(e, AbstractExpression::Expression(op, _, width)
                 if op == "zext" && **width == AbstractExpression::Immediate(64))
         };
-        (carry.op == ">=" && widened(&carry.left) && widened(&carry.right))
-            .then(|| (*carry.left.clone(), *carry.right.clone()))
+        let widened_plus_borrow = |e: &AbstractExpression| match e {
+            AbstractExpression::Expression(op, inner, borrow) => {
+                op == "+" && widened(inner) && **borrow == AbstractExpression::Immediate(1)
+            }
+            _ => false,
+        };
+        (carry.op == ">="
+            && widened(&carry.left)
+            && (widened(&carry.right) || widened_plus_borrow(&carry.right)))
+        .then(|| (*carry.left.clone(), *carry.right.clone()))
     }
 
     fn unsigned_extreme(
@@ -245,10 +295,15 @@ impl ARMCORTEXA {
         instruction: &Instruction,
     ) -> Result<ExecuteReturnType, String> {
         self.set_current_line(pc);
+        self.note_pc_for_exact_lanes(pc);
         let effect = self.plan_lane_effect(instruction);
+        let exact = self.plan_exact_lanes(instruction);
         let result = self.execute_instruction(pc, instruction);
         if result.is_ok() {
             self.apply_lane_effect(effect);
+            self.apply_exact_lanes(exact);
+        } else {
+            self.forget_exact_lanes();
         }
         result
     }
@@ -357,40 +412,31 @@ impl ARMCORTEXA {
                     }
                     None => todo!("adc reads a carry flag the program never set"),
                 },
-                "adcs" => {
-                    let mut reg_iter = instruction.operands.iter().clone();
-                    let _ = reg_iter.next().expect("Need destination register");
-                    let reg1 = reg_iter.next().expect("Need first choice register");
-                    let reg2 = reg_iter.next().expect("Need second choice source register");
-
-                    match &self.carry {
-                        Some(FlagValue::Real(b)) => {
-                            if *b {
-                                self.arithmetic(
-                                    "+",
-                                    |x, y| x + y + 1,
-                                    instruction.operands.clone(),
-                                );
-                                self.cmn(reg1, reg2);
-                            } else {
-                                self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
-                                self.cmn(reg1, reg2);
-                            }
+                "adcs" => match &self.carry {
+                    Some(FlagValue::Real(b)) => {
+                        let carry_in = *b;
+                        let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                        let bits = Self::flag_bits(&instruction.operands[1..]);
+                        if carry_in {
+                            self.arithmetic("+", |x, y| x + y + 1, instruction.operands.clone());
+                        } else {
+                            self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
                         }
-                        Some(FlagValue::Abstract(c)) => {
-                            let c = c.clone();
-                            self.set_unknown_flags();
-                            return self.carry_select(
-                                "+",
-                                |x, y| x + y + 1,
-                                |x, y| x + y,
-                                &c,
-                                &instruction.operands,
-                            );
-                        }
-                        None => todo!("adcs reads a carry flag the program never set"),
+                        self.add_with_carry_flags(r1, r2, bits, carry_in);
                     }
-                }
+                    Some(FlagValue::Abstract(c)) => {
+                        let c = c.clone();
+                        self.set_unknown_flags();
+                        return self.carry_select(
+                            "+",
+                            |x, y| x + y + 1,
+                            |x, y| x + y,
+                            &c,
+                            &instruction.operands,
+                        );
+                    }
+                    None => todo!("adcs reads a carry flag the program never set"),
+                },
                 "sbc" => match &self.carry {
                     Some(FlagValue::Real(b)) => {
                         if *b {
@@ -411,40 +457,31 @@ impl ARMCORTEXA {
                     }
                     None => todo!("sbc reads a carry flag the program never set"),
                 },
-                "sbcs" => {
-                    let mut reg_iter = instruction.operands.iter().clone();
-                    let _ = reg_iter.next().expect("Need destination register");
-                    let reg1 = reg_iter.next().expect("Need first choice register");
-                    let reg2 = reg_iter.next().expect("Need second choice source register");
-
-                    match &self.carry {
-                        Some(FlagValue::Real(b)) => {
-                            if *b {
-                                self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
-                                self.cmp(reg1, reg2);
-                            } else {
-                                self.arithmetic(
-                                    "-",
-                                    |x, y| x - y - 1,
-                                    instruction.operands.clone(),
-                                );
-                                self.cmp(reg1, reg2);
-                            }
+                "sbcs" => match &self.carry {
+                    Some(FlagValue::Real(b)) => {
+                        let carry_in = *b;
+                        let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                        let bits = Self::flag_bits(&instruction.operands[1..]);
+                        if carry_in {
+                            self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
+                        } else {
+                            self.arithmetic("-", |x, y| x - y - 1, instruction.operands.clone());
                         }
-                        Some(FlagValue::Abstract(c)) => {
-                            let c = c.clone();
-                            self.set_unknown_flags();
-                            return self.carry_select(
-                                "-",
-                                |x, y| x - y,
-                                |x, y| x - y - 1,
-                                &c,
-                                &instruction.operands,
-                            );
-                        }
-                        None => todo!("sbcs reads a carry flag the program never set"),
+                        self.subtract_with_carry_flags(r1, r2, bits, carry_in);
                     }
-                }
+                    Some(FlagValue::Abstract(c)) => {
+                        let c = c.clone();
+                        self.set_unknown_flags();
+                        return self.carry_select(
+                            "-",
+                            |x, y| x - y,
+                            |x, y| x - y - 1,
+                            &c,
+                            &instruction.operands,
+                        );
+                    }
+                    None => todo!("sbcs reads a carry flag the program never set"),
+                },
                 "clz" => {
                     let dst = &instruction.operands[0];
                     let width = match dst {
@@ -491,17 +528,12 @@ impl ARMCORTEXA {
                         (value.kind == RegisterKind::Immediate && value.base.is_none())
                             .then_some(value.offset)
                     };
-                    let region_length_symbols: Vec<String> = self
-                        .memory
-                        .values()
-                        .flat_map(|region| region.get_length().get_abstracts())
-                        .collect();
                     let symbolic = |value: &RegisterValue| {
                         let base = value.base.as_ref()?;
                         let symbols = base.get_abstracts();
-                        let built_from_region_lengths = !symbols.is_empty()
-                            && symbols.iter().all(|s| region_length_symbols.contains(s));
-                        (value.kind != RegisterKind::Number && built_from_region_lengths)
+                        let free_of_region_bases = !symbols.is_empty()
+                            && symbols.iter().all(|s| !self.memory.contains_key(s));
+                        (value.kind != RegisterKind::Number && free_of_region_bases)
                             .then(|| value.expression())
                     };
                     let high_half = |a: i64, b: i64| {
@@ -996,6 +1028,7 @@ impl ARMCORTEXA {
                             let signed = instruction.opcode.starts_with("ldrs")
                                 || instruction.opcode.starts_with("ldurs");
                             self.bound_loaded_element(dst, width, signed);
+                            self.apply_indexed_facts(dst, width, signed);
 
                             self.write_back(w, *reg_num, writeback);
                         }
@@ -1023,6 +1056,7 @@ impl ARMCORTEXA {
                                 self.load(dst.clone(), at, width)
                                     .map_err(|e| e.to_string())?;
                                 self.bound_loaded_element(dst, width, false);
+                                self.apply_indexed_facts(dst, width, false);
                             }
 
                             self.write_back(w, *reg_num, writeback);
@@ -1453,7 +1487,7 @@ impl ARMCORTEXA {
                     }
                 }
                 "movi" | "mvni" | "dup" => {
-                    return self.execute(
+                    return self.execute_instruction(
                         pc,
                         &Instruction {
                             ty: InstructionType::SIMDArithmetic,
@@ -1479,10 +1513,18 @@ impl ARMCORTEXA {
                     let range = if signed {
                         source.and_then(|o| self.lane_range(o)).or(from_width)
                     } else {
-                        from_width
+                        let tracked = source.and_then(|o| self.unsigned_lane_max(o));
+                        from_width.map(|(low, high)| {
+                            let tracked = tracked
+                                .and_then(|max| i64::try_from(max).ok())
+                                .unwrap_or(high);
+                            (low, high.min(tracked))
+                        })
                     };
-                    let maxima = match source.and_then(vector_index) {
-                        Some(n) if !signed => self.lane_bounds.maxima[n].clone(),
+                    let maxima = match (source.and_then(vector_index), width) {
+                        (Some(n), Some(width)) if !signed => {
+                            maxima_covering(&self.lane_bounds.maxima[n], width)
+                        }
                         _ => Vec::new(),
                     };
                     let Some(dst) = instruction.operands.first() else {

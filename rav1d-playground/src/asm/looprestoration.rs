@@ -17,7 +17,7 @@ fn wiener_filter7_8bpc_neon(
 );
 
 #[bums::check_mem_safe("looprestoration.S", dst.as_mut_ptr(), stride, left.as_ptr(), lpf.as_ptr(), w, h, filter.as_ptr(), edges, bitdepth_max,
-    [dst.len() * 1 == stride * h, left.len() == 4 * h, lpf.len() * 1 == stride * 2, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 128 * 1, stride % 16 == 0])]
+    [dst.len() * 1 == stride * h, left.len() == 4 * h, lpf.len() * 1 == stride * 8, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 128 * 1, stride % 16 == 0])]
 fn wiener_filter5_8bpc_neon(
     dst: &mut [u8],
     stride: usize,
@@ -30,8 +30,8 @@ fn wiener_filter5_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("looprestoration.S", sumsq.as_mut_ptr(), sum.as_mut_ptr(), left.as_ptr(), src.as_ptr(), w, edges, bitdepth_max,
-    [sumsq.len() == 400, sum.len() == 400, left.len() == 4, src.len() >= w + 22, w >= 4, w <= 256])]
+#[bums::check_mem_safe("looprestoration.S", sumsq.as_mut_ptr(), sum.as_mut_ptr(), left.as_ptr(), src.as_ptr().add(3), w, edges, bitdepth_max,
+    [sumsq.len() == 400, sum.len() == 400, left.len() == 4, src.len() >= w + 25, w >= 4, w <= 256])]
 fn sgr_box3_row_h_8bpc_neon(
     sumsq: &mut [i32],
     sum: &mut [i16],
@@ -42,8 +42,8 @@ fn sgr_box3_row_h_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("looprestoration.S", sumsq.as_mut_ptr(), sum.as_mut_ptr(), left.as_ptr(), src.as_ptr(), w, edges, bitdepth_max,
-    [sumsq.len() == 400, sum.len() == 400, left.len() == 4, src.len() >= w + 22, w >= 4, w <= 256])]
+#[bums::check_mem_safe("looprestoration.S", sumsq.as_mut_ptr(), sum.as_mut_ptr(), left.as_ptr(), src.as_ptr().add(3), w, edges, bitdepth_max,
+    [sumsq.len() == 400, sum.len() == 400, left.len() == 4, src.len() >= w + 25, w >= 4, w <= 256])]
 fn sgr_box5_row_h_8bpc_neon(
     sumsq: &mut [i32],
     sum: &mut [i16],
@@ -54,8 +54,8 @@ fn sgr_box5_row_h_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("looprestoration.S", sumsq3.as_mut_ptr(), sum3.as_mut_ptr(), sumsq5.as_mut_ptr(), sum5.as_mut_ptr(), left.as_ptr(), src.as_ptr(), w, edges, bitdepth_max,
-    [sumsq3.len() == 400, sum3.len() == 400, sumsq5.len() == 400, sum5.len() == 400, left.len() == 4, src.len() >= w + 22, w >= 4, w <= 256])]
+#[bums::check_mem_safe("looprestoration.S", sumsq3.as_mut_ptr(), sum3.as_mut_ptr(), sumsq5.as_mut_ptr(), sum5.as_mut_ptr(), left.as_ptr(), src.as_ptr().add(3), w, edges, bitdepth_max,
+    [sumsq3.len() == 400, sum3.len() == 400, sumsq5.len() == 400, sum5.len() == 400, left.len() == 4, src.len() >= w + 25, w >= 4, w <= 256])]
 fn sgr_box35_row_h_8bpc_neon(
     sumsq3: &mut [i32],
     sum3: &mut [i16],
@@ -149,7 +149,7 @@ fn sgr_finish_weighted2_8bpc_neon(
 );
 
 #[bums::check_mem_safe("looprestoration.S", dst.as_mut_ptr(), stride, t1.as_ptr(), t2.as_ptr(), w, h, wt.as_ptr(), bitdepth_max,
-    [dst.len() * 1 == stride * h, t1.len() == 2 * 384, t2.len() == 2 * 384, wt.len() == 2, w >= 8, w <= 256, w % 8 == 0, h >= 1, h <= 2, stride >= 128 * 1, stride % 16 == 0])]
+    [dst.len() * 1 == stride * h, t1.len() == 2 * 384, t2.len() == 2 * 384, wt.len() == 2, w >= 8, w <= 256, w % 8 == 0, h >= 1, h <= 2, stride >= 128 * 1, stride >= w * 1, stride % 16 == 0])]
 fn sgr_weighted2_8bpc_neon(
     dst: &mut [u8],
     stride: usize,
@@ -175,7 +175,7 @@ fn wiener_filter7_16bpc_neon(
 );
 
 #[bums::check_mem_safe("looprestoration16.S", dst.as_mut_ptr(), stride, left.as_ptr(), lpf.as_ptr(), w, h, filter.as_ptr(), edges, bitdepth_max,
-    [dst.len() * 2 == stride * h, left.len() == 4 * h, lpf.len() * 2 == stride * 2, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 128 * 2, stride % 16 == 0])]
+    [dst.len() * 2 == stride * h, left.len() == 4 * h, lpf.len() * 2 == stride * 8, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 128 * 2, stride % 16 == 0])]
 fn wiener_filter5_16bpc_neon(
     dst: &mut [u16],
     stride: usize,
@@ -188,8 +188,8 @@ fn wiener_filter5_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("looprestoration16.S", sumsq.as_mut_ptr(), sum.as_mut_ptr(), left.as_ptr(), src.as_ptr(), w, edges, bitdepth_max,
-    [sumsq.len() == 400, sum.len() == 400, left.len() == 4, src.len() >= w + 22, w >= 4, w <= 256])]
+#[bums::check_mem_safe("looprestoration16.S", sumsq.as_mut_ptr(), sum.as_mut_ptr(), left.as_ptr(), src.as_ptr().add(3), w, edges, bitdepth_max,
+    [sumsq.len() == 400, sum.len() == 400, left.len() == 4, src.len() >= w + 25, w >= 4, w <= 256])]
 fn sgr_box3_row_h_16bpc_neon(
     sumsq: &mut [i32],
     sum: &mut [i16],
@@ -200,8 +200,8 @@ fn sgr_box3_row_h_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("looprestoration16.S", sumsq.as_mut_ptr(), sum.as_mut_ptr(), left.as_ptr(), src.as_ptr(), w, edges, bitdepth_max,
-    [sumsq.len() == 400, sum.len() == 400, left.len() == 4, src.len() >= w + 22, w >= 4, w <= 256])]
+#[bums::check_mem_safe("looprestoration16.S", sumsq.as_mut_ptr(), sum.as_mut_ptr(), left.as_ptr(), src.as_ptr().add(3), w, edges, bitdepth_max,
+    [sumsq.len() == 400, sum.len() == 400, left.len() == 4, src.len() >= w + 25, w >= 4, w <= 256])]
 fn sgr_box5_row_h_16bpc_neon(
     sumsq: &mut [i32],
     sum: &mut [i16],
@@ -212,8 +212,8 @@ fn sgr_box5_row_h_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("looprestoration16.S", sumsq3.as_mut_ptr(), sum3.as_mut_ptr(), sumsq5.as_mut_ptr(), sum5.as_mut_ptr(), left.as_ptr(), src.as_ptr(), w, edges, bitdepth_max,
-    [sumsq3.len() == 400, sum3.len() == 400, sumsq5.len() == 400, sum5.len() == 400, left.len() == 4, src.len() >= w + 22, w >= 4, w <= 256])]
+#[bums::check_mem_safe("looprestoration16.S", sumsq3.as_mut_ptr(), sum3.as_mut_ptr(), sumsq5.as_mut_ptr(), sum5.as_mut_ptr(), left.as_ptr(), src.as_ptr().add(3), w, edges, bitdepth_max,
+    [sumsq3.len() == 400, sum3.len() == 400, sumsq5.len() == 400, sum5.len() == 400, left.len() == 4, src.len() >= w + 25, w >= 4, w <= 256])]
 fn sgr_box35_row_h_16bpc_neon(
     sumsq3: &mut [i32],
     sum3: &mut [i16],
@@ -307,7 +307,7 @@ fn sgr_finish_weighted2_16bpc_neon(
 );
 
 #[bums::check_mem_safe("looprestoration16.S", dst.as_mut_ptr(), stride, t1.as_ptr(), t2.as_ptr(), w, h, wt.as_ptr(), bitdepth_max,
-    [dst.len() * 2 == stride * h, t1.len() == 2 * 384, t2.len() == 2 * 384, wt.len() == 2, w >= 8, w <= 256, w % 8 == 0, h >= 1, h <= 2, stride >= 128 * 2, stride % 16 == 0])]
+    [dst.len() * 2 == stride * h, t1.len() == 2 * 384, t2.len() == 2 * 384, wt.len() == 2, w >= 8, w <= 256, w % 8 == 0, h >= 1, h <= 2, stride >= 128 * 2, stride >= w * 2, stride % 16 == 0])]
 fn sgr_weighted2_16bpc_neon(
     dst: &mut [u16],
     stride: usize,

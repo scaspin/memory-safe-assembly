@@ -105,7 +105,7 @@ impl ARMCORTEXA {
         let mut r2 = self.get_register(reg2);
 
         if let Some(Operand::Bitwise(op, num)) = &reg_iter.next() {
-            r2 = shift_imm(op.to_string(), r2.clone(), *num);
+            r2 = shift_operand(op, r2, reg2, *num);
         }
 
         let based = |base, offset| {
@@ -262,6 +262,11 @@ impl ARMCORTEXA {
 
     pub fn shift_reg(&mut self, op: &str, reg1: &Operand, reg2: &Operand, reg3: &Operand) {
         let r2 = self.get_register(reg2);
+        let r2 = if op == "asr" && matches!(reg2, Operand::Register(RePrefix::W, _)) {
+            sign_extend_word(r2)
+        } else {
+            r2
+        };
 
         let rotates_a_32_bit_constant = op == "ror"
             && matches!(reg2, Operand::Register(RePrefix::W, _))
@@ -278,6 +283,28 @@ impl ARMCORTEXA {
         let shifted_reg = match reg3 {
             Operand::Bitwise(op, shift) => shift_imm(op.to_string(), r2, *shift),
             Operand::Immediate(shift) => shift_imm(op.to_string(), r2, *shift),
+            Operand::Register(..) => {
+                let bits = if matches!(reg1, Operand::Register(RePrefix::W, _)) {
+                    32
+                } else {
+                    64
+                };
+                let amount = self.get_register(reg3);
+                if amount.kind == RegisterKind::Immediate && amount.base.is_none() {
+                    shift_imm(op.to_string(), r2, amount.offset.rem_euclid(bits))
+                } else {
+                    let unknown = RegisterValue {
+                        kind: RegisterKind::Number,
+                        base: None,
+                        offset: 0,
+                    };
+                    if bits == 32 {
+                        self.field_of_unknown(unknown, 32, false)
+                    } else {
+                        unknown
+                    }
+                }
+            }
             _ => {
                 log::info!("shift by register amount {:?} is not modelled", reg3);
                 RegisterValue {
@@ -293,9 +320,39 @@ impl ARMCORTEXA {
                 let bits = if *prefix == RePrefix::W { 32 } else { 64 };
                 self.field_of_unknown(shifted_reg, bits - k, false)
             }
+            ("asr", Operand::Immediate(k), Operand::Register(RePrefix::X, _)) => {
+                let source = self.get_register(reg2);
+                self.undone_left_shift(&source, *k).unwrap_or(shifted_reg)
+            }
             _ => shifted_reg,
         };
         self.set_register(reg1, shifted_reg.kind, shifted_reg.base, shifted_reg.offset);
+    }
+
+    fn undone_left_shift(&self, shifted: &RegisterValue, k: i64) -> Option<RegisterValue> {
+        if !(1..63).contains(&k) || shifted.kind == RegisterKind::Number {
+            return None;
+        }
+        let AbstractExpression::Expression(op, unshifted, amount) = full_value(shifted) else {
+            return None;
+        };
+        if op != "lsl" || *amount != AbstractExpression::Immediate(k) {
+            return None;
+        }
+        let half = 1i64 << (63 - k);
+        if !self.provably_between(&unshifted, -half, half - 1) {
+            return None;
+        }
+        let (base, offset) = match *unshifted {
+            AbstractExpression::Immediate(value) => (None, value),
+            other => (Some(other), 0),
+        };
+        let kind = if base.is_some() {
+            shifted.kind.clone()
+        } else {
+            RegisterKind::Immediate
+        };
+        Some(RegisterValue::new(kind, base, offset))
     }
 
     pub fn extend_loaded(&mut self, dst: &Operand, opcode: &str, width: i64) {
@@ -318,10 +375,29 @@ impl ARMCORTEXA {
             }
             return;
         }
+        let bits = 8 * width as u32;
+        if value.kind == RegisterKind::RegisterBase {
+            let whole = full_value(&value);
+            let (least, most) = if signed {
+                (-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1)
+            } else {
+                (0, (1i64 << bits) - 1)
+            };
+            if !self.provably_between(&whole, least, most) {
+                let extension = if signed { "sext" } else { "zext" };
+                let extended = generate_expression(
+                    extension,
+                    whole,
+                    AbstractExpression::Immediate(bits as i64),
+                );
+                self.set_register(dst, RegisterKind::RegisterBase, Some(extended), 0);
+                self.mark_loaded(dst);
+            }
+            return;
+        }
         if value.kind != RegisterKind::Immediate {
             return;
         }
-        let bits = 8 * width as u32;
         let low = (value.offset as u64) & ((1u64 << bits) - 1);
         let extended = if signed {
             ((low << (64 - bits)) as i64) >> (64 - bits)
@@ -400,7 +476,7 @@ impl ARMCORTEXA {
         let r1 = self.get_register(&operands[0]);
         let mut r2 = self.get_register(&operands[1]);
         if let Some(Operand::Bitwise(op, amount)) = operands.get(2) {
-            r2 = shift_imm(op.to_string(), r2, *amount);
+            r2 = shift_operand(op, r2, &operands[1], *amount);
         }
         (r1, r2)
     }
@@ -455,6 +531,8 @@ impl ARMCORTEXA {
                             Box::new(right.clone()),
                         );
                         let signed = signed_combination(bits, "-", &left, &right);
+                        self.overflow =
+                            Some(FlagValue::Abstract(signed_overflow(bits, signed.clone())));
                         self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
                             "<",
                             signed,
@@ -462,15 +540,10 @@ impl ARMCORTEXA {
                         )));
                         self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
                             "==",
-                            expression.clone(),
+                            expression,
                             AbstractExpression::Immediate(0),
                         )));
                         self.carry = Some(FlagValue::Abstract(unsigned_no_borrow(left, right)));
-                        self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                            "<",
-                            expression,
-                            AbstractExpression::Immediate(i64::MIN),
-                        )));
                     }
                 }
                 RegisterKind::Number => self.set_unknown_flags(),
@@ -504,22 +577,19 @@ impl ARMCORTEXA {
                 Box::new(left.clone()),
                 Box::new(right.clone()),
             );
+            let signed = signed_combination(bits, "-", &left, &right);
+            self.overflow = Some(FlagValue::Abstract(signed_overflow(bits, signed.clone())));
             self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
                 "<",
-                signed_combination(bits, "-", &left, &right),
+                signed,
                 AbstractExpression::Immediate(0),
             )));
             self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
                 "==",
-                expression.clone(),
+                expression,
                 AbstractExpression::Immediate(0),
             )));
             self.carry = Some(FlagValue::Abstract(unsigned_no_borrow(left, right)));
-            self.overflow = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
-                expression,
-                AbstractExpression::Immediate(i64::MIN),
-            )));
         } else {
             self.set_unknown_flags();
         }
@@ -587,29 +657,7 @@ impl ARMCORTEXA {
 
         if r1.kind == r2.kind {
             match r1.kind {
-                RegisterKind::RegisterBase => {
-                    let left = AbstractExpression::Register(Box::new(r1));
-                    let right = AbstractExpression::Register(Box::new(r2));
-                    let expression = AbstractExpression::Expression(
-                        "+".to_string(),
-                        Box::new(left.clone()),
-                        Box::new(right.clone()),
-                    );
-                    self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
-                        "<",
-                        signed_combination(bits, "+", &left, &right),
-                        AbstractExpression::Immediate(0),
-                    )));
-                    self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
-                        "==",
-                        expression.clone(),
-                        AbstractExpression::Immediate(0),
-                    )));
-                    let carry = self.unknown_flag("carry");
-                    let overflow = self.unknown_flag("overflow");
-                    self.carry = carry;
-                    self.overflow = overflow;
-                }
+                RegisterKind::RegisterBase => self.symbolic_sum_flags(r1, r2, bits, 0),
                 RegisterKind::Number => self.set_unknown_flags(),
                 RegisterKind::Immediate if bits == 32 => {
                     let (a, b) = (r1.offset as i32, r2.offset as i32);
@@ -629,31 +677,124 @@ impl ARMCORTEXA {
                 }
             }
         } else if r1.kind == RegisterKind::RegisterBase || r2.kind == RegisterKind::RegisterBase {
-            let left = AbstractExpression::Register(Box::new(r1));
-            let right = AbstractExpression::Register(Box::new(r2));
-            let expression = AbstractExpression::Expression(
-                "+".to_string(),
-                Box::new(left.clone()),
-                Box::new(right.clone()),
-            );
-            self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
-                "<",
-                signed_combination(bits, "+", &left, &right),
-                AbstractExpression::Immediate(0),
-            )));
-            self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
-                "==",
-                expression.clone(),
-                AbstractExpression::Immediate(0),
-            )));
-            let carry = self.unknown_flag("carry");
-            let overflow = self.unknown_flag("overflow");
-            self.carry = carry;
-            self.overflow = overflow;
+            self.symbolic_sum_flags(r1, r2, bits, 0);
         } else {
             self.set_unknown_flags();
         }
     }
+
+    fn symbolic_sum_flags(&mut self, r1: RegisterValue, r2: RegisterValue, bits: u32, carry: i64) {
+        let left = AbstractExpression::Register(Box::new(r1));
+        let right = AbstractExpression::Register(Box::new(r2));
+        let with_carry = |e: AbstractExpression| match carry {
+            0 => e,
+            c => generate_expression("+", e, AbstractExpression::Immediate(c)),
+        };
+        let exact = with_carry(AbstractExpression::Expression(
+            "+".to_string(),
+            Box::new(left.clone()),
+            Box::new(right.clone()),
+        ));
+        let signed = with_carry(signed_combination(bits, "+", &left, &right));
+        self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
+            "<",
+            signed.clone(),
+            AbstractExpression::Immediate(0),
+        )));
+        self.zero = Some(FlagValue::Abstract(wrapped_zero(exact, bits)));
+        self.carry = self.unknown_flag("carry");
+        self.overflow = Some(FlagValue::Abstract(signed_overflow(bits, signed)));
+    }
+
+    pub fn add_with_carry_flags(
+        &mut self,
+        r1: RegisterValue,
+        r2: RegisterValue,
+        bits: u32,
+        carry_in: bool,
+    ) {
+        if carry_in {
+            self.flags_one_past("+", r1, r2, bits);
+        } else {
+            self.cmn_values_sized(r1, r2, bits);
+        }
+    }
+
+    pub fn subtract_with_carry_flags(
+        &mut self,
+        r1: RegisterValue,
+        r2: RegisterValue,
+        bits: u32,
+        carry_in: bool,
+    ) {
+        if carry_in {
+            self.cmp_values_sized(r1, r2, bits);
+        } else {
+            self.flags_one_past("-", r1, r2, bits);
+        }
+    }
+
+    fn flags_one_past(&mut self, op: &str, r1: RegisterValue, r2: RegisterValue, bits: u32) {
+        let adding = op == "+";
+        if r1.kind == RegisterKind::Number || r2.kind == RegisterKind::Number {
+            self.set_unknown_flags();
+            return;
+        }
+        let constant = |r: &RegisterValue| r.kind == RegisterKind::Immediate && r.base.is_none();
+        if constant(&r1) && constant(&r2) {
+            let modulus = 1i128 << bits;
+            let half = modulus / 2;
+            let unsigned = |v: i64| (v as i128).rem_euclid(modulus);
+            let signed = |v: i64| match unsigned(v) {
+                u if u >= half => u - modulus,
+                u => u,
+            };
+            let step = |x: i128, y: i128| if adding { x + y + 1 } else { x - y - 1 };
+            let exact_unsigned = step(unsigned(r1.offset), unsigned(r2.offset));
+            let exact_signed = step(signed(r1.offset), signed(r2.offset));
+            self.neg = Some(FlagValue::Real(exact_signed < 0));
+            self.zero = Some(FlagValue::Real(exact_unsigned.rem_euclid(modulus) == 0));
+            self.carry = Some(FlagValue::Real(if adding {
+                exact_unsigned >= modulus
+            } else {
+                exact_unsigned >= 0
+            }));
+            self.overflow = Some(FlagValue::Real(!(-half..half).contains(&exact_signed)));
+            return;
+        }
+        if adding {
+            self.symbolic_sum_flags(r1, r2, bits, 1);
+            return;
+        }
+        let left = AbstractExpression::Register(Box::new(r1));
+        let right = AbstractExpression::Register(Box::new(r2));
+        let borrowed =
+            |e: AbstractExpression| generate_expression("-", e, AbstractExpression::Immediate(1));
+        let exact = borrowed(generate_expression("-", left.clone(), right.clone()));
+        let signed = borrowed(signed_combination(bits, "-", &left, &right));
+        self.neg = Some(FlagValue::Abstract(AbstractComparison::new(
+            "<",
+            signed.clone(),
+            AbstractExpression::Immediate(0),
+        )));
+        self.overflow = Some(FlagValue::Abstract(signed_overflow(bits, signed)));
+        self.zero = Some(FlagValue::Abstract(wrapped_zero(exact, bits)));
+        let unsigned =
+            |e| generate_expression("zext", e, AbstractExpression::Immediate(bits as i64));
+        self.carry = Some(FlagValue::Abstract(AbstractComparison::new(
+            ">=",
+            unsigned(left),
+            generate_expression("+", unsigned(right), AbstractExpression::Immediate(1)),
+        )));
+    }
+}
+
+fn wrapped_zero(exact: AbstractExpression, bits: u32) -> AbstractComparison {
+    AbstractComparison::new(
+        "==",
+        generate_expression("sext", exact, AbstractExpression::Immediate(bits as i64)),
+        AbstractExpression::Immediate(0),
+    )
 }
 
 pub fn signed_combination(
@@ -677,6 +818,60 @@ pub fn signed_combination(
         ),
     };
     generate_expression(op, widen(left), widen(right))
+}
+
+fn signed_overflow(bits: u32, exact: AbstractExpression) -> AbstractComparison {
+    if bits >= 64 {
+        outside_signed_range(exact, 64)
+    } else {
+        narrow_signed_overflow(bits, exact)
+    }
+}
+
+fn narrow_signed_overflow(bits: u32, exact: AbstractExpression) -> AbstractComparison {
+    let half = 1i64 << (bits - 1);
+    let shifted = AbstractExpression::Expression(
+        "+".to_string(),
+        Box::new(exact),
+        Box::new(AbstractExpression::Immediate(half)),
+    );
+    let wrapped = AbstractExpression::Expression(
+        "%".to_string(),
+        Box::new(shifted.clone()),
+        Box::new(AbstractExpression::Immediate(2 * half)),
+    );
+    AbstractComparison::new("!=", wrapped, shifted)
+}
+
+pub(super) fn narrow_wrapped_sign(overflow: &AbstractComparison) -> Option<AbstractComparison> {
+    let AbstractExpression::Expression(modulo, shifted, modulus) = &*overflow.left else {
+        return None;
+    };
+    let AbstractExpression::Expression(plus, exact, half) = &**shifted else {
+        return None;
+    };
+    let (AbstractExpression::Immediate(modulus), AbstractExpression::Immediate(half)) =
+        (&**modulus, &**half)
+    else {
+        return None;
+    };
+    let recognised = overflow.op == "!="
+        && modulo == "%"
+        && plus == "+"
+        && *overflow.right == **shifted
+        && *half > 0
+        && half.checked_mul(2) == Some(*modulus);
+    recognised.then(|| {
+        AbstractComparison::new(
+            ">=",
+            AbstractExpression::Expression(
+                "%".to_string(),
+                exact.clone(),
+                Box::new(AbstractExpression::Immediate(*modulus)),
+            ),
+            AbstractExpression::Immediate(*half),
+        )
+    })
 }
 
 fn unsigned_no_borrow(left: AbstractExpression, right: AbstractExpression) -> AbstractComparison {
@@ -892,6 +1087,20 @@ pub fn full_value(register: &RegisterValue) -> AbstractExpression {
         ),
         _ => AbstractExpression::Immediate(register.offset),
     }
+}
+
+pub fn shift_operand(
+    op: &str,
+    value: RegisterValue,
+    operand: &Operand,
+    shift: i64,
+) -> RegisterValue {
+    let value = if op == "asr" && matches!(operand, Operand::Register(RePrefix::W, _)) {
+        sign_extend_word(value)
+    } else {
+        value
+    };
+    shift_imm(op.to_string(), value, shift)
 }
 
 pub fn shift_imm(op: String, register: RegisterValue, shift: i64) -> RegisterValue {

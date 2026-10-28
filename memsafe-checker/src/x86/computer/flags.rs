@@ -29,6 +29,32 @@ fn signed(value: i64, width: i64) -> i64 {
     sign_extend(&RegisterValue::new_imm(value), width).offset
 }
 
+fn half_range(width: i64) -> i128 {
+    1i128 << (width * 8 - 1)
+}
+
+fn overflows(exact: i128, width: i64) -> bool {
+    !(-half_range(width)..half_range(width)).contains(&exact)
+}
+
+fn is_constant(value: &RegisterValue) -> bool {
+    value.kind == RegisterKind::Immediate && value.base.is_none()
+}
+
+fn combined(
+    op: &str,
+    left: AbstractExpression,
+    right: AbstractExpression,
+    extra: i64,
+) -> AbstractExpression {
+    let exact = generate_expression(op, left, right);
+    if extra == 0 {
+        exact
+    } else {
+        generate_expression(op, exact, AbstractExpression::Immediate(extra))
+    }
+}
+
 impl X86_64 {
     pub fn set_unknown_flags(&mut self) {
         let flag = |s: &mut Self, which: &str| {
@@ -70,7 +96,7 @@ impl X86_64 {
                 self.zero = real(a == b);
                 self.neg = real(sa < sb);
                 self.carry = real(a < b);
-                self.overflow = real(false);
+                self.overflow = real(overflows(sa as i128 - sb as i128, width));
             }
             (RegisterKind::RegisterBase, RegisterKind::RegisterBase)
                 if dst.base == src.base && width == 8 =>
@@ -87,9 +113,90 @@ impl X86_64 {
                 self.zero = compare("==", difference.clone(), AbstractExpression::Immediate(0));
                 self.neg = compare("<", difference, AbstractExpression::Immediate(0));
                 self.carry = compare("<", left, right);
-                self.overflow = real(false);
+                self.set_signed_order("-", (dst, src, 0), width, true);
             }
         }
+    }
+
+    pub fn set_signed_order(
+        &mut self,
+        op: &str,
+        (dst, src, extra): (&RegisterValue, &RegisterValue, i64),
+        width: i64,
+        neg_is_the_result_sign: bool,
+    ) {
+        if dst.kind == RegisterKind::Number || src.kind == RegisterKind::Number {
+            self.forget_signed_order();
+            return;
+        }
+        if is_constant(dst) && is_constant(src) {
+            let step = |x: i128, y: i128| if op == "+" { x + y } else { x - y };
+            let exact = step(
+                step(
+                    signed(dst.offset, width) as i128,
+                    signed(src.offset, width) as i128,
+                ),
+                extra as i128,
+            );
+            self.neg = real(exact < 0);
+            self.overflow = real(overflows(exact, width));
+            return;
+        }
+        let raw = combined(
+            op,
+            AbstractExpression::Register(Box::new(dst.clone())),
+            AbstractExpression::Register(Box::new(src.clone())),
+            extra,
+        );
+        if !neg_is_the_result_sign {
+            self.neg = compare("<", raw.clone(), AbstractExpression::Immediate(0));
+        }
+        if width >= 8 {
+            self.overflow = Some(FlagValue::Abstract(outside_signed_range(raw, 64)));
+            return;
+        }
+        if self.stays_below_the_sign_bit(&[dst, src], &raw, width) {
+            self.overflow = real(false);
+            return;
+        }
+        let view = |value: &RegisterValue| {
+            AbstractExpression::Register(Box::new(sign_extend(value, width)))
+        };
+        let exact = combined(op, view(dst), view(src), extra);
+        self.neg = compare("<", exact.clone(), AbstractExpression::Immediate(0));
+        self.overflow = Some(FlagValue::Abstract(outside_signed_range(
+            exact,
+            (width * 8) as u32,
+        )));
+    }
+
+    pub fn forget_signed_order(&mut self) {
+        self.neg = Some(self.unknown_condition());
+        self.overflow = Some(self.unknown_condition());
+    }
+
+    fn stays_below_the_sign_bit(
+        &self,
+        operands: &[&RegisterValue],
+        result: &AbstractExpression,
+        width: i64,
+    ) -> bool {
+        let half = half_range(width) as i64;
+        let mut outside = Vec::new();
+        for operand in operands {
+            let Some(value) = expression_to_ast(operand.expression()) else {
+                return false;
+            };
+            outside.push(value.lt(ast::Int::from_i64(0)));
+            outside.push(value.ge(ast::Int::from_i64(half)));
+        }
+        let Some(value) = expression_to_ast(result.clone()) else {
+            return false;
+        };
+        outside.push(value.lt(ast::Int::from_i64(-half)));
+        outside.push(value.ge(ast::Int::from_i64(half)));
+        let any = ast::Bool::or(&outside.iter().collect::<Vec<_>>());
+        check(&self.solver, &[any]) == SatResult::Unsat
     }
 
     pub fn flags_of_result(&mut self, result: &RegisterValue, width: i64, carry: Carry) {
@@ -188,8 +295,8 @@ impl X86_64 {
         Ok(match cc {
             "e" | "z" => flag(&self.zero)?,
             "ne" | "nz" => negate(flag(&self.zero)?),
-            "s" => flag(&self.neg)?,
-            "ns" => negate(flag(&self.neg)?),
+            "s" => self.sign()?,
+            "ns" => negate(self.sign()?),
             "b" | "c" | "nae" => flag(&self.carry)?,
             "ae" | "nb" | "nc" => negate(flag(&self.carry)?),
             "o" => flag(&self.overflow)?,
@@ -250,11 +357,28 @@ impl X86_64 {
         })
     }
 
+    fn sign(&mut self) -> Result<FlagValue, String> {
+        match (&self.neg, &self.overflow) {
+            (Some(less), Some(FlagValue::Real(false))) => Ok(less.clone()),
+            (Some(FlagValue::Real(less)), Some(FlagValue::Real(overflow))) => {
+                Ok(FlagValue::Real(less != overflow))
+            }
+            (Some(less), Some(FlagValue::Abstract(overflow))) => {
+                let refuted = comparison_to_ast(overflow.clone())
+                    .is_some_and(|holds| check(&self.solver, &[holds]) == SatResult::Unsat);
+                if refuted {
+                    Ok(less.clone())
+                } else {
+                    Ok(self.unknown_condition())
+                }
+            }
+            _ => Err("sign condition reads a flag the program never set".to_string()),
+        }
+    }
+
     fn less(&mut self) -> Result<FlagValue, String> {
         match (&self.neg, &self.overflow) {
-            (Some(n), Some(FlagValue::Real(false))) => Ok(n.clone()),
-            (Some(FlagValue::Real(n)), Some(FlagValue::Real(o))) => Ok(FlagValue::Real(n != o)),
-            (Some(_), Some(_)) => Ok(self.unknown_condition()),
+            (Some(less), Some(_)) => Ok(less.clone()),
             _ => Err("signed comparison reads a flag the program never set".to_string()),
         }
     }
@@ -269,9 +393,9 @@ impl X86_64 {
             (_, FlagValue::Real(true)) | (FlagValue::Real(true), _) => FlagValue::Real(true),
             (FlagValue::Real(false), z) => z,
             (l, FlagValue::Real(false)) => l,
-            _ => match (self.overflow.clone(), self.ordered(&self.neg.clone(), "<=")) {
-                (Some(FlagValue::Real(false)), Some(f)) => f,
-                _ => self.unknown_condition(),
+            _ => match self.ordered(&self.neg.clone(), "<=") {
+                Some(f) => f,
+                None => self.unknown_condition(),
             },
         })
     }

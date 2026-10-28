@@ -16,7 +16,7 @@ fn cdef_padding4_8bpc_neon(
 );
 
 #[bums::check_mem_safe("cdef.S", dst.as_mut_ptr(), dst_stride, tmp.as_ptr().add(24), pri_strength, sec_strength, dir, damping, h, edges, bitdepth_max,
-    [dst.len() == dst_stride * h, tmp.len() == 104, h >= 4, h <= 8, dst_stride >= 4, dir >= 0, dir <= 7])]
+    [dst.len() == dst_stride * h, tmp.len() == 104, h >= 4, h <= 8, h % 4 == 0, dst_stride >= 4, dir >= 0, dir <= 7])]
 fn cdef_filter4_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -44,7 +44,7 @@ fn cdef_padding8_8bpc_neon(
 );
 
 #[bums::check_mem_safe("cdef.S", dst.as_mut_ptr(), dst_stride, tmp.as_ptr().add(40), pri_strength, sec_strength, dir, damping, h, edges, bitdepth_max,
-    [dst.len() == dst_stride * h, tmp.len() == 200, h >= 4, h <= 8, dst_stride >= 8, dir >= 0, dir <= 7])]
+    [dst.len() == dst_stride * h, tmp.len() == 200, h >= 4, h <= 8, h % 4 == 0, dst_stride >= 8, dir >= 0, dir <= 7])]
 fn cdef_filter8_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -101,7 +101,7 @@ fn cdef_padding4_16bpc_neon(
 );
 
 #[bums::check_mem_safe("cdef16.S", dst.as_mut_ptr(), dst_stride, tmp.as_ptr().add(24), pri_strength, sec_strength, dir, damping, h, edges, bitdepth_max,
-    [dst.len() == dst_stride * h, tmp.len() == 104, h >= 4, h <= 8, dst_stride >= 4, dir >= 0, dir <= 7])]
+    [dst.len() == dst_stride * h, tmp.len() == 104, h >= 4, h <= 8, h % 4 == 0, dst_stride >= 4, dir >= 0, dir <= 7])]
 fn cdef_filter4_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -129,7 +129,7 @@ fn cdef_padding8_16bpc_neon(
 );
 
 #[bums::check_mem_safe("cdef16.S", dst.as_mut_ptr(), dst_stride, tmp.as_ptr().add(40), pri_strength, sec_strength, dir, damping, h, edges, bitdepth_max,
-    [dst.len() == dst_stride * h, tmp.len() == 200, h >= 4, h <= 8, dst_stride >= 8, dir >= 0, dir <= 7])]
+    [dst.len() == dst_stride * h, tmp.len() == 200, h >= 4, h <= 8, h % 4 == 0, dst_stride >= 8, dir >= 0, dir <= 7])]
 fn cdef_filter8_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,

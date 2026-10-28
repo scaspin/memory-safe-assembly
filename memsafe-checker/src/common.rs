@@ -7,7 +7,40 @@ use z3::*;
 
 use crate::instruction_parser::{self, Arrangement};
 
+pub struct EmptiedOnClone(Solver);
+
+impl EmptiedOnClone {
+    pub fn new(solver: Solver) -> Self {
+        EmptiedOnClone(solver)
+    }
+}
+
+impl Clone for EmptiedOnClone {
+    fn clone(&self) -> Self {
+        EmptiedOnClone(Solver::new())
+    }
+}
+
+impl std::ops::Deref for EmptiedOnClone {
+    type Target = Solver;
+
+    fn deref(&self) -> &Solver {
+        &self.0
+    }
+}
+
 const PATH_RESOURCE_LIMIT: u32 = 2_000_000;
+pub const INDEXED_FACT_INCREMENTAL_UNITS: u32 = 2_000_000;
+pub const INDEXED_FACT_FRESH_UNITS: u32 = 20_000_000;
+
+pub fn refuted_for_indexed_fact(solver: &Solver, assumption: &ast::Bool) -> bool {
+    refuted_within(
+        solver,
+        assumption,
+        INDEXED_FACT_INCREMENTAL_UNITS,
+        INDEXED_FACT_FRESH_UNITS,
+    )
+}
 const ESCALATION: [(ArithmeticEngine, u32, Duration); 5] = [
     (ArithmeticEngine::Legacy, 5_000_000, Duration::from_secs(5)),
     (
@@ -107,6 +140,31 @@ pub fn check_within(solver: &Solver, assumptions: &[ast::Bool], budget: Duration
     bounded(solver, UNLIMITED, budget, &|| {
         solver.check_assumptions(assumptions)
     })
+}
+
+pub fn refuted_within(
+    solver: &Solver,
+    assumption: &ast::Bool,
+    incremental_units: u32,
+    fresh_units: u32,
+) -> bool {
+    let unsat_within = |solver: &Solver, units: u32, run: &dyn Fn() -> SatResult| {
+        set_limits(solver, units, NO_TIMEOUT_MS);
+        let decided = run();
+        set_limits(solver, UNLIMITED, NO_TIMEOUT_MS);
+        decided == SatResult::Unsat
+    };
+    if unsat_within(solver, incremental_units, &|| {
+        solver.check_assumptions(std::slice::from_ref(assumption))
+    }) {
+        return true;
+    }
+    let fresh = ArithmeticEngine::Default.solver();
+    for fact in solver.get_assertions() {
+        fresh.assert(&fact);
+    }
+    fresh.assert(assumption);
+    unsat_within(&fresh, fresh_units, &|| fresh.check())
 }
 
 fn milliseconds(time: Duration) -> u32 {
@@ -543,6 +601,32 @@ pub fn generate_expression(
             return (**x).clone();
         }
     }
+    if op == "^"
+        && let Some(cancelled) = xor_cancelled(&a, &b)
+    {
+        return cancelled;
+    }
+    if op == "%"
+        && let AbstractExpression::Immediate(modulus) = b
+        && modulus > 0
+        && let Some(reduced) = without_multiples_of(&a, modulus)
+    {
+        return reduced;
+    }
+    if matches!(op, "lsr" | ">>")
+        && let AbstractExpression::Immediate(shift) = b
+        && (1..64).contains(&shift)
+        && let Some(high) = high_fields_of_composition(&a, shift)
+    {
+        return high;
+    }
+    if op == "asr"
+        && let AbstractExpression::Immediate(shift) = b
+        && (1..64).contains(&shift)
+        && let Some(high) = high_fields_of_composition(&a, shift)
+    {
+        return generate_expression("sext", high, AbstractExpression::Immediate(64 - shift));
+    }
     if matches!(op, "+" | "-") && b == AbstractExpression::Immediate(0) {
         return a;
     }
@@ -577,11 +661,207 @@ pub fn generate_expression(
                 None => kept.push((negated, term)),
             }
         }
+        if let Some(collected) = like_terms_collected(&kept) {
+            return rebuild_sum(collected, constant);
+        }
         if cancelled || flipped || immediates > 1 {
             return rebuild_sum(kept, constant);
         }
     }
     AbstractExpression::Expression(op.to_string(), Box::new(a), Box::new(b))
+}
+
+fn multiplier_of(term: &AbstractExpression) -> Option<(&AbstractExpression, i64)> {
+    match term {
+        AbstractExpression::Expression(op, x, c) if op == "*" => match (x.as_ref(), c.as_ref()) {
+            (_, AbstractExpression::Immediate(c)) => Some((x, *c)),
+            (AbstractExpression::Immediate(k), _) => Some((c, *k)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn is_multiple_of(term: &AbstractExpression, modulus: i64) -> bool {
+    match term {
+        AbstractExpression::Immediate(c) => c % modulus == 0,
+        _ => multiplier_of(term).is_some_and(|(_, c)| c % modulus == 0),
+    }
+}
+
+fn like_terms_collected(
+    kept: &[(bool, AbstractExpression)],
+) -> Option<Vec<(bool, AbstractExpression)>> {
+    let scaled = |term: &AbstractExpression| match multiplier_of(term) {
+        Some((x, k)) if k > 0 && !matches!(x, AbstractExpression::Immediate(_)) => (x.clone(), k),
+        _ => (term.clone(), 1),
+    };
+    let mut collected: Vec<(AbstractExpression, i64)> = Vec::new();
+    let mut repeated = false;
+    for (negated, term) in kept {
+        let (base, k) = scaled(term);
+        let k = if *negated { k.checked_neg()? } else { k };
+        match collected.iter_mut().find(|(b, _)| *b == base) {
+            Some(entry) => {
+                entry.1 = entry.1.checked_add(k)?;
+                repeated = true;
+            }
+            None => collected.push((base, k)),
+        }
+    }
+    if collected.iter().any(|(_, k)| *k == i64::MIN) {
+        return None;
+    }
+    repeated.then(|| {
+        collected
+            .into_iter()
+            .filter(|(_, k)| *k != 0)
+            .map(|(base, k)| {
+                let term = if k.abs() == 1 {
+                    base
+                } else {
+                    AbstractExpression::Expression(
+                        "*".to_string(),
+                        Box::new(base),
+                        Box::new(AbstractExpression::Immediate(k.abs())),
+                    )
+                };
+                (k < 0, term)
+            })
+            .collect()
+    })
+}
+
+fn finer_residue_of(term: &AbstractExpression, modulus: i64) -> Option<AbstractExpression> {
+    match term {
+        AbstractExpression::Expression(op, x, m) if op == "%" => match m.as_ref() {
+            AbstractExpression::Immediate(outer) if *outer > 0 && outer % modulus == 0 => {
+                Some((**x).clone())
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn without_multiples_of(a: &AbstractExpression, modulus: i64) -> Option<AbstractExpression> {
+    match a {
+        AbstractExpression::Expression(op, x, m) if op == "%" => match m.as_ref() {
+            AbstractExpression::Immediate(outer) if *outer > 0 && outer % modulus == 0 => Some(
+                generate_expression("%", (**x).clone(), AbstractExpression::Immediate(modulus)),
+            ),
+            _ => None,
+        },
+        AbstractExpression::Expression(op, ..)
+            if matches!(op.as_str(), "+" | "-") && a.size() <= MAX_CANCELLATION_NODES =>
+        {
+            let mut terms = Vec::new();
+            let mut flipped = false;
+            additive_terms(a.clone(), false, &mut terms, &mut flipped);
+            let before = terms.len();
+            terms.retain(|(_, term)| !is_multiple_of(term, modulus));
+            let mut unwrapped = false;
+            for (_, term) in terms.iter_mut() {
+                if let Some(inner) = finer_residue_of(term, modulus) {
+                    *term = inner;
+                    unwrapped = true;
+                }
+            }
+            if terms.len() == before && !unwrapped {
+                return None;
+            }
+            let terms = like_terms_collected(&terms).unwrap_or(terms);
+            if terms.is_empty() {
+                return Some(AbstractExpression::Immediate(0));
+            }
+            let reduced = rebuild_sum(terms, 0);
+            (reduced != *a)
+                .then(|| generate_expression("%", reduced, AbstractExpression::Immediate(modulus)))
+        }
+        _ => None,
+    }
+}
+
+fn residue_field(term: &AbstractExpression) -> Option<(AbstractExpression, i64, i64)> {
+    let (residue, scale) = match multiplier_of(term) {
+        Some((x, c)) => (x, c),
+        None => (term, 1),
+    };
+    match residue {
+        AbstractExpression::Expression(op, _, m) if op == "%" => match m.as_ref() {
+            AbstractExpression::Immediate(m) if *m > 0 && scale > 0 => {
+                Some((residue.clone(), *m, scale))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn high_fields_of_composition(a: &AbstractExpression, shift: i64) -> Option<AbstractExpression> {
+    if !matches!(a, AbstractExpression::Expression(op, ..) if op == "+")
+        || a.size() > MAX_CANCELLATION_NODES
+    {
+        return None;
+    }
+    let mut terms = Vec::new();
+    let mut flipped = false;
+    additive_terms(a.clone(), false, &mut terms, &mut flipped);
+    let divisor = 1i64 << shift;
+    let mut largest: u128 = 0;
+    let mut largest_low: u128 = 0;
+    let mut high = Vec::new();
+    for (negated, term) in terms {
+        if negated {
+            return None;
+        }
+        let (residue, modulus, scale) = residue_field(&term)?;
+        let most = (modulus as u128 - 1) * scale as u128;
+        largest = largest.checked_add(most)?;
+        if scale % divisor == 0 {
+            let quotient = scale / divisor;
+            high.push((
+                false,
+                if quotient == 1 {
+                    residue
+                } else {
+                    AbstractExpression::Expression(
+                        "*".to_string(),
+                        Box::new(residue),
+                        Box::new(AbstractExpression::Immediate(quotient)),
+                    )
+                },
+            ));
+        } else {
+            largest_low += most;
+        }
+    }
+    (largest < 1u128 << 64 && largest_low < divisor as u128).then(|| rebuild_sum(high, 0))
+}
+
+fn xor_cancelled(a: &AbstractExpression, b: &AbstractExpression) -> Option<AbstractExpression> {
+    if a == b {
+        return Some(AbstractExpression::Immediate(0));
+    }
+    if *b == AbstractExpression::Immediate(0) {
+        return Some(a.clone());
+    }
+    if *a == AbstractExpression::Immediate(0) {
+        return Some(b.clone());
+    }
+    let other_of = |pair: &AbstractExpression, single: &AbstractExpression| match pair {
+        AbstractExpression::Expression(op, x, y) if op == "^" => {
+            if **y == *single {
+                Some((**x).clone())
+            } else if **x == *single {
+                Some((**y).clone())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+    other_of(a, b).or_else(|| other_of(b, a))
 }
 
 pub fn generate_expression_from_options(
@@ -934,6 +1214,103 @@ impl fmt::Display for RegionType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct IndexedFact {
+    pub label: String,
+    pub base: i64,
+    pub stride: i64,
+    pub first: AbstractExpression,
+    pub end: AbstractExpression,
+    pub width: i64,
+    pub signed: bool,
+    pub op: String,
+    pub bound: AbstractExpression,
+}
+
+impl IndexedFact {
+    pub fn elements(
+        label: String,
+        first: AbstractExpression,
+        end: AbstractExpression,
+        width: i64,
+        signed: bool,
+    ) -> Self {
+        IndexedFact {
+            label,
+            base: 0,
+            stride: width,
+            first,
+            end,
+            width,
+            signed,
+            op: "==".to_string(),
+            bound: AbstractExpression::Immediate(0),
+        }
+    }
+
+    pub fn bounded(self, op: &str, bound: AbstractExpression) -> Self {
+        IndexedFact {
+            op: op.to_string(),
+            bound,
+            ..self
+        }
+    }
+
+    pub fn placed(self, base: i64, stride: i64) -> Self {
+        IndexedFact {
+            base,
+            stride,
+            ..self
+        }
+    }
+
+    fn element_start(&self, index: &ast::Int) -> ast::Int {
+        ast::Int::add(&[
+            &ast::Int::from_i64(self.base),
+            &ast::Int::mul(&[index, &ast::Int::from_i64(self.stride)]),
+        ])
+    }
+
+    pub fn byte_span(&self) -> Option<(ast::Int, ast::Int)> {
+        let first = expression_to_ast(self.first.clone())?;
+        let end = expression_to_ast(self.end.clone())?;
+        let last = ast::Int::sub(&[&end, &ast::Int::from_i64(1)]);
+        Some((
+            self.element_start(&first),
+            ast::Int::add(&[&self.element_start(&last), &ast::Int::from_i64(self.width)]),
+        ))
+    }
+
+    pub fn is_empty_ast(&self) -> Option<ast::Bool> {
+        let first = expression_to_ast(self.first.clone())?;
+        let end = expression_to_ast(self.end.clone())?;
+        Some(end.le(&first))
+    }
+
+    pub fn covers(&self, offset: &ast::Int) -> Option<ast::Bool> {
+        let first = expression_to_ast(self.first.clone())?;
+        let end = expression_to_ast(self.end.clone())?;
+        let within = ast::Int::sub(&[offset, &ast::Int::from_i64(self.base)]);
+        let stride = ast::Int::from_i64(self.stride);
+        Some(ast::Bool::and(&[
+            &within.modulo(&stride).eq(ast::Int::from_i64(0)),
+            &within.ge(ast::Int::mul(&[&first, &stride])),
+            &within.lt(ast::Int::mul(&[&end, &stride])),
+        ]))
+    }
+
+    pub fn value_range(&self) -> Option<(i64, i64)> {
+        let bits = 8 * u32::try_from(self.width)
+            .ok()
+            .filter(|w| (1..8).contains(w))?;
+        Some(if self.signed {
+            (-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1)
+        } else {
+            (0, (1i64 << bits) - 1)
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MemorySafeRegion {
     pub kind: RegionType,
@@ -943,6 +1320,8 @@ pub struct MemorySafeRegion {
     widths: BTreeMap<i64, i64>,
     written: Vec<(i64, i64)>,
     pub epoch: usize,
+    pub many: bool,
+    indexed_facts: Vec<IndexedFact>,
 }
 
 impl MemorySafeRegion {
@@ -955,7 +1334,29 @@ impl MemorySafeRegion {
             widths: BTreeMap::new(),
             written: Vec::new(),
             epoch: 0,
+            many: false,
+            indexed_facts: Vec::new(),
         }
+    }
+
+    pub fn stands_for_many(&mut self) {
+        self.many = true;
+    }
+
+    pub fn indexed_facts(&self) -> &[IndexedFact] {
+        &self.indexed_facts
+    }
+
+    pub fn add_indexed_fact(&mut self, fact: IndexedFact) {
+        self.indexed_facts.push(fact);
+    }
+
+    pub fn keep_indexed_facts(&mut self, kept: Vec<IndexedFact>) {
+        self.indexed_facts = kept;
+    }
+
+    fn changed(&mut self) {
+        self.indexed_facts.clear();
     }
 
     pub fn with_alignment(mut self, alignment: i64) -> Self {
@@ -968,6 +1369,7 @@ impl MemorySafeRegion {
     }
 
     pub fn write(&mut self, address: i64, width: i64, value: Option<RegisterValue>) {
+        self.changed();
         let widths = &self.widths;
         let overlapped: Vec<i64> = self
             .content
@@ -1022,6 +1424,63 @@ impl MemorySafeRegion {
         if !(1..=8).contains(&width) {
             return None;
         }
+        self.read_bytes(address, width)
+            .or_else(|| self.read_whole_cells(address, width))
+    }
+
+    fn read_whole_cells(&self, address: i64, width: i64) -> Option<RegisterValue> {
+        let mut constant: u64 = 0;
+        let mut terms: Option<AbstractExpression> = None;
+        let mut at = address;
+        while at < address + width {
+            let cell = self.content.get(&at)?;
+            let cell_width = self.widths.get(&at).copied()?;
+            if !(1..=4).contains(&cell_width) || at + cell_width > address + width {
+                return None;
+            }
+            let shift = 8 * (at - address) as u32;
+            let modulus = 1i64 << (8 * cell_width);
+            match (&cell.kind, &cell.base) {
+                (RegisterKind::Immediate, None) => {
+                    let piece = (cell.offset as u64 & (modulus as u64 - 1)).checked_shl(shift)?;
+                    constant = constant.checked_add(piece)?;
+                }
+                (RegisterKind::RegisterBase, Some(base)) => {
+                    let whole = generate_expression(
+                        "+",
+                        base.clone(),
+                        AbstractExpression::Immediate(cell.offset),
+                    );
+                    let field =
+                        generate_expression("%", whole, AbstractExpression::Immediate(modulus));
+                    let piece = if shift == 0 {
+                        field
+                    } else {
+                        generate_expression(
+                            "*",
+                            field,
+                            AbstractExpression::Immediate(1i64 << shift),
+                        )
+                    };
+                    terms = Some(match terms {
+                        None => piece,
+                        Some(sum) => generate_expression("+", sum, piece),
+                    });
+                }
+                _ => return None,
+            }
+            at += cell_width;
+        }
+        let constant = i64::try_from(constant).ok()?;
+        let composed = generate_expression("+", terms?, AbstractExpression::Immediate(constant));
+        Some(RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(composed),
+            0,
+        ))
+    }
+
+    fn read_bytes(&self, address: i64, width: i64) -> Option<RegisterValue> {
         let mut value: u64 = 0;
         for byte in 0..width {
             let at = address + byte;
@@ -1040,6 +1499,7 @@ impl MemorySafeRegion {
     }
 
     pub fn insert_sized(&mut self, address: i64, value: RegisterValue, width: i64) {
+        self.changed();
         self.content.insert(address, value);
         self.widths.insert(address, width);
     }
@@ -1049,6 +1509,7 @@ impl MemorySafeRegion {
     }
 
     pub fn clobber(&mut self) {
+        self.changed();
         self.content.clear();
         self.widths.clear();
         self.written.clear();
@@ -1056,6 +1517,7 @@ impl MemorySafeRegion {
     }
 
     pub fn insert(&mut self, address: i64, value: RegisterValue) {
+        self.changed();
         self.content.insert(address, value);
     }
 
@@ -1075,6 +1537,7 @@ impl MemorySafeRegion {
     }
 
     pub fn put(&mut self, address: i64, entry: Option<(RegisterValue, Option<i64>)>) {
+        self.changed();
         match entry {
             Some((value, width)) => {
                 self.content.insert(address, value);
@@ -1091,10 +1554,12 @@ impl MemorySafeRegion {
     }
 
     pub fn mark_written(&mut self, address: i64, width: i64) {
+        self.changed();
         self.written.push((address, address.saturating_add(width)));
     }
 
     pub fn renew_unwritten(&mut self) {
+        self.changed();
         self.epoch += 1;
     }
 
@@ -1382,6 +1847,20 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 return Some(value.ge(&zero).ite(&value, &zero));
             }
             if op == "!&"
+                && let AbstractExpression::Expression(inner, shifted, amount) = old2.as_ref()
+                && inner == "asr"
+                && **amount == AbstractExpression::Immediate(31)
+                && let AbstractExpression::Expression(extension, word, bits) = shifted.as_ref()
+                && extension == "sext"
+                && **bits == AbstractExpression::Immediate(32)
+                && word.as_ref() == old1.as_ref()
+            {
+                let whole = expression_to_ast(*old1.clone())?;
+                let low = whole.modulo(ast::Int::from_i64(1i64 << 32));
+                let negative = low.ge(ast::Int::from_i64(1i64 << 31));
+                return Some(negative.ite(&ast::Int::from_i64(0), &whole));
+            }
+            if op == "!&"
                 && let AbstractExpression::Immediate(mask) = old2.as_ref()
             {
                 return expression_to_ast(generate_expression(
@@ -1463,6 +1942,12 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 "-" => Some(ast::Int::sub(&[&new1, &new2])),
                 "*" => Some(ast::Int::mul(&[&new1, &new2])),
                 "/" => Some(new1.div(&new2)),
+                "lsl" if matches!(constant_shift, Some(0..=31)) => {
+                    let multiplier =
+                        ast::Int::from_str(&(1u128 << constant_shift.unwrap()).to_string())
+                            .expect("multiplier");
+                    Some(ast::Int::mul(&[&new1, &multiplier]))
+                }
                 "lsl" => {
                     let two = ast::Int::from_i64(2);
                     let multiplier = two.power(&new2).to_int();
@@ -1769,6 +2254,20 @@ pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
         "!=" => Some(ast::Bool::or(&[&left.lt(&right), &left.gt(&right)])),
         _ => todo!("unsupported op {:?}", expression.op),
     }
+}
+
+pub fn outside_signed_range(exact: AbstractExpression, bits: u32) -> AbstractComparison {
+    let half = 1i128 << (bits - 1);
+    let clamped = AbstractExpression::Expression(
+        "atmost".to_string(),
+        Box::new(AbstractExpression::Expression(
+            "atleast".to_string(),
+            Box::new(exact.clone()),
+            Box::new(AbstractExpression::Immediate((-half) as i64)),
+        )),
+        Box::new(AbstractExpression::Immediate((half - 1) as i64)),
+    );
+    AbstractComparison::new("!=", clamped, exact)
 }
 
 pub fn confined_load(value: AbstractExpression, width: i64) -> AbstractExpression {

@@ -140,6 +140,66 @@ which fails when executed (x86 first decodes the `.byte` sequences it understand
 $(e, n, w, v)$ and read back only by a load of the same $(e, n, w)$ (`remember_slot`,
 `recall_slot`).
 
+**Regions that stand for many** (`stands_for_many`, `holds_many`). The rows behind a
+pointer array share one region $R^{*}$ of the row length. Every pointer read from the
+array is a fresh label $\langle \rho\rangle{+}0$ of $R^{*}$ at offset 0 (`distinct_row`):
+accesses through it are checked against $[\rho, \rho + \ell_{R^*})$, and $\rho$ is related to
+no other row pointer, so two loads (of the same or different rows) neither equal nor
+differ by assumption and both arms of a comparison between them stay feasible. Since
+$R^{*}$ names every row at once, it has no cells,
+slots or never-written names: a load from it is $\nu\alpha.\,\mathsf{conf}_w(\alpha)$
+($\top$ at 8 bytes), a store to it is checked against $\ell_{R^*}$ and $\kappa_{R^*}$ and
+then forgotten. Rows declared `&[T; N]` are $\mathsf R$, rows declared `&mut [T; N]` are
+$\mathsf{RW}$; the pointer array itself is always $\mathsf R$, and reading row $i$ is a
+read of the array at $8i$, so $i < M$ is checked like any access.
+
+**Indexed facts** (`IndexedFact`, `add_indexed_fact`). A region may carry facts
+$\phi = \langle b, s, w, \mathit{sg}, [f, e), \bowtie, t\rangle$: for every element index
+$k \in [f, e)$, the $w$-byte element at byte $b + ks$, read as signed ($\mathit{sg}$) or
+unsigned, satisfies $\bowtie t$. $f$, $e$ and $t$ are terms over entry symbols, so a fact
+may sit at a symbolic index. A fact is admitted only if the solver proves
+$e \ge f$ and, when $e > f$, $b + fs \ge 0$ and $b + (e{-}1)s + w \le \ell_R$; otherwise
+the annotation is refused. Facts are part of $R$ and every change to $R$ drops them, except
+that `store_cell`, `forget_where_written` and a store into a many-region keep a fact whose
+byte span $[b{+}fs,\ b{+}(e{-}1)s{+}w)$ the solver proves disjoint from the written bytes.
+A load of width $w$ at offset $o$ (relative to $R$), with loaded value $v$, adds for each
+fact of width $w$ a fresh $\eta$ and
+$$\mathsf{cov}_\phi(o) \Rightarrow \big(\eta \bowtie t \wedge \eta \in \mathsf{range}_{w,\mathit{sg}} \wedge v = \mathsf{view}(\eta)\big),\qquad \mathsf{cov}_\phi(o) \equiv (o{-}b) \bmod s = 0 \wedge fs \le o{-}b < es,$$
+asserted outright when $\neg\mathsf{cov}$ is unsat and not at all when $\mathsf{cov}$ is
+unsat. $\mathsf{view}$ is the load's own extension of $\eta$'s bits (`zext`/`sext` at
+$8w$, then the 32-bit zero extension of a `w` destination), so a signed element read by an
+unsigned load is its bit pattern. A load that may straddle elements, or of another width,
+gets nothing.
+
+**Fields** (`add_field`). A field declaration places a cell holding the symbol
+`base@offset` at a byte offset of a region, after the solver proves it inside $\ell_R$ and
+no declared cell overlaps it. Pointer fields are cells holding another region's symbol
+(the same mechanism as `s[0] == data.as_ptr()`).
+
+**Exact lanes** (`ExactLanes`, `computer/exact_lanes.rs`). Besides the per-byte vector
+model, a vector register may carry exact lane values $\langle \beta; x_0..x_{16/\beta-1}\rangle$,
+each $x_i$ the unsigned value of lane $i$ ($\beta \in \{1,2,4,8\}$ bytes), re-laned on
+demand by splitting (`lsr`, `%`) or combining. They are kept with the rest of the vector
+state (`LaneBounds`, saved and restored by `lanes`/`set_lanes`). Every instruction drops the
+exact lanes of every vector it writes (its first vector operand; every vector in a load's
+register list, gaps included; none for stores) unless it is one of the modelled forms
+below, and **all** exact lanes are dropped whenever execution reaches a line at or before
+the last executed one, so no lane value survives into another loop iteration or a summary.
+Modelled forms: `movi`/`mvni`, `orr`/`bic` with an immediate, `dup` from a register or a
+lane, `and`/`orr`/`eor`/`bic`/`add`/`sub`/`mul` lane-wise ($\bmod 2^{8\beta}$),
+`sqdmulh`, the comparisons `cmhs`/`cmhi`/`cmeq`/`cmge`/`cmgt` (a fresh $m\in\{-1,0\}$ with
+$c \Rightarrow m = -1$, $\neg c \Rightarrow m = 0$, lane $m \bmod 2^{8\beta}$), `addv`, and
+the loads `ld1` (plain address), `ld1r`, `ldr`/`ldur` of a vector register. A loaded lane
+is the cell or never-written name the scalar load would read (with the indexed-fact rule
+above), or, from a never-written constant section at a symbolic offset, a fresh $\tau$ with
+$o = a \Rightarrow \tau = \mathit{data}(a)$ for each of the (at most 32, enumerated to
+`Unsat`) possible offsets $a$. `sqdmulh` is exact
+($\mathsf{min}(\lfloor 2\,\mathsf{sext}(a)\,\mathsf{sext}(b) / 2^{8\beta}\rfloor,\ 2^{8\beta-1}{-}1)$)
+unless one operand is proved in $[0, 2^{8\beta-1})$, in which case the result is a fresh
+$q$ between $0$ and the other operand's signed value (the product with a factor in
+$[0,1)$). `umov`/`smov`/`mov`/`fmov` to a general register read an exact lane (sign
+extended for `smov`).
+
 ### 1.5 States and contexts
 
 $$
@@ -221,7 +281,12 @@ by a fresh symbol.
 
 Writing a `w` register narrows (`narrow_to_32`):
 $\underline{n} \mapsto \underline{n \bmod 2^{32}}$ and
-$\langle e\rangle{+}n \mapsto \langle (e \boxplus n) \,\%\, 2^{32}\rangle{+}0$.
+$\langle e\rangle{+}n \mapsto \langle (e \boxplus n) \,\%\, 2^{32}\rangle{+}0$. When the path
+proves $e + n \in [0, 2^{32})$ (`fits_in_32`) the value is kept as $\langle e\rangle{+}n$,
+except that a base that is already a word, $\langle e' \,\%\, 2^{32}\rangle{+}n$ with
+$n \ne 0$, is always folded to $\langle (e' \boxplus n) \,\%\, 2^{32}\rangle{+}0$. Both forms
+denote the same integer when the sum fits; the folded one keeps a word counter in one shape
+across `add`/`subs`, so its loop step is a constant.
 
 ### 2.3 Interpretation into the solver (`expression_to_ast`, `comparison_to_ast`)
 
@@ -239,6 +304,7 @@ $$
 [\![e \,\&\, 2^k]\!] = \mathsf{bit}_k([\![e]\!]) && [\![e \,\&\, {\sim}2^k]\!] = [\![e]\!] - \mathsf{bit}_k([\![e]\!]) \quad(\text{also runs of bits})\\
 [\![e \;\hat{}\; e]\!] = 0 \quad [\![e \;\hat{}\; {-1}]\!] = -1 - [\![e]\!] && [\![e_1 \mid e_2]\!] = [\![e_1]\!] + [\![e_2]\!] \quad (\text{bits provably disjoint})\\
 [\![e \;\hat{}\; m]\!] = \text{bitwise flip of the bits of literal } m && [\![e \;\hat{}\; e']\!] \text{ otherwise: inexpressible}\\
+[\![e \mathbin{\&\sim} (\mathsf{sext}_{32}\, e \;\mathsf{asr}\; 31)]\!] = \big([\![e]\!] \bmod 2^{32} \ge 2^{31}\ ?\ 0 : [\![e]\!]\big) && (\texttt{bic w, w, w, asr \#31}\text{, the 32-bit } \max(e, 0))\\
 [\![e_1 \,\&\, e_2]\!],\ [\![e_1 \mid e_2]\!],\ [\![e_1 \oplus e_2]\!] = \mathsf{opaque}_{e} && \text{otherwise}
 \end{array}
 $$
@@ -290,9 +356,52 @@ $$
 \nu\text{-fresh flags} & v_1 = \top \text{ or } v_2 = \top\\
 Z{=}\mathsf{tt},\ N{=}\mathsf{ff},\ C{=}\mathsf{tt},\ V{=}\mathsf{ff} & v_1 = v_2\\
 \text{literal flags from } n, m & v_1 = \langle e\rangle{+}n,\ v_2 = \langle e\rangle{+}m, \text{ or both literal}\\
-Z{=}(d = 0),\ N{=}(\mathsf{sext}_b v_1 - \mathsf{sext}_b v_2 < 0),\ C{=}(\mathsf{zext}_{64} v_1 \ge \mathsf{zext}_{64} v_2),\ V{=}(d < -2^{63}) & \text{otherwise}
+Z{=}(d = 0),\ N{=}(s < 0),\ C{=}(\mathsf{zext}_{64} v_1 \ge \mathsf{zext}_{64} v_2),\ V{=}V_b(s) & \text{otherwise}
 \end{cases}
 $$
+
+with $s = \mathsf{sext}_b v_1 - \mathsf{sext}_b v_2$ the exact signed difference (for $b = 64$,
+$s = d$, the operands' values read as signed). $V_b(s)$ holds exactly when
+$s \notin [-2^{b-1}, 2^{b-1})$, both for positive and for negative overflow. For $b < 64$ it is
+written $V_b(s) = \big((s + 2^{b-1}) \bmod 2^b \ne s + 2^{b-1}\big)$; for $b = 64$, where $2^{64}$
+is no literal, $V_{64}(s) = \big(\min(\max(s, -2^{63}), 2^{63}-1) \ne s\big)$
+(`outside_signed_range`). The stored $N$ is the signed order $s < 0$, i.e. what `lt` tests
+($N \oplus V$ of the hardware), so `lt`/`ge`/`gt`/`le` never read $V$; `vs`/`vc` read $V_b(s)$.
+`adds`/`cmn` set the same $V_b$ over the exact sum $\mathsf{sext}_b v_1 + \mathsf{sext}_b v_2$ at
+every width. Their $Z$ tests the wrapped sum, $\mathsf{sext}_b(\lceil v_1\rceil + \lceil v_2\rceil) = 0$,
+since a sum can wrap to zero ($\mathtt{0xffffffff} + 1$ in a word); $C$ is a fresh flag.
+`eq`/`ne` read such a $Z$ as the plain $\lceil v_1\rceil + \lceil v_2\rceil = 0$ when the path
+refutes, within the solver budget, that the sum leaves $(-2^b, 2^b)$, where the two agree
+(`unwrapped_zero`).
+
+**Carry in** (`add_with_carry_flags`, `subtract_with_carry_flags`). `adcs`/`sbcs` read a literal
+carry $c$ before writing the destination and set the flags of the exact
+$v_1 + v_2 + c$ and $v_1 - v_2 - (1 - c)$. The carry that leaves the operation unchanged
+($c = 0$ for `adcs`, $c = 1$ for `sbcs`) gives the `cmn`/`cmp` flags above; the other one
+(`flags_one_past`) shifts every flag by one: $N$ is $s \pm 1 < 0$, $V$ is $V_b(s \pm 1)$, $Z$ is
+$\mathsf{sext}_b(d \pm 1) = 0$, and for `sbcs` $C$ (no borrow) is
+$\mathsf{zext}_b v_1 \ge \mathsf{zext}_b v_2 + 1$, which `hi` reads (for $b = 64$) as $\mathsf{zext}_b v_1 > \mathsf{zext}_b v_2 + 1$;
+`adcs` leaves $C$ fresh. Two literal operands give literal flags computed at width $b$. A symbolic
+carry makes all four flags fresh and the result a $\mathsf{sel}$ (`carry_select`).
+
+**Minus** (`mi`/`pl`) tests the sign of the wrapped result, $(s \bmod 2^b) \ge 2^{b-1}$ for a
+$b$-bit compare. When the path refutes $V$ within the solver budget
+(`refutes_within_budget`), the wrapped and exact signs agree and `mi` is the stored $N$,
+$s < 0$, which the loop rules read as a word counter's guard. Otherwise it is the wrapped
+comparison for $b < 64$ and a fresh flag for $b = 64$.
+
+**x86-64 flags** (`x86/computer/flags.rs`) use the same convention: the stored SF slot holds
+the signed order $s < 0$ (SF $\oplus$ OF of the hardware) and OF holds $V_b(s)$, with
+$s = \mathsf{sext}_b\,\mathit{dst} \mathbin{\pm} \mathsf{sext}_b\,\mathit{src} \mathbin{\pm} c$ for
+`cmp`/`sub`/`add`/`inc`/`dec`/`neg` and, with a literal carry $c$, `adc`/`sbb`
+(`set_signed_order`). Narrow operands are read zero-extended, so $\mathsf{sext}_b$ is applied
+unless the solver shows both operands in $[0, 2^{b-1})$ and $s$ in range, in which case OF is
+$\mathsf{ff}$ and the flags keep their unextended form. `l` reads the stored slot, `le` adds $Z$,
+`o` reads OF, and `s` is the stored slot when OF is $\mathsf{ff}$ or refuted, its exclusive-or
+with a literal OF, and otherwise a fresh flag. Instructions that change OF without a modelled
+value (`shl`/`shr`/rotates, `bt*`, `adox`) make both the slot and OF fresh. `sar` keeps OF
+$\mathsf{ff}$: exact for a 1-bit shift, and an assumption for longer ones, which the manual
+leaves undefined and OpenBLAS's `sar; jle` idiom relies on.
 
 **Conditions** (`condition`). Every AArch64 condition code is read through one model of
 the flags. A single flag is returned as is (negated for the inverse code). A conjunction
@@ -842,8 +951,13 @@ $$
 
   with $\epsilon \in \{0, 1\}$ by the same case split. Every other exit of the cycle
   contributes facts of the same shape over its own total $T_{pc'}$, and a branch decided
-  the same way throughout the cycle whose walker is unsigned contributes the fact that it
-  held at iteration $\kappa - 1$ (`held_on_the_cycle`). A guard on a sign-extended word
+  the same way throughout the cycle whose walker is unsigned, or a sign-extended word,
+  contributes the fact that it held at iteration $\kappa - 1$ (`held_on_the_cycle`). A
+  sign-extended word is stated over the integer it extends ($\mathsf{sext}_{32}$ dropped,
+  `without_word_signs`); like every branch fact it is kept only if it is implied at
+  $\kappa = N$ and proved for $\kappa + 1$ at the back edge (`branches_not_carried`), so the integer reading is never
+  assumed past a wrap. On AArch64 an exit tested on a `w` register is tied to that
+  register's word at the iteration start (`flag_source`, `word_view`). A guard on a sign-extended word
   counter bounds $\kappa$ by the iterations before the word wraps
   (`word_counter_bound`).
 - **Landing requirements** (`landing_requirements`, `unwrapped_requirements`). A trip fact
@@ -891,7 +1005,10 @@ the guard, for example one recomputed into a scratch register every iteration, g
 *ghost*: a predicted value at $\kappa$ and at $\kappa{+}1$. The ghost is substituted into
 $\mathit{stay}(c)$, and its $\kappa{+}1$ prediction becomes a premise of (IND). Every
 other stepping guard operand is checked at the back edge to still be read from the
-register it was tied to (`operand_checks`).
+register it was tied to (`operand_checks`). Operands are located by their path in the
+guard (`condition_side`); a word operand that was a literal when the loop was summarized
+and is $\mathsf{sext}_b$/$\mathsf{zext}_b$ of a register at the back edge is read through
+that extension, since the check concerns the register it extends.
 
 ### 6.5 The loop rules
 
@@ -966,8 +1083,12 @@ symbols (`bound_fresh`) are re-asserted whenever the scope they were made in is 
 so no pop, rebuild or fork loses them. From here on,
 $\kappa$ is the exit iteration: inside the body it was arbitrary, and at the exit it is
 pinned. If the leaving condition is affine in $\kappa$, its possible exit values $V$ (a
-window of at most 8, `exit_window`, `counter_value_at_exit`) are recorded in
-$\mathcal{C}$ (`closed_counters`). $H$ is cut back to $|H|$ at the summary, and the
+window of at most 8, `exit_window`, `counter_value_at_exit`; a single value for an `==`
+exit whatever the step) are recorded in
+$\mathcal{C}$ (`closed_counters`). A condition that is affine only once its word narrowings
+and $\mathsf{sext}_{32}$/$\mathsf{zext}_{32}$ are dropped (`without_word_wraps`) is read that
+way. $V$ is only a set of candidates: every use substitutes one and proves the resulting
+step against the actual states with the solver. $H$ is cut back to $|H|$ at the summary, and the
 records of $pc$ are marked resolved. If the path is unsat after closing, it ends
 (**Br-Dead**).
 
@@ -1005,8 +1126,14 @@ $pc$, the epilogue of `run` pops $S$. Every push therefore has exactly one pop.
 iteration of the open outer loop (§6.2) and closes, or fails, before the outer loop's
 back edge. Its counter's exit values in $\mathcal{C}$ let the outer loop's observation
 settle inner counters to their exit values (`step_past_inner_loops`) and re-anchor a
-pointer that the inner loop advanced (`anchor_past_inner_loops`). A branch on the cycle
-of an open loop is never summarized again.
+pointer that the inner loop advanced (`anchor_past_inner_loops`). Only the counters that
+survive in the register's move (after minus before) are settled, and the settled step may
+name the symbols of the exit values of inner counters the register already carried at
+entry, such as the width an inner trip count is computed from. A register with no inner counter in its move steps by its affine move when that move
+is proved between every pair of consecutive recorded visits
+(`step_held_by_invariant_symbols`, `repeated_on_every_visit`), even if its symbols also sit
+in other moving registers. These are candidate invariants; $\mathsf{IND}$ still checks them.
+A branch on the cycle of an open loop is never summarized again.
 
 **Memory-free loops** (`memory_free_loop`, `havoc_memory_free_loop`). Consider a natural
 loop $[pc, \mathit{end}]$ (from the back edges, `loop_ends_of`) made only of
@@ -1077,7 +1204,10 @@ for some extension of $\theta$:
 |---|---|---|
 | §2.1–§2.3 | Value operations and $[\![\cdot]\!]$ agree with machine arithmetic | **Only modulo wrap.** $[\![\cdot]\!]$ is over $\mathbb{Z}$ and literals fold with saturation. An access reached through 64-bit overflow is not modelled (open TODO). |
 | $\mathsf{opaque}$, $\top$, $\mathsf{cap}$ | Over-approximation: any concrete value extends $\theta$ | Holds: all are unconstrained symbols. |
-| §3 loads and stores | Cells, slots and names describe memory | Holds by construction: a write the engine cannot place forgets every cell not proved disjoint and bumps the epoch. |
+| §3 loads and stores | Cells, slots and names describe memory | Holds by construction: a write the engine cannot place forgets every cell not proved disjoint and bumps the epoch. A narrow load of a cell whose value is not proved inside the load's range is extended exactly (`zext`/`sext`), so a declared signed element read without sign extension is its bit pattern. |
+| Many-regions | One region stands for every row | Holds: it has no cells, slots or names, so a load from it is unconstrained and no row's value is equated with another's. Each loaded row pointer is a fresh label of the region, so no two row pointers are assumed equal or unequal and a branch on `rr[i] == rr[j]` explores both arms. |
+| Indexed facts | A fact holds of the element whenever $\mathsf{cov}$ holds | Holds: admitted only inside the region; dropped by every change to the region except a write proved disjoint from the whole span; asserted only under $\mathsf{cov}$, so an element at another index, another width or a straddling offset gets nothing. |
+| Exact lanes | Every exact lane is the lane's value | Holds by construction: every written vector is dropped unless modelled exactly, `sqdmulh`'s bound is an over-approximation, and a backward move drops every lane, so loop summaries never see a lane from an earlier iteration. |
 | **(Br-\*)**, **(Split)** | Every concrete successor is covered | Holds: an arm is pruned only on `Unsat`; an inexpressible guard explores both; **(Split)** covers all values because the enumeration ran to `Unsat`. |
 | **(Cases)** | The cases cover every feasible index | **Open.** `table_load` proves the index aligned and in range, but keeps an entry only if its query is `Sat`; an entry whose query is `Unknown` is dropped. It should be kept. |
 | **(Merge)**, selects | $\Delta$ is exact | Holds by construction. |
@@ -1100,6 +1230,20 @@ for some extension of $\theta$:
   arguments of 32 bits or fewer (`bool`, `u8`…`i32`) are asserted to lie in their type's
   range, and their 64-bit register is $v + 2^{32}h$ with $h$ unconstrained: AAPCS64 and
   the System V x86-64 ABI leave the upper half unspecified.
+- **Entry registers.** `reg(x8) == t` sets the 64-bit register to the symbol `reg_x8` and
+  asserts the comparisons on it; `reg(w8)` sets it to $v + 2^{32}h$ with
+  $v \in [0, 2^{32})$ and $h$ unconstrained (likewise `eax`…`r15d` on x86-64). Only
+  general registers not bound to an argument (nor `x8` when the result is returned
+  indirectly) may be named, one view per register. No Rust caller can establish a register,
+  so such a wrapper is an `unsafe fn`. `clz32(t)` is the leading-zero count of
+  $t \bmod 2^{32}$, $32$ for $0$, exactly as the instruction (§2.3).
+- **Indexed facts and fields.** `a[e] op t`, `a[e..]`, `a[e1..e2]`, `a[e1..=e2]` on a
+  slice, `field::<[T; N]>(base, off)[..] op t` on a field array, and
+  `x.iter().skip(k).step_by(s).all(|e| *e op t)` (also over the rows of a pointer array)
+  are checked at run time by the wrapper with exact arithmetic (a symbolic index is computed
+  in `i128` and converted to `usize`, so it cannot wrap), except over raw-pointer rows,
+  which makes the wrapper an `unsafe fn`. `field::<T>(base, off)` reads the bytes of a
+  slice argument with `read_unaligned` after asserting they are inside it.
 - **Stack conventions.** The AArch64 frame $[\min(s,0), \mathit{args})$; on x86-64, no lower
   bound below `rsp`. The red zone is not trusted: an annotation may claim at most the 128
   bytes the Apple arm64 ABI guarantees, and only for an Apple target, and each use is

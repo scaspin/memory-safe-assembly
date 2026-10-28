@@ -305,7 +305,7 @@ impl MachineInstruction for Instruction {
                 _ => continue,
             };
             return match source {
-                Some(Operand::Register(RePrefix::X, n)) => Some(*n),
+                Some(Operand::Register(RePrefix::X | RePrefix::W, n)) => Some(*n),
                 _ => None,
             };
         }
@@ -338,7 +338,7 @@ impl Machine for ARMCORTEXA {
     }
 
     fn set_solver(&mut self, solver: Solver) {
-        self.solver = solver;
+        self.solver = EmptiedOnClone::new(solver);
     }
 
     fn get_state(&self) -> MachineState {

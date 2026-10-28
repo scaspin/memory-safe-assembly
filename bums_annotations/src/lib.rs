@@ -2,7 +2,7 @@ use parse::{Parse, ParseStream};
 use proc_macro2::{Delimiter, Span, TokenStream, TokenTree};
 use punctuated::Punctuated;
 use quote::quote;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::*;
 
@@ -255,6 +255,380 @@ fn indexed_element(input: &ExprBinary) -> Option<(String, i64)> {
     ))
 }
 
+const PRECONDITION_FUNCTIONS: [&str; 3] = ["reg", "clz32", "field"];
+
+fn called_function(call: &ExprCall) -> Option<String> {
+    let Expr::Path(path) = &*call.func else {
+        return None;
+    };
+    match path.path.segments.iter().collect::<Vec<_>>().as_slice() {
+        [segment] if path.qself.is_none() => Some(segment.ident.to_string()),
+        _ => None,
+    }
+}
+
+const FIELD_SCALARS: [&str; 10] = [
+    "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "usize", "isize",
+];
+
+#[derive(Clone, Debug, PartialEq)]
+enum FieldType {
+    Scalar(String),
+    Array(String, i64),
+}
+
+impl FieldType {
+    fn element(&self) -> &str {
+        match self {
+            FieldType::Scalar(element) | FieldType::Array(element, _) => element,
+        }
+    }
+
+    fn element_width(&self) -> i64 {
+        calculate_size_of(self.element().to_string()) as i64
+    }
+
+    fn width(&self) -> i64 {
+        match self {
+            FieldType::Scalar(_) => self.element_width(),
+            FieldType::Array(_, count) => self.element_width() * count,
+        }
+    }
+
+    fn shown(&self) -> String {
+        let ty = self.rust_type();
+        spelled(quote! { #ty })
+    }
+
+    fn rust_type(&self) -> Type {
+        let element = Ident::new(self.element(), Span::call_site());
+        match self {
+            FieldType::Scalar(_) => parse_quote! { #element },
+            FieldType::Array(_, count) => {
+                let count = proc_macro2::Literal::i64_unsuffixed(*count);
+                parse_quote! { [#element; #count] }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct FieldAccess {
+    base: String,
+    offset: i64,
+    ty: FieldType,
+}
+
+impl FieldAccess {
+    fn symbol(&self) -> String {
+        format!("{}@{}", self.base, self.offset)
+    }
+
+    fn read(&self) -> proc_macro2::TokenStream {
+        let base = Ident::new(&self.base, Span::call_site());
+        let offset = proc_macro2::Literal::i64_unsuffixed(self.offset);
+        let width = proc_macro2::Literal::i64_unsuffixed(self.ty.width());
+        let ty = self.ty.rust_type();
+        quote! {
+            {
+                assert!(#offset + #width <= ::core::mem::size_of_val(#base));
+                unsafe { (#base.as_ptr() as *const u8).add(#offset).cast::<#ty>().read_unaligned() }
+            }
+        }
+    }
+}
+
+fn field_type(ty: &Type) -> std::result::Result<FieldType, String> {
+    let scalar = |ty: &Type| match ty {
+        Type::Path(path) => path
+            .path
+            .get_ident()
+            .map(|ident| ident.to_string())
+            .filter(|name| FIELD_SCALARS.contains(&name.as_str())),
+        _ => None,
+    };
+    if let Some(name) = scalar(ty) {
+        return Ok(FieldType::Scalar(name));
+    }
+    if let Type::Array(array) = ty
+        && let Some(element) = scalar(&array.elem)
+        && let Some(count) = constant_index(&array.len).filter(|count| *count > 0)
+    {
+        return Ok(FieldType::Array(element, count));
+    }
+    Err(format!(
+        "a field is one of {} or a fixed array of them, not {}",
+        FIELD_SCALARS.join(", "),
+        spelled(quote! { #ty })
+    ))
+}
+
+fn field_access(e: &Expr) -> Option<std::result::Result<FieldAccess, String>> {
+    let Expr::Call(call) = e else {
+        return None;
+    };
+    if called_function(call).as_deref() != Some("field") {
+        return None;
+    }
+    let shown = spelled(quote! { #call });
+    let malformed = || {
+        Err(format!(
+            "a field is named as field::<T>(base, byte_offset): {shown}"
+        ))
+    };
+    let Expr::Path(function) = &*call.func else {
+        return Some(malformed());
+    };
+    let PathArguments::AngleBracketed(generics) = &function.path.segments[0].arguments else {
+        return Some(malformed());
+    };
+    let (Some(GenericArgument::Type(ty)), 1) = (generics.args.first(), generics.args.len()) else {
+        return Some(malformed());
+    };
+    let arguments: Vec<&Expr> = call.args.iter().collect();
+    let [Expr::Path(base), offset] = arguments.as_slice() else {
+        return Some(malformed());
+    };
+    let (Some(base), Some(offset)) = (base.path.get_ident(), constant_index(offset)) else {
+        return Some(malformed());
+    };
+    if offset < 0 {
+        return Some(Err(format!(
+            "a field offset is a byte count from the base: {shown}"
+        )));
+    }
+    Some(field_type(ty).map(|ty| FieldAccess {
+        base: base.to_string(),
+        offset,
+        ty,
+    }))
+}
+
+fn fields_mentioned(e: &Expr, diagnostics: &mut Vec<String>) -> Vec<FieldAccess> {
+    let mut named = Vec::new();
+    let mut arrays = 0;
+    let mut indexed_arrays = 0;
+    each_subexpression(e, &mut |sub| {
+        if let Expr::Index(indexed) = sub
+            && let Some(Ok(field)) = field_access(&indexed.expr)
+            && matches!(field.ty, FieldType::Array(..))
+        {
+            indexed_arrays += 1;
+        }
+        match field_access(sub) {
+            Some(Ok(field)) => {
+                if matches!(field.ty, FieldType::Array(..)) {
+                    arrays += 1;
+                }
+                named.push(field)
+            }
+            Some(Err(problem)) => diagnostics.push(problem),
+            None => (),
+        }
+    });
+    if arrays > indexed_arrays {
+        diagnostics.push(format!(
+            "a field array is compared element by element, as in field::<[u8; 3]>(rf, 53)[..] <= 6: {}",
+            spelled(quote! { #e })
+        ));
+    }
+    named
+}
+
+fn register_named(e: &Expr) -> Option<std::result::Result<String, String>> {
+    let Expr::Call(call) = e else {
+        return None;
+    };
+    if called_function(call).as_deref() != Some("reg") {
+        return None;
+    }
+    Some(match call.args.iter().collect::<Vec<_>>().as_slice() {
+        [Expr::Path(name)] if name.path.get_ident().is_some() => Ok(name
+            .path
+            .get_ident()
+            .expect("a single identifier")
+            .to_string()),
+        _ => Err(format!(
+            "reg(..) names one register, as in reg(x8): {}",
+            spelled(quote! { #call })
+        )),
+    })
+}
+
+fn each_subexpression<'a>(e: &'a Expr, visit: &mut impl FnMut(&'a Expr)) {
+    visit(e);
+    let inner: Vec<&Expr> = match e {
+        Expr::Binary(b) => vec![&b.left, &b.right],
+        Expr::Unary(u) => vec![&u.expr],
+        Expr::Paren(p) => vec![&p.expr],
+        Expr::Group(g) => vec![&g.expr],
+        Expr::Cast(c) => vec![&c.expr],
+        Expr::Index(i) => vec![&i.expr, &i.index],
+        Expr::Reference(r) => vec![&r.expr],
+        Expr::Repeat(r) => vec![&r.expr, &r.len],
+        Expr::Array(a) => a.elems.iter().collect(),
+        Expr::Call(c) => c.args.iter().collect(),
+        Expr::MethodCall(m) => std::iter::once(&*m.receiver).chain(&m.args).collect(),
+        Expr::Range(r) => r.start.iter().chain(r.end.iter()).map(|b| &**b).collect(),
+        _ => Vec::new(),
+    };
+    for e in inner {
+        each_subexpression(e, visit);
+    }
+}
+
+fn registers_mentioned(e: &Expr, diagnostics: &mut Vec<String>) -> Vec<String> {
+    let mut named = Vec::new();
+    each_subexpression(e, &mut |sub| match register_named(sub) {
+        Some(Ok(name)) => named.push(name),
+        Some(Err(problem)) => diagnostics.push(problem),
+        None => (),
+    });
+    named
+}
+
+fn unknown_functions(e: &Expr, diagnostics: &mut Vec<String>) {
+    each_subexpression(e, &mut |sub| {
+        let Expr::Call(call) = sub else {
+            return;
+        };
+        let known = called_function(call)
+            .is_some_and(|name| PRECONDITION_FUNCTIONS.contains(&name.as_str()));
+        if !known {
+            diagnostics.push(format!(
+                "a precondition can call only {}: {}",
+                PRECONDITION_FUNCTIONS.join(", "),
+                spelled(quote! { #call })
+            ));
+        } else if called_function(call).as_deref() == Some("clz32") && call.args.len() != 1 {
+            diagnostics.push(format!(
+                "clz32 takes one value: {}",
+                spelled(quote! { #call })
+            ));
+        }
+    });
+}
+
+fn register_symbol(name: &str) -> String {
+    format!("reg_{name}")
+}
+
+const X86_WIDE_REGISTERS: [&str; 15] = [
+    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "r8", "r9", "r10", "r11", "r12", "r13", "r14",
+    "r15",
+];
+const X86_WORD_REGISTERS: [&str; 15] = [
+    "eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "r8d", "r9d", "r10d", "r11d", "r12d", "r13d",
+    "r14d", "r15d",
+];
+const X86_ARGUMENT_REGISTERS: [&str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
+const AARCH64_ARGUMENT_REGISTERS: usize = 8;
+const AARCH64_LAST_FREE_REGISTER: usize = 28;
+
+struct EntryRegister {
+    full: String,
+    word_view: bool,
+}
+
+fn entry_register(
+    isa: bums::machine::Isa,
+    name: &str,
+) -> std::result::Result<EntryRegister, String> {
+    match isa {
+        bums::machine::Isa::Aarch64 => {
+            let number = name
+                .strip_prefix('x')
+                .map(|n| (n, false))
+                .or_else(|| name.strip_prefix('w').map(|n| (n, true)))
+                .and_then(|(n, word)| {
+                    let canonical = n == "0" || !n.starts_with('0');
+                    n.parse::<usize>()
+                        .ok()
+                        .filter(|_| canonical)
+                        .map(|n| (n, word))
+                });
+            match number {
+                Some((n, word_view)) if n <= AARCH64_LAST_FREE_REGISTER => Ok(EntryRegister {
+                    full: format!("x{n}"),
+                    word_view,
+                }),
+                _ => Err(format!(
+                    "reg({name}) is not an AArch64 general register x0..x{AARCH64_LAST_FREE_REGISTER} or w0..w{AARCH64_LAST_FREE_REGISTER}"
+                )),
+            }
+        }
+        bums::machine::Isa::X86_64 => {
+            if X86_WIDE_REGISTERS.contains(&name) {
+                return Ok(EntryRegister {
+                    full: name.to_string(),
+                    word_view: false,
+                });
+            }
+            match X86_WORD_REGISTERS.iter().position(|r| *r == name) {
+                Some(k) => Ok(EntryRegister {
+                    full: X86_WIDE_REGISTERS[k].to_string(),
+                    word_view: true,
+                }),
+                None => Err(format!(
+                    "reg({name}) is not an x86-64 general register other than the stack pointer"
+                )),
+            }
+        }
+    }
+}
+
+fn argument_register_names(isa: bums::machine::Isa, arguments: usize) -> Vec<String> {
+    match isa {
+        bums::machine::Isa::Aarch64 => (0..arguments.min(AARCH64_ARGUMENT_REGISTERS))
+            .map(|n| format!("x{n}"))
+            .collect(),
+        bums::machine::Isa::X86_64 => X86_ARGUMENT_REGISTERS
+            .iter()
+            .take(arguments)
+            .map(|r| r.to_string())
+            .collect(),
+    }
+}
+
+fn entry_registers(
+    isa: bums::machine::Isa,
+    named: &BTreeSet<String>,
+    arguments: usize,
+    indirect_result: bool,
+) -> std::result::Result<Vec<(String, EntryRegister)>, Vec<String>> {
+    let mut bound = argument_register_names(isa, arguments);
+    if indirect_result && isa == bums::machine::Isa::Aarch64 {
+        bound.push("x8".to_string());
+    }
+    let mut problems = Vec::new();
+    let mut resolved: Vec<(String, EntryRegister)> = Vec::new();
+    for name in named {
+        match entry_register(isa, name) {
+            Ok(register) => {
+                if bound.contains(&register.full) {
+                    problems.push(format!(
+                        "reg({name}) is bound to an argument of this function, so its value at entry is that argument"
+                    ));
+                } else if let Some((other, _)) =
+                    resolved.iter().find(|(_, r)| r.full == register.full)
+                {
+                    problems.push(format!(
+                        "reg({name}) and reg({other}) are views of one register; state one of them"
+                    ));
+                } else {
+                    resolved.push((name.clone(), register));
+                }
+            }
+            Err(problem) => problems.push(problem),
+        }
+    }
+    if problems.is_empty() {
+        Ok(resolved)
+    } else {
+        Err(problems)
+    }
+}
+
 fn constant_index(e: &Expr) -> Option<i64> {
     match e {
         Expr::Lit(l) => match &l.lit {
@@ -276,31 +650,256 @@ fn constant_index(e: &Expr) -> Option<i64> {
     }
 }
 
-fn element_bound(input: &ExprBinary, diagnostics: &mut Vec<String>) -> Option<(String, i64)> {
-    if !matches!(
-        input.op,
+enum ElementBound {
+    Literal(String, i64),
+    Indexed(Box<IndexedBound>),
+}
+
+#[derive(Clone)]
+enum BoundTarget {
+    Slice(String),
+    Field(FieldAccess),
+    Strided {
+        array: String,
+        rows: bool,
+        skip: i64,
+        step: i64,
+    },
+}
+
+#[derive(Clone)]
+struct IndexedBound {
+    target: BoundTarget,
+    first: Expr,
+    end: Option<Expr>,
+    to_end: bool,
+    comparison: ExprBinary,
+}
+
+fn is_comparison(op: &BinOp) -> bool {
+    matches!(
+        op,
         BinOp::Eq(_) | BinOp::Ne(_) | BinOp::Lt(_) | BinOp::Le(_) | BinOp::Gt(_) | BinOp::Ge(_)
-    ) {
+    )
+}
+
+fn method_receiver<'a>(e: &'a Expr, method: &str) -> Option<(&'a Expr, Vec<&'a Expr>)> {
+    match e {
+        Expr::MethodCall(call) if call.method == method => {
+            Some((&*call.receiver, call.args.iter().collect()))
+        }
+        _ => None,
+    }
+}
+
+fn closure_body(e: &Expr) -> Option<(String, &Expr)> {
+    let Expr::Closure(closure) = e else {
+        return None;
+    };
+    let [Pat::Ident(parameter)] = closure.inputs.iter().collect::<Vec<_>>().as_slice() else {
+        return None;
+    };
+    Some((parameter.ident.to_string(), &*closure.body))
+}
+
+fn names(e: &Expr, name: &str) -> bool {
+    matches!(e, Expr::Path(path) if path.path.is_ident(name))
+}
+
+struct StridedAll {
+    receiver: Expr,
+    skip: i64,
+    step: i64,
+    comparison: ExprBinary,
+}
+
+fn strided_all(e: &Expr) -> Option<std::result::Result<StridedAll, String>> {
+    let (walk, arguments) = method_receiver(e, "all")?;
+    let shown = || spelled(quote! { #e });
+    let [predicate] = arguments.as_slice() else {
+        return Some(Err(format!("all takes one closure: {}", shown())));
+    };
+    let (step, walk) = match method_receiver(walk, "step_by") {
+        Some((inner, step)) => (step.first().and_then(|s| constant_index(s)), inner),
+        None => (Some(1), walk),
+    };
+    let (skip, walk) = match method_receiver(walk, "skip") {
+        Some((inner, skip)) => (skip.first().and_then(|s| constant_index(s)), inner),
+        None => (Some(0), walk),
+    };
+    let (receiver, _) = method_receiver(walk, "iter")?;
+    let (Some(skip), Some(step)) = (skip, step) else {
+        return Some(Err(format!(
+            "skip and step_by take literal counts: {}",
+            shown()
+        )));
+    };
+    if skip < 0 || step < 1 {
+        return Some(Err(format!(
+            "skip must be >= 0 and step_by >= 1: {}",
+            shown()
+        )));
+    }
+    let comparison = closure_body(predicate).and_then(|(element, body)| match body {
+        Expr::Binary(b) if is_comparison(&b.op) => match &*b.left {
+            Expr::Unary(u) if matches!(u.op, UnOp::Deref(_)) && names(&u.expr, &element) => {
+                Some(b.clone())
+            }
+            _ => None,
+        },
+        _ => None,
+    });
+    let Some(comparison) = comparison else {
+        return Some(Err(format!(
+            "the predicate of all is |e| *e op bound: {}",
+            shown()
+        )));
+    };
+    Some(Ok(StridedAll {
+        receiver: receiver.clone(),
+        skip,
+        step,
+        comparison,
+    }))
+}
+
+fn strided_over(array: &Expr, rows: bool, walk: StridedAll) -> Option<IndexedBound> {
+    let Expr::Path(array) = array else {
+        return None;
+    };
+    Some(IndexedBound {
+        target: BoundTarget::Strided {
+            array: array.path.get_ident()?.to_string(),
+            rows,
+            skip: walk.skip,
+            step: walk.step,
+        },
+        first: parse_quote! { 0 },
+        end: None,
+        to_end: true,
+        comparison: walk.comparison,
+    })
+}
+
+fn rows_bound(e: &Expr) -> Option<std::result::Result<IndexedBound, String>> {
+    let (walk, arguments) = method_receiver(e, "all")?;
+    let (rows, _) = method_receiver(walk, "iter")?;
+    let [predicate] = arguments.as_slice() else {
+        return None;
+    };
+    let (row, body) = closure_body(predicate)?;
+    let inner = match strided_all(body)? {
+        Ok(inner) => inner,
+        Err(problem) => return Some(Err(problem)),
+    };
+    if !names(&inner.receiver, &row) {
+        return Some(Err(format!(
+            "the rows walk starts from the row the closure names: {}",
+            spelled(quote! { #e })
+        )));
+    }
+    Some(strided_over(rows, true, inner).ok_or_else(|| {
+        format!(
+            "all walks the rows of a slice argument: {}",
+            spelled(quote! { #e })
+        )
+    }))
+}
+
+fn strided_bound(e: &Expr) -> Option<std::result::Result<IndexedBound, String>> {
+    if let Some(rows) = rows_bound(e) {
+        return Some(rows);
+    }
+    let walk = match strided_all(e)? {
+        Ok(walk) => walk,
+        Err(problem) => return Some(Err(problem)),
+    };
+    let receiver = walk.receiver.clone();
+    Some(
+        strided_over(&receiver, false, walk)
+            .ok_or_else(|| format!("all walks a slice argument: {}", spelled(quote! { #e }))),
+    )
+}
+
+fn element_bound(input: &ExprBinary) -> Option<ElementBound> {
+    if !is_comparison(&input.op) {
         return None;
     }
     let Expr::Index(indexed) = &*input.left else {
         return None;
     };
-    let Expr::Path(path) = &*indexed.expr else {
-        return None;
+    let target = match &*indexed.expr {
+        Expr::Path(path) => BoundTarget::Slice(path.path.segments[0].ident.to_string()),
+        call @ Expr::Call(_) => match field_access(call)? {
+            Ok(field) if matches!(field.ty, FieldType::Array(..)) => BoundTarget::Field(field),
+            _ => return None,
+        },
+        _ => return None,
     };
-    let index = match constant_index(&indexed.index) {
-        Some(index) => index,
-        None => {
-            diagnostics.push(
-                "an element precondition needs a literal index: a proc macro runs \
-                 before const evaluation, so a named constant cannot be resolved here"
-                    .to_string(),
-            );
-            return None;
+    if let Expr::Range(range) = &*indexed.index {
+        let first = range
+            .start
+            .as_deref()
+            .cloned()
+            .unwrap_or_else(|| parse_quote! { 0 });
+        let end = range.end.as_deref().cloned();
+        let to_end = end.is_none();
+        let end = match (&range.limits, end) {
+            (RangeLimits::Closed(_), Some(last)) => Some(parse_quote! { #last + 1 }),
+            (_, end) => end,
+        };
+        return Some(ElementBound::Indexed(Box::new(IndexedBound {
+            target,
+            first,
+            end,
+            to_end,
+            comparison: input.clone(),
+        })));
+    }
+    Some(match (constant_index(&indexed.index), &target) {
+        (Some(index), BoundTarget::Slice(array)) => ElementBound::Literal(array.clone(), index),
+        _ => ElementBound::Indexed(Box::new(IndexedBound {
+            target,
+            first: (*indexed.index).clone(),
+            end: None,
+            to_end: false,
+            comparison: input.clone(),
+        })),
+    })
+}
+
+fn exact_index(index: &Expr) -> proc_macro2::TokenStream {
+    let exact = exact_value(index);
+    quote! { usize::try_from(#exact).expect(#PRECONDITION_OVERFLOW) }
+}
+
+fn indexed_bound_check(bound: &IndexedBound, original: &Expr) -> proc_macro2::TokenStream {
+    let elements = match &bound.target {
+        BoundTarget::Slice(array) => {
+            let array = Ident::new(array, Span::call_site());
+            quote! { #array }
         }
+        BoundTarget::Field(field) => field.read(),
+        BoundTarget::Strided { .. } => return quote! { assert!(#original); },
     };
-    Some((path.path.segments[0].ident.to_string(), index))
+    let op = &bound.comparison.op;
+    let exact_bound = exact_value(&bound.comparison.right);
+    let first = exact_index(&bound.first);
+    match (&bound.end, bound.to_end) {
+        (None, false) => {
+            let element = exact_leaf(quote! { (#elements)[#first] });
+            quote! { assert!(#element #op #exact_bound); }
+        }
+        (end, _) => {
+            let end = match end {
+                Some(end) => exact_index(end),
+                None => quote! { (#elements).len() },
+            };
+            quote! {
+                assert!((#elements)[#first..#end].iter().all(|e| i128::try_from(*e).expect(#PRECONDITION_OVERFLOW) #op #exact_bound));
+            }
+        }
+    }
 }
 
 type PointerContent = (String, i64, String, &'static str, Option<(bool, Expr)>);
@@ -311,8 +910,75 @@ fn pointer_contents(
 ) -> Option<PointerContent> {
     let (array, element) = indexed_element(input)?;
     let (array_suffix, _) = passed_pointer(&array, arguments)?;
+    let (slice, suffix, step) = pointer_source(&input.right)?;
+    Some((
+        format!("{}{}", array, array_suffix),
+        element * 8,
+        slice,
+        suffix,
+        step,
+    ))
+}
 
-    let (call, step) = match &*input.right {
+const POINTER_FIELD_TYPES: [&str; 4] = ["usize", "u64", "isize", "i64"];
+
+fn wrapping_pointer(source: &Expr) -> Expr {
+    match source {
+        Expr::MethodCall(call) if call.method == "add" => {
+            let mut call = call.clone();
+            call.method = Ident::new("wrapping_add", call.method.span());
+            Expr::MethodCall(call)
+        }
+        Expr::MethodCall(call) if call.method == "byte_add" => {
+            let mut call = call.clone();
+            call.method = Ident::new("wrapping_byte_add", call.method.span());
+            Expr::MethodCall(call)
+        }
+        other => other.clone(),
+    }
+}
+
+fn field_pointer(
+    input: &ExprBinary,
+    arguments: &Punctuated<Expr, Token![,]>,
+) -> Option<std::result::Result<(PointerContent, FieldAccess), String>> {
+    if !matches!(input.op, BinOp::Eq(_)) {
+        return None;
+    }
+    let field = match field_access(&input.left)? {
+        Ok(field) => field,
+        Err(problem) => return Some(Err(problem)),
+    };
+    let (slice, suffix, step) = pointer_source(&input.right)?;
+    if !matches!(&field.ty, FieldType::Scalar(t) if POINTER_FIELD_TYPES.contains(&t.as_str())) {
+        return Some(Err(format!(
+            "a pointer field is 8 bytes, one of {}: {}",
+            POINTER_FIELD_TYPES.join(", "),
+            spelled(quote! { #input })
+        )));
+    }
+    let Some((base_suffix, _)) = passed_pointer(&field.base, arguments) else {
+        return Some(Err(format!(
+            "{} must be passed as a pointer to hold fields",
+            field.base
+        )));
+    };
+    Some(Ok((
+        (
+            format!("{}{}", field.base, base_suffix),
+            field.offset,
+            slice,
+            suffix,
+            step,
+        ),
+        field,
+    )))
+}
+
+type PointerSource = (String, &'static str, Option<(bool, Expr)>);
+
+fn pointer_source(right: &Expr) -> Option<PointerSource> {
+    let (call, step) = match right {
         Expr::MethodCall(call)
             if matches!(call.method.to_string().as_str(), "add" | "byte_add") =>
         {
@@ -335,17 +1001,19 @@ fn pointer_contents(
         "as_ptr" => "_as_ptr",
         _ => return None,
     };
-
-    Some((
-        format!("{}{}", array, array_suffix),
-        element * 8,
-        slice.path.segments[0].ident.to_string(),
-        suffix,
-        step,
-    ))
+    Some((slice.path.segments[0].ident.to_string(), suffix, step))
 }
 
-fn pointer_array_shape(input: &ExprBinary) -> Option<(String, String, Expr, Expr)> {
+#[derive(Clone)]
+struct PointerArray {
+    array: String,
+    element: String,
+    row_length: Expr,
+    rows: Expr,
+    writable: bool,
+}
+
+fn pointer_array_shape(input: &ExprBinary) -> Option<PointerArray> {
     if !matches!(input.op, BinOp::Eq(_)) {
         return None;
     }
@@ -355,21 +1023,22 @@ fn pointer_array_shape(input: &ExprBinary) -> Option<(String, String, Expr, Expr
     let Expr::Repeat(rows) = &*input.right else {
         return None;
     };
-    let Expr::Reference(row) = &*rows.expr else {
+    let Expr::Reference(reference) = &*rows.expr else {
         return None;
     };
-    let Expr::Repeat(row) = &*row.expr else {
+    let Expr::Repeat(row) = &*reference.expr else {
         return None;
     };
     let Expr::Path(element) = &*row.expr else {
         return None;
     };
-    Some((
-        array.path.segments[0].ident.to_string(),
-        element.path.segments[0].ident.to_string(),
-        (*row.len).clone(),
-        (*rows.len).clone(),
-    ))
+    Some(PointerArray {
+        array: array.path.segments[0].ident.to_string(),
+        element: element.path.segments[0].ident.to_string(),
+        row_length: (*row.len).clone(),
+        rows: (*rows.len).clone(),
+        writable: reference.mutability.is_some(),
+    })
 }
 
 fn element_range_array(input: &ExprBinary) -> Option<String> {
@@ -385,7 +1054,13 @@ fn element_range_array(input: &ExprBinary) -> Option<String> {
     (range.start.is_none() && range.end.is_none()).then(|| path.path.segments[0].ident.to_string())
 }
 
-fn row_pointer_type(ty: &Type) -> Option<(Type, bool)> {
+struct RowPointers {
+    row: Type,
+    checked: bool,
+    writable_rows: bool,
+}
+
+fn row_pointer_type(ty: &Type) -> Option<RowPointers> {
     let Type::Reference(reference) = ty else {
         return None;
     };
@@ -393,11 +1068,24 @@ fn row_pointer_type(ty: &Type) -> Option<(Type, bool)> {
         return None;
     };
     match &*slice.elem {
-        Type::Ptr(pointer) => Some((Type::Ptr(pointer.clone()), false)),
+        Type::Ptr(pointer) => Some(RowPointers {
+            row: Type::Ptr(pointer.clone()),
+            checked: false,
+            writable_rows: pointer.mutability.is_some(),
+        }),
         Type::Reference(row) => match &*row.elem {
-            Type::Slice(row) => {
-                let element = &row.elem;
-                Some((parse_quote! { *const #element }, true))
+            Type::Slice(slice) => {
+                let element = &slice.elem;
+                let writable_rows = row.mutability.is_some() && reference.mutability.is_some();
+                Some(RowPointers {
+                    row: if writable_rows {
+                        parse_quote! { *mut #element }
+                    } else {
+                        parse_quote! { *const #element }
+                    },
+                    checked: true,
+                    writable_rows,
+                })
             }
             _ => None,
         },
@@ -429,6 +1117,43 @@ fn disjuncts(e: &Expr, out: &mut Vec<Vec<AbstractComparison>>, diagnostics: &mut
             conjuncts(e, &mut all, diagnostics);
             out.push(all);
         }
+    }
+}
+
+fn without_parens(e: &Expr) -> &Expr {
+    match e {
+        Expr::Paren(p) => without_parens(&p.expr),
+        Expr::Group(g) => without_parens(&g.expr),
+        _ => e,
+    }
+}
+
+fn comparisons_only(e: &Expr) -> bool {
+    match e {
+        Expr::Paren(p) => comparisons_only(&p.expr),
+        Expr::Binary(b) if matches!(b.op, BinOp::Or(_)) => {
+            comparisons_only(&b.left) && comparisons_only(&b.right)
+        }
+        _ => conjunction_of_comparisons(e),
+    }
+}
+
+fn conjunction_of_comparisons(e: &Expr) -> bool {
+    match e {
+        Expr::Paren(p) => conjunction_of_comparisons(&p.expr),
+        Expr::Binary(b) => match b.op {
+            BinOp::And(_) => {
+                conjunction_of_comparisons(&b.left) && conjunction_of_comparisons(&b.right)
+            }
+            BinOp::Eq(_)
+            | BinOp::Ne(_)
+            | BinOp::Lt(_)
+            | BinOp::Le(_)
+            | BinOp::Gt(_)
+            | BinOp::Ge(_) => true,
+            _ => false,
+        },
+        _ => false,
     }
 }
 
@@ -526,6 +1251,18 @@ fn exact_value(e: &Expr) -> proc_macro2::TokenStream {
             let (left, right) = (exact_value(&b.left), exact_value(&b.right));
             quote! { #left.#checked(#right).expect(#PRECONDITION_OVERFLOW) }
         }
+        Expr::Call(call)
+            if called_function(call).as_deref() == Some("clz32") && call.args.len() == 1 =>
+        {
+            let inner = exact_value(&call.args[0]);
+            quote! { i128::from(((#inner).rem_euclid(1i128 << 32) as u32).leading_zeros()) }
+        }
+        Expr::Call(_) if matches!(field_access(e), Some(Ok(_))) => {
+            let Some(Ok(field)) = field_access(e) else {
+                unreachable!()
+            };
+            exact_leaf(field.read())
+        }
         _ => exact_leaf(e),
     }
 }
@@ -614,6 +1351,27 @@ fn syn_expr_to_abstract_expression(input: &Expr) -> AbstractExpression {
             AbstractExpression::Abstract(var_name)
         }
         Expr::Path(p) => AbstractExpression::Abstract(p.path.segments[0].ident.to_string()),
+        Expr::Call(call) => match (called_function(call).as_deref(), register_named(input)) {
+            (_, Some(Ok(name))) => AbstractExpression::Abstract(register_symbol(&name)),
+            (Some("clz32"), _) if call.args.len() == 1 => generate_expression(
+                "clz",
+                syn_expr_to_abstract_expression(&call.args[0]),
+                AbstractExpression::Immediate(32),
+            ),
+            (Some("field"), _) => match field_access(input) {
+                Some(Ok(field)) if matches!(field.ty, FieldType::Scalar(_)) => {
+                    AbstractExpression::Abstract(field.symbol())
+                }
+                _ => panic!(
+                    "a field array is compared element by element, as in field::<[u8; 3]>(rf, 53)[..] <= 6: {}",
+                    spelled(quote! { #call })
+                ),
+            },
+            _ => panic!(
+                "unsupported call in a precondition: {}",
+                spelled(quote! { #call })
+            ),
+        },
         Expr::Cast(c) => syn_expr_to_abstract_expression(&c.expr),
         Expr::Field(f) => {
             let base = match &*f.base {
@@ -682,11 +1440,14 @@ pub struct Annotation {
     pointer_values: Vec<PointerContent>,
     element_bounds: Vec<(String, i64, ExprBinary)>,
     element_ranges: Vec<(String, ExprBinary)>,
-    pointer_arrays: Vec<(String, String, Expr, Expr)>,
+    pointer_arrays: Vec<PointerArray>,
     invariants: Vec<AbstractComparison>,
     combinations: Vec<Vec<AbstractComparison>>,
     unchecked_rows: Vec<String>,
     unchecked_pointer_fields: Vec<(String, usize)>,
+    register_preconditions: BTreeSet<String>,
+    indexed_bounds: Vec<IndexedBound>,
+    fields: Vec<FieldAccess>,
 }
 
 pub struct Verdict {
@@ -729,12 +1490,56 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
     let mut element_bounds: Vec<(String, i64, ExprBinary)> = Vec::new();
     let mut pointer_values: Vec<PointerContent> = Vec::new();
     let mut element_ranges: Vec<(String, ExprBinary)> = Vec::new();
-    let mut pointer_arrays: Vec<(String, String, Expr, Expr)> = Vec::new();
+    let mut pointer_arrays: Vec<PointerArray> = Vec::new();
     let mut disjunctions: Vec<Vec<Vec<AbstractComparison>>> = Vec::new();
+    let mut register_preconditions: BTreeSet<String> = BTreeSet::new();
+    let mut indexed_bounds: Vec<IndexedBound> = Vec::new();
+    let mut declared_fields: Vec<FieldAccess> = Vec::new();
+    let mut pointer_fields: BTreeSet<(String, i64)> = BTreeSet::new();
+    let mut strided_bounds: Vec<(IndexedBound, Expr)> = Vec::new();
     let mut asserts = quote! {};
     let argument_list = attributes.argument_list.clone();
     if let Some(Expr::Array(a)) = argument_list.last() {
         for e in &a.elems {
+            let well_formed = diagnostics.len();
+            unknown_functions(e, &mut diagnostics);
+            let registers = registers_mentioned(e, &mut diagnostics);
+            let fields = fields_mentioned(e, &mut diagnostics);
+            if diagnostics.len() > well_formed {
+                continue;
+            }
+            declared_fields.extend(fields);
+            if let Some(bound) = strided_bound(e) {
+                match bound {
+                    Ok(bound) => strided_bounds.push((bound, e.clone())),
+                    Err(problem) => diagnostics.push(problem),
+                }
+                continue;
+            }
+            if !registers.is_empty() {
+                register_preconditions.extend(registers);
+                let mut reads_memory = false;
+                each_subexpression(e, &mut |sub| {
+                    reads_memory |= matches!(
+                        sub,
+                        Expr::Index(_) | Expr::Repeat(_) | Expr::Reference(_) | Expr::Range(_)
+                    );
+                });
+                if reads_memory || !comparisons_only(e) {
+                    diagnostics.push(format!(
+                        "a register precondition compares values with ==, !=, <, <=, >, >=, && and ||: {}",
+                        spelled(quote! { #e })
+                    ));
+                } else if matches!(without_parens(e), Expr::Binary(b) if matches!(b.op, BinOp::Or(_)))
+                {
+                    let mut alternatives = Vec::new();
+                    disjuncts(e, &mut alternatives, &mut diagnostics);
+                    disjunctions.push(alternatives);
+                } else {
+                    conjuncts(e, &mut invariants, &mut diagnostics);
+                }
+                continue;
+            }
             let checks = casts_keep_their_values(e);
             asserts = quote! { #asserts #checks };
             if let Expr::Binary(b) = e {
@@ -769,30 +1574,40 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                     element_ranges.push((array, b.clone()));
                     continue;
                 }
+                if let Some(pointer) = field_pointer(b, &attributes.argument_list) {
+                    match pointer {
+                        Ok((value, field)) => {
+                            let stored = field.read();
+                            let source = wrapping_pointer(&b.right);
+                            asserts = quote! { #asserts assert!((#stored) as usize == #source as usize); };
+                            pointer_fields.insert((field.base.clone(), field.offset));
+                            pointer_values.push(value);
+                        }
+                        Err(problem) => diagnostics.push(problem),
+                    }
+                    continue;
+                }
                 if let Some(value) = pointer_contents(b, &attributes.argument_list) {
                     let stored = &*b.left;
-                    let source = match &*b.right {
-                        Expr::MethodCall(call) if call.method == "add" => {
-                            let mut call = call.clone();
-                            call.method = Ident::new("wrapping_add", call.method.span());
-                            Expr::MethodCall(call)
-                        }
-                        Expr::MethodCall(call) if call.method == "byte_add" => {
-                            let mut call = call.clone();
-                            call.method = Ident::new("wrapping_byte_add", call.method.span());
-                            Expr::MethodCall(call)
-                        }
-                        other => other.clone(),
-                    };
+                    let source = wrapping_pointer(&b.right);
                     asserts = quote! { #asserts assert!((#stored) as usize == #source as usize); };
                     pointer_values.push(value);
                     continue;
                 }
-                if let Some((array, index)) = element_bound(b, &mut diagnostics) {
-                    element_bounds.push((array, index, b.clone()));
-                    let exact = exact_condition(e);
-                    asserts = quote! { #asserts assert!(#exact); };
-                    continue;
+                match element_bound(b) {
+                    Some(ElementBound::Literal(array, index)) => {
+                        element_bounds.push((array, index, b.clone()));
+                        let exact = exact_condition(e);
+                        asserts = quote! { #asserts assert!(#exact); };
+                        continue;
+                    }
+                    Some(ElementBound::Indexed(bound)) => {
+                        let check = indexed_bound_check(&bound, e);
+                        asserts = quote! { #asserts #check };
+                        indexed_bounds.push(*bound);
+                        continue;
+                    }
+                    None => (),
                 }
                 invariants.push(binary_to_abstract_comparison(b));
                 let exact = exact_condition(e);
@@ -936,11 +1751,19 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                 && call.method == "as_ptr"
                 && let Expr::Path(receiver) = &*call.receiver
                 && let Some(ty) = input_types.get(&receiver.path.segments[0].ident.to_string())
-                && let Some((row, true)) = row_pointer_type(ty)
+                && let Some(pointers) = row_pointer_type(ty)
+                && pointers.checked
             {
                 let rows = &call.receiver;
-                arguments_to_pass.push(parse_quote! {
-                    #rows.iter().map(|row| row.as_ptr()).collect::<Vec<#row>>().as_ptr()
+                let row = &pointers.row;
+                arguments_to_pass.push(if pointers.writable_rows {
+                    parse_quote! {
+                        #rows.iter_mut().map(|row| row.as_mut_ptr()).collect::<Vec<#row>>().as_ptr()
+                    }
+                } else {
+                    parse_quote! {
+                        #rows.iter().map(|row| row.as_ptr()).collect::<Vec<#row>>().as_ptr()
+                    }
                 });
             } else {
                 arguments_to_pass.push(i.clone());
@@ -949,27 +1772,103 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
     }
 
     let mut unchecked_rows = Vec::new();
-    for (array, _, len, count) in &pointer_arrays {
+    for shape in &pointer_arrays {
+        let array = &shape.array;
         let rows = Ident::new(array, proc_macro2::Span::call_site());
-        let exact_count = exact_value(count);
+        let exact_count = exact_value(&shape.rows);
         let exact_rows = exact_leaf(quote! { #rows.len() });
         asserts = quote! { #asserts assert!(#exact_rows == #exact_count); };
-        match input_types.get(array).and_then(row_pointer_type) {
-            Some((_, true)) => {
-                let exact_len = exact_value(len);
+        let pointers = input_types.get(array).and_then(row_pointer_type);
+        if let Some(pointers) = &pointers
+            && shape.writable
+            && !pointers.writable_rows
+        {
+            diagnostics.push(format!(
+                "{array} == [&mut ..] declares writable rows, so {array} must be &mut [&mut [T]] or a slice of *mut T"
+            ));
+        }
+        match pointers {
+            Some(pointers) if pointers.checked => {
+                let exact_len = exact_value(&shape.row_length);
                 let exact_row = exact_leaf(quote! { row.len() });
                 asserts = quote! {
                     #asserts
                     assert!(#rows.iter().all(|row| #exact_row == #exact_len));
                 };
             }
-            Some((_, false)) => unchecked_rows.push(array.clone()),
+            Some(_) => unchecked_rows.push(array.clone()),
             None => diagnostics.push(format!(
                 "{} must be a slice of row references or raw pointers",
                 array
             )),
         }
     }
+    for (bound, original) in &strided_bounds {
+        let BoundTarget::Strided { array, rows, .. } = &bound.target else {
+            unreachable!()
+        };
+        let checked = match (rows, input_types.get(array)) {
+            (true, Some(ty)) => row_pointer_type(ty).map(|pointers| pointers.checked),
+            (false, Some(Type::Reference(r))) => matches!(&*r.elem, Type::Slice(_)).then_some(true),
+            _ => None,
+        };
+        match checked {
+            Some(true) => asserts = quote! { #asserts assert!(#original); },
+            Some(false) if !unchecked_rows.contains(array) => unchecked_rows.push(array.clone()),
+            Some(false) => (),
+            None => diagnostics.push(format!(
+                "{array} must be a slice{} to walk it: {}",
+                if *rows { " of rows" } else { "" },
+                spelled(quote! { #original })
+            )),
+        }
+    }
+    let mut layout: BTreeMap<(String, i64), FieldType> = BTreeMap::new();
+    for field in &declared_fields {
+        let key = (field.base.clone(), field.offset);
+        match layout.get(&key) {
+            Some(ty) if *ty != field.ty => diagnostics.push(format!(
+                "the field at byte {} of {} is declared as both {} and {}",
+                field.offset,
+                field.base,
+                ty.shown(),
+                field.ty.shown()
+            )),
+            _ => {
+                layout.insert(key, field.ty.clone());
+            }
+        }
+    }
+    let mut reached: Option<(String, i64)> = None;
+    for ((base, offset), ty) in &layout {
+        if let Some((previous, end)) = &reached
+            && previous == base
+            && offset < end
+        {
+            diagnostics.push(format!(
+                "the field at byte {offset} of {base} overlaps the field before it, which ends at byte {end}"
+            ));
+        }
+        let end = offset + ty.width();
+        reached = match reached {
+            Some((previous, before)) if previous == *base => Some((previous, before.max(end))),
+            _ => Some((base.clone(), end)),
+        };
+        let slice = matches!(input_types.get(base), Some(Type::Reference(r)) if matches!(&*r.elem, Type::Slice(_)));
+        if !slice {
+            diagnostics.push(format!("{base} must be a slice argument to hold fields"));
+        }
+    }
+    let fields: Vec<FieldAccess> = layout
+        .iter()
+        .filter(|(key, ty)| matches!(ty, FieldType::Scalar(_)) && !pointer_fields.contains(*key))
+        .map(|((base, offset), ty)| FieldAccess {
+            base: base.clone(),
+            offset: *offset,
+            ty: ty.clone(),
+        })
+        .collect();
+    indexed_bounds.extend(strided_bounds.iter().map(|(bound, _)| bound.clone()));
 
     let mut q = Punctuated::new();
     q.push(PathSegment {
@@ -1047,9 +1946,10 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                         }
                         "as_ptr" => {
                             let n = Ident::new(&(var_name.clone() + "_as_ptr"), span);
-                            if let Some((row, _)) =
+                            if let Some(pointers) =
                                 input_types.get(&var_name).and_then(row_pointer_type)
                             {
+                                let row = pointers.row;
                                 new_args.push(parse_quote! {#n: *const #row});
                             } else if let Some(size) = pointer_sizes.get(&var_name) {
                                 let element: Type =
@@ -1238,7 +2138,10 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         })
         .collect();
     let mut original_fn_call = vars.item_fn.clone();
-    if !unchecked_rows.is_empty() || !unchecked_pointer_fields.is_empty() {
+    if !unchecked_rows.is_empty()
+        || !unchecked_pointer_fields.is_empty()
+        || !register_preconditions.is_empty()
+    {
         original_fn_call.unsafety = Some(Default::default());
     }
     let unsafe_block: Stmt = parse_quote! {
@@ -1299,10 +2202,127 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         combinations,
         unchecked_rows,
         unchecked_pointer_fields,
+        register_preconditions,
+        indexed_bounds,
+        fields,
     })
 }
 
+fn slice_element(ty: Option<&Type>) -> Option<String> {
+    match ty? {
+        Type::Reference(r) => match &*r.elem {
+            Type::Slice(sl) => Some(calculate_type_of_slice_ptr(sl)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 impl Annotation {
+    fn region_holding(&self, name: &str) -> std::result::Result<String, String> {
+        if let Some((suffix, _)) = passed_pointer(name, &self.argument_list) {
+            return Ok(format!("{name}{suffix}"));
+        }
+        self.pointer_values
+            .iter()
+            .find(|(_, _, slice, ..)| slice == name)
+            .map(|(_, _, slice, suffix, _)| format!("{slice}{suffix}"))
+            .ok_or_else(|| {
+                format!(
+                    "{name} is neither passed as a pointer nor stored where the assembly finds it"
+                )
+            })
+    }
+
+    fn bound_placement(
+        &self,
+        bound: &IndexedBound,
+    ) -> std::result::Result<(String, String, i64, i64, AbstractExpression), String> {
+        let not_a_slice = |array: &str| {
+            format!("{array} is not a slice, so an element precondition on it has no element size")
+        };
+        let walked = |length: AbstractExpression, skip: i64, step: i64| {
+            generate_expression(
+                "/",
+                generate_expression("+", length, AbstractExpression::Immediate(step - 1 - skip)),
+                AbstractExpression::Immediate(step),
+            )
+        };
+        match &bound.target {
+            BoundTarget::Slice(array) => {
+                let element =
+                    slice_element(self.input_types.get(array)).ok_or_else(|| not_a_slice(array))?;
+                let width = calculate_size_of(element.clone()) as i64;
+                Ok((
+                    self.region_holding(array)?,
+                    element,
+                    0,
+                    width,
+                    AbstractExpression::Abstract(format!("{array}_len")),
+                ))
+            }
+            BoundTarget::Field(field) => {
+                let FieldType::Array(element, count) = &field.ty else {
+                    unreachable!()
+                };
+                Ok((
+                    self.region_holding(&field.base)?,
+                    element.clone(),
+                    field.offset,
+                    field.ty.element_width(),
+                    AbstractExpression::Immediate(*count),
+                ))
+            }
+            BoundTarget::Strided {
+                array,
+                rows: false,
+                skip,
+                step,
+            } => {
+                let element =
+                    slice_element(self.input_types.get(array)).ok_or_else(|| not_a_slice(array))?;
+                let width = calculate_size_of(element.clone()) as i64;
+                Ok((
+                    self.region_holding(array)?,
+                    element,
+                    skip * width,
+                    step * width,
+                    walked(
+                        AbstractExpression::Abstract(format!("{array}_len")),
+                        *skip,
+                        *step,
+                    ),
+                ))
+            }
+            BoundTarget::Strided {
+                array,
+                rows: true,
+                skip,
+                step,
+            } => {
+                let shape = self
+                    .pointer_arrays
+                    .iter()
+                    .find(|shape| shape.array == *array)
+                    .ok_or_else(|| {
+                        format!("the rows of {array} are walked, so state their shape as {array} == [&[T; N]; M]")
+                    })?;
+                let width = calculate_size_of(shape.element.clone()) as i64;
+                Ok((
+                    format!("{array}_row"),
+                    shape.element.clone(),
+                    skip * width,
+                    step * width,
+                    walked(
+                        syn_expr_to_abstract_expression(&shape.row_length),
+                        *skip,
+                        *step,
+                    ),
+                ))
+            }
+        }
+    }
+
     pub fn unsupported_on(&self, target_vendor: &str) -> Option<String> {
         (self.red_zone.is_some() && target_vendor != "apple")
             .then(|| RED_ZONE_NEEDS_APPLE.to_string())
@@ -1616,6 +2636,31 @@ impl Annotation {
                 }
             }
 
+            let indirect_result =
+                matches!(output, ReturnType::Type(_, ty) if matches!(&**ty, Type::Array(_)));
+            let registers = entry_registers(
+                engine.isa(),
+                &self.register_preconditions,
+                arguments_to_memory_safe_regions.len(),
+                indirect_result,
+            )
+            .map_err(|problems| problems.join("; "))?;
+            for (name, register) in registers {
+                let symbol = register_symbol(&name);
+                if register.word_view {
+                    let value = AbstractExpression::Abstract(symbol.clone());
+                    for (op, bound) in [(">=", 0), ("<=", u32::MAX as i64)] {
+                        engine.add_invariant(AbstractComparison::new(
+                            op,
+                            value.clone(),
+                            AbstractExpression::Immediate(bound),
+                        ));
+                    }
+                    engine.add_abstract(register.full, with_unspecified_upper_bits(&symbol));
+                } else {
+                    engine.add_abstract(register.full, AbstractExpression::Abstract(symbol));
+                }
+            }
             for (region, offset, slice, suffix, step) in pointer_values.iter().cloned() {
                 let base = format!("{}{}", slice, suffix);
                 if passed_pointer(&slice, argument_list).is_none() {
@@ -1694,11 +2739,19 @@ impl Annotation {
                 let width = calculate_size_of(element.clone()) as i64;
                 let symbol = format!("{region}[{index}]");
                 engine.add_element_fact(region, *index, width, symbol.clone());
-                if element.starts_with('u') {
+                let narrow = syn::parse_str::<TypePath>(&element)
+                    .ok()
+                    .and_then(|ty| narrow_argument_range(&ty));
+                let element_range = match narrow {
+                    Some((least, most)) => vec![(">=", least), ("<=", most)],
+                    None if element.starts_with('u') => vec![(">=", 0)],
+                    None => Vec::new(),
+                };
+                for (op, bound) in element_range {
                     engine.add_invariant(AbstractComparison::new(
-                        ">=",
+                        op,
                         AbstractExpression::Abstract(symbol.clone()),
-                        AbstractExpression::Immediate(0),
+                        AbstractExpression::Immediate(bound),
                     ));
                 }
                 engine.add_invariant(AbstractComparison::new(
@@ -1740,27 +2793,37 @@ impl Annotation {
                     syn_expr_to_abstract_expression(&comparison.right),
                 );
             }
-            for (array, element, len, count) in pointer_arrays {
-                let Some((suffix, _)) = passed_pointer(array, argument_list) else {
-                    diagnostics.push(format!("{} is not passed as a pointer", array));
-                    continue;
+            for shape in pointer_arrays {
+                let array = &shape.array;
+                let pointers = match self.region_holding(array) {
+                    Ok(pointers) => pointers,
+                    Err(problem) => {
+                        diagnostics.push(problem);
+                        continue;
+                    }
                 };
                 engine.add_invariant(AbstractComparison::new(
                     "==",
                     AbstractExpression::Abstract(array.clone() + "_len"),
-                    syn_expr_to_abstract_expression(count),
+                    syn_expr_to_abstract_expression(&shape.rows),
                 ));
                 let row = array.clone() + "_row";
                 engine.add_region(
-                    RegionType::READ,
+                    if shape.writable {
+                        RegionType::RW
+                    } else {
+                        RegionType::READ
+                    },
                     row.clone(),
                     generate_expression(
                         "*",
-                        syn_expr_to_abstract_expression(len),
-                        AbstractExpression::Immediate(calculate_size_of(element.clone()) as i64),
+                        syn_expr_to_abstract_expression(&shape.row_length),
+                        AbstractExpression::Immediate(
+                            calculate_size_of(shape.element.clone()) as i64
+                        ),
                     ),
                 );
-                engine.add_pointer_elements(array.clone() + suffix, row);
+                engine.add_pointer_elements(pointers, row);
             }
             for i in invariants.iter().cloned() {
                 engine.add_invariant(i);
@@ -1779,6 +2842,72 @@ impl Annotation {
                     ) => engine.pin(name, *value),
                     _ => engine.add_invariant(c.clone()),
                 }
+            }
+            for field in &self.fields {
+                let region = self.region_holding(&field.base)?;
+                let symbol = AbstractExpression::Abstract(field.symbol());
+                engine.add_field(region, field.offset, field.ty.width(), symbol.clone())?;
+                let element = field.ty.element();
+                let narrow = syn::parse_str::<TypePath>(element)
+                    .ok()
+                    .and_then(|ty| narrow_argument_range(&ty));
+                let bounds = match narrow {
+                    Some((least, most)) => vec![(">=", least), ("<=", most)],
+                    None if element.starts_with('u') => vec![(">=", 0)],
+                    None => Vec::new(),
+                };
+                for (op, bound) in bounds {
+                    engine.add_invariant(AbstractComparison::new(
+                        op,
+                        symbol.clone(),
+                        AbstractExpression::Immediate(bound),
+                    ));
+                }
+            }
+            for bound in &self.indexed_bounds {
+                let (region, element, base, stride, end_of_all) = self.bound_placement(bound)?;
+                if element.starts_with('f') {
+                    return Err(format!(
+                        "an element precondition needs integer elements, not {element}"
+                    ));
+                }
+                let width = calculate_size_of(element.clone()) as i64;
+                let first = syn_expr_to_abstract_expression(&bound.first);
+                let end = match (&bound.end, bound.to_end) {
+                    (Some(end), _) => syn_expr_to_abstract_expression(end),
+                    (None, true) => end_of_all.clone(),
+                    (None, false) => {
+                        generate_expression("+", first.clone(), AbstractExpression::Immediate(1))
+                    }
+                };
+                let comparison = &bound.comparison;
+                let label = spelled(quote! { #comparison });
+                if let BoundTarget::Field(field) = &bound.target {
+                    let within = [
+                        AbstractComparison::new(
+                            ">=",
+                            first.clone(),
+                            AbstractExpression::Immediate(0),
+                        ),
+                        AbstractComparison::new("<=", end.clone(), end_of_all.clone()),
+                    ];
+                    if !within.iter().all(|fact| engine.implies(fact)) {
+                        return Err(format!(
+                            "{label} may index outside the {} elements of the field at byte {}",
+                            field.ty.shown(),
+                            field.offset
+                        ));
+                    }
+                }
+                engine.add_indexed_fact(
+                    region,
+                    IndexedFact::elements(label, first, end, width, element.starts_with('i'))
+                        .bounded(
+                            operator_of(&comparison.op),
+                            syn_expr_to_abstract_expression(&comparison.right),
+                        )
+                        .placed(base, stride),
+                )?;
             }
             if let ReturnType::Type(_, ty) = output
                 && let Type::Array(a) = &**ty
@@ -1825,6 +2954,12 @@ impl Annotation {
             findings.push(format!(
                 "the rows of {array} are raw pointers whose lengths cannot be checked at run time: \
                  they are the caller's contract, so the wrapper is an unsafe fn"
+            ));
+        }
+        for register in &self.register_preconditions {
+            findings.push(format!(
+                "the value of {register} at entry is a register precondition no Rust caller can establish: \
+                 it is the assembly caller's contract, so the wrapper is an unsafe fn"
             ));
         }
         for (tuple, index) in &self.unchecked_pointer_fields {
@@ -1966,6 +3101,385 @@ mod tests {
             quote! { fn f(src: &[&[i16]], n: usize, k: usize); },
         );
         assert!(checked.starts_with("fnf("), "{checked}");
+    }
+
+    fn width_dispatch() -> Vec<String> {
+        [
+            "f:",
+            "adrp x9, tbl",
+            "add x9, x9, :lo12:tbl",
+            "ldrsw x8, [x9, x8, lsl #2]",
+            "add x9, x9, x8",
+            "br x9",
+            "L_w16:",
+            "strb w1, [x0, #15]",
+            "ret",
+            "L_w8:",
+            "strb w1, [x0, #7]",
+            "ret",
+            "L_w4:",
+            "strb w1, [x0, #3]",
+            "ret",
+            "\t.section .rodata",
+            "tbl:",
+            "\t.size tbl, 12",
+            "\t.word L_w16 - tbl",
+            "\t.word L_w8 - tbl",
+            "\t.word L_w4 - tbl",
+        ]
+        .iter()
+        .map(|line| line.to_string())
+        .collect()
+    }
+
+    fn dispatch_verdict(preconditions: TokenStream) -> std::result::Result<Vec<String>, String> {
+        let attr = quote! { "f.S", dst.as_mut_ptr(), v, w, [dst.len() == w, w >= 4, w <= 16, #preconditions] };
+        let item = quote! { fn f(dst: &mut [u8], v: u8, w: usize); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        assert_eq!(annotation.diagnostics, Vec::<String>::new());
+        annotation
+            .check(&width_dispatch())
+            .map(|verdict| verdict.failures)
+    }
+
+    #[test]
+    fn a_register_precondition_selects_the_jump_table_entry() {
+        assert_eq!(
+            dispatch_verdict(quote! { reg(x8) == clz32(w) - 27 }),
+            Ok(Vec::new())
+        );
+    }
+
+    #[test]
+    fn a_register_precondition_that_misses_the_table_is_rejected() {
+        for wrong in [
+            quote! { reg(x8) == clz32(w) - 26 },
+            quote! { reg(w8) == clz32(w) - 27 },
+            quote! { reg(x8) <= 2 },
+            quote! { w >= 4 },
+        ] {
+            let failures = dispatch_verdict(wrong.clone()).expect("the check runs");
+            assert!(
+                !failures.is_empty(),
+                "{wrong} let an out-of-table read pass"
+            );
+        }
+    }
+
+    #[test]
+    fn a_register_precondition_needs_a_free_general_register() {
+        for (named, expected) in [
+            (quote! { reg(x0) == 4 }, "bound to an argument"),
+            (quote! { reg(w2) == 4 }, "bound to an argument"),
+            (quote! { reg(sp) == 4 }, "not an AArch64 general register"),
+            (quote! { reg(x30) == 4 }, "not an AArch64 general register"),
+            (quote! { reg(x08) == 4 }, "not an AArch64 general register"),
+            (quote! { reg(rax) == 4 }, "not an AArch64 general register"),
+            (
+                quote! { reg(x8) == 0 && reg(w8) == 0 },
+                "views of one register",
+            ),
+        ] {
+            let error = dispatch_verdict(named.clone()).expect_err("the check refuses");
+            assert!(error.contains(expected), "{named}: {error}");
+        }
+    }
+
+    #[test]
+    fn a_malformed_register_precondition_is_a_diagnostic() {
+        for malformed in [
+            quote! { reg(x8 + 1) == 4 },
+            quote! { reg(x8) + 1 },
+            quote! { dst[reg(x8)] == 4 },
+            quote! { popcount(w) == 1 },
+            quote! { clz32(w, 3) == 1 },
+        ] {
+            let attr = quote! { "f.S", dst.as_mut_ptr(), v, w, [dst.len() == w, #malformed] };
+            let item = quote! { fn f(dst: &mut [u8], v: u8, w: usize); };
+            let annotation = parse_annotation(attr, item).expect("annotation parses");
+            assert!(
+                !annotation.diagnostics.is_empty(),
+                "{malformed} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn a_register_precondition_makes_the_wrapper_unsafe_and_unchecked() {
+        let attr =
+            quote! { "f.S", dst.as_mut_ptr(), v, w, [dst.len() == w, reg(x8) == clz32(w) - 27] };
+        let item = quote! { fn f(dst: &mut [u8], v: u8, w: usize); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        let expansion = without_spaces(&annotation.expansion.to_string());
+        assert!(expansion.starts_with("unsafefnf("), "{expansion}");
+        assert!(!expansion.contains("reg("), "{expansion}");
+    }
+
+    #[test]
+    fn clz32_counts_the_leading_zeros_of_the_low_word() {
+        let precondition: Expr = parse_quote! { clz32(w) == 27 };
+        let w: u64 = (1u64 << 32) + 16;
+        let (spelled, check) = emitted! {
+            i128::from(((i128::try_from(w).expect("precondition arithmetic overflows i128"))
+                .rem_euclid(1i128 << 32) as u32)
+                .leading_zeros())
+                == i128::try_from(27).expect("precondition arithmetic overflows i128")
+        };
+        assert_eq!(
+            without_spaces(&exact_condition(&precondition).to_string()),
+            without_spaces(spelled)
+        );
+        assert!(check());
+    }
+
+    fn entry_verdict(
+        preconditions: TokenStream,
+        read: &str,
+    ) -> std::result::Result<Vec<String>, String> {
+        let attr = quote! { "f.S", t.as_ptr(), cdf.as_ptr(), n, [t.len() == 33, cdf.len() == 16, #preconditions] };
+        let item = quote! { fn f(t: &[u8], cdf: &[u16], n: usize); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        assert_eq!(annotation.diagnostics, Vec::<String>::new());
+        let program: Vec<String> = ["f:", read, "ldrb w5, [x0, x4]", "ret"]
+            .iter()
+            .map(|line| line.to_string())
+            .collect();
+        annotation.check(&program).map(|verdict| verdict.failures)
+    }
+
+    #[test]
+    fn an_element_precondition_at_a_symbolic_index_is_assumed_where_it_is_read() {
+        let at_n = "ldrh w4, [x1, x2, lsl #1]";
+        assert_eq!(
+            entry_verdict(quote! { n <= 15, cdf[n] <= 32 }, at_n),
+            Ok(Vec::new())
+        );
+        assert_eq!(
+            entry_verdict(quote! { n <= 15, cdf[n..] <= 32 }, at_n),
+            Ok(Vec::new())
+        );
+        assert_eq!(
+            entry_verdict(quote! { n >= 1, n <= 15, cdf[n - 1..=n] <= 32 }, at_n),
+            Ok(Vec::new())
+        );
+        let elsewhere = entry_verdict(quote! { n <= 15, cdf[n] <= 32 }, "ldrh w4, [x1, #2]")
+            .expect("the check runs");
+        assert!(!elsewhere.is_empty());
+    }
+
+    #[test]
+    fn an_element_precondition_whose_index_may_be_outside_is_refused() {
+        let at_n = "ldrh w4, [x1, x2, lsl #1]";
+        for outside in [
+            quote! { n <= 16, cdf[n] <= 32 },
+            quote! { cdf[n] <= 32 },
+            quote! { n <= 15, cdf[n..n + 2] <= 32 },
+            quote! { n <= 15, cdf[n + 1..n] <= 32 },
+        ] {
+            let error = entry_verdict(outside.clone(), at_n).expect_err("the check refuses");
+            assert!(error.contains("may index outside"), "{outside}: {error}");
+        }
+    }
+
+    #[test]
+    fn an_element_precondition_at_a_symbolic_index_is_checked_at_run_time() {
+        let attr = quote! { "f.S", cdf.as_ptr(), n, [cdf.len() == 16, n <= 15, cdf[n] <= 32, cdf[n + 1..] <= 7] };
+        let item = quote! { fn f(cdf: &[u16], n: usize); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        let expansion = without_spaces(&annotation.expansion.to_string());
+        assert!(
+            expansion.contains(
+                "assert!(i128::try_from((cdf)[usize::try_from(i128::try_from(n).expect(\"preconditionarithmeticoverflowsi128\")).expect(\"preconditionarithmeticoverflowsi128\")])"
+            ),
+            "{expansion}"
+        );
+        assert!(
+            expansion.contains("..(cdf).len()].iter().all("),
+            "{expansion}"
+        );
+    }
+
+    fn program(lines: &[&str]) -> Vec<String> {
+        lines.iter().map(|line| line.to_string()).collect()
+    }
+
+    fn field_verdict(
+        preconditions: TokenStream,
+        lines: &[&str],
+    ) -> std::result::Result<Vec<String>, String> {
+        let attr = quote! { "f.S", rf.as_ptr(), [rf.len() == 3, #preconditions] };
+        let item = quote! { fn f(rf: &[usize], buf: &[u8], n: i32); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        if !annotation.diagnostics.is_empty() {
+            return Err(annotation.diagnostics.join("; "));
+        }
+        annotation
+            .check(&program(lines))
+            .map(|verdict| verdict.failures)
+    }
+
+    const FIELD_READS: [&str; 5] = [
+        "f:",
+        "ldr w2, [x0, #16]",
+        "ldr x3, [x0, #8]",
+        "ldrb w4, [x3, w2, uxtw]",
+        "ret",
+    ];
+
+    #[test]
+    fn a_pointer_field_points_to_a_region_sized_by_another_field() {
+        let sized = |length: TokenStream| {
+            field_verdict(
+                quote! { field::<usize>(rf, 8) == buf.as_ptr(), field::<i32>(rf, 16) == n, n >= 0, buf.len() == #length },
+                &FIELD_READS,
+            )
+        };
+        assert_eq!(sized(quote! { n + 1 }), Ok(Vec::new()));
+        assert!(!sized(quote! { n }).expect("the check runs").is_empty());
+    }
+
+    #[test]
+    fn a_field_read_wider_than_its_declaration_learns_nothing() {
+        let wide = field_verdict(
+            quote! { field::<usize>(rf, 8) == buf.as_ptr(), field::<i32>(rf, 16) == n, n >= 0, buf.len() == n + 1 },
+            &["f:", "ldr x2, [x0, #16]", "ldr x3, [x0, #8]", "ldrb w4, [x3, x2]", "ret"],
+        )
+        .expect("the check runs");
+        assert!(!wide.is_empty());
+    }
+
+    #[test]
+    fn fields_must_fit_and_not_overlap() {
+        for (bad, expected) in [
+            (
+                quote! { field::<i32>(rf, 16) == n, field::<u8>(rf, 18) == 0 },
+                "overlaps",
+            ),
+            (
+                quote! { field::<i32>(rf, 16) == n, field::<u32>(rf, 16) == 0 },
+                "declared as both",
+            ),
+            (quote! { field::<f32>(rf, 16) == 0 }, "a field is one of"),
+            (
+                quote! { field::<u8>(rf) == 0 },
+                "field::<T>(base, byte_offset)",
+            ),
+            (
+                quote! { field::<[u8; 3]>(rf, 0) == 0 },
+                "element by element",
+            ),
+            (quote! { field::<i32>(rf, 22) == n }, "not provably inside"),
+            (
+                quote! { field::<u32>(rf, 8) == buf.as_ptr() },
+                "a pointer field is 8 bytes",
+            ),
+        ] {
+            let error = match std::panic::catch_unwind(|| field_verdict(bad.clone(), &FIELD_READS))
+            {
+                Ok(verdict) => verdict.expect_err("the annotation is refused"),
+                Err(panic) => panic.downcast_ref::<String>().cloned().unwrap_or_default(),
+            };
+            assert!(error.contains(expected), "{bad}: {error}");
+        }
+    }
+
+    #[test]
+    fn a_field_array_carries_a_range_for_every_element() {
+        let indexed = |bound: TokenStream| {
+            let attr = quote! { "f.S", rf.as_ptr(), t.as_ptr(), k, [rf.len() == 3, t.len() == 7, k <= 2, field::<[u8; 3]>(rf, 0)[..] <= #bound] };
+            let item = quote! { fn f(rf: &[usize], t: &[u8], k: usize); };
+            let annotation = parse_annotation(attr, item).expect("annotation parses");
+            assert_eq!(annotation.diagnostics, Vec::<String>::new());
+            annotation
+                .check(&program(&[
+                    "f:",
+                    "ldrb w3, [x0, x2]",
+                    "ldrb w4, [x1, x3]",
+                    "ret",
+                ]))
+                .map(|verdict| verdict.failures)
+        };
+        assert_eq!(indexed(quote! { 6 }), Ok(Vec::new()));
+        assert!(!indexed(quote! { 7 }).expect("the check runs").is_empty());
+    }
+
+    #[test]
+    fn a_field_array_fact_must_stay_inside_the_array() {
+        let attr = quote! { "f.S", rf.as_ptr(), k, [rf.len() == 3, k <= 3, field::<[u8; 3]>(rf, 0)[k] <= 6] };
+        let item = quote! { fn f(rf: &[usize], k: usize); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        let error = annotation
+            .check(&program(&["f:", "ldrb w3, [x0, x1]", "ret"]))
+            .err()
+            .unwrap_or_default();
+        assert!(error.contains("may index outside"), "{error}");
+    }
+
+    #[test]
+    fn a_strided_walk_states_a_fact_about_one_field_of_every_row() {
+        let walked = |offset: i64| {
+            let attr = quote! { "f.S", rr.as_ptr(), t.as_ptr(), [rr == [&[u8; 10]; 2], t.len() == 8, rr.iter().all(|row| row.iter().skip(4).step_by(5).all(|e| *e <= 7))] };
+            let item = quote! { fn f(rr: &[&[u8]], t: &[u8]); };
+            let annotation = parse_annotation(attr, item).expect("annotation parses");
+            assert_eq!(annotation.diagnostics, Vec::<String>::new());
+            let read = format!("ldrb w3, [x2, #{offset}]");
+            annotation
+                .check(&program(&[
+                    "f:",
+                    "ldr x2, [x0, #8]",
+                    &read,
+                    "ldrb w4, [x1, x3]",
+                    "ret",
+                ]))
+                .map(|verdict| verdict.failures)
+        };
+        assert_eq!(walked(9), Ok(Vec::new()));
+        assert_eq!(walked(4), Ok(Vec::new()));
+        assert!(!walked(8).expect("the check runs").is_empty());
+    }
+
+    #[test]
+    fn a_malformed_walk_is_a_diagnostic() {
+        for malformed in [
+            quote! { rr.iter().all(|row| row.iter().skip(k).all(|e| *e <= 7)) },
+            quote! { rr.iter().all(|row| row.iter().step_by(0).all(|e| *e <= 7)) },
+            quote! { rr.iter().all(|row| row.iter().all(|e| e.count_ones() <= 7)) },
+            quote! { rr.iter().all(|row| t.iter().all(|e| *e <= 7)) },
+        ] {
+            let attr =
+                quote! { "f.S", rr.as_ptr(), t.as_ptr(), k, [rr == [&[u8; 10]; 2], #malformed] };
+            let item = quote! { fn f(rr: &[&[u8]], t: &[u8], k: usize); };
+            let annotation = parse_annotation(attr, item).expect("annotation parses");
+            assert!(
+                !annotation.diagnostics.is_empty(),
+                "{malformed} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn writable_rows_need_mutable_row_references() {
+        let attr = quote! { "f.S", rr.as_ptr(), n, [rr == [&mut [u8; n]; 2], n >= 1] };
+        let shared = parse_annotation(attr.clone(), quote! { fn f(rr: &[&mut [u8]], n: usize); })
+            .expect("annotation parses");
+        assert!(!shared.diagnostics.is_empty());
+        let unique = parse_annotation(attr, quote! { fn f(rr: &mut [&mut [u8]], n: usize); })
+            .expect("annotation parses");
+        assert_eq!(unique.diagnostics, Vec::<String>::new());
+        let expansion = without_spaces(&unique.expansion.to_string());
+        assert!(
+            expansion.contains("rr.iter_mut().map(|row|row.as_mut_ptr()).collect::<Vec<*mutu8>>()"),
+            "{expansion}"
+        );
+        let failures = |last: &str| {
+            let program: Vec<String> = ["f:", "ldr x2,[x0,#8]", last, "ret"]
+                .iter()
+                .map(|line| line.to_string())
+                .collect();
+            unique.check(&program).expect("the check runs").failures
+        };
+        assert_eq!(failures("strb wzr,[x2,#0]"), Vec::<String>::new());
+        assert!(!failures("strb wzr,[x2,x1]").is_empty());
     }
 
     #[test]

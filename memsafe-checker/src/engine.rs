@@ -5,6 +5,7 @@ use std::io::Error;
 use std::rc::Rc;
 
 const MAX_UNCONDITIONAL_REVISITS: usize = 1000;
+const MAX_CALL_DEPTH: usize = 64;
 const MAX_BRANCH_DEPTH: usize = 32;
 const MAX_JUMP_HISTORY: usize = 30;
 const MIN_REVISITS_PER_BRANCH: usize = 20;
@@ -261,6 +262,7 @@ pub struct Engine<M: Machine> {
     next_scope_id: usize,
     path_ends: bool,
     suspended: Vec<SuspendedCall>,
+    caller_jump_visits: Vec<BTreeMap<usize, usize>>,
     ledger: Rc<RefCell<SummaryLedger>>,
 }
 
@@ -348,6 +350,7 @@ impl<M: Machine> Engine<M> {
             next_scope_id: 0,
             path_ends: false,
             suspended: Vec::new(),
+            caller_jump_visits: Vec::new(),
             ledger: Rc::default(),
         }
     }
@@ -419,6 +422,29 @@ impl<M: Machine> Engine<M> {
             .add_pointer_elements(&region.into(), &target.into());
     }
 
+    pub fn add_indexed_fact(
+        &mut self,
+        region: impl Into<String>,
+        fact: IndexedFact,
+    ) -> Result<(), String> {
+        self.computer.add_indexed_fact(&region.into(), fact)
+    }
+
+    pub fn add_field(
+        &mut self,
+        region: impl Into<String>,
+        offset: i64,
+        width: i64,
+        value: AbstractExpression,
+    ) -> Result<(), String> {
+        self.computer
+            .add_field(&region.into(), offset, width, value)
+    }
+
+    pub fn implies(&self, fact: &AbstractComparison) -> bool {
+        Machine::proves(&self.computer, fact)
+    }
+
     pub fn add_element_range(
         &mut self,
         region: impl Into<String>,
@@ -485,6 +511,13 @@ impl<M: Machine> Engine<M> {
         let res = self.run(pc, 0);
         debug_assert!(self.scopes.is_empty(), "solver scopes left open");
         res
+    }
+
+    fn inside_static_loop(&self, pc: usize) -> bool {
+        self.program
+            .loop_ends
+            .iter()
+            .any(|(&start, &end)| start <= pc && pc <= end)
     }
 
     fn concrete_split(&self, condition: &AbstractComparison) -> Option<(String, Vec<i64>)> {
@@ -792,7 +825,14 @@ impl<M: Machine> Engine<M> {
 
             let mut execute_result = self.computer.execute(pc, &instruction);
             if instruction.flow() == Flow::Call && execute_result.is_ok() {
+                if self.suspended.len() >= MAX_CALL_DEPTH {
+                    return Err(Error::other(format!(
+                        "line {pc}: calls nested deeper than {MAX_CALL_DEPTH}"
+                    )));
+                }
                 self.suspend_for_call(pc);
+                self.caller_jump_visits
+                    .push(std::mem::take(unconditional_visits));
             }
             if let Some((condition, label)) =
                 self.costly_concrete_latch(pc, &instruction, &execute_result)
@@ -843,6 +883,9 @@ impl<M: Machine> Engine<M> {
                                 .is_some_and(|call| call.resume == dest)
                         {
                             self.resume_suspended();
+                            if let Some(visits) = self.caller_jump_visits.pop() {
+                                *unconditional_visits = visits;
+                            }
                         }
                         Self::note_unconditional_jump(unconditional_visits, dest)?;
                         Ok(Step::Continue(dest))
@@ -1001,23 +1044,82 @@ impl<M: Machine> Engine<M> {
         }
     }
 
+    fn mask_ones(&self, expr: &AbstractExpression) -> Option<i64> {
+        if self.is_boolean_mask(expr) {
+            return Some(-1);
+        }
+        let value = expression_to_ast(expr.clone())?;
+        let low_bits = match expr {
+            AbstractExpression::Expression(op, _, right) if op == "&" => match **right {
+                AbstractExpression::Immediate(ones)
+                    if ones > 0 && ones.checked_add(1).is_some_and(|m| m.count_ones() == 1) =>
+                {
+                    Some(ones)
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        let assumptions = self.computer.select_assumptions(expr);
+        [Some(-1), low_bits].into_iter().flatten().find(|&ones| {
+            let other = ast::Bool::and(&[
+                value.eq(ast::Int::from_i64(0)).not(),
+                value.eq(ast::Int::from_i64(ones)).not(),
+            ]);
+            let mut assuming = assumptions.clone();
+            assuming.push(other);
+            check(self.computer.solver(), &assuming) == SatResult::Unsat
+        })
+    }
+
+    fn xor_with_mask(
+        value: AbstractExpression,
+        mask: AbstractExpression,
+        ones: i64,
+    ) -> AbstractExpression {
+        if ones == -1 {
+            return generate_expression(
+                "+",
+                generate_expression("+", value.clone(), mask.clone()),
+                generate_expression(
+                    "*",
+                    AbstractExpression::Immediate(2),
+                    generate_expression("*", value, mask),
+                ),
+            );
+        }
+        let flipped = generate_expression(
+            "-",
+            AbstractExpression::Immediate(ones),
+            generate_expression(
+                "*",
+                AbstractExpression::Immediate(2),
+                generate_expression("%", value.clone(), AbstractExpression::Immediate(ones + 1)),
+            ),
+        );
+        generate_expression(
+            "+",
+            value,
+            generate_expression(
+                "*",
+                generate_expression("/", mask, AbstractExpression::Immediate(ones)),
+                flipped,
+            ),
+        )
+    }
+
     fn resolve_boolean_mask_xor(&self, expr: &AbstractExpression) -> AbstractExpression {
         match expr {
             AbstractExpression::Expression(op, left, right) => {
                 let left = self.resolve_boolean_mask_xor(left);
                 let right = self.resolve_boolean_mask_xor(right);
-                if op.as_str() == "^"
-                    && (self.is_boolean_mask(&left) || self.is_boolean_mask(&right))
-                {
-                    generate_expression(
-                        "+",
-                        generate_expression("+", left.clone(), right.clone()),
-                        generate_expression(
-                            "*",
-                            AbstractExpression::Immediate(2),
-                            generate_expression("*", left, right),
-                        ),
-                    )
+                if op.as_str() != "^" {
+                    return generate_expression(op.as_str(), left, right);
+                }
+                if let Some(ones) = self.mask_ones(&right) {
+                    Self::xor_with_mask(left, right, ones)
+                } else if let Some(ones) = self.mask_ones(&left) {
+                    Self::xor_with_mask(right, left, ones)
                 } else {
                     generate_expression(op.as_str(), left, right)
                 }
@@ -1154,6 +1256,7 @@ impl<M: Machine> Engine<M> {
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
         if self.loops.active.is_empty()
+            && !self.inside_static_loop(pc)
             && let Some((symbol, values)) = self.concrete_split(&condition)
         {
             return self.split_on(&symbol, &values, pc, depth);
@@ -1736,6 +1839,28 @@ impl AnyEngine {
 
     pub fn add_pointer_elements(&mut self, region: impl Into<String>, target: impl Into<String>) {
         forward!(self, e => e.add_pointer_elements(region, target))
+    }
+
+    pub fn add_indexed_fact(
+        &mut self,
+        region: impl Into<String>,
+        fact: IndexedFact,
+    ) -> Result<(), String> {
+        forward!(self, e => e.add_indexed_fact(region, fact))
+    }
+
+    pub fn add_field(
+        &mut self,
+        region: impl Into<String>,
+        offset: i64,
+        width: i64,
+        value: AbstractExpression,
+    ) -> Result<(), String> {
+        forward!(self, e => e.add_field(region, offset, width, value))
+    }
+
+    pub fn implies(&self, fact: &AbstractComparison) -> bool {
+        forward!(self, e => e.implies(fact))
     }
 
     pub fn add_element_range(

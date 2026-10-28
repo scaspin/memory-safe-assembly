@@ -55,7 +55,7 @@ fn ff_pix_norm1_neon_dotprod(pix: &[u8], line_size: usize);
 fn ff_png_add_bytes_l2_neon(dst: &mut [u8], src1: &[u8], src2: &[u8], w: usize);
 
 #[bums::check_mem_safe("pngdsp_neon.S", dst.as_mut_ptr().add(bpp), src.as_ptr(), top.as_ptr().add(bpp), w, bpp,
-    [dst.len() == bpp + w, src.len() == w, top.len() == bpp + w, w >= 1, w <= 1073741824,
+    [dst.len() == bpp + w, src.len() == w, top.len() == bpp + w, w % bpp == 0, w >= bpp, w <= 1073741824,
      (bpp - 3) * (bpp - 4) * (bpp - 6) * (bpp - 8) == 0])]
 fn ff_png_add_paeth_prediction_neon(dst: &mut [u8], src: &[u8], top: &[u8], w: usize, bpp: usize);
 

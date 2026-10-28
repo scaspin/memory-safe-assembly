@@ -177,10 +177,16 @@ impl X86_64 {
             return Ok(unknown());
         };
         let (region, offset) = self.get_memory_pointer(name.clone(), address.offset);
-        let Some(value) = self.memory.get(&region).and_then(|r| r.read(offset, width)) else {
+        let Some((value, cells)) = self
+            .memory
+            .get(&region)
+            .and_then(|r| Some((r.read(offset, width)?, r.overlapping(offset, width))))
+        else {
             return Ok(unknown());
         };
-        self.note_element_read(&region, offset);
+        for cell in cells {
+            self.note_element_read(&region, cell);
+        }
         Ok(self.narrow_checked(&value, width))
     }
 

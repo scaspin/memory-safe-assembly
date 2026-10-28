@@ -552,6 +552,21 @@ fn symbolic_step(
     if let Some(step) = narrowed_step(prev, cur) {
         return Some(AbstractExpression::Immediate(step));
     }
+    if let (
+        AbstractExpression::Expression(_, prev_inner, _),
+        AbstractExpression::Expression(_, cur_inner, _),
+    ) = (prev, cur)
+        && is_narrowed(prev)
+        && is_narrowed(cur)
+    {
+        let step = Affine::of(cur_inner)?.combine(&Affine::of(prev_inner)?, -1)?;
+        let over_symbols = step
+            .terms
+            .iter()
+            .all(|(atom, _)| matches!(atom, AbstractExpression::Abstract(_)));
+        return (over_symbols && !step.terms.is_empty() && !step.mentions_a_loop_counter())
+            .then(|| step.to_expression());
+    }
     let cur = match cur {
         AbstractExpression::Expression(op, inner, _) if op == "%" && is_narrowed(cur) => &**inner,
         other => other,

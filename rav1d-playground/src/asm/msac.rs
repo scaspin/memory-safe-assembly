@@ -11,7 +11,7 @@ fn msac_decode_symbol_adapt4_neon(s: &mut [usize], cdf: &mut [u16], n_symbols: u
 fn msac_decode_symbol_adapt8_neon(s: &mut [usize], cdf: &mut [u16], n_symbols: usize, data: &[u8], pos: usize) -> u32;
 
 #[bums::check_mem_safe("msac.S", s.as_mut_ptr(), cdf.as_mut_ptr(), n_symbols,
-    [s.len() == 6, s[0] == data.as_ptr().add(pos), s[1] == data.as_ptr().add(data.len()), data.len() >= 8, pos <= data.len(), cdf.len() >= 16, n_symbols + 1 <= cdf.len(), n_symbols >= 1, n_symbols <= 15])]
+    [s.len() == 6, s[0] == data.as_ptr().add(pos), s[1] == data.as_ptr().add(data.len()), data.len() >= 8, pos <= data.len(), cdf.len() >= 16, n_symbols + 1 <= cdf.len(), n_symbols >= 1, n_symbols <= 15, cdf[n_symbols] <= 32])]
 fn msac_decode_symbol_adapt16_neon(s: &mut [usize], cdf: &mut [u16], n_symbols: usize, data: &[u8], pos: usize) -> u32;
 
 #[bums::check_mem_safe("msac.S", s.as_mut_ptr(), cdf.as_mut_ptr(), [s.len() == 6, s[0] == data.as_ptr().add(pos), s[1] == data.as_ptr().add(data.len()), data.len() >= 8, pos <= data.len(), cdf.len() == 2])]

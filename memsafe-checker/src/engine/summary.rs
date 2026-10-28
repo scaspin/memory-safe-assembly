@@ -44,16 +44,56 @@ fn rewind(value: AbstractExpression, steps: i64, step: &AbstractExpression) -> A
     )
 }
 
-fn operand_index(
-    operands: &[(RegisterValue, usize)],
-    current: &[RegisterValue],
-    r: &RegisterValue,
-) -> Option<usize> {
-    operands
-        .iter()
-        .find(|(value, _)| value == r)
-        .map(|(_, i)| *i)
-        .or_else(|| current.iter().position(|c| c == r))
+pub(super) struct GuardOperands {
+    moved: Vec<(RegisterValue, usize)>,
+    steady: Vec<RegisterValue>,
+}
+
+impl GuardOperands {
+    fn may_be_held_by(
+        &self,
+        r: &RegisterValue,
+        i: usize,
+        (current, previous): (&[RegisterValue], &[RegisterValue]),
+    ) -> bool {
+        !self.steady.contains(r) || previous.get(i) == current.get(i)
+    }
+
+    fn held_now(
+        &self,
+        r: &RegisterValue,
+        (current, previous): (&[RegisterValue], &[RegisterValue]),
+    ) -> Option<usize> {
+        self.moved
+            .iter()
+            .find(|(value, _)| value == r)
+            .map(|(_, i)| *i)
+            .or_else(|| {
+                (0..current.len())
+                    .find(|&i| current[i] == *r && self.may_be_held_by(r, i, (current, previous)))
+            })
+    }
+
+    fn held_one_iteration_back(
+        &self,
+        r: &RegisterValue,
+        (current, previous): (&[RegisterValue], &[RegisterValue]),
+    ) -> Option<usize> {
+        (0..previous.len())
+            .find(|&i| previous[i] == *r && self.may_be_held_by(r, i, (current, previous)))
+    }
+}
+
+fn steady_operands(before: &AbstractComparison, after: &AbstractComparison) -> Vec<RegisterValue> {
+    if before.op != after.op {
+        return Vec::new();
+    }
+    let earlier = register_leaves(before);
+    register_leaves(after)
+        .into_iter()
+        .filter(|leaf| earlier.contains(leaf))
+        .map(|(_, r)| r)
+        .collect()
 }
 
 pub(super) fn guard_operands(
@@ -61,7 +101,7 @@ pub(super) fn guard_operands(
     after: &AbstractComparison,
     previous: &[RegisterValue],
     current: &[RegisterValue],
-) -> Vec<(RegisterValue, usize)> {
+) -> GuardOperands {
     pub(super) fn pair(
         before: &AbstractExpression,
         after: &AbstractExpression,
@@ -94,16 +134,15 @@ pub(super) fn guard_operands(
         pair(&before.left, &after.left, (previous, current), &mut found);
         pair(&before.right, &after.right, (previous, current), &mut found);
     }
-    found
+    GuardOperands {
+        moved: found,
+        steady: steady_operands(before, after),
+    }
 }
 
 pub(super) fn anchored(
     e: &AbstractExpression,
-    (current, previous, operands): (
-        &[RegisterValue],
-        &[RegisterValue],
-        &[(RegisterValue, usize)],
-    ),
+    (current, previous, operands): (&[RegisterValue], &[RegisterValue], &GuardOperands),
     invariants: &[LoopInvariant],
     ghosts: &[Ghost],
 ) -> AbstractExpression {
@@ -116,9 +155,14 @@ pub(super) fn anchored(
                     &AbstractExpression::Immediate(step),
                 );
             }
-            let found = operand_index(operands, current, r)
+            let found = operands
+                .held_now(r, (current, previous))
                 .map(|i| (i, 0))
-                .or_else(|| previous.iter().position(|p| p == &**r).map(|i| (i, 1)));
+                .or_else(|| {
+                    operands
+                        .held_one_iteration_back(r, (current, previous))
+                        .map(|i| (i, 1))
+                });
             match found.map(|(i, behind)| (&invariants[i], behind)) {
                 Some((LoopInvariant::Linear(step), behind)) => {
                     rewind(value_of(r), SUMMARY_ITERATION - behind, step)
@@ -150,22 +194,21 @@ pub(super) fn word_view(register: &RegisterValue) -> RegisterValue {
 
 pub(super) fn at_summary(
     e: &AbstractExpression,
-    (current, previous, operands): (
-        &[RegisterValue],
-        &[RegisterValue],
-        &[(RegisterValue, usize)],
-    ),
+    (current, previous, operands): (&[RegisterValue], &[RegisterValue], &GuardOperands),
     updates: &[(usize, RegisterValue)],
 ) -> AbstractExpression {
     match e {
         AbstractExpression::Register(r) => {
-            let index = operand_index(operands, current, r)
-                .or_else(|| previous.iter().position(|p| p == &**r));
+            let index = operands
+                .held_now(r, (current, previous))
+                .or_else(|| operands.held_one_iteration_back(r, (current, previous)));
             if let Some((_, rewritten)) = index.and_then(|i| updates.iter().find(|(j, _)| *j == i))
             {
                 return AbstractExpression::Register(Box::new(rewritten.clone()));
             }
-            let word = current.iter().position(|c| word_view(c) == **r);
+            let word = (0..current.len()).find(|&i| {
+                word_view(&current[i]) == **r && operands.may_be_held_by(r, i, (current, previous))
+            });
             match word.and_then(|i| updates.iter().find(|(j, _)| *j == i)) {
                 Some((_, rewritten)) => {
                     AbstractExpression::Register(Box::new(word_view(rewritten)))
@@ -479,14 +522,23 @@ pub(super) fn condition_side<'a>(
     path: &[bool],
 ) -> Option<&'a AbstractExpression> {
     let (left, rest) = path.split_first()?;
-    leaf_at(
+    let leaf = leaf_at(
         if *left {
             &condition.left
         } else {
             &condition.right
         },
         rest,
-    )
+    )?;
+    match leaf {
+        AbstractExpression::Expression(op, inner, _)
+            if (op == "sext" || op == "zext")
+                && matches!(**inner, AbstractExpression::Register(_)) =>
+        {
+            Some(&**inner)
+        }
+        other => Some(other),
+    }
 }
 
 fn ghost_step(ghosts: &[Ghost], r: &RegisterValue) -> Option<i64> {
@@ -978,6 +1030,20 @@ pub(super) fn branches_walked(loop_pc: usize, cycle: &[JumpRecord]) -> Vec<JumpR
     walked
 }
 
+fn without_word_signs(e: &AbstractExpression) -> AbstractExpression {
+    match e {
+        AbstractExpression::Expression(op, inner, width)
+            if op == "sext" && **width == AbstractExpression::Immediate(32) =>
+        {
+            without_word_signs(inner)
+        }
+        AbstractExpression::Expression(op, left, right) => {
+            generate_expression(op, without_word_signs(left), without_word_signs(right))
+        }
+        other => other.clone(),
+    }
+}
+
 fn held_on_the_cycle(
     (record, ghosts): (&JumpRecord, &[Ghost]),
     counter: &LoopCounter,
@@ -985,10 +1051,23 @@ fn held_on_the_cycle(
     landings: &mut Vec<(AbstractComparison, AbstractComparison)>,
 ) -> Option<AbstractComparison> {
     let states = (record.point.state.0.as_slice(), ghosts);
-    let branch = &record.point.condition;
+    let tested = &record.point.condition;
+    let tests_a_signed_word = [&tested.left, &tested.right]
+        .iter()
+        .any(|side| sign_extended_word(side).is_some());
+    let integer_view = AbstractComparison::new(
+        &tested.op,
+        without_word_signs(&tested.left),
+        without_word_signs(&tested.right),
+    );
+    let branch = if tests_a_signed_word {
+        &integer_view
+    } else {
+        tested
+    };
     let exit_step = |r: &RegisterValue| step_at_exit(r, states, invariants);
     let (exit, walker, step) = trip_of(branch, &exit_step)?;
-    if !is_unsigned(walker) {
+    if !is_unsigned(walker) && !tests_a_signed_word {
         return None;
     }
     let exit_anchor = anchored_at_exit(exit, states, invariants);
@@ -1074,7 +1153,7 @@ pub(super) fn summarize(
     id: LoopId,
     pc: usize,
     label: Option<String>,
-    guard: (&AbstractComparison, &[Ghost], &[(RegisterValue, usize)]),
+    guard: (&AbstractComparison, &[Ghost], &GuardOperands),
     continues_when: bool,
     invariants: Vec<LoopInvariant>,
     states: (
@@ -1249,7 +1328,9 @@ pub(super) fn summarize(
     facts.extend(progress_facts);
 
     let index_of = |r: &RegisterValue| -> Option<usize> {
-        operand_index(operands, &current.0, r).or_else(|| previous.0.iter().position(|c| c == r))
+        operands
+            .held_now(r, (&current.0, &previous.0))
+            .or_else(|| operands.held_one_iteration_back(r, (&current.0, &previous.0)))
     };
 
     let register_step = |r: &RegisterValue| match (ghost_step(ghosts, r), index_of(r)) {
@@ -1385,7 +1466,7 @@ pub(super) fn summarize(
         .into_iter()
         .filter(|(_, r)| ghost_step(ghosts, r).is_none())
         .filter_map(|(path, r)| {
-            let i = operand_index(operands, &current.0, &r)?;
+            let i = operands.held_now(&r, (&current.0, &previous.0))?;
             (invariants[i] != LoopInvariant::Fixed).then_some((path, i))
         })
         .collect();
@@ -1436,16 +1517,30 @@ fn register_leaves(condition: &AbstractComparison) -> Vec<(Vec<bool>, RegisterVa
 }
 
 pub(super) fn exit_window(op: &str, per_iteration: i64) -> Vec<i64> {
-    if per_iteration == 0 || per_iteration.abs() > MAX_EXIT_WINDOW {
+    if per_iteration == 0 {
         return Vec::new();
     }
+    if op == "==" {
+        return vec![0];
+    }
+    if per_iteration.abs() > MAX_EXIT_WINDOW {
+        return floor_division_exit(op, per_iteration).into_iter().collect();
+    }
     match (op, per_iteration.signum()) {
-        ("==", _) => vec![0],
         ("<", -1) => (per_iteration..=-1).collect(),
         ("<=", -1) => (per_iteration + 1..=0).collect(),
         (">", 1) => (1..=per_iteration).collect(),
         (">=", 1) => (0..per_iteration).collect(),
         _ => Vec::new(),
+    }
+}
+
+fn floor_division_exit(op: &str, per_iteration: i64) -> Option<i64> {
+    match (op, per_iteration.signum()) {
+        ("<", -1) | (">", 1) => Some(per_iteration),
+        ("<=", -1) => Some(per_iteration + 1),
+        (">=", 1) => Some(per_iteration - 1),
+        _ => None,
     }
 }
 

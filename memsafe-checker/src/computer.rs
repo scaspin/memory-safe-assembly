@@ -7,6 +7,8 @@ use std::fmt;
 use std::rc::Rc;
 use z3::*;
 
+mod exact_lanes;
+pub use exact_lanes::ExactLanes;
 mod instruction_aux;
 mod instructions;
 pub(crate) use instructions::is_floating_point;
@@ -14,7 +16,8 @@ mod machine;
 mod memory;
 mod simd;
 pub(crate) use simd::{
-    arrangement_of, range_fits_lane, split_vector_operands, vector_access_width, vector_index,
+    arrangement_of, maxima_covering, range_fits_lane, split_vector_operands, vector_access_width,
+    vector_index,
 };
 
 pub const RETURN_TO: &str = "return_to";
@@ -44,7 +47,7 @@ pub struct ARMCORTEXA {
     current_line: usize,
     alignment: i64,
     flag_counter: usize,
-    pub solver: Solver,
+    pub solver: EmptiedOnClone,
     pub lane_bounds: Box<LaneBounds>,
     pub fresh_bounds: Vec<ast::Bool>,
     pub write_journal: Vec<CellWrite>,
@@ -53,6 +56,15 @@ pub struct ARMCORTEXA {
     pointer_elements: BTreeMap<String, String>,
     element_ranges: BTreeMap<String, Vec<ElementRange>>,
     pristine_read: Option<String>,
+    indexed_read: Option<IndexedRead>,
+    last_executed: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IndexedRead {
+    region: String,
+    offset: AbstractExpression,
+    width: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -60,7 +72,21 @@ pub struct LaneBounds {
     pub bytes: [[u8; 16]; 32],
     pub bits: [[u8; 16]; 32],
     pub scalar: [Option<u64>; 32],
-    pub maxima: [Vec<AbstractExpression>; 32],
+    pub maxima: [Vec<LaneMaximum>; 32],
+    pub signed_maxima: [Vec<LaneMaximum>; 32],
+    pub exact: [Option<ExactLanes>; 32],
+}
+
+#[derive(Debug, Clone)]
+pub struct LaneMaximum {
+    pub width: usize,
+    pub value: AbstractExpression,
+}
+
+impl LaneMaximum {
+    pub fn covers(&self, width: usize) -> bool {
+        width <= self.width
+    }
 }
 
 impl Default for LaneBounds {
@@ -70,6 +96,8 @@ impl Default for LaneBounds {
             bits: [[u8::MAX; 16]; 32],
             scalar: [None; 32],
             maxima: std::array::from_fn(|_| Vec::new()),
+            signed_maxima: std::array::from_fn(|_| Vec::new()),
+            exact: std::array::from_fn(|_| None),
         }
     }
 }
@@ -209,8 +237,44 @@ impl ARMCORTEXA {
             pointer_elements: BTreeMap::new(),
             element_ranges: BTreeMap::new(),
             pristine_read: None,
-            solver,
+            indexed_read: None,
+            last_executed: None,
+            solver: EmptiedOnClone::new(solver),
         }
+    }
+
+    pub(crate) fn refutes_within_budget(&self, fact: &AbstractComparison) -> bool {
+        let Some(holds) = comparison_to_ast(fact.clone()) else {
+            return false;
+        };
+        self.refutes_ast_within_budget(holds)
+    }
+
+    pub(crate) fn refutes_ast_within_budget(&self, holds: ast::Bool) -> bool {
+        let mut bounded = Params::new();
+        bounded.set_u32("rlimit", WORD_FIT_RESOURCE_LIMIT);
+        self.solver.set_params(&bounded);
+        let result = self.solver.check_assumptions(&[holds]);
+        let mut unbounded = Params::new();
+        unbounded.set_u32("rlimit", 0);
+        self.solver.set_params(&unbounded);
+        result == SatResult::Unsat
+    }
+
+    pub(crate) fn provably_between(
+        &self,
+        value: &AbstractExpression,
+        least: i64,
+        most: i64,
+    ) -> bool {
+        if value.size() > MAX_EXPRESSION_NODES || !is_translatable(value) {
+            return false;
+        }
+        let Some(value) = expression_to_ast(value.clone()) else {
+            return false;
+        };
+        self.refutes_ast_within_budget(value.lt(ast::Int::from_i64(least)))
+            && self.refutes_ast_within_budget(value.gt(ast::Int::from_i64(most)))
     }
 
     fn fits_in_32(&self, base: &Option<AbstractExpression>, offset: i64) -> bool {
@@ -262,13 +326,20 @@ impl ARMCORTEXA {
     }
 
     pub fn add_pointer_elements(&mut self, region: &str, target: &str) {
-        match self.memory.get(target) {
-            Some(rows) if rows.kind == RegionType::READ => {
+        match self.memory.get_mut(target) {
+            Some(rows) if rows.kind != RegionType::WRITE => {
+                rows.stands_for_many();
                 self.pointer_elements
                     .insert(region.to_string(), target.to_string());
             }
-            _ => panic!("pointer elements need a read-only region {target} to point into"),
+            _ => panic!("pointer elements need a readable region {target} to point into"),
         }
+    }
+
+    fn holds_many(&self, base: &AbstractExpression) -> bool {
+        self.region_of(base)
+            .and_then(|(region, ..)| self.memory.get(&region))
+            .is_some_and(|region| region.many)
     }
 
     pub fn add_element_range(&mut self, region: &str, range: ElementRange) {
@@ -505,7 +576,11 @@ impl ARMCORTEXA {
                 RePrefix::X => self.registers[*num].set(kind, base, offset),
                 RePrefix::W => {
                     if *num < 31 {
-                        let (base, offset) = if self.fits_in_32(&base, offset) {
+                        let offset_outside_a_word =
+                            offset != 0 && base.as_ref().is_some_and(is_narrowed);
+                        let (base, offset) = if offset_outside_a_word {
+                            narrow_to_32(base, offset)
+                        } else if self.fits_in_32(&base, offset) {
                             (base, offset)
                         } else {
                             narrow_to_32(base, offset)

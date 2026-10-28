@@ -271,7 +271,8 @@ pub struct LaneWrite {
     bytes: [u8; 16],
     bits: [u8; 16],
     scalar: Option<u64>,
-    maxima: Vec<AbstractExpression>,
+    maxima: Vec<LaneMaximum>,
+    signed_maxima: Vec<LaneMaximum>,
 }
 
 fn lanes_bounded_by(register: usize, bytes: [u8; 16]) -> LaneWrite {
@@ -281,6 +282,61 @@ fn lanes_bounded_by(register: usize, bytes: [u8; 16]) -> LaneWrite {
         bits: bytes.map(|max| u8::MAX.checked_shr(max.leading_zeros()).unwrap_or(0)),
         scalar: None,
         maxima: Vec::new(),
+        signed_maxima: Vec::new(),
+    }
+}
+
+pub fn maxima_covering(maxima: &[LaneMaximum], width: usize) -> Vec<AbstractExpression> {
+    maxima
+        .iter()
+        .filter(|maximum| maximum.covers(width))
+        .map(|maximum| maximum.value.clone())
+        .collect()
+}
+
+fn narrowed_to(maxima: &[LaneMaximum], width: usize) -> Vec<LaneMaximum> {
+    maxima
+        .iter()
+        .filter(|maximum| maximum.covers(width))
+        .map(|maximum| LaneMaximum {
+            width,
+            value: maximum.value.clone(),
+        })
+        .collect()
+}
+
+fn lanes_all_zero(bytes: &[u8; 16], arrangement: &Arrangement) -> bool {
+    bytes[..arrangement.width() as usize]
+        .iter()
+        .all(|max| *max == 0)
+}
+
+pub(crate) fn shifted_immediate(instruction: &Instruction) -> Option<u128> {
+    let mut value = None;
+    let mut shift = 0u32;
+    for operand in instruction.operands.iter().skip(1) {
+        match operand {
+            Operand::Immediate(immediate) => value = Some(*immediate as u64 as u128),
+            Operand::Bitwise(kind, amount) if kind.trim() == "lsl" => {
+                shift = u32::try_from(*amount).ok().filter(|s| *s < 64)?
+            }
+            _ => return None,
+        }
+    }
+    let value = value? << shift;
+    Some(if instruction.opcode == "mvni" {
+        !value
+    } else {
+        value
+    })
+}
+
+pub fn read_width(operand: &Operand) -> Option<usize> {
+    match operand {
+        Operand::VectorAccess(_, _, element, _) => Some(element.lane_bytes()),
+        Operand::Register(RePrefix::W, _) => Some(4),
+        Operand::Register(RePrefix::X, _) => Some(8),
+        _ => None,
     }
 }
 
@@ -320,6 +376,16 @@ impl ARMCORTEXA {
         (value.kind == RegisterKind::Immediate && value.base.is_none()).then_some(value.offset)
     }
 
+    pub fn unsigned_lane_max(&self, operand: &Operand) -> Option<u64> {
+        let Operand::VectorAccess(_, register, element, lane) = operand else {
+            return None;
+        };
+        let width = element.lane_bytes();
+        let end = (*lane as usize + 1) * width;
+        (width <= 8 && end <= 16)
+            .then(|| lane_max(&self.lane_bounds.bytes[*register], *lane as usize, width))
+    }
+
     pub fn plan_lane_effect(&mut self, instruction: &Instruction) -> LaneEffect {
         let operands = &instruction.operands;
         let opcode = instruction.opcode.as_str();
@@ -343,7 +409,9 @@ impl ARMCORTEXA {
             && matches!(opcode, "fmov" | "mov")
             && matches!(first, Operand::Register(..))
         {
-            let maxima = bounds.maxima[source].clone();
+            let maxima = read_width(first)
+                .map(|width| maxima_covering(&bounds.maxima[source], width))
+                .unwrap_or_default();
             let bound = match operands.get(1) {
                 Some(Operand::VectorAccess(_, _, arrangement, lane)) => {
                     let width = arrangement.element_width() as usize;
@@ -407,7 +475,10 @@ impl ARMCORTEXA {
                             && self.fits_unsigned(&whole, 8 * width as u32)
                         {
                             LaneEffect::Vectors(vec![LaneWrite {
-                                maxima: vec![whole],
+                                maxima: vec![LaneMaximum {
+                                    width,
+                                    value: whole,
+                                }],
                                 ..lanes_bounded_by(dst, [u8::MAX; 16])
                             }])
                         } else {
@@ -440,15 +511,88 @@ impl ARMCORTEXA {
                     bytes[range.clone()].copy_from_slice(&bounds.bytes[smaller][range.clone()]);
                     bits[range.clone()].copy_from_slice(&bounds.bits[smaller][range]);
                 }
-                let maxima = bounds.maxima[*a]
+                let maxima = [*a, *b]
                     .iter()
-                    .chain(&bounds.maxima[*b])
-                    .cloned()
+                    .flat_map(|source| narrowed_to(&bounds.maxima[*source], width))
                     .collect();
                 LaneEffect::Vectors(vec![LaneWrite {
                     maxima,
                     ..lanes_holding_bits(dst, bytes, bits)
                 }])
+            }
+            (
+                "smin",
+                [
+                    Operand::Vector(_, _, arrangement),
+                    Operand::Vector(_, a, _),
+                    Operand::Vector(_, b, _),
+                ],
+            ) => {
+                let width = arrangement.element_width() as usize;
+                let sign_bit = 8 * width as u32 - 1;
+                let mut signed_maxima = Vec::new();
+                for source in [*a, *b] {
+                    for maximum in narrowed_to(&bounds.maxima[source], width) {
+                        if self.fits_unsigned(&maximum.value, sign_bit) {
+                            signed_maxima.push(maximum);
+                        }
+                    }
+                    signed_maxima.extend(
+                        bounds.signed_maxima[source]
+                            .iter()
+                            .filter(|maximum| maximum.width == width)
+                            .cloned(),
+                    );
+                }
+                LaneEffect::Vectors(vec![LaneWrite {
+                    signed_maxima,
+                    ..lanes_bounded_by(dst, [u8::MAX; 16])
+                }])
+            }
+            (
+                "smax",
+                [
+                    Operand::Vector(_, _, arrangement),
+                    Operand::Vector(_, a, _),
+                    Operand::Vector(_, b, _),
+                ],
+            ) => {
+                let width = arrangement.element_width() as usize;
+                let clamped_at_zero = |source: usize, floor: usize| {
+                    if lanes_all_zero(&bounds.bytes[floor], arrangement) {
+                        bounds.signed_maxima[source]
+                            .iter()
+                            .filter(|maximum| maximum.width == width)
+                            .cloned()
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                };
+                let mut maxima: Vec<LaneMaximum> = clamped_at_zero(*a, *b);
+                maxima.extend(clamped_at_zero(*b, *a));
+                LaneEffect::Vectors(vec![LaneWrite {
+                    maxima,
+                    ..lanes_bounded_by(dst, [u8::MAX; 16])
+                }])
+            }
+            ("movi" | "mvni", [Operand::Vector(_, _, arrangement), ..]) => {
+                match shifted_immediate(instruction) {
+                    Some(value) => {
+                        let width = arrangement.element_width() as usize;
+                        let lane = mask_to_lane(value, width).to_le_bytes();
+                        let mut bytes = [0u8; 16];
+                        for (k, byte) in bytes
+                            .iter_mut()
+                            .enumerate()
+                            .take(arrangement.width() as usize)
+                        {
+                            *byte = lane[k % width];
+                        }
+                        LaneEffect::Vectors(vec![lanes_holding_bits(dst, bytes, bytes)])
+                    }
+                    None => unknown,
+                }
             }
             ("eor", [_, Operand::Vector(_, a, _), Operand::Vector(_, b, _)]) if a == b => {
                 LaneEffect::Vectors(vec![lanes_bounded_by(dst, [0u8; 16])])
@@ -467,7 +611,14 @@ impl ARMCORTEXA {
                     bits[k] = bounds.bits[*a][k] & bounds.bits[*b][k];
                     bytes[k] = bounds.bytes[*a][k].min(bounds.bytes[*b][k]).min(bits[k]);
                 }
-                LaneEffect::Vectors(vec![lanes_holding_bits(dst, bytes, bits)])
+                let maxima = [*a, *b]
+                    .iter()
+                    .flat_map(|source| bounds.maxima[*source].iter().cloned())
+                    .collect();
+                LaneEffect::Vectors(vec![LaneWrite {
+                    maxima,
+                    ..lanes_holding_bits(dst, bytes, bits)
+                }])
             }
             (
                 "cnt",
@@ -509,6 +660,7 @@ impl ARMCORTEXA {
                     self.lane_bounds.bits[write.register] = write.bits;
                     self.lane_bounds.scalar[write.register] = write.scalar;
                     self.lane_bounds.maxima[write.register] = write.maxima;
+                    self.lane_bounds.signed_maxima[write.register] = write.signed_maxima;
                 }
             }
             LaneEffect::General(register, bound, maxima) => {

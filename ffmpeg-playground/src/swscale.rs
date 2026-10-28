@@ -77,7 +77,7 @@ fn ff_deinterleave_bytes_neon(src: &[u8], dst1: &mut [u8], dst2: &mut [u8], widt
 fn ff_hscale16to15_4_neon_asm(shift: i32, dst: &mut [i16], dst_w: usize, src: &[u16], filter: &[i16], filter_pos: &[i32], filter_size: usize, src_w: usize);
 
 #[bums::check_mem_safe("hscale.S", shift, dst.as_mut_ptr(), dst_w, src.as_ptr(), filter.as_ptr(), filter_pos.as_ptr(), filter_size,
-    [dst.len() == dst_w + 33, dst_w >= 1, dst_w <= 16384, src.len() == src_w, src_w >= filter_size, src_w <= 16384, filter.len() == (dst_w + 3) * filter_size, filter_pos.len() == dst_w + 3, filter_pos[..] <= (src_w - filter_size) as i32, filter_pos[..] >= 0, filter_size <= 256, filter_size % 4 == 0, filter_size % 8 != 0, filter_size >= 4])]
+    [dst.len() == dst_w + 33, dst_w >= 1, dst_w <= 16384, src.len() == src_w, src_w >= filter_size, src_w <= 16384, filter.len() == (dst_w + 3) * filter_size, filter_pos.len() == dst_w + 3, filter_pos[..] <= (src_w - filter_size) as i32, filter_pos[..] >= 0, filter_size <= 256, filter_size % 4 == 0, filter_size % 8 != 0, filter_size >= 12])]
 fn ff_hscale16to15_X4_neon_asm(shift: i32, dst: &mut [i16], dst_w: usize, src: &[u16], filter: &[i16], filter_pos: &[i32], filter_size: usize, src_w: usize);
 
 #[bums::check_mem_safe("hscale.S", shift, dst.as_mut_ptr(), dst_w, src.as_ptr(), filter.as_ptr(), filter_pos.as_ptr(), filter_size,
@@ -89,7 +89,7 @@ fn ff_hscale16to15_X8_neon_asm(shift: i32, dst: &mut [i16], dst_w: usize, src: &
 fn ff_hscale16to19_4_neon_asm(shift: i32, dst: &mut [i32], dst_w: usize, src: &[u16], filter: &[i16], filter_pos: &[i32], filter_size: usize, src_w: usize);
 
 #[bums::check_mem_safe("hscale.S", shift, dst.as_mut_ptr(), dst_w, src.as_ptr(), filter.as_ptr(), filter_pos.as_ptr(), filter_size,
-    [dst.len() == dst_w + 33, dst_w >= 1, dst_w <= 16384, src.len() == src_w, src_w >= filter_size, src_w <= 16384, filter.len() == (dst_w + 3) * filter_size, filter_pos.len() == dst_w + 3, filter_pos[..] <= (src_w - filter_size) as i32, filter_pos[..] >= 0, filter_size <= 256, filter_size % 4 == 0, filter_size % 8 != 0, filter_size >= 4])]
+    [dst.len() == dst_w + 33, dst_w >= 1, dst_w <= 16384, src.len() == src_w, src_w >= filter_size, src_w <= 16384, filter.len() == (dst_w + 3) * filter_size, filter_pos.len() == dst_w + 3, filter_pos[..] <= (src_w - filter_size) as i32, filter_pos[..] >= 0, filter_size <= 256, filter_size % 4 == 0, filter_size % 8 != 0, filter_size >= 12])]
 fn ff_hscale16to19_X4_neon_asm(shift: i32, dst: &mut [i32], dst_w: usize, src: &[u16], filter: &[i16], filter_pos: &[i32], filter_size: usize, src_w: usize);
 
 #[bums::check_mem_safe("hscale.S", shift, dst.as_mut_ptr(), dst_w, src.as_ptr(), filter.as_ptr(), filter_pos.as_ptr(), filter_size,
@@ -101,7 +101,7 @@ fn ff_hscale16to19_X8_neon_asm(shift: i32, dst: &mut [i32], dst_w: usize, src: &
 fn ff_hscale8to15_4_neon(ctx: &[u8], dst: &mut [i16], dst_w: usize, src: &[u8], filter: &[i16], filter_pos: &[i32], filter_size: usize, src_w: usize);
 
 #[bums::check_mem_safe("hscale.S", ctx.as_ptr(), dst.as_mut_ptr(), dst_w, src.as_ptr(), filter.as_ptr(), filter_pos.as_ptr(), filter_size,
-    [ctx.len() == 1, dst.len() == dst_w + 33, dst_w >= 1, dst_w <= 16384, src.len() == src_w, src_w >= filter_size, src_w <= 16384, filter.len() == (dst_w + 3) * filter_size, filter_pos.len() == dst_w + 3, filter_pos[..] <= (src_w - filter_size) as i32, filter_pos[..] >= 0, filter_size <= 256, filter_size % 4 == 0, filter_size % 8 != 0, filter_size >= 4])]
+    [ctx.len() == 1, dst.len() == dst_w + 33, dst_w >= 1, dst_w <= 16384, src.len() == src_w, src_w >= filter_size, src_w <= 16384, filter.len() == (dst_w + 3) * filter_size, filter_pos.len() == dst_w + 3, filter_pos[..] <= (src_w - filter_size) as i32, filter_pos[..] >= 0, filter_size <= 256, filter_size % 4 == 0, filter_size % 8 != 0, filter_size >= 12])]
 fn ff_hscale8to15_X4_neon(ctx: &[u8], dst: &mut [i16], dst_w: usize, src: &[u8], filter: &[i16], filter_pos: &[i32], filter_size: usize, src_w: usize);
 
 #[bums::check_mem_safe("hscale.S", ctx.as_ptr(), dst.as_mut_ptr(), dst_w, src.as_ptr(), filter.as_ptr(), filter_pos.as_ptr(), filter_size,
@@ -113,7 +113,7 @@ fn ff_hscale8to15_X8_neon(ctx: &[u8], dst: &mut [i16], dst_w: usize, src: &[u8],
 fn ff_hscale8to19_4_neon(ctx: &[u8], dst: &mut [i32], dst_w: usize, src: &[u8], filter: &[i16], filter_pos: &[i32], filter_size: usize, src_w: usize);
 
 #[bums::check_mem_safe("hscale.S", ctx.as_ptr(), dst.as_mut_ptr(), dst_w, src.as_ptr(), filter.as_ptr(), filter_pos.as_ptr(), filter_size,
-    [ctx.len() == 1, dst.len() == dst_w + 33, dst_w >= 1, dst_w <= 16384, src.len() == src_w, src_w >= filter_size, src_w <= 16384, filter.len() == (dst_w + 3) * filter_size, filter_pos.len() == dst_w + 3, filter_pos[..] <= (src_w - filter_size) as i32, filter_pos[..] >= 0, filter_size <= 256, filter_size % 4 == 0, filter_size % 8 != 0, filter_size >= 4])]
+    [ctx.len() == 1, dst.len() == dst_w + 33, dst_w >= 1, dst_w <= 16384, src.len() == src_w, src_w >= filter_size, src_w <= 16384, filter.len() == (dst_w + 3) * filter_size, filter_pos.len() == dst_w + 3, filter_pos[..] <= (src_w - filter_size) as i32, filter_pos[..] >= 0, filter_size <= 256, filter_size % 4 == 0, filter_size % 8 != 0, filter_size >= 12])]
 fn ff_hscale8to19_X4_neon(ctx: &[u8], dst: &mut [i32], dst_w: usize, src: &[u8], filter: &[i16], filter_pos: &[i32], filter_size: usize, src_w: usize);
 
 #[bums::check_mem_safe("hscale.S", ctx.as_ptr(), dst.as_mut_ptr(), dst_w, src.as_ptr(), filter.as_ptr(), filter_pos.as_ptr(), filter_size,
@@ -229,7 +229,7 @@ fn ff_uyvytoyuv420_neon(ydst: &mut [u8], udst: &mut [u8], vdst: &mut [u8], src: 
 fn ff_uyvytoyuv422_neon(ydst: &mut [u8], udst: &mut [u8], vdst: &mut [u8], src: &[u8], width: usize, height: usize, lum: usize, chrom: usize, ss: usize);
 
 #[bums::check_mem_safe("output.S", src.as_ptr(), dest.as_mut_ptr(), dst_w, dither.as_ptr(), offset,
-    [src.len() == dst_w + 33, dest.len() == dst_w, dst_w >= 1, dst_w <= 16384, dither.len() == 8, offset <= 7])]
+    [src.len() == dst_w + 33, dest.len() == (dst_w + 7) / 8 * 8, dst_w >= 1, dst_w <= 16384, dither.len() == 8, offset <= 7])]
 fn ff_yuv2plane1_8_neon(src: &[i16], dest: &mut [u8], dst_w: usize, dither: &[u8], offset: usize);
 
 #[bums::check_mem_safe("rgb2rgb_neon.S", ydst.as_mut_ptr(), udst.as_mut_ptr(), vdst.as_mut_ptr(), src.as_ptr(), width, height, lum, chrom, ss,
@@ -241,13 +241,13 @@ fn ff_yuyvtoyuv420_neon(ydst: &mut [u8], udst: &mut [u8], vdst: &mut [u8], src: 
 fn ff_yuyvtoyuv422_neon(ydst: &mut [u8], udst: &mut [u8], vdst: &mut [u8], src: &[u8], width: usize, height: usize, lum: usize, chrom: usize, ss: usize);
 
 #[bums::check_mem_safe("output.S", filter.as_ptr(), filter_size, src.as_ptr(), dest.as_mut_ptr(), dst_w, dither.as_ptr(), offset,
-    [filter.len() == filter_size, src == [&[i16; dst_w + 33]; filter_size], dest.len() == dst_w, dither.len() == 8,
+    [filter.len() == filter_size, src == [&[i16; dst_w + 33]; filter_size], dest.len() == (dst_w + 7) / 8 * 8, dither.len() == 8,
      filter_size >= 1, filter_size <= 64, dst_w >= 1, dst_w <= 16384, offset <= 7])]
 fn ff_yuv2planeX_8_neon(filter: &[i16], filter_size: usize, src: &[*const i16], dest: &mut [u8], dst_w: usize, dither: &[u8], offset: usize);
 
 #[bums::check_mem_safe("output.S", filter.as_ptr(), filter_size, src.as_ptr(), dest.as_mut_ptr(), dst_w, big_endian, output_bits,
     [filter.len() == filter_size, src == [&[i16; dst_w + 33]; filter_size], dest.len() == dst_w,
-     filter_size >= 1, filter_size <= 64, dst_w >= 1, dst_w <= 16384, big_endian <= 1, output_bits >= 9, output_bits <= 14])]
+     filter_size % 2 == 0, filter_size >= 2, filter_size <= 64, dst_w >= 1, dst_w <= 16384, big_endian <= 1, output_bits >= 9, output_bits <= 14])]
 fn ff_yuv2planeX_10_neon(filter: &[i16], filter_size: usize, src: &[*const i16], dest: &mut [u16], dst_w: usize, big_endian: usize, output_bits: usize);
 
 #[bums::check_mem_safe("output.S", is_swapped, chr_dither.as_ptr(), chr_filter.as_ptr(), chr_filter_size, chr_u_src.as_ptr(), chr_v_src.as_ptr(), dest.as_mut_ptr(), chr_dst_w,

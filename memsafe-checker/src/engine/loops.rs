@@ -245,6 +245,8 @@ impl SummaryLedger {
 }
 
 const NEIGHBOUR_GAPS: [i64; 6] = [0, 1, 2, 4, 16, 256];
+const OBLIGATION_RESOURCE_LIMIT: u32 = 5_000_000;
+const OBLIGATION_INCREMENTAL_RESOURCE_LIMIT: u32 = 500_000;
 
 impl<M: Machine> Engine<M> {
     fn record_at<T>(&self, pc: usize, read: impl FnOnce(&PcRecord) -> T) -> T {
@@ -789,7 +791,13 @@ impl<M: Machine> Engine<M> {
             &mut entry,
             &mut current,
         );
-        self.step_past_inner_loops(&mut invariants, &entry, &current);
+        let visits: Vec<&MachineState> = cycle
+            .history
+            .iter()
+            .filter(|record| record.point.pc == pc)
+            .map(|record| &record.point.state)
+            .collect();
+        self.step_past_inner_loops(&mut invariants, &entry, &current, &visits);
         Observation {
             entry,
             current,
@@ -1597,6 +1605,7 @@ impl<M: Machine> Engine<M> {
         observed: &mut [LoopInvariant],
         entry: &MachineState,
         current: &MachineState,
+        visits: &[&MachineState],
     ) {
         for (i, invariant) in observed.iter_mut().enumerate() {
             if *invariant != LoopInvariant::Unknown {
@@ -1606,10 +1615,27 @@ impl<M: Machine> Engine<M> {
             if before.kind == RegisterKind::Number || after.kind == RegisterKind::Number {
                 continue;
             }
-            let mentioned: Vec<String> = [value_of(before), value_of(after)]
+            let carried_before = value_of(before).get_abstracts();
+            let inner_exit_symbols: Vec<String> = self
+                .loops
+                .closed_counters
                 .iter()
-                .flat_map(|e| e.get_abstracts())
+                .filter(|(counter, _)| match counter {
+                    AbstractExpression::Abstract(name) => carried_before.contains(name),
+                    _ => false,
+                })
+                .flat_map(|(_, values)| values.iter().flat_map(|value| value.get_abstracts()))
                 .collect();
+            let moved = Affine::of_register(after)
+                .zip(Affine::of_register(before))
+                .and_then(|(after, before)| after.combine(&before, -1));
+            let mentioned: Vec<String> = match moved {
+                Some(moved) => moved.to_expression().get_abstracts(),
+                None => [value_of(before), value_of(after)]
+                    .iter()
+                    .flat_map(|e| e.get_abstracts())
+                    .collect(),
+            };
             let relevant: Vec<&(AbstractExpression, Vec<AbstractExpression>)> = self
                 .loops
                 .closed_counters
@@ -1621,7 +1647,7 @@ impl<M: Machine> Engine<M> {
                 })
                 .collect();
             if relevant.is_empty() {
-                if let Some(step) = self.step_held_by_invariant_symbols(i, entry, current) {
+                if let Some(step) = self.step_held_by_invariant_symbols(i, entry, current, visits) {
                     log::info!("x{i} steps by {step}");
                     *invariant = LoopInvariant::Linear(step);
                 }
@@ -1651,9 +1677,12 @@ impl<M: Machine> Engine<M> {
                 };
                 let settled_before = settle(value_of(before));
                 let settled_after = settle(value_of(after));
-                if let Some(step) =
-                    self.proven_settled_step(before, after, &settled_before, &settled_after)
-                {
+                if let Some(step) = self.proven_settled_step(
+                    (before, after),
+                    &settled_before,
+                    &settled_after,
+                    &inner_exit_symbols,
+                ) {
                     log::info!("x{i} steps by {step} once inner loop counters are settled");
                     *invariant = LoopInvariant::Linear(step);
                     break;
@@ -1667,6 +1696,7 @@ impl<M: Machine> Engine<M> {
         register: usize,
         entry: &MachineState,
         current: &MachineState,
+        visits: &[&MachineState],
     ) -> Option<AbstractExpression> {
         let (before, after) = (&entry.0[register], &current.0[register]);
         let moved = Affine::of_register(after)?.combine(&Affine::of_register(before)?, -1)?;
@@ -1712,11 +1742,26 @@ impl<M: Machine> Engine<M> {
                 .iter()
                 .all(|symbol| !carried_anywhere(symbol)),
         });
-        if !invariant {
+        let step = moved.to_expression();
+        if !self.proves_step(before, after, &step) {
             return None;
         }
-        let step = moved.to_expression();
-        self.proves_step(before, after, &step).then_some(step)
+        (invariant || self.repeated_on_every_visit(register, visits, after, &step)).then_some(step)
+    }
+
+    fn repeated_on_every_visit(
+        &self,
+        register: usize,
+        visits: &[&MachineState],
+        current: &RegisterValue,
+        step: &AbstractExpression,
+    ) -> bool {
+        let mut walk: Vec<&RegisterValue> = visits.iter().map(|state| &state.0[register]).collect();
+        walk.push(current);
+        walk.len() > SUMMARY_ITERATION as usize
+            && walk
+                .windows(2)
+                .all(|pair| self.proves_step(pair[0], pair[1], step))
     }
 
     fn anchor_past_inner_loops(
@@ -1800,10 +1845,10 @@ impl<M: Machine> Engine<M> {
 
     fn proven_settled_step(
         &self,
-        before: &RegisterValue,
-        after: &RegisterValue,
+        (before, after): (&RegisterValue, &RegisterValue),
         settled_before: &AbstractExpression,
         settled_after: &AbstractExpression,
+        inner_exit_symbols: &[String],
     ) -> Option<AbstractExpression> {
         let (settled_before, settled_after) =
             (Affine::of(settled_before)?, Affine::of(settled_after)?);
@@ -1816,10 +1861,10 @@ impl<M: Machine> Engine<M> {
             settled_after.to_expression().get_abstracts(),
         );
         let step = moved.to_expression();
-        let held_throughout = step
-            .get_abstracts()
-            .iter()
-            .all(|symbol| known_before.contains(symbol) && known_after.contains(symbol));
+        let held_throughout = step.get_abstracts().iter().all(|symbol| {
+            known_after.contains(symbol)
+                && (known_before.contains(symbol) || inner_exit_symbols.contains(symbol))
+        });
         if !held_throughout {
             return None;
         }
@@ -2326,11 +2371,17 @@ impl<M: Machine> Engine<M> {
                             LoopInvariant::Linear(AbstractExpression::Immediate(step))
                                 if *step != 0 =>
                             {
-                                leaf_path(&record.point.condition, value).map(|path| Ghost {
-                                    path,
-                                    value: value.clone(),
-                                    step: *step,
-                                })
+                                [value.clone(), word_view(value)]
+                                    .into_iter()
+                                    .find_map(|tested| {
+                                        leaf_path(&record.point.condition, &tested)
+                                            .map(|path| (path, tested))
+                                    })
+                                    .map(|(path, value)| Ghost {
+                                        path,
+                                        value,
+                                        step: *step,
+                                    })
                             }
                             _ => None,
                         })
@@ -2705,6 +2756,17 @@ impl<M: Machine> Engine<M> {
     pub(super) fn proves(&self, fact: AbstractComparison) -> bool {
         comparison_to_ast(fact).is_some_and(|c| {
             self.computer.solver().check_assumptions(&[c.not()]) == SatResult::Unsat
+        })
+    }
+
+    fn proves_within_budget(&self, fact: AbstractComparison) -> bool {
+        comparison_to_ast(fact).is_some_and(|c| {
+            refuted_within(
+                self.computer.solver(),
+                &c.not(),
+                OBLIGATION_INCREMENTAL_RESOURCE_LIMIT,
+                OBLIGATION_RESOURCE_LIMIT,
+            )
         })
     }
 
@@ -3109,9 +3171,18 @@ impl<M: Machine> Engine<M> {
             expression.clone()
         };
         let counter = LoopCounter::for_loop(active.id).expression();
-        if let (Some(left), Some(right)) = (Affine::of(&left_by.left), Affine::of(&left_by.right))
-            && let Some(distance) = left.combine(&right, -1)
-        {
+        let distance_to_exit = |left: &AbstractExpression, right: &AbstractExpression| {
+            Affine::of(left)?
+                .combine(&Affine::of(right)?, -1)
+                .filter(|distance| distance.coefficient(&counter) != 0)
+        };
+        let distance = distance_to_exit(&left_by.left, &left_by.right).or_else(|| {
+            distance_to_exit(
+                &without_word_wraps(&left_by.left),
+                &without_word_wraps(&left_by.right),
+            )
+        });
+        if let Some(distance) = distance {
             let values: Vec<AbstractExpression> =
                 exit_window(&left_by.op, distance.coefficient(&counter))
                     .into_iter()
@@ -3169,17 +3240,16 @@ impl<M: Machine> Engine<M> {
         current: &MachineState,
     ) -> Vec<Obligation> {
         let mut broken = Vec::new();
-        let ghost =
-            active
-                .ghost_checks
-                .iter()
-                .find(|(path, expected)| match condition_side(expression, path) {
-                    Some(AbstractExpression::Register(now)) => !self.proves(
-                        AbstractComparison::new("==", value_of(now), expected.clone()),
-                    ),
-                    _ => true,
-                })
-                .map(|(path, _)| Obligation::Ghost(path.clone()));
+        let ghost = active
+            .ghost_checks
+            .iter()
+            .find(|(path, expected)| match condition_side(expression, path) {
+                Some(AbstractExpression::Register(now)) => !self.proves_within_budget(
+                    AbstractComparison::new("==", value_of(now), expected.clone()),
+                ),
+                _ => true,
+            })
+            .map(|(path, _)| Obligation::Ghost(path.clone()));
         let operand = || {
             active
                 .operand_checks
@@ -3187,7 +3257,7 @@ impl<M: Machine> Engine<M> {
                 .find(|(path, i)| match condition_side(expression, path) {
                     Some(AbstractExpression::Register(now)) => {
                         **now != current.0[*i]
-                            && !self.proves(AbstractComparison::new(
+                            && !self.proves_within_budget(AbstractComparison::new(
                                 "==",
                                 value_of(now),
                                 value_of(&current.0[*i]),
@@ -3364,5 +3434,23 @@ impl<M: Machine> Engine<M> {
             relied_on: self.loops.relied_on.clone(),
             retry: self.loops.attempts.get(&active.pc).cloned(),
         });
+    }
+}
+
+fn without_word_wraps(e: &AbstractExpression) -> AbstractExpression {
+    match e {
+        AbstractExpression::Register(register) if register.base.is_some() => {
+            without_word_wraps(&value_of(register))
+        }
+        AbstractExpression::Expression(_, inner, _) if is_narrowed(e) => without_word_wraps(inner),
+        AbstractExpression::Expression(op, inner, width)
+            if (op == "sext" || op == "zext") && **width == AbstractExpression::Immediate(32) =>
+        {
+            without_word_wraps(inner)
+        }
+        AbstractExpression::Expression(op, left, right) => {
+            generate_expression(op, without_word_wraps(left), without_word_wraps(right))
+        }
+        other => other.clone(),
     }
 }

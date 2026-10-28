@@ -763,6 +763,10 @@ fn the_second_side_of_a_fork_in_a_loop_keeps_the_loop_facts() {
 }
 
 fn divided_index(scale: i64) -> Result<(), String> {
+    divided_index_of_a_region_of_length(scale, "n")
+}
+
+fn divided_index_of_a_region_of_length(scale: i64, region_length: &str) -> Result<(), String> {
     init();
     let program = format!(
         "start:
@@ -776,8 +780,9 @@ fn divided_index(scale: i64) -> Result<(), String> {
     );
     let mut engine = bums::engine::ExecutionEngine::new(program.lines().map(str::trim));
     engine.add_abstract_from(0, "buf");
-    engine.add_region(RegionType::READ, "buf", abstract_of("n"));
+    engine.add_region(RegionType::READ, "buf", abstract_of(region_length));
     engine.add_abstract_from(1, "n");
+    engine.add_invariant(fact("==", abstract_of(region_length), abstract_of("n")));
     engine.add_invariant(fact(">=", abstract_of("n"), imm(1)));
     engine.add_invariant(fact("<=", abstract_of("n"), imm(1 << 30)));
     engine.start("start").map_err(|e| e.to_string())
@@ -787,6 +792,12 @@ fn divided_index(scale: i64) -> Result<(), String> {
 fn umulh_is_the_high_half_of_the_product() {
     assert_eq!(divided_index(7), Ok(()));
     assert!(divided_index(8).is_err());
+}
+
+#[test]
+fn umulh_of_a_count_equal_to_the_region_length_is_the_high_half_of_the_product() {
+    assert_eq!(divided_index_of_a_region_of_length(7, "buf_len"), Ok(()));
+    assert!(divided_index_of_a_region_of_length(8, "buf_len").is_err());
 }
 
 fn immediate_minus_register(offset: i64) -> Result<(), String> {

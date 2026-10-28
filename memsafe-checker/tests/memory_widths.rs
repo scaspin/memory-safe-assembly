@@ -221,3 +221,65 @@ fn ldurb_zero_extends() {
         128
     );
 }
+
+fn packed_field_index(extract: &str, bounded: &[(i64, i64)]) -> Result<(), String> {
+    init();
+    let program: Vec<String> = [
+        "start:",
+        "add x0, x0, #32",
+        "ldr x4, [x1]",
+        extract,
+        "ldrb w6, [x0, x5]",
+        "ret",
+    ]
+    .iter()
+    .map(|line| line.to_string())
+    .collect();
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "table");
+    engine.add_region(RegionType::READ, "table", AbstractExpression::Immediate(64));
+    engine.add_abstract_from(1, "fields");
+    engine.add_region(RegionType::READ, "fields", AbstractExpression::Immediate(8));
+    for index in 0..4 {
+        engine.add_element_fact("fields", index, 2, format!("fields[{index}]"));
+    }
+    for &(index, bound) in bounded {
+        let field = AbstractExpression::Abstract(format!("fields[{index}]"));
+        for (op, value) in [(">=", -bound), ("<=", bound)] {
+            engine.add_invariant(AbstractComparison::new(
+                op,
+                field.clone(),
+                AbstractExpression::Immediate(value),
+            ));
+        }
+    }
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_wide_load_of_signed_halfword_elements_keeps_each_field() {
+    let every_field = [(0, 31), (1, 31), (2, 31), (3, 31)];
+    for extract in [
+        "sxth x5, w4",
+        "sbfx x5, x4, #16, #16",
+        "sbfx x5, x4, #32, #16",
+        "asr x5, x4, #48",
+    ] {
+        assert_eq!(
+            packed_field_index(extract, &every_field),
+            Ok(()),
+            "{extract}"
+        );
+    }
+}
+
+#[test]
+fn a_wide_load_field_one_past_its_bound_is_rejected() {
+    let every_field = [(0, 32), (1, 32), (2, 32), (3, 32)];
+    for extract in ["sxth x5, w4", "sbfx x5, x4, #16, #16", "asr x5, x4, #48"] {
+        assert!(
+            packed_field_index(extract, &every_field).is_err(),
+            "{extract} accepted an index of 32 past a 64-byte table's middle"
+        );
+    }
+}
