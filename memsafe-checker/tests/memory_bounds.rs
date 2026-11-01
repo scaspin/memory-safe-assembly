@@ -345,3 +345,51 @@ fn read_only_data_is_not_written() {
     assert!(!writing(".section .rodata"));
     assert!(writing(".data"));
 }
+
+fn masked_rotation_through_a_table(
+    align: &str,
+    table_quads: usize,
+    rounds: i64,
+) -> Result<(), String> {
+    init();
+    let mut program = vec![align.to_string(), "table:".to_string()];
+    program.extend(std::iter::repeat_n(".quad 7".to_string(), table_quads));
+    program.extend([
+        "start:".to_string(),
+        "adr x11,table".to_string(),
+        "add x11,x11,#16".to_string(),
+        format!("mov w8,#{rounds}"),
+        "loop:".to_string(),
+        "ld1 {v0.16b},[x11],#16".to_string(),
+        "and x11,x11,#-65".to_string(),
+        "subs w8,w8,#1".to_string(),
+        "b.ne loop".to_string(),
+        "ret".to_string(),
+    ]);
+    bums::engine::ExecutionEngine::new(program)
+        .start("start".to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_mask_wrapping_a_pointer_inside_an_aligned_table_keeps_it_in_bounds() {
+    assert_eq!(masked_rotation_through_a_table(".align 7", 8, 40), Ok(()));
+}
+
+#[test]
+fn a_masked_rotation_past_a_short_table_is_rejected() {
+    let verdict = masked_rotation_through_a_table(".align 7", 6, 40);
+    assert!(
+        verdict.as_ref().is_err_and(|e| e.contains("(ld1): read")),
+        "{verdict:?}"
+    );
+}
+
+#[test]
+fn a_masked_rotation_through_a_weakly_aligned_table_is_rejected() {
+    let verdict = masked_rotation_through_a_table(".align 3", 8, 40);
+    assert!(
+        verdict.as_ref().is_err_and(|e| e.contains("(ld1): read")),
+        "{verdict:?}"
+    );
+}

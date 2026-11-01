@@ -266,7 +266,7 @@ impl Machine for X86_64 {
         self.unknown_counter - 1
     }
 
-    fn substitute_symbol(&mut self, symbol: &str, value: i64) {
+    fn substitute_symbol(&mut self, symbol: &str, value: &AbstractExpression) {
         X86_64::substitute_symbol(self, symbol, value)
     }
 

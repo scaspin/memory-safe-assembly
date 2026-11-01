@@ -3,7 +3,7 @@ use crate::cargo;
 use crate::discover::{self, CfgContext, Found};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
@@ -186,11 +186,13 @@ fn log_tail(log: &Path) -> String {
 }
 
 fn reported_outcome(log: &Path) -> Option<(Status, String)> {
-    let tail = log_tail(log);
-    let line = tail
-        .lines()
-        .rev()
-        .find(|line| line.starts_with(RESULT_MARKER))?;
+    let file = File::open(log).ok()?;
+    let line = BufReader::new(file)
+        .split(b'\n')
+        .map_while(Result::ok)
+        .filter(|line| line.starts_with(RESULT_MARKER.as_bytes()))
+        .last()?;
+    let line = String::from_utf8_lossy(&line);
     let mut fields = line.splitn(3, '\t').skip(1);
     let status = Status::from_name(fields.next()?)?;
     Some((status, fields.next().unwrap_or_default().to_string()))

@@ -973,7 +973,7 @@ impl ARMCORTEXA {
         false
     }
 
-    fn aligned_offset(&self, e: &AbstractExpression) -> Option<(String, i64)> {
+    pub(super) fn aligned_offset(&self, e: &AbstractExpression) -> Option<(String, i64)> {
         match e {
             AbstractExpression::Abstract(name) if self.memory.contains_key(name) => {
                 Some((name.clone(), 0))

@@ -344,10 +344,20 @@ impl X86_64 {
         }
     }
 
-    pub fn substitute_symbol(&mut self, symbol: &str, value: i64) {
+    pub fn substitute_symbol(&mut self, symbol: &str, value: &AbstractExpression) {
         for i in 0..GPR_COUNT + VECTOR_COUNT + MASK_COUNT {
             if let Some(register) = respelled(&self.register_at(i), symbol, value) {
                 self.set_register_at(i, register);
+            }
+        }
+        for flag in [
+            &mut self.zero,
+            &mut self.neg,
+            &mut self.carry,
+            &mut self.overflow,
+        ] {
+            if let Some(FlagValue::Abstract(comparison)) = flag {
+                *comparison = comparison_respelled(comparison, symbol, value);
             }
         }
     }

@@ -226,6 +226,31 @@ impl ARMCORTEXA {
         self.set_register(destination, RegisterKind::RegisterBase, Some(bounded), 0);
     }
 
+    pub fn fold_mask_within_aligned_region(&mut self, instruction: &Instruction) {
+        let Some(destination @ Operand::Register(RePrefix::X, _)) = instruction.operands.first()
+        else {
+            return;
+        };
+        let value = self.get_register(destination);
+        if value.kind != RegisterKind::RegisterBase || value.offset != 0 {
+            return;
+        }
+        let Some(base @ AbstractExpression::Expression(op, _, _)) = &value.base else {
+            return;
+        };
+        if op != "&" {
+            return;
+        }
+        if let Some((region, offset)) = self.aligned_offset(base) {
+            self.set_register(
+                destination,
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(region)),
+                offset,
+            );
+        }
+    }
+
     pub fn realign_below_stack_pointer(&mut self, instruction: &Instruction) {
         let Some(destination @ Operand::Register(RePrefix::X | RePrefix::Sp, _)) =
             instruction.operands.first()

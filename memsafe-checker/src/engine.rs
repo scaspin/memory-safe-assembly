@@ -118,7 +118,9 @@ fn facts_about_live_symbols(facts: Vec<String>, state: &str) -> Vec<String> {
         .collect()
 }
 
-#[derive(Default)]
+type DeadRegistersByContext = BTreeMap<(usize, bool), Rc<Vec<usize>>>;
+
+#[derive(Default, Clone)]
 struct Explored {
     finished: BTreeMap<String, bool>,
     bytes: usize,
@@ -254,7 +256,7 @@ pub struct Engine<M: Machine> {
     select_history: Vec<usize>,
     fail_fast: bool,
     summaries: Rc<RefCell<Vec<Summary>>>,
-    dead_registers: Rc<RefCell<BTreeMap<usize, Rc<Vec<usize>>>>>,
+    dead_registers: Rc<RefCell<DeadRegistersByContext>>,
     next_loop_id: Rc<Cell<usize>>,
     steps_left: Rc<Cell<usize>>,
     explored: Rc<RefCell<Explored>>,
@@ -264,6 +266,7 @@ pub struct Engine<M: Machine> {
     suspended: Vec<SuspendedCall>,
     caller_jump_visits: Vec<BTreeMap<usize, usize>>,
     ledger: Rc<RefCell<SummaryLedger>>,
+    symbolic_trial: Option<(usize, String, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -352,6 +355,7 @@ impl<M: Machine> Engine<M> {
             suspended: Vec::new(),
             caller_jump_visits: Vec::new(),
             ledger: Rc::default(),
+            symbolic_trial: None,
         }
     }
 
@@ -547,7 +551,7 @@ impl<M: Machine> Engine<M> {
             let mut branch = self.fork();
             let pinned = ast::Int::new_const(symbol.to_string()).eq(ast::Int::from_i64(*value));
             branch.computer.solver().assert(&pinned);
-            branch.substitute_symbol(symbol, *value);
+            branch.substitute_symbol(symbol, &AbstractExpression::Immediate(*value));
             if let Err(e) = branch.run(pc, depth + 1) {
                 let text = e.to_string();
                 if !failures.contains(&text) {
@@ -560,6 +564,43 @@ impl<M: Machine> Engine<M> {
         } else {
             Err(Error::other(failures.join("; ")))
         }
+    }
+
+    fn split_unless_symbolic_suffices(
+        &mut self,
+        symbol: &str,
+        values: &[i64],
+        pc: usize,
+        depth: usize,
+    ) -> std::io::Result<BranchOutcome> {
+        let mut symbolic = self.fork_with_private_bookkeeping();
+        symbolic.symbolic_trial = Some((pc, symbol.to_string(), self.instructions_run + 1));
+        match symbolic.run(pc, depth + 1) {
+            Ok(()) => {
+                self.adopt_bookkeeping_of(&symbolic);
+                Ok(BranchOutcome::BothExplored)
+            }
+            Err(e) => {
+                log::info!("line {pc}: keeping {symbol} symbolic failed ({e}); splitting instead");
+                self.split_on(symbol, values, pc, depth)
+            }
+        }
+    }
+
+    fn fork_with_private_bookkeeping(&self) -> Engine<M> {
+        let mut forked = self.fork();
+        forked.loop_history = Rc::new(RefCell::new(self.loop_history.borrow().clone()));
+        forked.summaries = Rc::new(RefCell::new(self.summaries.borrow().clone()));
+        forked.explored = Rc::new(RefCell::new(self.explored.borrow().clone()));
+        forked.ledger = Rc::new(RefCell::new(self.ledger.borrow().clone()));
+        forked
+    }
+
+    fn adopt_bookkeeping_of(&self, other: &Engine<M>) {
+        self.loop_history.replace(other.loop_history.take());
+        self.summaries.replace(other.summaries.take());
+        self.explored.replace(other.explored.take());
+        self.ledger.replace(other.ledger.take());
     }
 
     fn split_cases(
@@ -1256,10 +1297,24 @@ impl<M: Machine> Engine<M> {
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
         if self.loops.active.is_empty()
-            && !self.inside_static_loop(pc)
             && let Some((symbol, values)) = self.concrete_split(&condition)
         {
-            return self.split_on(&symbol, &values, pc, depth);
+            if !self.inside_static_loop(pc) {
+                return self.split_on(&symbol, &values, pc, depth);
+            }
+            match &self.symbolic_trial {
+                None => return self.split_unless_symbolic_suffices(&symbol, &values, pc, depth),
+                Some((trial_pc, trial_symbol, started))
+                    if *trial_pc == pc
+                        && *trial_symbol == symbol
+                        && self.instructions_run > *started =>
+                {
+                    return Err(Error::other(format!(
+                        "line {pc}: the loop unrolls on {symbol} while it stays symbolic"
+                    )));
+                }
+                Some(_) => {}
+            }
         }
         let decision = self.evaluate_branch_condition(pc, depth, &mut condition);
         self.follow_branch(pc, condition, decision, jump_dest, depth)
@@ -1527,7 +1582,7 @@ impl<M: Machine> Engine<M> {
             AbstractExpression::Immediate(value),
         )) {
             log::info!("{symbol} is {value} on this path");
-            self.substitute_symbol(&symbol, value);
+            self.substitute_symbol(&symbol, &AbstractExpression::Immediate(value));
         }
     }
 
@@ -1537,10 +1592,10 @@ impl<M: Machine> Engine<M> {
             AbstractExpression::Abstract(symbol.to_string()),
             AbstractExpression::Immediate(value),
         ));
-        self.substitute_symbol(symbol, value);
+        self.substitute_symbol(symbol, &AbstractExpression::Immediate(value));
     }
 
-    fn substitute_symbol(&mut self, symbol: &str, value: i64) {
+    fn substitute_symbol(&mut self, symbol: &str, value: &AbstractExpression) {
         self.computer.substitute_symbol(symbol, value);
         for record in &mut self.jump_history {
             for register in &mut record.point.state.0 {
@@ -1548,6 +1603,7 @@ impl<M: Machine> Engine<M> {
                     *register = respelled;
                 }
             }
+            record.point.condition = comparison_respelled(&record.point.condition, symbol, value);
         }
     }
 

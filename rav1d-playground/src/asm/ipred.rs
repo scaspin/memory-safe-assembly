@@ -614,7 +614,7 @@ fn pal_pred_16bpc_neon(
 );
 
 #[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), stride, topleft.as_ptr(), width, height, dxy, max_base_xy,
-    [dst.len() == stride * height, topleft.len() == 2 * width + 1, max_base_xy + 8 <= topleft.len(), width >= 4, height >= 4, width <= 64, height <= 64, 64 % height == 0, stride >= width])]
+    [dst.len() == stride * height, topleft.len() == 64 + 64 + (64 + 15) * 2 + 16, max_base_xy + 1 <= width + height, max_base_xy + 1 >= width, width >= 4, height >= 4, width <= 64, height <= 64, 64 % height == 0, 64 % width == 0, stride >= width, dxy >= 1, dxy <= 1023])]
 fn ipred_z1_fill1_16bpc_neon(
     dst: &mut [u16],
     stride: usize,

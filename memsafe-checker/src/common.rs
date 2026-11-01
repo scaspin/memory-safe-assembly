@@ -601,6 +601,11 @@ pub fn generate_expression(
             return (**x).clone();
         }
     }
+    if op == "*"
+        && let Some(folded) = with_constant_factor_outside(&a, &b)
+    {
+        return folded;
+    }
     if op == "^"
         && let Some(cancelled) = xor_cancelled(&a, &b)
     {
@@ -740,7 +745,49 @@ fn finer_residue_of(term: &AbstractExpression, modulus: i64) -> Option<AbstractE
             }
             _ => None,
         },
-        _ => None,
+        _ => match multiplier_of(term) {
+            Some((residue, scale)) => finer_residue_of(residue, modulus)
+                .map(|inner| generate_expression("*", inner, AbstractExpression::Immediate(scale))),
+            None => None,
+        },
+    }
+}
+
+fn with_constant_factor_outside(
+    a: &AbstractExpression,
+    b: &AbstractExpression,
+) -> Option<AbstractExpression> {
+    match (a, b) {
+        (AbstractExpression::Immediate(k), _) | (_, AbstractExpression::Immediate(k))
+            if !matches!(
+                (a, b),
+                (
+                    AbstractExpression::Immediate(_),
+                    AbstractExpression::Immediate(_)
+                )
+            ) =>
+        {
+            let scaled = if matches!(a, AbstractExpression::Immediate(_)) {
+                b
+            } else {
+                a
+            };
+            let (inner, c) = multiplier_of(scaled)?;
+            Some(generate_expression(
+                "*",
+                inner.clone(),
+                AbstractExpression::Immediate(c.checked_mul(*k)?),
+            ))
+        }
+        _ => {
+            let (inner, c) = multiplier_of(b).or_else(|| multiplier_of(a))?;
+            let other = if multiplier_of(b).is_some() { a } else { b };
+            Some(generate_expression(
+                "*",
+                generate_expression("*", other.clone(), inner.clone()),
+                AbstractExpression::Immediate(c),
+            ))
+        }
     }
 }
 
@@ -2413,5 +2460,32 @@ mod cancellation_tests {
     fn cancellation_does_not_reach_across_a_multiply() {
         let p = generate_expression("*", sub(sym("x"), sym("x")), sym("b"));
         assert_eq!(shown(p), "0 * b");
+    }
+}
+
+pub fn subexpressions(e: &AbstractExpression) -> Vec<AbstractExpression> {
+    let mut found = vec![e.clone()];
+    if let AbstractExpression::Expression(_, left, right) = e {
+        found.extend(subexpressions(left));
+        found.extend(subexpressions(right));
+    }
+    found
+}
+
+pub fn replaced(
+    e: &AbstractExpression,
+    target: &AbstractExpression,
+    with: &AbstractExpression,
+) -> AbstractExpression {
+    if e == target {
+        return with.clone();
+    }
+    match e {
+        AbstractExpression::Expression(op, left, right) => generate_expression(
+            op,
+            replaced(left, target, with),
+            replaced(right, target, with),
+        ),
+        other => other.clone(),
     }
 }

@@ -67,6 +67,12 @@ impl Instruction {
                 _ => 0,
             };
         }
+        let moves_a_lane_into_a_register = self.ty == InstructionType::SIMDManagement
+            && matches!(self.opcode.as_str(), "umov" | "smov" | "mov" | "fmov")
+            && matches!(self.operands.first(), Some(Operand::Register(prefix, _)) if *prefix != RePrefix::Sp);
+        if moves_a_lane_into_a_register {
+            return 1;
+        }
         match self.register_written() {
             Some(Some(_)) => 1,
             _ => 0,
@@ -121,6 +127,10 @@ impl MachineInstruction for Instruction {
 
     fn label(&self) -> Option<&str> {
         self.is_label().then_some(self.opcode.as_str())
+    }
+
+    fn call_target(&self) -> Option<&str> {
+        (self.opcode == "bl").then(|| self.branch_label()).flatten()
     }
 
     fn opcode(&self) -> &str {
@@ -396,7 +406,7 @@ impl Machine for ARMCORTEXA {
         self.next_carry()
     }
 
-    fn substitute_symbol(&mut self, symbol: &str, value: i64) {
+    fn substitute_symbol(&mut self, symbol: &str, value: &AbstractExpression) {
         ARMCORTEXA::substitute_symbol(self, symbol, value)
     }
 

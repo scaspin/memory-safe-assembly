@@ -444,6 +444,8 @@ impl LoopCounter {
     }
 }
 
+pub const DERIVED_LEADER: &str = "derived_leader";
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoopInvariant {
     Fixed,
@@ -451,6 +453,7 @@ pub enum LoopInvariant {
     AtMost(i64),
     Within(i64),
     Tracks(usize, i64),
+    Derived(usize, AbstractExpression),
     NonDecreasing,
     NonIncreasing,
     Geometric(i64),

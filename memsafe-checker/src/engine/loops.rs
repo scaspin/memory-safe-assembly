@@ -169,7 +169,7 @@ impl<M: Machine> PathLoops<M> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(super) struct PcRecord {
     failures: usize,
     refutations: usize,
@@ -182,7 +182,7 @@ pub(super) struct PcRecord {
     select_refuted: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(super) struct LoopHistory {
     records: BTreeMap<usize, PcRecord>,
 }
@@ -209,7 +209,7 @@ impl LoopBudget {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(super) struct SummaryLedger {
     next_instance: usize,
     failures: Vec<FailedDischarge>,
@@ -221,6 +221,7 @@ enum Verdict {
     Refuted { retry: Option<LoopAttempt> },
 }
 
+#[derive(Clone)]
 struct FailedDischarge {
     instance: usize,
     relied_on: Vec<usize>,
@@ -682,6 +683,90 @@ impl<M: Machine> Engine<M> {
                 }
             }
         }
+        self.derive_from_leaders(observed, entry, current);
+    }
+
+    fn derive_from_leaders(
+        &self,
+        observed: &mut [LoopInvariant],
+        entry: &[RegisterValue],
+        current: &[RegisterValue],
+    ) {
+        let registers = observed.len().min(entry.len()).min(current.len());
+        for i in 0..registers {
+            if observed[i] != LoopInvariant::Unknown
+                || entry[i].kind != RegisterKind::RegisterBase
+                || current[i].kind != RegisterKind::RegisterBase
+                || self.computer.carries_region(&entry[i])
+                || self.computer.carries_region(&current[i])
+            {
+                continue;
+            }
+            let derived = (0..registers).find_map(|j| {
+                if j == i || !matches!(observed[j], LoopInvariant::Linear(_)) {
+                    return None;
+                }
+                self.template_following(&entry[i], &current[i], &entry[j], &current[j])
+                    .map(|template| (j, template))
+            });
+            if let Some((j, template)) = derived {
+                log::info!("x{i} is {template} of x{j} at every visit");
+                observed[i] = LoopInvariant::Derived(j, template);
+            }
+        }
+    }
+
+    fn follows(
+        &self,
+        template: &AbstractExpression,
+        leader: &RegisterValue,
+        follower: &RegisterValue,
+    ) -> bool {
+        if follower.kind != RegisterKind::RegisterBase {
+            return false;
+        }
+        let rebuilt = substitute(template, DERIVED_LEADER, &value_of(leader));
+        let held = value_of(follower);
+        rebuilt == held
+            || (is_translatable(&rebuilt)
+                && is_translatable(&held)
+                && self.proves(AbstractComparison::new("==", rebuilt, held)))
+    }
+
+    fn template_following(
+        &self,
+        follower_then: &RegisterValue,
+        follower_now: &RegisterValue,
+        leader_then: &RegisterValue,
+        leader_now: &RegisterValue,
+    ) -> Option<AbstractExpression> {
+        let then = value_of(follower_then);
+        let now = value_of(follower_now);
+        let leader_then = value_of(leader_then);
+        let leader_now = value_of(leader_now);
+        if then.size() > MAX_EXPRESSION_NODES || !is_translatable(&now) {
+            return None;
+        }
+        let placeholder = AbstractExpression::Abstract(DERIVED_LEADER.to_string());
+        subexpressions(&then)
+            .into_iter()
+            .filter(|node| !matches!(node, AbstractExpression::Immediate(_)) && *node != then)
+            .find_map(|node| {
+                let offset = generate_expression("-", node.clone(), leader_then.clone());
+                if offset.size() > MAX_EXPRESSION_NODES {
+                    return None;
+                }
+                let template = replaced(
+                    &then,
+                    &node,
+                    &generate_expression("+", placeholder.clone(), offset),
+                );
+                let reproduces = |leader: &AbstractExpression, follower: &AbstractExpression| {
+                    substitute(&template, DERIVED_LEADER, leader) == *follower
+                };
+                (reproduces(&leader_then, &then) && reproduces(&leader_now, &now))
+                    .then_some(template)
+            })
     }
 
     fn try_summarize(
@@ -2158,21 +2243,26 @@ impl<M: Machine> Engine<M> {
         &self,
         from: usize,
         register: usize,
-        has_calls: bool,
+        returning_ends_the_function: bool,
     ) -> bool {
         let mut seen = BTreeSet::new();
-        let mut pending = self.static_successors(from).unwrap_or_default();
+        let mut pending: Vec<(usize, Vec<usize>)> = self
+            .static_successors(from)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|pc| (pc, Vec::new()))
+            .collect();
         if pending.is_empty() {
             return false;
         }
-        while let Some(pc) = pending.pop() {
-            if !seen.insert(pc) {
+        while let Some((pc, return_sites)) = pending.pop() {
+            if !seen.insert((pc, return_sites.clone())) {
                 continue;
             }
             let Some(instruction) = self.program.code.get(pc) else {
                 return false;
             };
-            if matches!(instruction.flow(), Flow::Call | Flow::Indirect) {
+            if instruction.flow() == Flow::Indirect {
                 return false;
             }
             if instruction.overwrites_without_reading(register) {
@@ -2181,13 +2271,36 @@ impl<M: Machine> Engine<M> {
             if instruction.mentions(register) {
                 return false;
             }
+            if instruction.flow() == Flow::Call {
+                let Some(callee) = instruction
+                    .call_target()
+                    .and_then(|label| self.resolve_jump_target(label, pc).ok())
+                else {
+                    return false;
+                };
+                if return_sites.len() >= MAX_CALL_DEPTH {
+                    return false;
+                }
+                let mut inside = return_sites;
+                inside.push(pc + 1);
+                pending.push((callee, inside));
+                continue;
+            }
             match self.static_successors(pc) {
                 Some(successors) if successors.is_empty() => {
-                    if has_calls {
+                    if instruction.flow() == Flow::Return
+                        && let Some((&site, outer)) = return_sites.split_last()
+                    {
+                        pending.push((site, outer.to_vec()));
+                    } else if !returning_ends_the_function {
                         return false;
                     }
                 }
-                Some(successors) => pending.extend(successors),
+                Some(successors) => pending.extend(
+                    successors
+                        .into_iter()
+                        .map(|next| (next, return_sites.clone())),
+                ),
                 None => return false,
             }
         }
@@ -2195,21 +2308,25 @@ impl<M: Machine> Engine<M> {
     }
 
     fn dead_after(&self, pc: usize) -> Rc<Vec<usize>> {
-        if let Some(known) = self.dead_registers.borrow().get(&pc) {
-            return Rc::clone(known);
-        }
         let has_calls = self
             .program
             .code
             .iter()
             .any(|instruction| instruction.flow() == Flow::Call);
+        let returning_ends_the_function = !has_calls || self.suspended.is_empty();
+        let key = (pc, returning_ends_the_function);
+        if let Some(known) = self.dead_registers.borrow().get(&key) {
+            return Rc::clone(known);
+        }
         let dead: Vec<usize> = (0..M::Instruction::TRACKED_REGISTERS)
-            .filter(|&register| self.is_overwritten_before_any_read(pc, register, has_calls))
+            .filter(|&register| {
+                self.is_overwritten_before_any_read(pc, register, returning_ends_the_function)
+            })
             .collect();
         let dead = Rc::new(dead);
         self.dead_registers
             .borrow_mut()
-            .insert(pc, Rc::clone(&dead));
+            .insert(key, Rc::clone(&dead));
         dead
     }
 
@@ -3138,6 +3255,13 @@ impl<M: Machine> Engine<M> {
             {
                 observed[i] = recorded.clone();
             }
+            if let LoopInvariant::Derived(j, template) = recorded
+                && observed[i] != *recorded
+                && self.follows(template, &before.0[*j], &before.0[i])
+                && self.follows(template, &after.0[*j], &after.0[i])
+            {
+                observed[i] = recorded.clone();
+            }
         }
         let broken = self.broken_obligations(&active, &expression, &observed, &current);
         if !broken.is_empty() {
@@ -3198,7 +3322,7 @@ impl<M: Machine> Engine<M> {
                     .collect();
             if !values.is_empty() {
                 log::info!("{} leaves with its counter at one of {values:?}", active.id);
-                self.loops.closed_counters.push((counter, values));
+                self.loops.closed_counters.push((counter.clone(), values));
             }
         }
         let mut kept: Vec<ast::Bool> = summary_fact_to_ast(&left_by).into_iter().collect();
@@ -3228,8 +3352,40 @@ impl<M: Machine> Engine<M> {
                 active.pc
             );
             self.path_ends = true;
+        } else {
+            self.settle_closed_counter(&counter);
         }
         Discharge::Closed(!active.entry_decision)
+    }
+
+    fn settle_closed_counter(&mut self, counter: &AbstractExpression) {
+        let AbstractExpression::Abstract(name) = counter else {
+            return;
+        };
+        let Some((_, values)) = self
+            .loops
+            .closed_counters
+            .last()
+            .filter(|(closed, values)| closed == counter && values.len() > 1)
+        else {
+            return;
+        };
+        let Some(value) = values
+            .iter()
+            .find(|value| {
+                self.proves(AbstractComparison::new(
+                    "==",
+                    counter.clone(),
+                    (*value).clone(),
+                ))
+            })
+            .cloned()
+        else {
+            return;
+        };
+        log::info!("{name} is {value} on this path");
+        let name = name.clone();
+        self.substitute_symbol(&name, &value);
     }
 
     fn broken_obligations(

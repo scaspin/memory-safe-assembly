@@ -94,6 +94,10 @@ pub trait MachineInstruction: Clone + Debug {
         false
     }
 
+    fn call_target(&self) -> Option<&str> {
+        None
+    }
+
     fn mentions(&self, _register: usize) -> bool {
         true
     }
@@ -147,7 +151,7 @@ pub trait Machine: Clone {
     fn set_flags(&mut self, flags: [Option<FlagValue>; 4]);
     fn set_unknown_flags(&mut self);
     fn fresh_index(&mut self) -> usize;
-    fn substitute_symbol(&mut self, symbol: &str, value: i64);
+    fn substitute_symbol(&mut self, symbol: &str, value: &AbstractExpression);
     fn stack_pointer_at_return(&self) -> (RegisterValue, i64);
 
     fn check_stack_pointer_restored(&self, pc: usize) -> Result<(), String> {
@@ -705,7 +709,11 @@ pub trait Machine: Clone {
     }
 }
 
-pub fn respelled(register: &RegisterValue, symbol: &str, value: i64) -> Option<RegisterValue> {
+pub fn respelled(
+    register: &RegisterValue,
+    symbol: &str,
+    value: &AbstractExpression,
+) -> Option<RegisterValue> {
     let base = register.base.as_ref()?;
     if register.kind != RegisterKind::RegisterBase
         || !base.get_abstracts().iter().any(|name| name == symbol)
@@ -722,11 +730,43 @@ pub fn respelled(register: &RegisterValue, symbol: &str, value: i64) -> Option<R
     })
 }
 
-pub fn substituted(e: &AbstractExpression, symbol: &str, value: i64) -> AbstractExpression {
+pub fn comparison_respelled(
+    comparison: &AbstractComparison,
+    symbol: &str,
+    value: &AbstractExpression,
+) -> AbstractComparison {
+    AbstractComparison::new(
+        &comparison.op,
+        expression_respelled(&comparison.left, symbol, value),
+        expression_respelled(&comparison.right, symbol, value),
+    )
+}
+
+fn expression_respelled(
+    e: &AbstractExpression,
+    symbol: &str,
+    value: &AbstractExpression,
+) -> AbstractExpression {
     match e {
-        AbstractExpression::Abstract(name) if name == symbol => {
-            AbstractExpression::Immediate(value)
-        }
+        AbstractExpression::Register(register) => respelled(register, symbol, value)
+            .map_or_else(|| e.clone(), |r| AbstractExpression::Register(Box::new(r))),
+        AbstractExpression::Expression(op, left, right) => generate_expression(
+            op,
+            expression_respelled(left, symbol, value),
+            expression_respelled(right, symbol, value),
+        ),
+        AbstractExpression::Abstract(name) if name == symbol => value.clone(),
+        other => other.clone(),
+    }
+}
+
+pub fn substituted(
+    e: &AbstractExpression,
+    symbol: &str,
+    value: &AbstractExpression,
+) -> AbstractExpression {
+    match e {
+        AbstractExpression::Abstract(name) if name == symbol => value.clone(),
         AbstractExpression::Register(r) => AbstractExpression::Register(Box::new(RegisterValue {
             base: r.base.as_ref().map(|b| substituted(b, symbol, value)),
             ..(**r).clone()

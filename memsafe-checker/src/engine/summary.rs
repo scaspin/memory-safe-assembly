@@ -1247,7 +1247,7 @@ pub(super) fn summarize(
                     },
                 ));
             }
-            LoopInvariant::Tracks(..) => {}
+            LoopInvariant::Tracks(..) | LoopInvariant::Derived(..) => {}
             LoopInvariant::NonDecreasing | LoopInvariant::NonIncreasing => {
                 let progress = counter.symbol(LoopRole::Progress(i)).expression();
                 progress_facts.push(AbstractComparison::new(
@@ -1290,6 +1290,24 @@ pub(super) fn summarize(
             RegisterValue {
                 kind: current.0[i].kind.clone(),
                 base: Some(generate_expression("+", value_of(&current.0[i]), moved)),
+                offset: 0,
+            },
+        ));
+    }
+
+    for (i, invariant) in invariants.iter().enumerate() {
+        let LoopInvariant::Derived(j, template) = invariant else {
+            continue;
+        };
+        let leader = updates
+            .iter()
+            .find(|(index, _)| index == j)
+            .map_or_else(|| value_of(&current.0[*j]), |(_, value)| value_of(value));
+        updates.push((
+            i,
+            RegisterValue {
+                kind: RegisterKind::RegisterBase,
+                base: Some(substitute(template, DERIVED_LEADER, &leader)),
                 offset: 0,
             },
         ));

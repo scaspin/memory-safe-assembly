@@ -339,6 +339,7 @@ impl ARMCORTEXA {
                 }
                 "and" => {
                     self.arithmetic("&", |x, y| x & y, instruction.operands.clone());
+                    self.fold_mask_within_aligned_region(instruction);
                     self.realign_below_stack_pointer(instruction);
                 }
                 "orr" => {
