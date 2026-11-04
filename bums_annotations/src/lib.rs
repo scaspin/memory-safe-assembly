@@ -1332,6 +1332,13 @@ fn exact_value(e: &Expr) -> proc_macro2::TokenStream {
             };
             exact_leaf(field.read())
         }
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(literal),
+            ..
+        }) if literal.suffix().is_empty() => {
+            let wide = LitInt::new(&format!("{}i128", literal.base10_digits()), literal.span());
+            quote! { #wide }
+        }
         _ => exact_leaf(e),
     }
 }
@@ -3155,6 +3162,20 @@ mod tests {
     }
 
     #[test]
+    fn a_literal_beyond_i32_bounds_a_usize() {
+        let nblocks: usize = 1 << 32;
+        let precondition: Expr = parse_quote! { nblocks <= 4294967295 };
+        let (spelled, check) = emitted! {
+            i128::try_from(nblocks).expect("precondition arithmetic overflows i128") <= 4294967295i128
+        };
+        assert_eq!(
+            without_spaces(&exact_condition(&precondition).to_string()),
+            without_spaces(spelled)
+        );
+        assert!(!check());
+    }
+
+    #[test]
     fn precondition_arithmetic_that_overflows_i128_panics() {
         let (n, inc_x) = (u64::MAX, u64::MAX);
         let precondition: Expr = parse_quote! { n * inc_x * inc_x <= 4 };
@@ -3165,7 +3186,7 @@ mod tests {
                 .expect("precondition arithmetic overflows i128")
                 .checked_mul(i128::try_from(inc_x).expect("precondition arithmetic overflows i128"))
                 .expect("precondition arithmetic overflows i128")
-                <= i128::try_from(4).expect("precondition arithmetic overflows i128")
+                <= 4i128
         };
         assert_eq!(
             without_spaces(&exact_condition(&precondition).to_string()),
@@ -3358,7 +3379,7 @@ mod tests {
             i128::from(((i128::try_from(w).expect("precondition arithmetic overflows i128"))
                 .rem_euclid(1i128 << 32) as u32)
                 .leading_zeros())
-                == i128::try_from(27).expect("precondition arithmetic overflows i128")
+                == 27i128
         };
         assert_eq!(
             without_spaces(&exact_condition(&precondition).to_string()),
