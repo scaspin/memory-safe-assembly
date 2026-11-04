@@ -8,7 +8,7 @@ use bums_macros as bums;
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_2vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_2vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_dot_prod_avx2-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 2,
@@ -18,7 +18,7 @@ fn gf_2vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_2vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_2vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_dot_prod_avx2_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 2,
@@ -28,7 +28,7 @@ fn gf_2vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_2vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_2vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_dot_prod_avx512-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 2,
@@ -38,7 +38,7 @@ fn gf_2vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_2vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_2vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_dot_prod_avx512_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 2,
@@ -48,7 +48,7 @@ fn gf_2vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_2vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_2vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_2vect_dot_prod_neon.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 2,
@@ -58,7 +58,7 @@ fn gf_2vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_2vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_2vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_dot_prod_sse-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 2,
@@ -68,7 +68,7 @@ fn gf_2vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_2vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_2vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_mad_avx-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 2,
@@ -79,7 +79,7 @@ fn gf_2vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_2vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_2vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_mad_avx2-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 2,
@@ -90,7 +90,7 @@ fn gf_2vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_2vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_2vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_mad_avx2_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 2,
@@ -101,7 +101,7 @@ fn gf_2vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_2vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_2vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_mad_avx512-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 2,
@@ -112,7 +112,7 @@ fn gf_2vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], s
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_2vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_2vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_mad_avx512_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 2,
@@ -123,7 +123,7 @@ fn gf_2vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src:
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_2vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_2vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_2vect_mad_neon.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 2,
@@ -134,7 +134,7 @@ fn gf_2vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8],
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_2vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_2vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_2vect_mad_sse-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 2,
@@ -145,7 +145,7 @@ fn gf_2vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_2vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_2vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_2vect_mad_sve.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 2,
@@ -156,7 +156,7 @@ fn gf_2vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_2vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_2vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_dot_prod_avx-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 3,
@@ -166,7 +166,7 @@ fn gf_2vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_3vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_3vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_dot_prod_avx2-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 3,
@@ -176,7 +176,7 @@ fn gf_3vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_3vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_3vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_dot_prod_avx2_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 3,
@@ -186,7 +186,7 @@ fn gf_3vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_3vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_3vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_dot_prod_avx512-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 3,
@@ -196,7 +196,7 @@ fn gf_3vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_3vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_3vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_dot_prod_avx512_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 3,
@@ -206,7 +206,7 @@ fn gf_3vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_3vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_3vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_3vect_dot_prod_neon.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 3,
@@ -216,7 +216,7 @@ fn gf_3vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_3vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_3vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_dot_prod_sse-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 3,
@@ -226,7 +226,7 @@ fn gf_3vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_3vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_3vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_mad_avx-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 3,
@@ -237,7 +237,7 @@ fn gf_3vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_3vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_3vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_mad_avx2-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 3,
@@ -248,7 +248,7 @@ fn gf_3vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_3vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_3vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_mad_avx2_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 3,
@@ -259,7 +259,7 @@ fn gf_3vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_3vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_3vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_mad_avx512-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 3,
@@ -270,7 +270,7 @@ fn gf_3vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], s
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_3vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_3vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_mad_avx512_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 3,
@@ -281,7 +281,7 @@ fn gf_3vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src:
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_3vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_3vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_3vect_mad_neon.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 3,
@@ -292,7 +292,7 @@ fn gf_3vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8],
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_3vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_3vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_3vect_mad_sse-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 3,
@@ -303,7 +303,7 @@ fn gf_3vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_3vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_3vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_3vect_mad_sve.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 3,
@@ -314,7 +314,7 @@ fn gf_3vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_3vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_3vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_dot_prod_avx-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 4,
@@ -324,7 +324,7 @@ fn gf_3vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_4vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_4vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_dot_prod_avx2-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 4,
@@ -334,7 +334,7 @@ fn gf_4vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_4vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_4vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_dot_prod_avx2_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 4,
@@ -344,7 +344,7 @@ fn gf_4vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_4vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_4vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_dot_prod_avx512-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 4,
@@ -354,7 +354,7 @@ fn gf_4vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_4vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_4vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_dot_prod_avx512_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 4,
@@ -364,7 +364,7 @@ fn gf_4vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_4vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_4vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_4vect_dot_prod_neon.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 4,
@@ -374,7 +374,7 @@ fn gf_4vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_4vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_4vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_dot_prod_sse-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 4,
@@ -384,7 +384,7 @@ fn gf_4vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_4vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_4vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_mad_avx-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 4,
@@ -395,7 +395,7 @@ fn gf_4vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_4vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_4vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_mad_avx2-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 4,
@@ -406,7 +406,7 @@ fn gf_4vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_4vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_4vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_mad_avx2_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 4,
@@ -417,7 +417,7 @@ fn gf_4vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_4vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_4vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_mad_avx512-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 4,
@@ -428,7 +428,7 @@ fn gf_4vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], s
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_4vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_4vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_mad_avx512_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 4,
@@ -439,7 +439,7 @@ fn gf_4vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src:
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_4vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_4vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_4vect_mad_neon.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 4,
@@ -450,7 +450,7 @@ fn gf_4vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8],
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_4vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_4vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_4vect_mad_sse-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 4,
@@ -461,7 +461,7 @@ fn gf_4vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_4vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_4vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_4vect_mad_sve.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 4,
@@ -472,7 +472,7 @@ fn gf_4vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_4vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_4vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_dot_prod_avx-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 5,
@@ -482,7 +482,7 @@ fn gf_4vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_5vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_5vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_dot_prod_avx2-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 5,
@@ -492,7 +492,7 @@ fn gf_5vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_5vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_5vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_dot_prod_avx2_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 5,
@@ -502,7 +502,7 @@ fn gf_5vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_5vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_5vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_dot_prod_avx512-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 5,
@@ -512,7 +512,7 @@ fn gf_5vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_5vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_5vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_dot_prod_avx512_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 5,
@@ -522,7 +522,7 @@ fn gf_5vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_5vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_5vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_5vect_dot_prod_neon.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 5,
@@ -532,7 +532,7 @@ fn gf_5vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_5vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_5vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_dot_prod_sse-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 5,
@@ -542,7 +542,7 @@ fn gf_5vect_dot_prod_neon(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_5vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_5vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_mad_avx-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 5,
@@ -553,7 +553,7 @@ fn gf_5vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_5vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_5vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_mad_avx2-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 5,
@@ -564,7 +564,7 @@ fn gf_5vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_5vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_5vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_mad_avx2_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 5,
@@ -575,7 +575,7 @@ fn gf_5vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_5vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_5vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_mad_avx512-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 5,
@@ -586,7 +586,7 @@ fn gf_5vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], s
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_5vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_5vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_mad_avx512_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 5,
@@ -597,7 +597,7 @@ fn gf_5vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src:
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_5vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_5vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_5vect_mad_neon.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 5,
@@ -608,7 +608,7 @@ fn gf_5vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8],
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_5vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_5vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_5vect_mad_sse-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 5,
@@ -619,7 +619,7 @@ fn gf_5vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_5vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_5vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_5vect_mad_sve.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 5,
@@ -630,7 +630,7 @@ fn gf_5vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_5vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_5vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_dot_prod_avx-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 6,
@@ -640,7 +640,7 @@ fn gf_5vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_6vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_6vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_dot_prod_avx2-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 6,
@@ -650,7 +650,7 @@ fn gf_6vect_dot_prod_avx(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_6vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_6vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_dot_prod_avx2_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 6,
@@ -660,7 +660,7 @@ fn gf_6vect_dot_prod_avx2(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]],
      vlen <= 255,
      len >= 32,
      len <= 2147483647]))]
-fn gf_6vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_6vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_dot_prod_avx512-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 6,
@@ -670,7 +670,7 @@ fn gf_6vect_dot_prod_avx2_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_6vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_6vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_dot_prod_avx512_gfni-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 6,
@@ -680,7 +680,7 @@ fn gf_6vect_dot_prod_avx512(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]
      vlen <= 255,
      len >= 64,
      len <= 2147483647]))]
-fn gf_6vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_6vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_dot_prod_sse-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vlen * 6,
@@ -690,7 +690,7 @@ fn gf_6vect_dot_prod_avx512_gfni(len: usize, vlen: usize, gftbls: &[u8], src: &[
      vlen <= 255,
      len >= 16,
      len <= 2147483647]))]
-fn gf_6vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &[&mut [u8]]);
+fn gf_6vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_mad_avx-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 6,
@@ -701,7 +701,7 @@ fn gf_6vect_dot_prod_sse(len: usize, vlen: usize, gftbls: &[u8], src: &[&[u8]], 
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_6vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_6vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_mad_avx2-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 6,
@@ -712,7 +712,7 @@ fn gf_6vect_mad_avx(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_6vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_6vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_mad_avx2_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 6,
@@ -723,7 +723,7 @@ fn gf_6vect_mad_avx2(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 32,
      len <= 2147483647]))]
-fn gf_6vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_6vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_mad_avx512-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 6,
@@ -734,7 +734,7 @@ fn gf_6vect_mad_avx2_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], s
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_6vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_6vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_mad_avx512_gfni-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 6,
@@ -745,7 +745,7 @@ fn gf_6vect_mad_avx512(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src:
      vec_i < vec,
      len >= 64,
      len <= 2147483647]))]
-fn gf_6vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_6vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_6vect_mad_neon.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 6,
@@ -756,7 +756,7 @@ fn gf_6vect_mad_avx512_gfni(len: usize, vec: usize, vec_i: usize, gftbls: &[u8],
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_6vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_6vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_6vect_mad_sse-x86_64.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 6,
@@ -767,7 +767,7 @@ fn gf_6vect_mad_neon(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_6vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_6vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "aarch64", bums::check_mem_safe("gf_6vect_mad_sve.S", len, vec, vec_i, gftbls.as_ptr(), src.as_ptr(), dest.as_ptr(),
     [gftbls.len() == 32 * vec * 6,
@@ -778,7 +778,7 @@ fn gf_6vect_mad_sse(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[
      vec_i < vec,
      len >= 16,
      len <= 2147483647]))]
-fn gf_6vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &[&mut [u8]]);
+fn gf_6vect_mad_sve(len: usize, vec: usize, vec_i: usize, gftbls: &[u8], src: &[u8], dest: &mut [&mut [u8]]);
 
 #[cfg_attr(target_arch = "x86_64", bums::check_mem_safe("gf_vect_dot_prod_avx-x86_64.S", len, vlen, gftbls.as_ptr(), src.as_ptr(), dest.as_mut_ptr(),
     [gftbls.len() == 32 * vlen * 1,
