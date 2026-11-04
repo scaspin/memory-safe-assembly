@@ -55,12 +55,12 @@ fn ff_tx_fft15_ns_float_neon(s: &[u32], out: &mut [f32], input: &[f32], stride: 
 #[bums::check_mem_safe("tx_float_neon.S", s.as_ptr(), out.as_mut_ptr(), input.as_ptr(), stride,
     [s.len() == 18, s[0] == len as u32, s[1] == map.as_ptr(), map.len() == len, map[..] >= 0, map[..] < len as i32,
      out.len() == 2 * len, input.len() == 2 * len,
-     (len - 64) * (len - 128) * (len - 256) * (len - 512) * (len - 1024) * (len - 2048) * (len - 4096) == 0])]
+     (len - 32) * (len - 64) * (len - 128) * (len - 256) * (len - 512) * (len - 1024) * (len - 2048) * (len - 4096) == 0])]
 fn ff_tx_fft_sr_float_neon(s: &[u32], out: &mut [f32], input: &[f32], stride: usize, map: &[i32], len: usize);
 
 #[bums::check_mem_safe("tx_float_neon.S", s.as_ptr(), out.as_mut_ptr(), input.as_ptr(), stride,
     [s.len() == 18, s[0] == len as u32, s[1] == map.as_ptr(), map.len() == len, map[..] >= 0, map[..] < len as i32,
      out.len() == 2 * len, input.len() == 2 * len,
-     (len - 64) * (len - 128) * (len - 256) * (len - 512) * (len - 1024) * (len - 2048) * (len - 4096) == 0])]
+     (len - 32) * (len - 64) * (len - 128) * (len - 256) * (len - 512) * (len - 1024) * (len - 2048) * (len - 4096) == 0])]
 fn ff_tx_fft_sr_ns_float_neon(s: &[u32], out: &mut [f32], input: &[f32], stride: usize, map: &[i32], len: usize);
 
