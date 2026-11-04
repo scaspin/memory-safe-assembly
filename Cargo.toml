@@ -7,7 +7,6 @@ members = [
   "crypto-playground",
   "bignum-playground",
   "rav1d-playground",
-  "awslc-probe",
   "corecrypto-playground",
   "graviola-playground",
   "candle-playground",
