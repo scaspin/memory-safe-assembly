@@ -127,6 +127,10 @@ impl MachineInstruction for Instruction {
         &self.opcode
     }
 
+    fn call_target(&self) -> Option<&str> {
+        (self.opcode == "bl").then(|| self.branch_label()).flatten()
+    }
+
     fn flow(&self) -> Flow<'_> {
         let label = self.branch_label();
         match self.opcode.as_str() {

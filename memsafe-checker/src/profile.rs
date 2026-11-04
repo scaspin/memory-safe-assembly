@@ -5,6 +5,8 @@ use z3::{SatResult, Solver, ast};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Phase {
+    Parsing,
+    Serialization,
     Execution,
     LoopResolution,
     Forking,
@@ -13,6 +15,8 @@ pub enum Phase {
 
 #[derive(Clone, Default, Debug)]
 pub struct Profile {
+    pub parsing: Duration,
+    pub serialization: Duration,
     pub execution: Duration,
     pub loop_resolution: Duration,
     pub forking: Duration,
@@ -39,6 +43,8 @@ impl Clock {
         let profile = &mut self.profile;
         match below.next() {
             None => {}
+            Some(Phase::Parsing) => profile.parsing += spent,
+            Some(Phase::Serialization) => profile.serialization += spent,
             Some(Phase::Execution) => profile.execution += spent,
             Some(Phase::LoopResolution) => profile.loop_resolution += spent,
             Some(Phase::Forking) => profile.forking += spent,

@@ -19,7 +19,8 @@ const USAGE: &str = "usage: bums-check <crate-dir> [options]
   --skip-file FILE         skip the function names listed in FILE (one per line, # comments)
   --out FILE               write a TSV: function, file, status, seconds, first error
   --log-dir DIR            keep one log per function (RUST_LOG applies)
-  --list                   print the annotations that would be checked and exit";
+  --list                   print the annotations that would be checked and exit
+  --sizes                  print each function's statically reachable instruction count and exit";
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
@@ -54,6 +55,7 @@ pub struct Options {
     pub out: Option<PathBuf>,
     pub log_dir: Option<PathBuf>,
     pub list: bool,
+    pub sizes: bool,
 }
 
 fn parse_options(arguments: Vec<String>) -> Result<Options, String> {
@@ -76,6 +78,7 @@ fn parse_options(arguments: Vec<String>) -> Result<Options, String> {
         out: None,
         log_dir: None,
         list: false,
+        sizes: false,
     };
     let mut arguments = arguments.into_iter();
     while let Some(argument) = arguments.next() {
@@ -120,6 +123,7 @@ fn parse_options(arguments: Vec<String>) -> Result<Options, String> {
             "--out" => options.out = Some(PathBuf::from(value()?)),
             "--log-dir" => options.log_dir = Some(PathBuf::from(value()?)),
             "--list" => options.list = true,
+            "--sizes" => options.sizes = true,
             flag if flag.starts_with('-') => return Err(format!("unknown option {flag}")),
             directory => {
                 if crate_dir.replace(PathBuf::from(directory)).is_some() {

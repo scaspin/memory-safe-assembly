@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 const RESULT_MARKER: &str = "bums-check-result";
 const PROFILE_MARKER: &str = "bums-check-profile";
-const PROFILE_COLUMNS: usize = 9;
+const PROFILE_COLUMNS: usize = 11;
 const TARGET_VENDOR_VARIABLE: &str = "BUMS_CHECK_TARGET_VENDOR";
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -97,10 +97,13 @@ fn profile_fields(profile: &bums::profile::Profile) -> Vec<String> {
         seconds(profile.forking),
         seconds(profile.solver_in_execution),
         seconds(profile.solver_in_loops),
+        seconds(profile.parsing),
+        seconds(profile.serialization),
     ]
 }
 
 fn evaluate(asm_file: &Path, attr: &str, item: &str) -> (Status, String) {
+    let _parsing = bums::profile::enter(bums::profile::Phase::Parsing);
     let tokens = |text: &str| text.parse::<proc_macro2::TokenStream>();
     let (Ok(attr), Ok(item)) = (tokens(attr), tokens(item)) else {
         return (Status::Error, "cannot tokenize the annotation".to_string());
@@ -134,6 +137,14 @@ fn evaluate(asm_file: &Path, attr: &str, item: &str) -> (Status, String) {
         return (Status::Fail, verdict.failures.join("; "));
     }
     (Status::Verified, String::new())
+}
+
+fn static_size(annotation: &Found, asm_dir: &Path) -> Option<usize> {
+    let parsed =
+        bums_annotations::parse_annotation(annotation.attr.clone(), annotation.item.clone())
+            .ok()?;
+    let program = bums_annotations::read_program(&asm_dir.join(&annotation.asm_file)).ok()?;
+    bums::engine::AnyEngine::new(program).static_size(&parsed.label)
 }
 
 fn host_triple() -> Result<String, String> {
@@ -326,6 +337,17 @@ pub fn all(options: Options) -> Result<ExitCode, String> {
         None => package.build_script_out_dir(options.target.as_deref(), &options.features)?,
     };
     println!("bums-check: assembly from {}", asm_dir.display());
+    if options.sizes {
+        for annotation in &found {
+            println!(
+                "{}\t{}\t{}",
+                annotation.function,
+                relative(&annotation.file),
+                static_size(annotation, &asm_dir).unwrap_or_default()
+            );
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
 
     let (log_dir, temporary_logs) = match &options.log_dir {
         Some(directory) => (directory.clone(), false),

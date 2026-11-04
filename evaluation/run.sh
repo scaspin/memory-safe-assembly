@@ -38,11 +38,16 @@ for run in $(seq 1 "$runs"); do
     [[ $crate = /* ]] || crate=$root/$crate
     tsv=$out/run$run/$name.tsv
     [[ -s $tsv ]] && continue
-    skip=()
-    if [[ $run -gt 1 && -s $out/run1/$name.tsv ]]; then
-      awk -F'\t' '$3 != "verified" {print $1}' "$out/run1/$name.tsv" >"$out/run$run/$name.skip"
-      skip=(--skip-file "$out/run$run/$name.skip")
+    skipping=$out/run$run/$name.skip
+    : >"$skipping"
+    if [[ -s $out/known-timeouts/$name.txt ]]; then
+      cat "$out/known-timeouts/$name.txt" >>"$skipping"
     fi
+    if [[ $run -gt 1 && -s $out/run1/$name.tsv ]]; then
+      awk -F'\t' '$3 != "verified" {print $1}' "$out/run1/$name.tsv" >>"$skipping"
+    fi
+    skip=()
+    [[ -s $skipping ]] && skip=(--skip-file "$skipping")
     echo "=== run $run $name $(date)"
     (cd "$root" && "$check" "$crate" $flags --jobs "$jobs" --timeout "$timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.partial") | tail -1
     mv "$tsv.partial" "$tsv"

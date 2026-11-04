@@ -80,6 +80,10 @@ pub trait MachineInstruction: Clone + Debug {
         self.label().is_some()
     }
 
+    fn call_target(&self) -> Option<&str> {
+        None
+    }
+
     fn data_only(&self) -> bool {
         false
     }

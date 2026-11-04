@@ -1381,6 +1381,7 @@ fn signed_word(value: &ast::Int, operand: &AbstractExpression) -> ast::Int {
 }
 
 pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
+    let _serializing = profile::enter(Phase::Serialization);
     match expression.clone() {
         AbstractExpression::Immediate(num) => Some(ast::Int::from_i64(num)),
         AbstractExpression::Abstract(a) => Some(ast::Int::new_const(a)),
@@ -1783,6 +1784,7 @@ mod tests {
 }
 
 pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
+    let _serializing = profile::enter(Phase::Serialization);
     let left = expression_to_ast(*expression.left)?;
     let right = expression_to_ast(*expression.right)?;
     match expression.op.as_str() {

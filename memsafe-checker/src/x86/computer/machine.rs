@@ -165,6 +165,10 @@ impl MachineInstruction for Instruction {
         &self.opcode
     }
 
+    fn call_target(&self) -> Option<&str> {
+        (self.mnemonic == "call").then(|| self.target()).flatten()
+    }
+
     fn flow(&self) -> Flow<'_> {
         let m = self.mnemonic.as_str();
         let target = self.target();

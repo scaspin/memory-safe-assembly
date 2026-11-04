@@ -282,6 +282,7 @@ struct Scope {
 
 impl<M: Machine> Engine<M> {
     pub fn new<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> Engine<M> {
+        let _parsing = profile::enter(Phase::Parsing);
         let listing = Listing::<M::Instruction>::parse(lines);
         let mut computer = M::new();
 
@@ -486,6 +487,33 @@ impl<M: Machine> Engine<M> {
         let res = self.run(pc, 0);
         debug_assert!(self.scopes.is_empty(), "solver scopes left open");
         res
+    }
+
+    pub fn static_size(&self, start: &str) -> Option<usize> {
+        let entry = self.get_linenumber_of_label(start.trim_matches(':').to_string(), 0)?;
+        let mut reached = BTreeSet::new();
+        let mut pending = vec![entry];
+        while let Some(pc) = pending.pop() {
+            let Some(instruction) = self.program.code.get(pc) else {
+                continue;
+            };
+            if !reached.insert(pc) {
+                continue;
+            }
+            if let Some(callee) = instruction
+                .call_target()
+                .and_then(|label| self.resolve_jump_target(label, pc).ok())
+            {
+                pending.push(callee);
+            }
+            pending.extend(self.static_successors(pc).unwrap_or_default());
+        }
+        Some(
+            reached
+                .iter()
+                .filter(|&&pc| !self.program.code[pc].is_label())
+                .count(),
+        )
     }
 
     fn concrete_split(&self, condition: &AbstractComparison) -> Option<(String, Vec<i64>)> {
@@ -709,6 +737,7 @@ impl<M: Machine> Engine<M> {
     }
 
     fn merge_key(&self, pc: usize) -> Option<String> {
+        let _serializing = profile::enter(Phase::Serialization);
         let fingerprint = self
             .computer
             .fingerprint(!M::Instruction::flags_dead(&self.program.code, pc))?;
@@ -1809,6 +1838,10 @@ impl AnyEngine {
 
     pub fn start(&mut self, start: impl Into<String>) -> std::io::Result<()> {
         forward!(self, e => e.start(start))
+    }
+
+    pub fn static_size(&self, start: &str) -> Option<usize> {
+        forward!(self, e => e.static_size(start))
     }
 }
 
