@@ -58,6 +58,7 @@ pub struct ARMCORTEXA {
     pristine_read: Option<String>,
     indexed_read: Option<IndexedRead>,
     last_executed: Option<usize>,
+    pristine_read_byte: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -238,6 +239,7 @@ impl ARMCORTEXA {
             element_ranges: BTreeMap::new(),
             pristine_read: None,
             indexed_read: None,
+            pristine_read_byte: 0,
             last_executed: None,
             solver: EmptiedOnClone::new(solver),
         }
@@ -337,12 +339,12 @@ impl ARMCORTEXA {
 
     pub fn add_pointer_elements(&mut self, region: &str, target: &str) {
         match self.memory.get_mut(target) {
-            Some(rows) if rows.kind != RegionType::WRITE => {
+            Some(rows) => {
                 rows.stands_for_many();
                 self.pointer_elements
                     .insert(region.to_string(), target.to_string());
             }
-            _ => panic!("pointer elements need a readable region {target} to point into"),
+            None => panic!("pointer elements need a region {target} to point into"),
         }
     }
 
@@ -350,6 +352,13 @@ impl ARMCORTEXA {
         self.region_of(base)
             .and_then(|(region, ..)| self.memory.get(&region))
             .is_some_and(|region| region.many)
+    }
+
+    pub fn writable_rows(&self, region: &str) -> bool {
+        self.memory
+            .get(region)
+            .is_some_and(|rows| rows.kind != RegionType::READ)
+            && self.pointer_elements.values().any(|rows| rows == region)
     }
 
     pub fn add_element_range(&mut self, region: &str, range: ElementRange) {
@@ -500,6 +509,17 @@ impl ARMCORTEXA {
     pub fn bound_fresh(&mut self, fact: ast::Bool) {
         self.solver.assert(&fact);
         self.fresh_bounds.push(fact);
+    }
+
+    pub fn unsat_within_budget(&self, assumptions: &[ast::Bool]) -> bool {
+        let mut bounded = Params::new();
+        bounded.set_u32("rlimit", WORD_FIT_RESOURCE_LIMIT);
+        self.solver.set_params(&bounded);
+        let result = self.solver.check_assumptions(assumptions);
+        let mut unbounded = Params::new();
+        unbounded.set_u32("rlimit", 0);
+        self.solver.set_params(&unbounded);
+        result == SatResult::Unsat
     }
 
     pub fn fresh_symbol(&mut self, which: &str) -> String {
@@ -710,6 +730,14 @@ impl ARMCORTEXA {
                 RePrefix::X => self.registers[*index].clone(),
                 RePrefix::W => {
                     let whole = self.registers[*index].clone();
+                    let counts_loops = whole.base.as_ref().is_some_and(|base| {
+                        base.get_abstracts()
+                            .iter()
+                            .any(|symbol| symbol.contains("_?"))
+                    });
+                    if counts_loops && self.fits_in_32(&whole.base, whole.offset) {
+                        return whole;
+                    }
                     let (base, offset) = narrow_to_32(whole.base, whole.offset);
                     RegisterValue::new(whole.kind, base, offset)
                 }

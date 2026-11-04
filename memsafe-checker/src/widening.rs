@@ -326,6 +326,8 @@ pub enum LoopRole {
     Flag(usize),
     Status(usize),
     Latest(usize),
+    Offset(usize),
+    Cell(usize),
     Any,
 }
 
@@ -367,6 +369,10 @@ impl LoopSymbol {
                     LoopRole::Flag(k)
                 } else if let Some(i) = indexed("_latest_") {
                     LoopRole::Latest(i)
+                } else if let Some(i) = indexed("_offset_") {
+                    LoopRole::Offset(i)
+                } else if let Some(k) = indexed("_cell_") {
+                    LoopRole::Cell(k)
                 } else {
                     let status = role.strip_prefix('_')?;
                     LoopRole::Status(STATUS_FLAGS.iter().position(|flag| *flag == status)?)
@@ -400,6 +406,8 @@ impl fmt::Display for LoopSymbol {
             LoopRole::Flag(k) => write!(f, "_flag_{k}"),
             LoopRole::Status(k) => write!(f, "_{}", STATUS_FLAGS[k]),
             LoopRole::Latest(i) => write!(f, "_latest_{i}"),
+            LoopRole::Offset(i) => write!(f, "_offset_{i}"),
+            LoopRole::Cell(k) => write!(f, "_cell_{k}"),
             LoopRole::Any => write!(f, "_any"),
         }
     }
@@ -455,6 +463,7 @@ pub enum LoopInvariant {
     Fixed,
     Linear(AbstractExpression),
     AtMost(i64),
+    Ranged(i64, i64),
     Within(i64),
     Tracks(usize, i64),
     Derived(usize, AbstractExpression),
@@ -474,11 +483,29 @@ impl LoopInvariant {
         }
     }
 
+    fn step_range(&self) -> Option<(i64, i64)> {
+        match self {
+            LoopInvariant::Fixed => Some((0, 0)),
+            LoopInvariant::Linear(AbstractExpression::Immediate(step)) => Some((*step, *step)),
+            LoopInvariant::AtMost(bound) => Some((0, *bound)),
+            LoopInvariant::Ranged(low, high) => Some((*low, *high)),
+            _ => None,
+        }
+    }
+
     pub fn subsumes(&self, other: &LoopInvariant) -> bool {
         if matches!(self, LoopInvariant::Unknown) || self == other {
             return true;
         }
         match (self, other) {
+            (LoopInvariant::Ranged(low, high), _) => other
+                .step_range()
+                .is_some_and(|(l, h)| *low <= l && h <= *high),
+            (LoopInvariant::AtMost(bound), LoopInvariant::Ranged(low, high)) => {
+                *low >= 0 && high <= bound
+            }
+            (LoopInvariant::NonDecreasing, LoopInvariant::Ranged(low, _)) => *low >= 0,
+            (LoopInvariant::NonIncreasing, LoopInvariant::Ranged(_, high)) => *high <= 0,
             (LoopInvariant::Within(bound), LoopInvariant::Within(seen)) => seen <= bound,
             (LoopInvariant::Within(_), LoopInvariant::Fixed) => true,
             (LoopInvariant::AtMost(bound), _) => other
@@ -493,9 +520,13 @@ impl LoopInvariant {
 
     pub fn join(&self, other: &LoopInvariant) -> LoopInvariant {
         if self == other {
-            self.clone()
-        } else {
-            LoopInvariant::Unknown
+            return self.clone();
+        }
+        let ranged =
+            matches!(self, LoopInvariant::Ranged(..)) || matches!(other, LoopInvariant::Ranged(..));
+        match (ranged, self.step_range(), other.step_range()) {
+            (true, Some((a, b)), Some((c, d))) => LoopInvariant::Ranged(a.min(c), b.max(d)),
+            _ => LoopInvariant::Unknown,
         }
     }
 }
@@ -681,6 +712,86 @@ pub fn divisions_to_zero(bound: i64, divisor: i64) -> Option<i64> {
         steps += 1;
     }
     Some(steps)
+}
+
+pub fn unsigned_range(e: &AbstractExpression) -> Option<(i64, i64)> {
+    let bits_of = |high: i64| 64 - (high as u64).leading_zeros() as i64;
+    match e {
+        AbstractExpression::Immediate(v) => Some((*v, *v)),
+        AbstractExpression::Register(register) => match (&register.kind, &register.base) {
+            (RegisterKind::Immediate, _) => Some((register.offset, register.offset)),
+            (RegisterKind::RegisterBase, Some(base)) => {
+                let (low, high) = unsigned_range(base)?;
+                Some((
+                    low.checked_add(register.offset)?,
+                    high.checked_add(register.offset)?,
+                ))
+            }
+            _ => None,
+        },
+        AbstractExpression::Expression(op, left, right) => {
+            let constant = |side: &AbstractExpression| match side {
+                AbstractExpression::Immediate(v) => Some(*v),
+                _ => None,
+            };
+            match op.as_str() {
+                "atmost" => {
+                    let high = constant(right)?;
+                    let (low, inner_high) = unsigned_range(left)
+                        .or_else(|| at_least(left).map(|low| (low, i64::MAX)))?;
+                    Some((low.min(high), inner_high.min(high)))
+                }
+                "atleast" => {
+                    let low = constant(right)?;
+                    let high = unsigned_range(left).map_or(i64::MAX, |(_, h)| h);
+                    Some((low, high.max(low)))
+                }
+                "%" => {
+                    let m = constant(right).filter(|m| *m > 0)?;
+                    let high = unsigned_range(left)
+                        .filter(|(low, _)| *low >= 0)
+                        .map_or(m - 1, |(_, h)| h.min(m - 1));
+                    Some((0, high))
+                }
+                "lsr" | ">>" => {
+                    let shift = constant(right).filter(|s| (0..63).contains(s))?;
+                    let (low, high) = unsigned_range(left).filter(|(low, _)| *low >= 0)?;
+                    Some((low >> shift, high >> shift))
+                }
+                "&" => {
+                    let masks: Vec<i64> = [left, right]
+                        .into_iter()
+                        .filter_map(|side| unsigned_range(side).filter(|(low, _)| *low >= 0))
+                        .map(|(_, high)| high)
+                        .collect();
+                    masks.into_iter().min().map(|high| (0, high))
+                }
+                "|" | "^" => {
+                    let (_, a) = unsigned_range(left).filter(|(low, _)| *low >= 0)?;
+                    let (_, b) = unsigned_range(right).filter(|(low, _)| *low >= 0)?;
+                    let bits = bits_of(a.max(b));
+                    (bits < 63).then(|| (0, (1i64 << bits) - 1))
+                }
+                "+" => {
+                    let (a, b) = unsigned_range(left)?;
+                    let (c, d) = unsigned_range(right)?;
+                    Some((a.checked_add(c)?, b.checked_add(d)?))
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn at_least(e: &AbstractExpression) -> Option<i64> {
+    match e {
+        AbstractExpression::Expression(op, _, right) if op == "atleast" => match **right {
+            AbstractExpression::Immediate(v) => Some(v),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 pub fn upper_bound_of(e: &AbstractExpression) -> Option<i64> {

@@ -192,6 +192,7 @@ pub struct Instruction {
     pub prefixes: Vec<String>,
     pub operands: Vec<Operand>,
     pub mask: Option<usize>,
+    pub broadcast: Option<i64>,
 }
 
 impl fmt::Display for Instruction {
@@ -210,13 +211,13 @@ pub const CONDITION_CODES: [&str; 30] = [
     "l", "nge", "ge", "nl", "le", "ng", "g", "nle", "o", "no", "p", "pe", "np", "po",
 ];
 
-const SUFFIXED: [&str; 63] = [
+const SUFFIXED: [&str; 64] = [
     "mov", "movabs", "lea", "add", "sub", "adc", "sbb", "and", "or", "xor", "not", "neg", "inc",
     "dec", "cmp", "test", "shl", "sal", "shr", "sar", "rol", "ror", "rcl", "rcr", "shld", "shrd",
     "imul", "mul", "div", "idiv", "bswap", "xchg", "bt", "bts", "btr", "btc", "push", "pop",
     "call", "ret", "jmp", "nop", "xadd", "cmpxchg", "popcnt", "lzcnt", "tzcnt", "bsf", "bsr",
     "andn", "mulx", "adcx", "adox", "rorx", "sarx", "shlx", "shrx", "bzhi", "leave", "stos",
-    "lods", "movs", "movbe",
+    "lods", "movs", "movbe", "crc32",
 ];
 
 fn is_conditional(mnemonic: &str, stem: &str) -> bool {
@@ -562,6 +563,7 @@ impl Instruction {
                 prefixes: Vec::new(),
                 operands: Vec::new(),
                 mask: None,
+                broadcast: None,
             };
         }
 
@@ -597,6 +599,12 @@ impl Instruction {
                 .and_then(|n| n.parse::<usize>().ok())
                 .filter(|k| (1..8).contains(k))
         });
+        let broadcast = rest
+            .split("{1to")
+            .nth(1)
+            .and_then(|after| after.split('}').next())
+            .and_then(|n| n.parse::<i64>().ok())
+            .filter(|n| *n > 0);
 
         Instruction {
             ty: InstructionType::Instruction,
@@ -606,6 +614,7 @@ impl Instruction {
             prefixes,
             operands,
             mask,
+            broadcast,
         }
     }
 

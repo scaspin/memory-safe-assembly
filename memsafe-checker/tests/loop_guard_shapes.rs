@@ -144,9 +144,9 @@ fn equality_exits_closed_by_an_unsigned_test_bound_the_walk() {
 }
 
 #[test]
-fn equality_exits_closed_by_an_unsigned_test_off_their_lattice_are_rejected() {
+fn equality_exits_closed_by_an_unsigned_test_off_their_lattice_stay_in_bounds() {
     let res = analyze_countdown(unrolled_countdown_closed_by(8, "b.hi"), 4);
-    assert!(res.is_err(), "{res:?}");
+    assert!(res.is_ok(), "{res:?}");
 }
 
 fn countdown_first_tested_unsigned() -> Vec<String> {

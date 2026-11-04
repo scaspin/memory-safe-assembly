@@ -1,0 +1,252 @@
+library	function	arch	status	seconds	first error
+isa-l crc	crc16_t10dif_01	x86_64	verified	25.9	
+isa-l crc	crc16_t10dif_avx2	x86_64	verified	32.9	
+isa-l crc	crc16_t10dif_by16_10	x86_64	verified	30.7	
+isa-l crc	crc16_t10dif_copy_by4	x86_64	verified	27.5	
+isa-l crc	crc16_t10dif_copy_by4_02	x86_64	verified	27.7	
+isa-l crc	crc16_t10dif_copy_pmull	aarch64	verified	4.5	
+isa-l crc	crc16_t10dif_pmull	aarch64	verified	4.4	
+isa-l crc	crc32_gzip_refl_3crc_fold	aarch64	TIMEOUT	900.1	killed after 900s
+isa-l crc	crc32_gzip_refl_avx2	x86_64	verified	33.0	
+isa-l crc	crc32_gzip_refl_by16_10	x86_64	verified	78.1	
+isa-l crc	crc32_gzip_refl_by8	x86_64	verified	12.7	
+isa-l crc	crc32_gzip_refl_crc_ext	aarch64	verified	474.6	
+isa-l crc	crc32_gzip_refl_pmull	aarch64	verified	3.9	
+isa-l crc	crc32_ieee_01	x86_64	verified	21.4	
+isa-l crc	crc32_ieee_avx2	x86_64	verified	29.4	
+isa-l crc	crc32_ieee_by16_10	x86_64	verified	73.7	
+isa-l crc	crc32_ieee_norm_pmull	aarch64	verified	4.0	
+isa-l crc	crc32_iscsi_01	x86_64	TIMEOUT	300.0	killed after 300s
+isa-l crc	crc32_iscsi_3crc_fold	aarch64	TIMEOUT	900.0	killed after 900s
+isa-l crc	crc32_iscsi_avx2	x86_64	verified	25.8	
+isa-l crc	crc32_iscsi_by16_10	x86_64	verified	82.8	
+isa-l crc	crc32_iscsi_by8_02	x86_64	verified	21.8	
+isa-l crc	crc32_iscsi_crc_ext	aarch64	verified	472.6	
+isa-l crc	crc32_iscsi_refl_pmull	aarch64	verified	4.1	
+isa-l crc	crc32_iscsi_refl_pmull_internal	aarch64	verified	4.1	
+isa-l crc	crc32_iscsi_x6	aarch64	verified	230.9	
+isa-l crc	crc32_mix_default	aarch64	verified	230.0	
+isa-l crc	crc32_mix_neoverse_n1	aarch64	verified	224.1	
+isa-l crc	crc32c_mix_default	aarch64	verified	240.3	
+isa-l crc	crc32c_mix_neoverse_n1	aarch64	verified	228.6	
+isa-l crc	crc64_ecma_norm_avx2	x86_64	verified	29.5	
+isa-l crc	crc64_ecma_norm_by16_10	x86_64	verified	24.7	
+isa-l crc	crc64_ecma_norm_by8	x86_64	verified	21.5	
+isa-l crc	crc64_ecma_norm_pmull	aarch64	verified	3.9	
+isa-l crc	crc64_ecma_refl_avx2	x86_64	verified	27.2	
+isa-l crc	crc64_ecma_refl_by16_10	x86_64	verified	23.7	
+isa-l crc	crc64_ecma_refl_by8	x86_64	verified	19.8	
+isa-l crc	crc64_ecma_refl_pmull	aarch64	verified	3.9	
+isa-l crc	crc64_iso_norm_avx2	x86_64	verified	29.7	
+isa-l crc	crc64_iso_norm_by16_10	x86_64	verified	26.7	
+isa-l crc	crc64_iso_norm_by8	x86_64	verified	26.5	
+isa-l crc	crc64_iso_norm_pmull	aarch64	verified	4.3	
+isa-l crc	crc64_iso_refl_avx2	x86_64	verified	33.2	
+isa-l crc	crc64_iso_refl_by16_10	x86_64	verified	28.5	
+isa-l crc	crc64_iso_refl_by8	x86_64	verified	22.8	
+isa-l crc	crc64_iso_refl_pmull	aarch64	verified	4.3	
+isa-l crc	crc64_jones_norm_avx2	x86_64	verified	24.9	
+isa-l crc	crc64_jones_norm_by16_10	x86_64	verified	22.7	
+isa-l crc	crc64_jones_norm_by8	x86_64	verified	22.3	
+isa-l crc	crc64_jones_norm_pmull	aarch64	verified	4.2	
+isa-l crc	crc64_jones_refl_avx2	x86_64	verified	27.5	
+isa-l crc	crc64_jones_refl_by16_10	x86_64	verified	25.3	
+isa-l crc	crc64_jones_refl_by8	x86_64	verified	21.0	
+isa-l crc	crc64_jones_refl_pmull	aarch64	verified	4.4	
+isa-l crc	crc64_rocksoft_norm_avx2	x86_64	verified	34.2	
+isa-l crc	crc64_rocksoft_norm_by16_10	x86_64	verified	31.8	
+isa-l crc	crc64_rocksoft_norm_by8	x86_64	verified	21.4	
+isa-l crc	crc64_rocksoft_norm_pmull	aarch64	verified	4.1	
+isa-l crc	crc64_rocksoft_refl_avx2	x86_64	verified	26.0	
+isa-l crc	crc64_rocksoft_refl_by16_10	x86_64	verified	23.4	
+isa-l crc	crc64_rocksoft_refl_by8	x86_64	verified	19.6	
+isa-l crc	crc64_rocksoft_refl_pmull	aarch64	verified	4.4	
+isa-l erasure_code	gf_2vect_dot_prod_avx	x86_64	verified	7.1	
+isa-l erasure_code	gf_2vect_dot_prod_avx2	x86_64	verified	7.3	
+isa-l erasure_code	gf_2vect_dot_prod_avx2_gfni	x86_64	TIMEOUT	300.0	killed after 300s
+isa-l erasure_code	gf_2vect_dot_prod_avx512	x86_64	verified	7.7	
+isa-l erasure_code	gf_2vect_dot_prod_avx512_gfni	x86_64	verified	9.0	
+isa-l erasure_code	gf_2vect_dot_prod_neon	aarch64	verified	39.7	
+isa-l erasure_code	gf_2vect_dot_prod_sse	x86_64	verified	6.7	
+isa-l erasure_code	gf_2vect_mad_avx	x86_64	verified	1.2	
+isa-l erasure_code	gf_2vect_mad_avx2	x86_64	verified	1.8	
+isa-l erasure_code	gf_2vect_mad_avx2_gfni	x86_64	verified	148.7	
+isa-l erasure_code	gf_2vect_mad_avx512	x86_64	verified	1.8	
+isa-l erasure_code	gf_2vect_mad_avx512_gfni	x86_64	verified	1.9	
+isa-l erasure_code	gf_2vect_mad_neon	aarch64	verified	6.5	
+isa-l erasure_code	gf_2vect_mad_sse	x86_64	verified	1.8	
+isa-l erasure_code	gf_2vect_mad_sve	aarch64	ERROR	0.1	panicked: not yet implemented: not a valid register type for set register Label("z0.b")
+isa-l erasure_code	gf_3vect_dot_prod_avx	x86_64	verified	10.7	
+isa-l erasure_code	gf_3vect_dot_prod_avx2	x86_64	verified	11.3	
+isa-l erasure_code	gf_3vect_dot_prod_avx2_gfni	x86_64	TIMEOUT	300.1	killed after 300s
+isa-l erasure_code	gf_3vect_dot_prod_avx512	x86_64	verified	13.9	
+isa-l erasure_code	gf_3vect_dot_prod_avx512_gfni	x86_64	verified	16.3	
+isa-l erasure_code	gf_3vect_dot_prod_neon	aarch64	verified	36.6	
+isa-l erasure_code	gf_3vect_dot_prod_sse	x86_64	verified	23.1	
+isa-l erasure_code	gf_3vect_mad_avx	x86_64	verified	10.2	
+isa-l erasure_code	gf_3vect_mad_avx2	x86_64	verified	8.8	
+isa-l erasure_code	gf_3vect_mad_avx2_gfni	x86_64	verified	235.0	
+isa-l erasure_code	gf_3vect_mad_avx512	x86_64	verified	1.4	
+isa-l erasure_code	gf_3vect_mad_avx512_gfni	x86_64	verified	1.5	
+isa-l erasure_code	gf_3vect_mad_neon	aarch64	verified	6.8	
+isa-l erasure_code	gf_3vect_mad_sse	x86_64	verified	1.4	
+isa-l erasure_code	gf_3vect_mad_sve	aarch64	ERROR	0.1	panicked: not yet implemented: not a valid register type for set register Label("z0.b")
+isa-l erasure_code	gf_4vect_dot_prod_avx	x86_64	verified	8.2	
+isa-l erasure_code	gf_4vect_dot_prod_avx2	x86_64	verified	7.6	
+isa-l erasure_code	gf_4vect_dot_prod_avx2_gfni	x86_64	TIMEOUT	300.1	killed after 300s
+isa-l erasure_code	gf_4vect_dot_prod_avx512	x86_64	verified	14.1	
+isa-l erasure_code	gf_4vect_dot_prod_avx512_gfni	x86_64	verified	12.5	
+isa-l erasure_code	gf_4vect_dot_prod_neon	aarch64	verified	36.9	
+isa-l erasure_code	gf_4vect_dot_prod_sse	x86_64	verified	7.8	
+isa-l erasure_code	gf_4vect_mad_avx	x86_64	verified	1.6	
+isa-l erasure_code	gf_4vect_mad_avx2	x86_64	verified	1.6	
+isa-l erasure_code	gf_4vect_mad_avx2_gfni	x86_64	verified	88.8	
+isa-l erasure_code	gf_4vect_mad_avx512	x86_64	verified	1.3	
+isa-l erasure_code	gf_4vect_mad_avx512_gfni	x86_64	verified	1.3	
+isa-l erasure_code	gf_4vect_mad_neon	aarch64	verified	6.7	
+isa-l erasure_code	gf_4vect_mad_sse	x86_64	verified	1.3	
+isa-l erasure_code	gf_4vect_mad_sve	aarch64	ERROR	0.1	panicked: not yet implemented: not a valid register type for set register Label("z0.b")
+isa-l erasure_code	gf_5vect_dot_prod_avx	x86_64	verified	7.6	
+isa-l erasure_code	gf_5vect_dot_prod_avx2	x86_64	verified	6.9	
+isa-l erasure_code	gf_5vect_dot_prod_avx2_gfni	x86_64	FAIL	235.0	line 74 (vmovdqu): read of 32 bytes at src_row - 3 * 32 + loop2_? * 32 + 64 + 32 not provably within region of length len * 1; line 74 (vmovdqu): read of 32 bytes at src_row - 3 * 32 + loop66_? * 32 + 64 + 32 not provably within region of length len * 1; line 74 (vmovdqu): read of 32 bytes at src_row - 3 * 32 + loop98_? * 32 + 64 + 32 not provably within region of length len * 1; line 74 (vmovdqu): read of 32 bytes at src_row - 3 * 32 + loop99_? * 32 + 64 + 32 not provably within region of length len * 1
+isa-l erasure_code	gf_5vect_dot_prod_avx512	x86_64	verified	7.1	
+isa-l erasure_code	gf_5vect_dot_prod_avx512_gfni	x86_64	verified	9.9	
+isa-l erasure_code	gf_5vect_dot_prod_neon	aarch64	verified	37.7	
+isa-l erasure_code	gf_5vect_dot_prod_sse	x86_64	verified	8.2	
+isa-l erasure_code	gf_5vect_mad_avx	x86_64	verified	1.9	
+isa-l erasure_code	gf_5vect_mad_avx2	x86_64	verified	1.7	
+isa-l erasure_code	gf_5vect_mad_avx2_gfni	x86_64	verified	82.7	
+isa-l erasure_code	gf_5vect_mad_avx512	x86_64	verified	1.3	
+isa-l erasure_code	gf_5vect_mad_avx512_gfni	x86_64	verified	1.3	
+isa-l erasure_code	gf_5vect_mad_neon	aarch64	verified	7.1	
+isa-l erasure_code	gf_5vect_mad_sse	x86_64	verified	1.5	
+isa-l erasure_code	gf_5vect_mad_sve	aarch64	ERROR	0.1	panicked: not yet implemented: not a valid register type for set register Label("z0.b")
+isa-l erasure_code	gf_6vect_dot_prod_avx	x86_64	verified	8.0	
+isa-l erasure_code	gf_6vect_dot_prod_avx2	x86_64	verified	7.2	
+isa-l erasure_code	gf_6vect_dot_prod_avx2_gfni	x86_64	FAIL	228.0	line 80 (vmovdqu): read of 32 bytes at src_row - 3 * 32 + loop2_? * 32 + 64 + 32 not provably within region of length len * 1; line 80 (vmovdqu): read of 32 bytes at src_row - 3 * 32 + loop66_? * 32 + 64 + 32 not provably within region of length len * 1; line 80 (vmovdqu): read of 32 bytes at src_row - 3 * 32 + loop98_? * 32 + 64 + 32 not provably within region of length len * 1; line 80 (vmovdqu): read of 32 bytes at src_row - 3 * 32 + loop99_? * 32 + 64 + 32 not provably within region of length len * 1
+isa-l erasure_code	gf_6vect_dot_prod_avx512	x86_64	verified	7.3	
+isa-l erasure_code	gf_6vect_dot_prod_avx512_gfni	x86_64	verified	8.7	
+isa-l erasure_code	gf_6vect_dot_prod_sse	x86_64	verified	8.2	
+isa-l erasure_code	gf_6vect_mad_avx	x86_64	verified	1.9	
+isa-l erasure_code	gf_6vect_mad_avx2	x86_64	verified	1.8	
+isa-l erasure_code	gf_6vect_mad_avx2_gfni	x86_64	verified	96.9	
+isa-l erasure_code	gf_6vect_mad_avx512	x86_64	verified	1.4	
+isa-l erasure_code	gf_6vect_mad_avx512_gfni	x86_64	verified	1.5	
+isa-l erasure_code	gf_6vect_mad_neon	aarch64	verified	7.2	
+isa-l erasure_code	gf_6vect_mad_sse	x86_64	verified	1.4	
+isa-l erasure_code	gf_6vect_mad_sve	aarch64	ERROR	0.1	panicked: not yet implemented: not a valid register type for set register Label("z0.b")
+isa-l erasure_code	gf_vect_dot_prod_avx	x86_64	verified	6.6	
+isa-l erasure_code	gf_vect_dot_prod_avx2	x86_64	verified	6.7	
+isa-l erasure_code	gf_vect_dot_prod_avx2_gfni	x86_64	TIMEOUT	300.0	killed after 300s
+isa-l erasure_code	gf_vect_dot_prod_avx512	x86_64	verified	7.6	
+isa-l erasure_code	gf_vect_dot_prod_avx512_gfni	x86_64	verified	7.4	
+isa-l erasure_code	gf_vect_dot_prod_neon	aarch64	verified	34.5	
+isa-l erasure_code	gf_vect_dot_prod_sse	x86_64	verified	7.6	
+isa-l erasure_code	gf_vect_mad_avx	x86_64	verified	1.4	
+isa-l erasure_code	gf_vect_mad_avx2	x86_64	verified	1.6	
+isa-l erasure_code	gf_vect_mad_avx2_gfni	x86_64	verified	250.3	
+isa-l erasure_code	gf_vect_mad_avx512	x86_64	verified	2.1	
+isa-l erasure_code	gf_vect_mad_avx512_gfni	x86_64	verified	2.6	
+isa-l erasure_code	gf_vect_mad_neon	aarch64	verified	6.4	
+isa-l erasure_code	gf_vect_mad_sse	x86_64	verified	2.2	
+isa-l erasure_code	gf_vect_mad_sve	aarch64	ERROR	0.1	panicked: not yet implemented: not a valid register type for set register Label("z0.b")
+isa-l erasure_code	gf_vect_mul_avx	x86_64	verified	0.9	
+isa-l erasure_code	gf_vect_mul_avx2_gfni	x86_64	verified	0.9	
+isa-l erasure_code	gf_vect_mul_neon	aarch64	verified	3.3	
+isa-l erasure_code	gf_vect_mul_sse	x86_64	verified	1.1	
+isa-l erasure_code	gf_vect_mul_sve	aarch64	ERROR	0.1	panicked: not yet implemented: not a valid register type for set register Label("z0.b")
+isa-l igzip	adler32_avx2_4	x86_64	FAIL	84.1	line 121: branch depth exceeded 32; line 128: branch depth exceeded 32; line 34: branch depth exceeded 32; line 45: branch depth exceeded 32; line 92: branch depth exceeded 32; line 49: branch depth exceeded 32; line 35 (vbroadcastf128): read of 16 bytes at start_as_ptr + loop2_? * 16 + loop5_? * 16 + loop21_? * 16 + loop25_? * 16 + loop29_? * 16 + loop33_? * 16 + loop37_? * 16 + loop44_? * 32 - 64 not provably within region of length start_len * 1; line 128: branch depth exceeded 32
+isa-l igzip	adler32_neon	aarch64	FAIL	64.8	line 14: branch depth exceeded 32; line 49: branch depth exceeded 32; line 37: branch depth exceeded 32; line 59: branch depth exceeded 32; line 52: branch depth exceeded 32; line 59: branch depth exceeded 32; line 59: branch depth exceeded 32
+isa-l igzip	adler32_sse	x86_64	FAIL	23.1	line 115 (movzbl): read of 1 bytes at start_as_ptr + loop2_? * 8 + loop15_? * 16 - 16 not provably within region of length start_len * 1; line 49 (pmovzxbd): read of 4 bytes at start_as_ptr + loop2_? * 8 + loop15_? * 16 - 16 not provably within region of length start_len * 1
+isa-l igzip	build_heap	x86_64	FAIL	8.0	line 121 (movq): read of 8 bytes at heap_as_mut_ptr + (loop5_?_widened_11 + loop5_?_widened_11) * 8 + 0 not provably within region of length 6872; line 123 (movq): read of 8 bytes at heap_as_mut_ptr + loop6_?_widened_8 * 8 + 0 not provably within region of length 6872; line 121 (movq): read of 8 bytes at heap_as_mut_ptr + (loop7_?_widened_11 + loop7_?_widened_11) * 8 + 0 not provably within region of length 6872; line 121 (movq): read of 8 bytes at heap_as_mut_ptr + (loop8_?_widened_11 + loop8_?_widened_11) * 8 + 0 not provably within region of length 6872; line 123 (movq): read of 8 bytes at heap_as_mut_ptr + loop9_?_widened_8 * 8 + 0 not provably within region of length 6872; line 121 (movq): read of 8 bytes at heap_as_mut_ptr + (loop10_?_widened_11 + loop10_?_widened_11) * 8 + 0 not provably within region of length 6872
+isa-l igzip	build_huff_tree	x86_64	TIMEOUT	300.0	killed after 300s
+isa-l igzip	decode_huffman_code_block_stateless_01	x86_64	TIMEOUT	300.1	killed after 300s
+isa-l igzip	decode_huffman_code_block_stateless_04	x86_64	TIMEOUT	300.0	killed after 300s
+isa-l igzip	decode_huffman_code_block_stateless_aarch64	aarch64	TIMEOUT	300.0	killed after 300s
+isa-l igzip	encode_deflate_icf_04	x86_64	FAIL	1.4	line 294 (movl): read of 4 bytes at hufftables_as_ptr + (loop1_?_widened_12 & 1023) * 4 + 124 not provably within region of length 2176; line 19 (vpgatherdd): vpgatherdd indexed by Vector { index: 7, width: 32 } whose lanes have no known bound
+isa-l igzip	encode_deflate_icf_06	x86_64	FAIL	1.7	line 453 (movl): read of 4 bytes at hufftables_as_ptr + (loop1_?_widened_12 & 1023) * 4 + 124 not provably within region of length 2176; line 35 (vpgatherdd): read of 1023 * 4 + 4 bytes at hufftables_as_ptr + 0 * 4 + 124 not provably within region of length 2176
+isa-l igzip	encode_deflate_icf_aarch64	aarch64	FAIL	97.5	line 56: branch depth exceeded 32; line 13: branch depth exceeded 32
+isa-l igzip	gen_icf_map_h1_aarch64	aarch64	TIMEOUT	300.0	killed after 300s
+isa-l igzip	gen_icf_map_lh1_04	x86_64	verified	10.7	
+isa-l igzip	gen_icf_map_lh1_06	x86_64	verified	3.4	
+isa-l igzip	isal_deflate_body_01	x86_64	TIMEOUT	300.0	killed after 300s
+isa-l igzip	isal_deflate_body_02	x86_64	TIMEOUT	300.1	killed after 300s
+isa-l igzip	isal_deflate_body_04	x86_64	TIMEOUT	300.1	killed after 300s
+isa-l igzip	isal_deflate_body_aarch64	aarch64	TIMEOUT	300.1	killed after 300s
+isa-l igzip	isal_deflate_finish_01	x86_64	TIMEOUT	300.0	killed after 300s
+isa-l igzip	isal_deflate_finish_aarch64	aarch64	TIMEOUT	300.1	killed after 300s
+isa-l igzip	isal_deflate_hash_aarch64	aarch64	FAIL	0.3	line 10 (ldr): read of 4 bytes at dict_as_ptr + 0 not provably within region of length dict_len * 1
+isa-l igzip	isal_deflate_hash_aarch64	aarch64	verified	0.8	
+isa-l igzip	isal_deflate_hash_crc_01	x86_64	FAIL	0.7	line 40 (movw): write of 2 bytes at hash_table_as_mut_ptr + field_2 atleast 0 atmost field_1 atleast 0 atmost 4294967295 * 2 + 0 not provably within region of length hash_table_len * 2; line 14 (crc32l): read of 4 bytes at dict_as_ptr + 1 not provably within region of length dict_len * 1
+isa-l igzip	isal_deflate_hash_crc_01	x86_64	FAIL	0.8	line 40 (movw): write of 2 bytes at hash_table_as_mut_ptr + field_2 atleast 0 atmost field_1 atleast 0 atmost 4294967295 * 2 + 0 not provably within region of length hash_table_len * 2; line 12 (crc32l): read of 4 bytes at dict_as_ptr + 0 not provably within region of length dict_len * 1
+isa-l igzip	isal_deflate_icf_body_hash_hist_01	x86_64	TIMEOUT	300.1	killed after 300s
+isa-l igzip	isal_deflate_icf_body_hash_hist_02	x86_64	TIMEOUT	300.1	killed after 300s
+isa-l igzip	isal_deflate_icf_body_hash_hist_04	x86_64	TIMEOUT	300.0	killed after 300s
+isa-l igzip	isal_deflate_icf_body_hash_hist_aarch64	aarch64	FAIL	11.0	line 80 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 - ((zs_field2 - loaded_2 atleast 0 atmost 65535 % 4294967296) % 4294967296 & 65535) % 4294967296 zext 16 + field_4 atleast 0 atmost 2305843009213693951 + field_6 atleast 0 atmost 2305843009213693951 + loop0_?_progress_3 + 0 not provably within region of length input_len * 1; line 121 (ldr): read of 4 bytes through an address with no known region (2176); line 39 (ldr): read of 4 bytes at input_as_ptr + 32768 * 1 + ((field_4 atleast 0 atmost 2305843009213693951 + field_6 atleast 0 atmost 2305843009213693951) % 4294967296 & 65535) % 4294967296 zext 16 + loop2_?_progress_9 + 0 not provably within region of length input_len * 1; line 121 (ldr): read of 4 bytes through an address with no known region (2176); line 39 (ldr): read of 4 bytes at input_as_ptr + 32768 * 1 + (select_7 & 65535) % 4294967296 zext 16 + loop3_? * 258 - 774 not provably within region of length input_len * 1; line 39 (ldr): read of 4 bytes at input_as_ptr + 32768 * 1 + loop4_? * 1 - 2 not provably within region of length input_len * 1; line 121 (ldr): read of 4 bytes through an address with no known region (2176); line 39 (ldr): read of 4 bytes at input_as_ptr + 32768 * 1 + (field_4 atleast 0 atmost 2305843009213693951 % 4294967296 & 65535) % 4294967296 zext 16 + loop5_?_progress_9 + 0 not provably within region of length input_len * 1; line 121 (ldr): read of 4 bytes through an address with no known region (2176); line 39 (ldr): read of 4 bytes at input_as_ptr + 32768 * 1 + (select_5 & 65535) % 4294967296 zext 16 + loop6_? * 258 - 774 not provably within region of length input_len * 1; line 39 (ldr): read of 4 bytes at input_as_ptr + 32768 * 1 + loop7_? * 1 - 2 not provably within region of length input_len * 1
+isa-l igzip	isal_deflate_icf_finish_hash_hist_01	x86_64	TIMEOUT	300.1	killed after 300s
+isa-l igzip	isal_deflate_icf_finish_hash_hist_aarch64	aarch64	TIMEOUT	300.0	killed after 300s
+isa-l igzip	isal_update_histogram_01	x86_64	FAIL	8.3	line 206 (cmpb): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 }); line 196 (xorq): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 }); line 73 (xorq): read of 8 bytes at start_as_ptr + 0 - field_27 atleast 0 atmost 32767 + 0 not provably within region of length start_len * 1
+isa-l igzip	isal_update_histogram_04	x86_64	FAIL	7.2	line 206 (cmpb): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 }); line 196 (xorq): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 }); line 73 (xorq): read of 8 bytes at start_as_ptr + 0 - field_27 atleast 0 atmost 32767 + 0 not provably within region of length start_len * 1
+isa-l igzip	isal_update_histogram_aarch64	aarch64	FAIL	1.3	line 32 (ldr): read of 4 bytes at start_as_ptr + 0 not provably within region of length start_len * 1
+isa-l igzip	set_long_icf_fg_04	x86_64	FAIL	7.4	line 56 (vmovdqu): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 }); line 22 (vmovdqu): read of 32 bytes at matches_as_mut_ptr + loop4_? * 32 + 0 not provably within region of length matches_len * 4; line 56 (vmovdqu): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 }); line 56 (vmovdqu): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 })
+isa-l igzip	set_long_icf_fg_06	x86_64	FAIL	5.3	line 51 (vpgatherdq): vpgatherdq indexed by Vector { index: 5, width: 32 } whose lanes have no known bound
+isa-l igzip	set_long_icf_fg_aarch64	aarch64	FAIL	6.0	line 51 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 + loop0_? * 1 + loop2_? * 1 + 0 - ((loaded_7 atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_8 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 6 not provably within region of length input_len * 1; line 51 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 + loop0_? * 1 + 0 - ((loaded_6 atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_7 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 8 not provably within region of length input_len * 1; line 60 (ldrb): read of 1 bytes at input_as_ptr + 32768 * 1 + loop0_? * 1 + 0 - ((loaded_2 atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_3 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 7 not provably within region of length input_len * 1; line 51 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 + loop0_? * 1 + 0 - ((loaded_2 atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_3 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 7 not provably within region of length input_len * 1; line 51 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 + 0 - ((matches_as_mut_ptr[6:2] atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_0 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 9 not provably within region of length input_len * 1; line 51 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 + 0 - ((matches_as_mut_ptr[2:2] atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_0 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 8 not provably within region of length input_len * 1; line 51 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 + loop3_? * 1 + 0 - ((loaded_2 atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_3 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 7 not provably within region of length input_len * 1; line 51 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 + 0 - ((matches_as_mut_ptr[6:2] atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_0 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 9 not provably within region of length input_len * 1; line 51 (ldr): read of 8 bytes at input_as_ptr + 32768 * 1 + 0 - ((matches_as_mut_ptr[2:2] atleast 0 atmost 65535 % 4294967296 lsr 3) % 8192 % 4294967296 + loaded_0 atleast 0 atmost 4294967295 % 4294967296) % 4294967296 + 8 not provably within region of length input_len * 1
+isa-l mem	mem_zero_detect_avx	x86_64	verified	13.2	
+isa-l mem	mem_zero_detect_avx2	x86_64	FAIL	4.2	line 57 (movq): read of 8 bytes at mem_as_ptr + 16 not provably within region of length mem_len * 1; line 27 (vmovdqu): read of 32 bytes at mem_as_ptr + (len % 4294967296 & 127) + 128 not provably within region of length mem_len * 1
+isa-l mem	mem_zero_detect_avx512	x86_64	FAIL	2.0	line 27 (vmovdqa64): read of 64 bytes at mem_as_ptr + (0 - (mem_as_ptr % 4294967296 & 63) + 64) % 4294967296 + 128 not provably within region of length mem_len * 1
+isa-l mem	mem_zero_detect_neon	aarch64	verified	234.9	
+isa-l mem	mem_zero_detect_sse	x86_64	verified	10.4	
+isa-l raid	pq_check_neon	aarch64	verified	20.1	
+isa-l raid	pq_check_sse	x86_64	verified	29.4	
+isa-l raid	pq_gen_avx	x86_64	verified	15.0	
+isa-l raid	pq_gen_avx2	x86_64	verified	19.6	
+isa-l raid	pq_gen_avx2_gfni	x86_64	verified	11.8	
+isa-l raid	pq_gen_avx512	x86_64	verified	30.7	
+isa-l raid	pq_gen_avx512_gfni	x86_64	verified	30.8	
+isa-l raid	pq_gen_neon	aarch64	verified	24.2	
+isa-l raid	pq_gen_sse	x86_64	verified	10.7	
+isa-l raid	xor_check_neon	aarch64	FAIL	433.6	line 132: branch depth exceeded 32; line 130: branch depth exceeded 32; line 149: branch depth exceeded 32; line 144: branch depth exceeded 32; line 132: branch depth exceeded 32; line 147: branch depth exceeded 32; line 149: branch depth exceeded 32; line 149: branch depth exceeded 32; line 124: branch depth exceeded 32; line 132: branch depth exceeded 32; line 130: branch depth exceeded 32; line 132: branch depth exceeded 32; line 147: branch depth exceeded 32; line 96: branch depth exceeded 32; line 93: branch depth exceeded 32; line 128: branch depth exceeded 32; line 109: branch depth exceeded 32; line 149: branch depth exceeded 32; line 144: branch depth exceeded 32; line 110: branch depth exceeded 32; line 127: branch depth exceeded 32; line 132: branch depth exceeded 32; line 147: branch depth exceeded 32; line 149: branch depth exceeded 32; line 132: branch depth exceeded 32; line 130: branch depth exceeded 32; line 149: branch depth exceeded 32; line 144: branch depth exceeded 32; line 132: branch depth exceeded 32; line 147: branch depth exceeded 32; line 132: branch depth exceeded 32; line 147: branch depth exceeded 32; line 149: branch depth exceeded 32; line 17: branch depth exceeded 32; line 96: branch depth exceeded 32; line 132: branch depth exceeded 32; line 130: branch depth exceeded 32; line 149: branch depth exceeded 32; line 124: branch depth exceeded 32; line 132: branch depth exceeded 32; line 147: branch depth exceeded 32; line 110: branch depth exceeded 32; line 127: branch depth exceeded 32; line 149: branch depth exceeded 32; line 132: branch depth exceeded 32; line 130: branch depth exceeded 32; line 149: branch depth exceeded 32; line 144: branch depth exceeded 32; line 132: branch depth exceeded 32; line 147: branch depth exceeded 32; line 132: branch depth exceeded 32; line 147: branch depth exceeded 32; line 149: branch depth exceeded 32
+isa-l raid	xor_check_sse	x86_64	verified	344.6	
+isa-l raid	xor_gen_avx	x86_64	verified	254.7	
+isa-l raid	xor_gen_avx512	x86_64	verified	247.5	
+isa-l raid	xor_gen_neon	aarch64	FAIL	440.7	line 94 (reached at line 35: loop at L_11c) not summarized after 20 revisits
+isa-l raid	xor_gen_sse	x86_64	verified	259.7	
+zlib-ng	adler32_avx2	x86_64	TIMEOUT	300.0	killed after 300s
+zlib-ng	adler32_avx512	x86_64	TIMEOUT	300.0	killed after 300s
+zlib-ng	adler32_avx512_vnni	x86_64	TIMEOUT	300.0	killed after 300s
+zlib-ng	adler32_fold_copy_avx2	x86_64	TIMEOUT	300.0	killed after 300s
+zlib-ng	adler32_fold_copy_avx512	x86_64	TIMEOUT	300.1	killed after 300s
+zlib-ng	adler32_fold_copy_avx512_vnni	x86_64	FAIL	159.2	line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 0 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 32 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 32 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 64 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16512 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 + loop3_? * 128 - 16512 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16256 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16384 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16448 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 + loop4_? * 128 - 16448 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16192 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16320 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 + loop5_? * 128 - 16544 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16288 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16416 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16480 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 + loop6_? * 128 - 16480 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16224 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + loop2_? * 5536 - 16352 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop1_? * 128 + 64 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 320 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 192 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 128 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop7_? * 128 + 128 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 384 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 256 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop8_? * 128 + 32 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 288 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 160 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 96 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + loop9_? * 128 + 96 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 352 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop0_? * 128 + 224 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 288 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 160 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 96 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop10_? * 128 + 96 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 352 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 224 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop11_? * 128 + 0 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 256 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 128 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 64 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + loop12_? * 128 + 64 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 320 not provably within region of length src_len * 1; line 282 (vmovdqu8): read of 32 bytes at src_as_ptr + 192 not provably within region of length src_len * 1
+zlib-ng	adler32_fold_copy_neon	aarch64	TIMEOUT	300.0	killed after 300s
+zlib-ng	adler32_fold_copy_sse42	x86_64	FAIL	178.3	line 180 (movzbl): read of 1 bytes at src_as_ptr + loop1_? * 32 + loop39_? * 80 - 144 not provably within region of length src_len * 1; line 154 (movzbl): read of 1 bytes at src_as_ptr + loop1_? * 32 + loop39_? * 80 - 144 not provably within region of length src_len * 1; line 100 (movdqu): read of 16 bytes at src_as_ptr + loop1_? * 32 + loop39_? * 80 - 144 not provably within region of length src_len * 1; line 63 (movdqu): read of 16 bytes at src_as_ptr + loop1_? * 32 + loop39_? * 80 - 144 not provably within region of length src_len * 1
+zlib-ng	adler32_neon	aarch64	TIMEOUT	300.0	killed after 300s
+zlib-ng	adler32_ssse3	x86_64	TIMEOUT	300.1	killed after 300s
+zlib-ng	chunkmemset_safe_avx2	x86_64	FAIL	6.8	line 37 (movq): read of 8 bytes at buf_as_mut_ptr + (pos - dist) * 1 + 0 not provably within region of length buf_len * 1; line 264 (movzwl): read of 2 bytes at .rodata + (pos * 1 - (pos - dist) * 1 + 4294967293) % 4294967296 * 4 + 32 not provably within region of length 992; line 209 (movslq): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 }); line 264 (movzwl): read of 2 bytes at .rodata + (pos * 1 - (pos - dist) * 1 + 4294967293) % 4294967296 * 4 + 32 not provably within region of length 992; line 209 (movslq): read through a pointer with no known region (RegisterValue { kind: Number, base: None, offset: 0 }); line 189 (movzwl): read of 2 bytes at .rodata + (pos * 1 - (pos - dist) * 1 + 4294967293) % 4294967296 * 4 + 32 not provably within region of length 992
+zlib-ng	chunkmemset_safe_avx512	x86_64	TIMEOUT	300.0	killed after 300s
+zlib-ng	chunkmemset_safe_neon	aarch64	FAIL	135.8	line 44 (ldr): read of 16 bytes at buf_as_mut_ptr + (pos - dist) * 1 + (select_0 - 1 & 15) % 4294967296 + 17 not provably within region of length buf_len * 1
+zlib-ng	chunkmemset_safe_sse2	x86_64	FAIL	52.0	line 1764 (movb): write of 1 bytes at sp + pos * 1 - (pos - dist) * 1 + pos * 1 - (pos - dist) * 1 - 3 * (pos * 1 - (pos - dist) * 1) - 72 + loop21_? * (pos * 1 - (pos - dist) * 1) + 0 not provably within the stack frame (entry rsp + 8)
+zlib-ng	chunkmemset_safe_ssse3	x86_64	FAIL	26.6	line 121 (movdqu): write of 16 bytes at buf_as_mut_ptr + pos * 1 + (0 - element_3 atleast 0 atmost 320 % 65536 + 16) % 4294967296 + 0 not provably within region of length buf_len * 1; line 109 (movdqu): write of 16 bytes at buf_as_mut_ptr + pos * 1 + (0 - element_3 atleast 0 atmost 320 % 65536 + 16) % 4294967296 + 0 not provably within region of length buf_len * 1
+zlib-ng	compare256_avx2	x86_64	verified	1.9	
+zlib-ng	compare256_avx512	x86_64	verified	3.5	
+zlib-ng	compare256_neon	aarch64	verified	1.7	
+zlib-ng	compare256_sse2	x86_64	verified	48.8	
+zlib-ng	crc32_armv8	aarch64	verified	59.2	
+zlib-ng	crc32_chorba_sse2	x86_64	TIMEOUT	300.0	killed after 300s
+zlib-ng	crc32_chorba_sse41	x86_64	TIMEOUT	300.1	killed after 300s
+zlib-ng	crc32_fold_armv8	aarch64	verified	71.4	
+zlib-ng	crc32_fold_copy_armv8	aarch64	verified	98.0	
+zlib-ng	crc32_fold_pclmulqdq	x86_64	verified	319.4	
+zlib-ng	crc32_fold_pclmulqdq_copy	x86_64	verified	34.0	
+zlib-ng	crc32_fold_pclmulqdq_final	x86_64	verified	0.1	
+zlib-ng	crc32_fold_pclmulqdq_reset	x86_64	verified	0.1	
+zlib-ng	crc32_fold_vpclmulqdq	x86_64	verified	346.7	
+zlib-ng	crc32_fold_vpclmulqdq_copy	x86_64	FAIL	75.0	line 491 (vmovdqu64): read of 64 bytes at src_as_ptr + ((0 - src_as_ptr % 4294967296) % 4294967296 & 15 | 448) - 192 not provably within region of length src_len * 1
+zlib-ng	crc32_fold_vpclmulqdq_final	x86_64	verified	0.1	
+zlib-ng	crc32_fold_vpclmulqdq_reset	x86_64	verified	0.1	
+zlib-ng	crc32_pclmulqdq	x86_64	verified	321.5	
+zlib-ng	crc32_vpclmulqdq	x86_64	verified	377.9	
+zlib-ng	slide_hash_avx2	x86_64	verified	6.3	
+zlib-ng	slide_hash_neon	aarch64	verified	5.1	
+zlib-ng	slide_hash_sse2	x86_64	verified	6.4	
+zstd	HUF_decompress4X1_usingDTable_internal_fast_asm_loop	x86_64	TIMEOUT	300.1	killed after 300s
+zstd	HUF_decompress4X2_usingDTable_internal_fast_asm_loop	x86_64	TIMEOUT	300.1	killed after 300s

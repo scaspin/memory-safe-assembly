@@ -329,12 +329,55 @@ impl MachineInstruction for Instruction {
             };
         }
     }
+
+    fn flag_zero_latch(code: &[Self], branch_pc: usize) -> Option<(&'static str, Operand, i64)> {
+        let condition = code.get(branch_pc)?.opcode.strip_prefix("b.")?;
+        let mut pc = branch_pc;
+        let setter = loop {
+            pc = pc.checked_sub(1)?;
+            let instruction = code.get(pc)?;
+            if matches!(
+                instruction.ty,
+                InstructionType::Label | InstructionType::ControlFlow
+            ) {
+                return None;
+            }
+            match instruction.opcode.as_str() {
+                "subs" | "adds" => break instruction,
+                op if op.ends_with('s') || matches!(op, "cmp" | "cmn" | "tst") => return None,
+                _ => continue,
+            }
+        };
+        let [
+            Operand::Register(prefix @ (RePrefix::X | RePrefix::W), number),
+            _,
+            Operand::Immediate(step),
+        ] = setter.operands.as_slice()
+        else {
+            return None;
+        };
+        let tested = general_register_index(prefix, *number)?;
+        if code[pc + 1..branch_pc]
+            .iter()
+            .any(|between| between.mentions(tested))
+        {
+            return None;
+        }
+        let op = match (condition, setter.opcode.as_str(), step) {
+            ("ne", ..) | ("lo" | "cc", "adds", 1) => "!=",
+            ("eq", ..) | ("hs" | "cs", "adds", 1) => "==",
+            _ => return None,
+        };
+        let width = if *prefix == RePrefix::X { 8 } else { 4 };
+        Some((op, Operand::Register(prefix.clone(), *number), width))
+    }
 }
 
 impl Machine for ARMCORTEXA {
     type Operand = Operand;
     type Instruction = Instruction;
     type Lanes = (Box<[SimdRegister; 32]>, Box<LaneBounds>);
+    type LoopLanes = ();
 
     fn new() -> Self {
         ARMCORTEXA::new()
@@ -402,6 +445,10 @@ impl Machine for ARMCORTEXA {
         self.simd_registers = simd_registers;
         self.lane_bounds = lane_bounds;
     }
+
+    fn loop_lanes(&self) {}
+
+    fn keep_loop_lanes(&mut self, _previous: &(), _current: ()) {}
 
     fn set_flags(&mut self, flags: [Option<FlagValue>; 4]) {
         ARMCORTEXA::set_flags(self, flags)
@@ -529,6 +576,14 @@ impl Machine for ARMCORTEXA {
 
     fn add_element_range(&mut self, region: &str, range: ElementRange) {
         ARMCORTEXA::add_element_range(self, region, range)
+    }
+
+    fn element_ranges_of(&self, region: &str) -> Vec<ElementRange> {
+        self.element_ranges.get(region).cloned().unwrap_or_default()
+    }
+
+    fn retire_element_ranges(&mut self, region: &str) {
+        self.element_ranges.remove(region);
     }
 
     fn allow_red_zone(&mut self, bytes: i64) {

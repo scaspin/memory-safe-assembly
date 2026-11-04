@@ -184,15 +184,60 @@ impl MachineInstruction for Instruction {
     fn is_straight_line(&self) -> bool {
         !self.is_label() && self.flow() == Flow::Next && !self.may_select()
     }
+
+    fn flag_zero_latch(code: &[Self], branch_pc: usize) -> Option<(&'static str, Operand, i64)> {
+        let op = match code.get(branch_pc)?.mnemonic.as_str() {
+            "jne" | "jnz" => "!=",
+            "je" | "jz" => "==",
+            _ => return None,
+        };
+        let setter = code.get(branch_pc.checked_sub(1)?)?;
+        let counter = match (setter.mnemonic.as_str(), setter.operands.as_slice()) {
+            ("add" | "sub", [Operand::Immediate(_), Operand::Register(counter)])
+            | ("inc" | "dec", [Operand::Register(counter)]) => counter,
+            _ => return None,
+        };
+        let Register::Gpr {
+            width, high: false, ..
+        } = counter
+        else {
+            return None;
+        };
+        Some((op, Operand::Register(*counter), *width))
+    }
 }
 
 impl Machine for X86_64 {
     type Operand = Operand;
     type Instruction = Instruction;
-    type Lanes = ();
+    type Lanes = DwordLaneBounds;
+    type LoopLanes = DwordLaneBounds;
 
     fn new() -> Self {
         X86_64::new()
+    }
+
+    fn fresh_bounds(&self) -> &[ast::Bool] {
+        &self.fresh_bounds
+    }
+
+    fn add_element_range(&mut self, region: &str, range: ElementRange) {
+        self.element_ranges
+            .entry(region.to_string())
+            .or_default()
+            .push(range);
+    }
+
+    fn element_ranges_of(&self, region: &str) -> Vec<ElementRange> {
+        self.element_ranges.get(region).cloned().unwrap_or_default()
+    }
+
+    fn retire_element_ranges(&mut self, region: &str) {
+        self.element_ranges.remove(region);
+    }
+
+    fn add_pointer_elements(&mut self, region: &str, target: &str) {
+        X86_64::add_pointer_elements(self, region, target)
     }
 
     fn execute(
@@ -249,9 +294,21 @@ impl Machine for X86_64 {
         self.loaded.get(index).copied().unwrap_or(false)
     }
 
-    fn lanes(&self) {}
+    fn lanes(&self) -> Self::Lanes {
+        X86_64::dword_lane_bounds(self)
+    }
 
-    fn set_lanes(&mut self, _lanes: ()) {}
+    fn set_lanes(&mut self, lanes: Self::Lanes) {
+        X86_64::set_dword_lane_bounds(self, lanes)
+    }
+
+    fn loop_lanes(&self) -> Self::LoopLanes {
+        X86_64::dword_lane_bounds(self)
+    }
+
+    fn keep_loop_lanes(&mut self, previous: &Self::LoopLanes, current: Self::LoopLanes) {
+        X86_64::keep_invariant_dword_lanes(self, previous, current)
+    }
 
     fn set_flags(&mut self, flags: [Option<FlagValue>; 4]) {
         X86_64::set_flags(self, flags)

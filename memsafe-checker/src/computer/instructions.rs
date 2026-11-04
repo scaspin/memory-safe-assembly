@@ -326,9 +326,17 @@ impl ARMCORTEXA {
                 "add" => {
                     self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
                 }
-                "sub" => {
-                    self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
-                }
+                "sub" => match self.low_bits_left_after_clearing(&instruction.operands) {
+                    Some(low) => self.set_register(
+                        &instruction.operands[0],
+                        RegisterKind::RegisterBase,
+                        Some(low),
+                        0,
+                    ),
+                    None => {
+                        self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
+                    }
+                },
                 "neg" => {
                     let mut operands = instruction.operands.clone();
                     operands.insert(1, Operand::Register(RePrefix::Ze, 0));
@@ -338,22 +346,33 @@ impl ARMCORTEXA {
                     self.arithmetic("*", |x, y| x * y, instruction.operands.clone());
                 }
                 "and" => {
+                    let mask = self.nonnegative_mask(instruction);
                     self.arithmetic("&", |x, y| x & y, instruction.operands.clone());
                     self.fold_mask_within_aligned_region(instruction);
+                    self.bound_masked_result(instruction, mask);
                     self.realign_below_stack_pointer(instruction);
                 }
                 "orr" => {
-                    let widths = self.source_bit_widths(instruction);
+                    let bits = self.bitwise_operand_bits(instruction);
+                    let widths = if bits.is_none() {
+                        self.source_bit_widths(instruction)
+                    } else {
+                        None
+                    };
                     self.arithmetic("|", |x, y| x | y, instruction.operands.clone());
-                    self.bound_bitwise_result(instruction);
+                    self.bound_bitwise_result(instruction, bits);
                     self.bound_by_source_widths(instruction, widths);
                 }
                 "orn" => {
                     self.arithmetic("!|", |x, y: i64| x | !y, instruction.operands.clone());
                 }
+                "eon" => {
+                    self.arithmetic("!^", |x, y: i64| x ^ !y, instruction.operands.clone());
+                }
                 "eor" => {
+                    let bits = self.bitwise_operand_bits(instruction);
                     self.arithmetic("^", |x, y| x ^ y, instruction.operands.clone());
-                    self.bound_bitwise_result(instruction);
+                    self.bound_bitwise_result(instruction, bits);
                 }
                 "bic" => {
                     self.arithmetic("!&", |x, y: i64| x & !y, instruction.operands.clone());
@@ -772,7 +791,14 @@ impl ARMCORTEXA {
                 _ => todo!("Unsupported arithmetic instruction: {:?}", instruction),
             },
             InstructionType::ControlFlow => match instruction.opcode.as_str() {
-                "add" => (),
+                "add" => {
+                    if let [destination, source, ..] = instruction.operands.as_slice()
+                        && destination != source
+                    {
+                        let value = self.get_register(source);
+                        self.set_register(destination, value.kind, value.base, value.offset);
+                    }
+                }
                 "adr" => {
                     if let Operand::Address(label, _) = &instruction.operands[1] {
                         self.set_label_address(&instruction.operands[0], label);
@@ -975,7 +1001,27 @@ impl ARMCORTEXA {
                             instruction.opcode
                         ));
                     };
-                    match self.condition(cond)? {
+                    let decided = match self.condition(cond)? {
+                        FlagValue::Abstract(holds) => {
+                            let provable = |c: &AbstractComparison| {
+                                comparison_to_ast(c.clone().not()).is_some_and(|refuted| {
+                                    self.solver.check_assumptions(&[refuted]) == SatResult::Unsat
+                                })
+                            };
+                            if provable(&holds) {
+                                FlagValue::Real(true)
+                            } else if provable(&holds.clone().not()) {
+                                FlagValue::Real(false)
+                            } else {
+                                return Ok(ExecuteReturnType::Split(vec![
+                                    holds.clone(),
+                                    holds.not(),
+                                ]));
+                            }
+                        }
+                        real => real,
+                    };
+                    match decided {
                         FlagValue::Real(true) => {
                             let bits = Self::flag_bits(&instruction.operands);
                             let (left, right) = (self.get_register(left), self.get_register(right));
@@ -994,7 +1040,7 @@ impl ARMCORTEXA {
                                 Some(FlagValue::Real(v)),
                             ]);
                         }
-                        _ => self.set_unknown_flags(),
+                        FlagValue::Abstract(_) => unreachable!("decided above"),
                     }
                 }
                 _ => todo!(

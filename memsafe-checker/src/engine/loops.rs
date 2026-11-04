@@ -1,6 +1,12 @@
 use crate::computer::MAX_EXPRESSION_NODES;
 use std::fmt;
 
+const STACK_REGION: &str = "sp";
+const CONFINEMENT_RESOURCE_LIMIT: u32 = 60_000_000;
+const STEP_BOUND_RESOURCE_LIMIT: u32 = 2_000_000;
+const MAX_STEP_BOUND_NODES: usize = 200;
+const MAX_WITHIN_BOUND: i64 = 1 << 16;
+
 use super::*;
 
 enum Obligation {
@@ -13,6 +19,7 @@ enum Obligation {
     Bound(Bound),
     Carried(usize),
     Settled(usize),
+    Escaped(usize),
 }
 
 impl fmt::Display for Obligation {
@@ -27,6 +34,7 @@ impl fmt::Display for Obligation {
             Obligation::Bound(bound) => write!(f, "bound {}", bound.key()),
             Obligation::Carried(branch) => write!(f, "branch fact of line {branch}"),
             Obligation::Settled(i) => write!(f, "settled step of x{i}"),
+            Obligation::Escaped(i) => write!(f, "confinement of x{i}"),
         }
     }
 }
@@ -49,6 +57,8 @@ enum Decline {
     WidensRegion(LoopId, usize, Box<[RegisterValue; 2]>),
     UnprovedAtBase(LoopId, AbstractComparison),
     Contradicts(LoopId),
+    LowBitsWalker(usize),
+    EscapedLeader(LoopId, usize, usize),
 }
 
 impl Decline {
@@ -85,6 +95,12 @@ impl Decline {
             Decline::Contradicts(id) => {
                 log::info!("{id} at line {pc} summary contradicts the path, unrolling")
             }
+            Decline::LowBitsWalker(i) => log::info!(
+                "line {pc} tests the low bits of x{i}, which steps by one, so it exits within a few rounds: unrolling"
+            ),
+            Decline::EscapedLeader(id, i, j) => log::info!(
+                "{id} at line {pc} declined: x{i} follows x{j}, which escaped its confinement"
+            ),
         }
     }
 
@@ -93,19 +109,19 @@ impl Decline {
     }
 }
 
-struct Cycle {
-    history: Vec<JumpRecord>,
+struct Cycle<L> {
+    history: Vec<JumpRecord<L>>,
     index: usize,
-    previous: BranchPoint,
+    previous: BranchPoint<L>,
     continues: bool,
 }
 
-impl Cycle {
-    fn walked(&self) -> &[JumpRecord] {
+impl<L> Cycle<L> {
+    fn walked(&self) -> &[JumpRecord<L>] {
         &self.history[self.index + 1..]
     }
 
-    fn before(&self) -> &[JumpRecord] {
+    fn before(&self) -> &[JumpRecord<L>] {
         &self.history[..self.index]
     }
 }
@@ -114,11 +130,14 @@ struct Observation {
     entry: MachineState,
     current: MachineState,
     invariants: Vec<LoopInvariant>,
+    guard: AbstractComparison,
+    staying: AbstractComparison,
 }
 
 struct Draft {
     summary: Summary,
     settled_steps: Vec<SettledSelectStep>,
+    pinned_selects: Vec<ast::Bool>,
     continuing: AbstractComparison,
     bounds: Vec<Bound>,
     cells: Vec<(MemoryCell, LoopInvariant)>,
@@ -181,11 +200,14 @@ pub(super) struct PcRecord {
     unstable_slots: bool,
     uncarried: BTreeSet<usize>,
     select_refuted: bool,
+    unconfinable: BTreeSet<usize>,
 }
 
 #[derive(Default, Clone)]
 pub(super) struct LoopHistory {
     records: BTreeMap<usize, PcRecord>,
+    confined_instances: BTreeMap<usize, Vec<usize>>,
+    validated_instances: BTreeSet<usize>,
 }
 
 struct LoopBudget {
@@ -282,6 +304,24 @@ impl<M: Machine> Engine<M> {
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
         let explored = self.run(next, depth);
+        let unvalidated = {
+            let history = self.loop_history.borrow();
+            history
+                .confined_instances
+                .get(&instance)
+                .filter(|_| !history.validated_instances.contains(&instance))
+                .cloned()
+        };
+        if let Some(registers) = unvalidated {
+            log::info!(
+                "summary {instance} at line {pc} relied on confinements no continuing iteration checked, exploring again"
+            );
+            *self = fallback;
+            self.update_record(pc, |record| record.unconfinable.extend(registers));
+            self.loops.attempts.remove(&pc);
+            let decision = self.decide(pc, depth, &condition);
+            return self.follow_branch(pc, condition, decision, jump_dest, depth);
+        }
         let Verdict::Refuted { retry } = self.ledger.borrow_mut().refute(instance) else {
             let mut fallback = fallback;
             let continues = next == jump_dest;
@@ -410,13 +450,65 @@ impl<M: Machine> Engine<M> {
             }
             Decision::Take(taken)
                 if self.repeats_unboundedly(pc, taken, expression)
-                    || self.unrolling_costs_too_much(pc, taken, expression) =>
+                    || self.unrolling_costs_too_much(pc, taken, expression)
+                    || self.unrolling_runs_out_of_revisits(pc, taken, expression) =>
             {
                 self.try_summarize(pc, depth, expression).or(Some(taken))
             }
             Decision::Take(taken) => Some(taken),
             Decision::Explore => self.try_summarize(pc, depth, expression),
         }
+    }
+
+    fn unrolling_runs_out_of_revisits(
+        &self,
+        pc: usize,
+        taken: bool,
+        expression: &AbstractComparison,
+    ) -> bool {
+        if self.loops.active.iter().any(|open| open.pc == pc) {
+            return false;
+        }
+        let visits = visits_since_the_branch_turned(&self.jump_history, pc, taken);
+        if visits + 2 != self.revisit_cap() {
+            return false;
+        }
+        let Some(last) = self
+            .jump_history
+            .iter()
+            .rev()
+            .find(|record| record.point.pc == pc && !record.resolved)
+        else {
+            return false;
+        };
+        let distance_of = |condition: &AbstractComparison| {
+            expression_to_ast(generate_expression(
+                "-",
+                (*condition.left).clone(),
+                (*condition.right).clone(),
+            ))
+        };
+        let (Some(now), Some(before)) =
+            (distance_of(expression), distance_of(&last.point.condition))
+        else {
+            return false;
+        };
+        let Some(closing) = ast::Int::sub(&[&before, &now]).simplify().as_i64() else {
+            return false;
+        };
+        if closing == 0 {
+            return false;
+        }
+        let misses_the_exit = now
+            .modulo(ast::Int::from_i64(closing.abs()))
+            .eq(ast::Int::from_i64(0))
+            .not();
+        let runs_out = !matches!(expression.op.as_str(), "==" | "!=")
+            || self.computer.solver().check_assumptions(&[misses_the_exit]) == SatResult::Unsat;
+        if runs_out {
+            log::info!("line {pc} is about to exhaust its {visits} revisits, summarizing instead");
+        }
+        runs_out
     }
 
     fn repeats_unboundedly(&self, pc: usize, taken: bool, expression: &AbstractComparison) -> bool {
@@ -445,33 +537,57 @@ impl<M: Machine> Engine<M> {
         instruction: &M::Instruction,
         result: &Result<ExecuteReturnType<M::Operand>, String>,
     ) -> Option<(AbstractComparison, String)> {
-        let (op, tested, label) = instruction.zero_test()?;
-        let Ok(ExecuteReturnType::Next | ExecuteReturnType::JumpLabel(_)) = result else {
-            return None;
+        let (op, tested, label, width) = match instruction.zero_test() {
+            Some((op, tested, label)) => (op, tested.clone(), label.to_string(), 8),
+            None => {
+                let Flow::Branch(label) = instruction.flow() else {
+                    return None;
+                };
+                let (op, tested, width) = M::Instruction::flag_zero_latch(&self.program.code, pc)?;
+                (op, tested, label.to_string(), width)
+            }
         };
-        let label = label.to_string();
+        let costly = self.loops.costly_latches.contains(&pc);
+        match result {
+            Ok(ExecuteReturnType::Next | ExecuteReturnType::JumpLabel(_)) => {}
+            Ok(ExecuteReturnType::ConditionalJumpLabel(..)) if costly => {}
+            _ => return None,
+        }
         if self.get_linenumber_of_label(label.clone(), pc)? > pc {
             return None;
         }
-        let tested = self.computer.get_register(tested);
-        if tested.base.is_some() || tested.kind == RegisterKind::Number {
+        let tested = self.computer.get_register(&tested);
+        let symbolic = tested.base.is_some();
+        if tested.kind == RegisterKind::Number || (symbolic && !costly) {
             return None;
         }
-        let condition = AbstractComparison::new(
-            op,
-            AbstractExpression::Immediate(0),
-            AbstractExpression::Register(Box::new(tested.clone())),
-        );
-        if self.loops.costly_latches.contains(&pc) {
+        let value = signed_at_width(tested.offset, width);
+        let leaf = AbstractExpression::Register(Box::new(tested.clone()));
+        let compared = if value == tested.offset && !(symbolic && width < 8) {
+            leaf
+        } else {
+            let half = 1i64 << (width * 8 - 1);
+            let shifted = generate_expression("+", leaf, AbstractExpression::Immediate(half));
+            let wrapped = generate_expression(
+                "%",
+                shifted,
+                AbstractExpression::Immediate(1i64 << (width * 8)),
+            );
+            generate_expression("-", wrapped, AbstractExpression::Immediate(half))
+        };
+        let condition = AbstractComparison::new(op, AbstractExpression::Immediate(0), compared);
+        if costly {
             return Some((condition, label));
         }
-        let now = (self.instructions_run, tested.offset);
+        let now = (self.instructions_run, value);
         if let Some((run_before, value_before)) = self.loops.concrete_latch_visits.insert(pc, now) {
-            let closing = value_before - tested.offset;
+            let closing = value_before - value;
             let per_iteration = (self.instructions_run - run_before) as i64;
-            if closing != 0 && tested.offset.signum() == closing.signum() {
-                let remaining = tested.offset / closing;
-                if remaining.saturating_mul(per_iteration) > UNROLLING_INSTRUCTION_BUDGET {
+            if closing != 0 && value.signum() == closing.signum() && value % closing == 0 {
+                let remaining = value / closing;
+                if remaining.saturating_mul(per_iteration) > UNROLLING_INSTRUCTION_BUDGET
+                    || remaining as usize >= MAX_UNCONDITIONAL_REVISITS
+                {
                     log::info!(
                         "line {pc} would unroll {remaining} more iterations of {per_iteration} instructions, tracking it as a loop guard"
                     );
@@ -524,7 +640,8 @@ impl<M: Machine> Engine<M> {
         }
         let per_iteration = (self.instructions_run - last.point.instructions_run) as i64;
         let remaining = now / closing;
-        let costs_too_much = remaining.saturating_mul(per_iteration) > UNROLLING_INSTRUCTION_BUDGET;
+        let costs_too_much = remaining.saturating_mul(per_iteration) > UNROLLING_INSTRUCTION_BUDGET
+            || remaining as usize > self.revisit_cap();
         if costs_too_much {
             log::info!(
                 "line {pc} would unroll {remaining} more iterations of {per_iteration} instructions, summarizing instead"
@@ -540,10 +657,15 @@ impl<M: Machine> Engine<M> {
         tested: &[AbstractComparison],
         entry_state: &mut MachineState,
         current_state: &mut MachineState,
-    ) -> Vec<LoopInvariant> {
+    ) -> (Vec<LoopInvariant>, AbstractComparison) {
         self.while_staying(condition, continues_when, |engine| {
             engine.resolve_selects(entry_state);
             engine.resolve_selects(current_state);
+            let resolved_guard = AbstractComparison::new(
+                &condition.op,
+                engine.resolved_leaves(&condition.left),
+                engine.resolved_leaves(&condition.right),
+            );
             let mut observed = invariant_of_registers(&entry_state.0, &current_state.0);
             engine.pin_unknown_steps(
                 &mut observed,
@@ -552,7 +674,7 @@ impl<M: Machine> Engine<M> {
                 condition,
                 tested,
             );
-            observed
+            (observed, resolved_guard)
         })
     }
 
@@ -600,6 +722,20 @@ impl<M: Machine> Engine<M> {
                 continue;
             };
             if prev.kind == RegisterKind::Number || cur.kind == RegisterKind::Number {
+                continue;
+            }
+            let unchanged = generate_expression("-", cur.expression(), prev.expression());
+            if prev != cur
+                && is_translatable(&unchanged)
+                && unchanged.size() <= MAX_EXPRESSION_NODES
+                && self.proves_with_selects(AbstractComparison::new(
+                    "==",
+                    unchanged,
+                    AbstractExpression::Immediate(0),
+                ))
+            {
+                log::info!("x{i} is unchanged on this path");
+                *invariant = LoopInvariant::Fixed;
                 continue;
             }
             if !(self.computer.carries_region(prev)
@@ -682,6 +818,65 @@ impl<M: Machine> Engine<M> {
                         LoopInvariant::Unknown
                     };
                 }
+            }
+        }
+        let demoted = self.demote_varying_steps(observed.to_vec(), entry);
+        observed.clone_from_slice(&demoted);
+        for i in 0..registers {
+            if !matches!(observed[i], LoopInvariant::Unknown)
+                || !(self.computer.carries_region(&entry[i])
+                    || self.computer.carries_region(&current[i]))
+            {
+                continue;
+            }
+            let moved = generate_expression("-", current[i].expression(), entry[i].expression());
+            let leader = (0..registers)
+                .filter(|&j| {
+                    j != i
+                        && !self.computer.carries_region(&entry[j])
+                        && !self.computer.carries_region(&current[j])
+                        && entry[j].kind == RegisterKind::RegisterBase
+                        && current[j].kind == RegisterKind::RegisterBase
+                        && entry[j] != current[j]
+                })
+                .find_map(|j| {
+                    let led =
+                        generate_expression("-", current[j].expression(), entry[j].expression());
+                    log::info!("x{i} moved {moved}; candidate x{j} moved {led}");
+                    [-1i64, 1, -2, 2, -4, 4, -8, 8].into_iter().find_map(|k| {
+                        self.proves_with_selects(AbstractComparison::new(
+                            "==",
+                            moved.clone(),
+                            generate_expression("*", AbstractExpression::Immediate(k), led.clone()),
+                        ))
+                        .then_some((j, k))
+                    })
+                });
+            if let Some((j, k)) = leader {
+                log::info!("x{i} provably moves by {k} times x{j} each iteration");
+                observed[i] = LoopInvariant::Tracks(j, k);
+            }
+        }
+        let mut packs: Vec<(usize, LinearForm)> = Vec::new();
+        for i in 0..registers {
+            if !matches!(observed[i], LoopInvariant::Unknown)
+                || !(self.computer.carries_region(&entry[i])
+                    || self.computer.carries_region(&current[i]))
+            {
+                continue;
+            }
+            let Some(step) = step_form(&entry[i], &current[i]) else {
+                continue;
+            };
+            if step.terms.is_empty() {
+                continue;
+            }
+            match packs.iter().find(|(_, leader)| *leader == step) {
+                Some(&(j, _)) => {
+                    log::info!("x{i} moves with x{j} each iteration");
+                    observed[i] = LoopInvariant::Tracks(j, 1);
+                }
+                None => packs.push((i, step)),
             }
         }
         self.derive_from_leaders(observed, entry, current);
@@ -795,17 +990,23 @@ impl<M: Machine> Engine<M> {
         expression: &AbstractComparison,
     ) -> Result<bool, Decline> {
         let cycle = self.locate_cycle(pc, expression)?;
-        let mut observation = self.observe(pc, expression, &cycle);
-        let attempt = self.next_attempt(pc, &observation)?;
+        let mut observation = self.observe(pc, expression, &cycle)?;
+        let guard = observation.guard.clone();
+        let expression = &guard;
+        let (attempt, confined) = self.next_attempt(pc, expression, &observation)?;
         let cells = self.abstract_cells(pc, &cycle);
         let mut draft =
             self.draft_summary(pc, expression, &cycle, &attempt, &mut observation, cells);
         self.loops.attempts.insert(pc, attempt);
         self.justify_facts(pc, expression, &cycle, &mut draft.summary)?;
-        self.install(pc, depth, &cycle, observation, draft)
+        self.install(pc, depth, &cycle, observation, draft, confined)
     }
 
-    fn locate_cycle(&self, pc: usize, expression: &AbstractComparison) -> Result<Cycle, Decline> {
+    fn locate_cycle(
+        &self,
+        pc: usize,
+        expression: &AbstractComparison,
+    ) -> Result<Cycle<M::LoopLanes>, Decline> {
         if self.loops.active.iter().any(|open| open.pc == pc) {
             return Err(Decline::AlreadyOpen);
         }
@@ -860,8 +1061,8 @@ impl<M: Machine> Engine<M> {
         &mut self,
         pc: usize,
         expression: &AbstractComparison,
-        cycle: &Cycle,
-    ) -> Observation {
+        cycle: &Cycle<M::LoopLanes>,
+    ) -> Result<Observation, Decline> {
         let mut entry = cycle.previous.state.clone();
         self.forget_dead_registers(pc, expression, &mut [&mut entry]);
         let mut current = self.computer.get_state();
@@ -870,7 +1071,7 @@ impl<M: Machine> Engine<M> {
             .iter()
             .map(|record| record.point.condition.clone())
             .collect();
-        let mut invariants = self.invariants_while_staying(
+        let (invariants, guard) = self.invariants_while_staying(
             expression,
             cycle.continues,
             &tested,
@@ -883,15 +1084,36 @@ impl<M: Machine> Engine<M> {
             .filter(|record| record.point.pc == pc)
             .map(|record| &record.point.state)
             .collect();
+        let mut invariants = invariants;
         self.step_past_inner_loops(&mut invariants, &entry, &current, &visits);
-        Observation {
+        let invariants = self.demote_varying_steps(invariants, &entry.0);
+        let staying = if cycle.continues {
+            expression.clone()
+        } else {
+            expression.clone().not()
+        };
+        if let Some(i) = unit_walker_under_a_low_bits_test(
+            &invariants,
+            &current.0,
+            tested.iter().chain([&staying]),
+        ) {
+            return Err(Decline::LowBitsWalker(i));
+        }
+        Ok(Observation {
             entry,
             current,
             invariants,
-        }
+            guard,
+            staying,
+        })
     }
 
-    fn next_attempt(&self, pc: usize, observation: &Observation) -> Result<LoopAttempt, Decline> {
+    fn next_attempt(
+        &self,
+        pc: usize,
+        expression: &AbstractComparison,
+        observation: &Observation,
+    ) -> Result<(LoopAttempt, Vec<Confinement>), Decline> {
         let observed = &observation.invariants;
         let mut attempt = match self.loops.attempts.get(&pc) {
             Some(earlier) if earlier.widened => LoopAttempt {
@@ -918,9 +1140,82 @@ impl<M: Machine> Engine<M> {
                 *invariant = LoopInvariant::Unknown;
             }
         }
+        let unconfinable = self.record_at(pc, |record| record.unconfinable.clone());
+        let mut confined: Vec<Confinement> = Vec::new();
+        for (i, invariant) in attempt.invariants.iter().enumerate() {
+            if matches!(invariant, LoopInvariant::Unknown)
+                && !unconfinable.contains(&i)
+                && self.computer.carries_region(&observation.current.0[i])
+                && let Some((region, length)) =
+                    self.confining_region(&[&observation.entry.0[i], &observation.current.0[i]])
+            {
+                let guarded = registers_in(expression);
+                let floor = confined
+                    .iter()
+                    .filter(|other| other.region == region)
+                    .map(|other| other.register)
+                    .filter(|&j| {
+                        guarded.contains(&observation.current.0[i])
+                            && guarded.contains(&observation.current.0[j])
+                    })
+                    .filter(|&j| {
+                        [&observation.entry, &observation.current]
+                            .iter()
+                            .all(|state| {
+                                self.proves_with_selects(AbstractComparison::new(
+                                    ">=",
+                                    value_of(&state.0[i]),
+                                    value_of(&state.0[j]),
+                                ))
+                            })
+                    })
+                    .last();
+                let multiple = floor
+                    .and_then(|j| {
+                        (2..=16i64).rev().find(|m| {
+                            [&observation.entry, &observation.current]
+                                .iter()
+                                .all(|state| {
+                                    self.proves_with_selects(AbstractComparison::new(
+                                        "==",
+                                        generate_expression(
+                                            "%",
+                                            generate_expression(
+                                                "-",
+                                                value_of(&state.0[i]),
+                                                value_of(&state.0[j]),
+                                            ),
+                                            AbstractExpression::Immediate(*m),
+                                        ),
+                                        AbstractExpression::Immediate(0),
+                                    ))
+                                })
+                        })
+                    })
+                    .unwrap_or(1);
+                log::info!(
+                    "{} x{i} stays within region {region}{}{}",
+                    attempt.id,
+                    floor.map_or(String::new(), |j| format!(", at or above x{j}")),
+                    if multiple > 1 {
+                        format!(" by multiples of {multiple}")
+                    } else {
+                        String::new()
+                    }
+                );
+                confined.push(Confinement {
+                    register: i,
+                    region,
+                    length,
+                    floor,
+                    multiple,
+                });
+            }
+        }
         if let Some((i, _)) = attempt.invariants.iter().enumerate().find(|(i, inv)| {
             matches!(inv, LoopInvariant::Unknown)
                 && self.computer.carries_region(&observation.current.0[*i])
+                && confined.iter().all(|kept| kept.register != *i)
         }) {
             return Err(Decline::WidensRegion(
                 attempt.id,
@@ -931,10 +1226,31 @@ impl<M: Machine> Engine<M> {
                 ]),
             ));
         }
-        Ok(attempt)
+        if let Some((i, j)) = attempt
+            .invariants
+            .iter()
+            .enumerate()
+            .find_map(|(i, inv)| match inv {
+                LoopInvariant::Tracks(j, _)
+                    if unconfinable.contains(j)
+                        && matches!(attempt.invariants[*j], LoopInvariant::Unknown)
+                        && self.computer.carries_region(&observation.current.0[i]) =>
+                {
+                    Some((i, *j))
+                }
+                _ => None,
+            })
+        {
+            return Err(Decline::EscapedLeader(attempt.id, i, j));
+        }
+        Ok((attempt, confined))
     }
 
-    fn abstract_cells(&self, pc: usize, cycle: &Cycle) -> Vec<(MemoryCell, LoopInvariant)> {
+    fn abstract_cells(
+        &self,
+        pc: usize,
+        cycle: &Cycle<M::LoopLanes>,
+    ) -> Vec<(MemoryCell, LoopInvariant)> {
         let cycle_start = cycle
             .previous
             .journal_len
@@ -946,15 +1262,22 @@ impl<M: Machine> Engine<M> {
                 .into_iter()
                 .map(|(cell, before)| {
                     let now = self.computer.cell_content(&cell);
-                    let invariant = match invariant_of_register(&before, &now) {
+                    let observed = self.demote_varying_steps(
+                        vec![invariant_of_register(&before, &now)],
+                        std::slice::from_ref(&before),
+                    );
+                    let invariant = match observed.into_iter().next() {
                         _ if wandering_cells.contains(&cell) => LoopInvariant::Unknown,
                         _ if self.advances_a_pointer(&before, &now) => LoopInvariant::NonDecreasing,
                         _ if unstable_cells.contains(&cell) => LoopInvariant::Unknown,
-                        LoopInvariant::Fixed => LoopInvariant::Fixed,
-                        LoopInvariant::Linear(step)
+                        Some(LoopInvariant::Fixed) => LoopInvariant::Fixed,
+                        Some(LoopInvariant::Linear(step))
                             if matches!(step, AbstractExpression::Immediate(_)) =>
                         {
                             LoopInvariant::Linear(step)
+                        }
+                        Some(ranged @ (LoopInvariant::AtMost(_) | LoopInvariant::Ranged(..))) => {
+                            ranged
                         }
                         _ => LoopInvariant::Unknown,
                     };
@@ -998,7 +1321,7 @@ impl<M: Machine> Engine<M> {
         &mut self,
         pc: usize,
         expression: &AbstractComparison,
-        cycle: &Cycle,
+        cycle: &Cycle<M::LoopLanes>,
         attempt: &LoopAttempt,
         observation: &mut Observation,
         cells: Vec<(MemoryCell, LoopInvariant)>,
@@ -1072,6 +1395,7 @@ impl<M: Machine> Engine<M> {
             &ghosts,
             &continuing_now,
         );
+        let pinned_selects = self.pinned_select_facts(&summary, entry_state, current_state);
         let continuing = summary.continuing.clone();
         log::info!(
             "detected {id} at line {pc} in {:?}, round {}",
@@ -1100,6 +1424,7 @@ impl<M: Machine> Engine<M> {
         Draft {
             summary,
             settled_steps,
+            pinned_selects,
             continuing,
             bounds,
             cells,
@@ -1111,7 +1436,7 @@ impl<M: Machine> Engine<M> {
         &mut self,
         pc: usize,
         expression: &AbstractComparison,
-        cycle: &Cycle,
+        cycle: &Cycle<M::LoopLanes>,
         summary: &mut Summary,
     ) -> Result<(), Decline> {
         let id = summary.id;
@@ -1323,13 +1648,15 @@ impl<M: Machine> Engine<M> {
         &mut self,
         pc: usize,
         depth: usize,
-        cycle: &Cycle,
+        cycle: &Cycle<M::LoopLanes>,
         observation: Observation,
         draft: Draft,
+        mut confined: Vec<Confinement>,
     ) -> Result<bool, Decline> {
         let Draft {
-            summary,
+            mut summary,
             settled_steps,
+            pinned_selects,
             continuing,
             bounds,
             cells,
@@ -1338,12 +1665,144 @@ impl<M: Machine> Engine<M> {
         let id = summary.id;
         let fallback = self.fork();
         let scope_id = self.push_scope();
+        for fact in &pinned_selects {
+            self.computer.solver().assert(fact);
+        }
         for fact in summary.facts.iter().filter_map(summary_fact_to_ast) {
+            self.computer.solver().assert(fact);
+        }
+        for fact in self
+            .select_definitions_in(&observation.staying)
+            .into_iter()
+            .chain(comparison_to_ast(observation.staying.clone()))
+        {
+            self.computer.solver().assert(fact);
+        }
+        for fact in self
+            .select_definitions_in(&summary.continuing)
+            .into_iter()
+            .chain(summary_fact_to_ast(&summary.continuing))
+        {
             self.computer.solver().assert(fact);
         }
         let mut summarized = self.computer.get_state();
         for (i, new_reg) in summary.updates.iter().cloned() {
             summarized.0[i] = new_reg;
+        }
+        let (entry_state, current_state) = (&observation.entry, &observation.current);
+        let unconfinable = self.record_at(pc, |record| record.unconfinable.clone());
+        let leaders: Vec<usize> = summary
+            .invariants
+            .iter()
+            .filter_map(|invariant| match invariant {
+                LoopInvariant::Tracks(j, _) => Some(*j),
+                _ => None,
+            })
+            .collect();
+        {
+            for (i, invariant) in summary.invariants.iter().enumerate() {
+                let stepped = matches!(
+                    invariant,
+                    LoopInvariant::Linear(AbstractExpression::Immediate(_))
+                        | LoopInvariant::AtMost(_)
+                        | LoopInvariant::Ranged(..)
+                ) || (matches!(invariant, LoopInvariant::Unknown)
+                    && leaders.contains(&i)
+                    && !self.computer.carries_region(&current_state.0[i]));
+                if !stepped
+                    || unconfinable.contains(&i)
+                    || confined.iter().any(|kept| kept.register == i)
+                {
+                    continue;
+                }
+                let counts_down = matches!(
+                    invariant,
+                    LoopInvariant::Linear(AbstractExpression::Immediate(step)) if *step < 0
+                ) || matches!(invariant, LoopInvariant::Ranged(_, high) if *high <= 0)
+                    || (matches!(invariant, LoopInvariant::Unknown) && leaders.contains(&i));
+                if !self.computer.carries_region(&current_state.0[i]) {
+                    let zero = AbstractExpression::Immediate(0);
+                    let stays_natural = counts_down
+                        && current_state.0[i].kind == RegisterKind::RegisterBase
+                        && [&entry_state, &current_state].iter().all(|state| {
+                            self.proves_with_selects(AbstractComparison::new(
+                                ">=",
+                                value_of(&state.0[i]),
+                                zero.clone(),
+                            ))
+                        });
+                    if stays_natural {
+                        log::info!("{id} x{i} counts down without going below zero");
+                        let fact = AbstractComparison::new(">=", value_of(&summarized.0[i]), zero);
+                        if let Some(asserted) = comparison_to_ast(fact.clone()) {
+                            self.computer.solver().assert(asserted);
+                        }
+                        summary.facts.push(fact);
+                        confined.push(Confinement {
+                            register: i,
+                            region: String::new(),
+                            length: AbstractExpression::Immediate(0),
+                            floor: None,
+                            multiple: 1,
+                        });
+                    }
+                    continue;
+                }
+                let Some((region, length)) =
+                    self.confining_region(&[&entry_state.0[i], &current_state.0[i]])
+                else {
+                    continue;
+                };
+                log::info!("{id} x{i} stays within region {region} as it steps");
+                let start = AbstractExpression::Abstract(region.clone());
+                let end = generate_expression("+", start.clone(), length.clone());
+                let value = value_of(&summarized.0[i]);
+                for fact in [
+                    AbstractComparison::new(">=", value.clone(), start),
+                    AbstractComparison::new("<=", value, end),
+                ] {
+                    if let Some(asserted) = comparison_to_ast(fact.clone()) {
+                        self.computer.solver().assert(asserted);
+                    }
+                    summary.facts.push(fact);
+                }
+                confined.push(Confinement {
+                    register: i,
+                    region,
+                    length,
+                    floor: None,
+                    multiple: 1,
+                });
+            }
+        }
+        for confinement in confined.iter().filter(|c| {
+            !c.region.is_empty() && matches!(summary.invariants[c.register], LoopInvariant::Unknown)
+        }) {
+            let i = confinement.register;
+            let start = AbstractExpression::Abstract(confinement.region.clone());
+            let end = generate_expression("+", start.clone(), confinement.length.clone());
+            let offset = summary.counter.symbol(LoopRole::Offset(i)).expression();
+            let floor = confinement
+                .floor
+                .map_or(start, |j| value_of(&summarized.0[j]));
+            let scaled = generate_expression(
+                "*",
+                AbstractExpression::Immediate(confinement.multiple),
+                offset.clone(),
+            );
+            let within = generate_expression("+", floor, scaled);
+            let facts = [
+                AbstractComparison::new(">=", offset, AbstractExpression::Immediate(0)),
+                AbstractComparison::new("<=", within.clone(), end),
+                AbstractComparison::new("==", value_of(&summarized.0[i]), within.clone()),
+            ];
+            for fact in facts {
+                if let Some(asserted) = comparison_to_ast(fact.clone()) {
+                    self.computer.solver().assert(asserted);
+                }
+                summary.facts.push(fact);
+            }
+            summarized.0[i] = RegisterValue::new(RegisterKind::RegisterBase, Some(within), 0);
         }
         for bound in bounds.iter().map(|bound| bound.at(&summarized.0)) {
             log::info!("{id} assumes {bound}");
@@ -1382,7 +1841,10 @@ impl<M: Machine> Engine<M> {
             return Err(Decline::Contradicts(id));
         }
 
+        let lanes_now = self.computer.loop_lanes();
         self.computer.set_state(summarized);
+        self.computer
+            .keep_loop_lanes(&cycle.previous.lanes, lanes_now);
         if self.record_at(pc, |record| record.unstable_slots) {
             self.computer.set_symbolic_slots(Vec::new());
         }
@@ -1394,13 +1856,13 @@ impl<M: Machine> Engine<M> {
             .collect();
         self.computer.set_symbolic_slots(kept);
         let counter = LoopCounter::for_loop(id);
-        for (k, (cell, invariant)) in cells.iter().enumerate() {
+        for (index, (cell, invariant)) in cells.iter().enumerate() {
             let stored = self.computer.cell_content(cell);
             let generalized = match invariant {
                 LoopInvariant::Fixed => continue,
                 LoopInvariant::Linear(step) => stepped_by_the_counter(&stored, step, &counter),
                 LoopInvariant::NonDecreasing => {
-                    let progress = counter.symbol(LoopRole::CellProgress(k)).expression();
+                    let progress = counter.symbol(LoopRole::CellProgress(index)).expression();
                     let ahead = AbstractComparison::new(
                         ">=",
                         progress.clone(),
@@ -1414,6 +1876,12 @@ impl<M: Machine> Engine<M> {
                         base: Some(generate_expression("+", value_of(&stored), progress)),
                         offset: 0,
                     }
+                }
+                LoopInvariant::AtMost(high) => {
+                    self.ranged_cell(&stored, (0, *high), &counter, index, &mut summary.facts)
+                }
+                LoopInvariant::Ranged(low, high) => {
+                    self.ranged_cell(&stored, (*low, *high), &counter, index, &mut summary.facts)
                 }
                 _ => RegisterValue::new(RegisterKind::Number, None, 0),
             };
@@ -1444,6 +1912,12 @@ impl<M: Machine> Engine<M> {
             ledger.next_instance
         };
         self.loops.relied_on.push(instance);
+        if !confined.is_empty() {
+            self.loop_history
+                .borrow_mut()
+                .confined_instances
+                .insert(instance, confined.iter().map(|c| c.register).collect());
+        }
         self.loops.pending = Some((instance, Box::new(fallback)));
         self.loops.active.push(ActiveLoop {
             id,
@@ -1461,7 +1935,7 @@ impl<M: Machine> Engine<M> {
             exits,
             branch_facts,
             round,
-            nested_facts: Vec::new(),
+            nested_facts: pinned_selects,
             ghost_checks,
             operand_checks,
             cells,
@@ -1471,6 +1945,7 @@ impl<M: Machine> Engine<M> {
             settled_steps,
             continuing,
             bounds,
+            confined,
         });
         Ok(cycle.continues)
     }
@@ -1586,11 +2061,17 @@ impl<M: Machine> Engine<M> {
     }
 
     fn value_bound(&self, register: &RegisterValue) -> Option<i64> {
-        match value_of(register) {
-            AbstractExpression::Immediate(value) => (value >= 0).then_some(value),
-            AbstractExpression::Abstract(name) => self.select_bound(&name, MAX_SELECT_CHAIN),
+        let value = value_of(register);
+        let by_select = match &value {
+            AbstractExpression::Immediate(value) => return (*value >= 0).then_some(*value),
+            AbstractExpression::Abstract(name) => self.select_bound(name, MAX_SELECT_CHAIN),
             _ => None,
-        }
+        };
+        by_select.or_else(|| {
+            self.step_bounds(&value)
+                .filter(|(low, high)| *low >= 0 && *high <= MAX_WITHIN_BOUND)
+                .map(|(_, high)| high)
+        })
     }
 
     fn bound_values(
@@ -1621,6 +2102,177 @@ impl<M: Machine> Engine<M> {
                 other => other.clone(),
             })
             .collect()
+    }
+
+    fn confining_region(&self, values: &[&RegisterValue]) -> Option<(String, AbstractExpression)> {
+        let base = values.first()?.base.as_ref()?;
+        let (region, symbol, label_offset) = self.computer.region_of(base)?;
+        if region != symbol || label_offset != 0 || region == STACK_REGION {
+            return None;
+        }
+        let length = self.computer.memory().get(&region)?.get_length();
+        let start = AbstractExpression::Abstract(region.clone());
+        let end = generate_expression("+", start.clone(), length.clone());
+        values
+            .iter()
+            .all(|value| {
+                let same = value.kind == RegisterKind::RegisterBase
+                    && self
+                        .computer
+                        .region_of(value.base.as_ref().expect("based"))
+                        .map(|r| r.0)
+                        == Some(region.clone());
+                let above = same
+                    && self.proves_with_selects(AbstractComparison::new(
+                        ">=",
+                        value_of(value),
+                        start.clone(),
+                    ));
+                let below = above
+                    && self.proves_with_selects(AbstractComparison::new(
+                        "<=",
+                        value_of(value),
+                        end.clone(),
+                    ));
+                if !below {
+                    log::info!(
+                        "{} not confined to {region}: same region {same}, above start {above}",
+                        value_of(value)
+                    );
+                }
+                below
+            })
+            .then_some((region, length))
+    }
+
+    fn demote_varying_steps(
+        &self,
+        invariants: Vec<LoopInvariant>,
+        before: &[RegisterValue],
+    ) -> Vec<LoopInvariant> {
+        let known: BTreeSet<String> = before
+            .iter()
+            .filter_map(|register| register.base.as_ref())
+            .flat_map(|base| base.get_abstracts())
+            .collect();
+        let active: Vec<String> = self
+            .loops
+            .active
+            .iter()
+            .map(|open| LoopCounter::for_loop(open.id).name().to_string())
+            .collect();
+        let finished_counter = |symbol: &str| {
+            symbol
+                .find("_?")
+                .is_some_and(|at| !active.iter().any(|open| *open == symbol[..at + 2]))
+        };
+        invariants
+            .into_iter()
+            .map(|invariant| match invariant {
+                LoopInvariant::Linear(step)
+                    if step
+                        .get_abstracts()
+                        .iter()
+                        .any(|symbol| finished_counter(symbol)) =>
+                {
+                    LoopInvariant::Unknown
+                }
+                LoopInvariant::Linear(step)
+                    if step
+                        .get_abstracts()
+                        .iter()
+                        .any(|symbol| is_fresh_symbol(symbol) && !known.contains(symbol)) =>
+                {
+                    match self.step_bounds(&step) {
+                        Some((low, high)) if low >= 0 => LoopInvariant::AtMost(high),
+                        Some((low, high)) => LoopInvariant::Ranged(low, high),
+                        None => LoopInvariant::Unknown,
+                    }
+                }
+                other => other,
+            })
+            .collect()
+    }
+
+    fn step_bounds(&self, step: &AbstractExpression) -> Option<(i64, i64)> {
+        const REACH: i64 = 1 << 40;
+        if let Some(range) = unsigned_range(step) {
+            return Some(range);
+        }
+        if step.size() > MAX_STEP_BOUND_NODES {
+            return None;
+        }
+        let upper = |value: &AbstractExpression| {
+            let at_most = |bound: i64| {
+                self.proves_quietly_within(
+                    AbstractComparison::new(
+                        "<=",
+                        value.clone(),
+                        AbstractExpression::Immediate(bound),
+                    ),
+                    STEP_BOUND_RESOURCE_LIMIT,
+                )
+            };
+            if !at_most(REACH) {
+                return None;
+            }
+            let (mut low, mut high) = (-REACH, REACH);
+            if at_most(low) {
+                return None;
+            }
+            while low + 1 < high {
+                let middle = low + (high - low) / 2;
+                if at_most(middle) {
+                    high = middle;
+                } else {
+                    low = middle;
+                }
+            }
+            Some(high)
+        };
+        let high = upper(step)?;
+        let negated = generate_expression("-", AbstractExpression::Immediate(0), step.clone());
+        let low = -upper(&negated)?;
+        Some((low, high))
+    }
+
+    fn ranged_cell(
+        &self,
+        stored: &RegisterValue,
+        (low, high): (i64, i64),
+        counter: &LoopCounter,
+        index: usize,
+        kept: &mut Vec<AbstractComparison>,
+    ) -> RegisterValue {
+        let progress = counter.symbol(LoopRole::Cell(index)).expression();
+        let rounds = generate_expression(
+            "-",
+            counter.expression(),
+            AbstractExpression::Immediate(SUMMARY_ITERATION),
+        );
+        let facts = [
+            AbstractComparison::new(
+                "<=",
+                generate_expression("*", AbstractExpression::Immediate(low), rounds.clone()),
+                progress.clone(),
+            ),
+            AbstractComparison::new(
+                ">=",
+                generate_expression("*", AbstractExpression::Immediate(high), rounds),
+                progress.clone(),
+            ),
+        ];
+        for fact in facts {
+            if let Some(asserted) = comparison_to_ast(fact.clone()) {
+                self.computer.solver().assert(asserted);
+            }
+            kept.push(fact);
+        }
+        RegisterValue {
+            kind: RegisterKind::RegisterBase,
+            base: Some(generate_expression("+", value_of(stored), progress)),
+            offset: 0,
+        }
     }
 
     fn bounded_step(&self, step: &AbstractExpression) -> Option<i64> {
@@ -1902,7 +2554,7 @@ impl<M: Machine> Engine<M> {
         &self,
         pc: usize,
         invariants: &[LoopInvariant],
-        history: &[JumpRecord],
+        history: &[JumpRecord<M::LoopLanes>],
         current: &mut MachineState,
     ) {
         let closed: Vec<String> = self
@@ -2038,6 +2690,78 @@ impl<M: Machine> Engine<M> {
         };
         assuming.extend([past, rare_taken, continued]);
         self.computer.solver().check_assumptions(&assuming) == SatResult::Unsat
+    }
+
+    fn pinned_select_facts(
+        &self,
+        summary: &Summary,
+        entry: &MachineState,
+        current: &MachineState,
+    ) -> Vec<ast::Bool> {
+        let name = summary.counter.name().to_string();
+        let previous = generate_expression(
+            "-",
+            summary.counter.expression(),
+            AbstractExpression::Immediate(1),
+        );
+        let not_a_head_register = |_: &RegisterValue| None;
+        let at_previous = |e: &AbstractExpression| {
+            flag_at_summary(e, &entry.0, &summary.updates, &not_a_head_register)
+                .map(|at_summary| with_counter_at(&at_summary, &name, &previous))
+        };
+        let mut facts = Vec::new();
+        for (i, invariant) in summary.invariants.iter().enumerate() {
+            let LoopInvariant::Linear(AbstractExpression::Immediate(moved)) = invariant else {
+                continue;
+            };
+            let Some(step) = step_form(&entry.0[i], &current.0[i]) else {
+                continue;
+            };
+            let [(select, &coefficient)] = step.terms.iter().collect::<Vec<_>>()[..] else {
+                continue;
+            };
+            if coefficient == 0 || (moved - step.constant) % coefficient != 0 {
+                continue;
+            }
+            let value = (moved - step.constant) / coefficient;
+            let Some((condition, taken, skipped)) =
+                self.computer.select_definitions().get(select).cloned()
+            else {
+                continue;
+            };
+            let (Some(left), Some(right), Some(taken), Some(skipped)) = (
+                at_previous(&condition.left),
+                at_previous(&condition.right),
+                at_previous(&taken),
+                at_previous(&skipped),
+            ) else {
+                continue;
+            };
+            let chosen = AbstractExpression::Immediate(value);
+            let (Some(holds), Some(fails), Some(took), Some(skipped)) = (
+                comparison_to_ast(AbstractComparison::new(
+                    &condition.op,
+                    left.clone(),
+                    right.clone(),
+                )),
+                comparison_to_ast(AbstractComparison::new(&condition.op, left, right).not()),
+                comparison_to_ast(AbstractComparison::new("==", taken, chosen.clone())),
+                comparison_to_ast(AbstractComparison::new("==", skipped, chosen)),
+            ) else {
+                continue;
+            };
+            let previous_counter = ast::Int::new_const(name.clone());
+            let summarized = previous_counter.gt(ast::Int::from_i64(SUMMARY_ITERATION));
+            log::info!(
+                "{} x{i} took {select} = {value} in every iteration before the latest",
+                summary.counter.name()
+            );
+            facts.push(summarized.implies(ast::Bool::or(&[
+                &ast::Bool::and(&[&holds, &took]),
+                &ast::Bool::and(&[&fails, &skipped]),
+            ])));
+        }
+        facts
     }
 
     fn settle_select_steps(
@@ -2267,7 +2991,8 @@ impl<M: Machine> Engine<M> {
         let mut reached = Vec::new();
         for cell in tracked {
             let cell_start = ast::Int::add(&[&stack_pointer, &ast::Int::from_i64(cell.offset)]);
-            let cell_end = ast::Int::add(&[&cell_start, &ast::Int::from_i64(WIDEST_STORED_VALUE)]);
+            let cell_width = stack.width_at(cell.offset).unwrap_or(WIDEST_STORED_VALUE);
+            let cell_end = ast::Int::add(&[&cell_start, &ast::Int::from_i64(cell_width)]);
             let may_overlap = writes.iter().any(|(base, offset, width)| {
                 if !is_translatable(base) {
                     return true;
@@ -2408,7 +3133,7 @@ impl<M: Machine> Engine<M> {
         &self,
         loop_pc: usize,
         continues: bool,
-        cycle: &[JumpRecord],
+        cycle: &[JumpRecord<M::LoopLanes>],
     ) -> Option<(usize, usize, BTreeSet<usize>)> {
         let branch_step = |pc: usize, taken: bool| -> Option<usize> {
             match self.static_successors(pc)?.as_slice() {
@@ -2506,10 +3231,10 @@ impl<M: Machine> Engine<M> {
 
     pub(super) fn exit_ghosts(
         &self,
-        exits: Vec<JumpRecord>,
-        before: &[JumpRecord],
+        exits: Vec<JumpRecord<M::LoopLanes>>,
+        before: &[JumpRecord<M::LoopLanes>],
         (loop_pc, entry, steps): (usize, &[RegisterValue], &[LoopInvariant]),
-    ) -> Vec<GhostedRecord> {
+    ) -> Vec<GhostedRecord<M::LoopLanes>> {
         let iteration_start = before.iter().rposition(|r| r.point.pc == loop_pc);
         exits
             .into_iter()
@@ -2560,11 +3285,16 @@ impl<M: Machine> Engine<M> {
             .collect()
     }
 
-    fn loop_exits(&self, loop_pc: usize, continues: bool, cycle: &[JumpRecord]) -> Vec<JumpRecord> {
+    fn loop_exits(
+        &self,
+        loop_pc: usize,
+        continues: bool,
+        cycle: &[JumpRecord<M::LoopLanes>],
+    ) -> Vec<JumpRecord<M::LoopLanes>> {
         let Some((source, header, walked)) = self.cycle_back_edge(loop_pc, continues, cycle) else {
             return Vec::new();
         };
-        let mut exits: Vec<JumpRecord> = Vec::new();
+        let mut exits: Vec<JumpRecord<M::LoopLanes>> = Vec::new();
         for record in cycle.iter().rev() {
             let pc = record.point.pc;
             if pc == loop_pc
@@ -2590,6 +3320,22 @@ impl<M: Machine> Engine<M> {
         exits
     }
 
+    fn resolved_leaves(&self, e: &AbstractExpression) -> AbstractExpression {
+        match e {
+            AbstractExpression::Register(register) => match &register.base {
+                Some(base) => AbstractExpression::Register(Box::new(RegisterValue {
+                    base: Some(self.resolved_selects(base)),
+                    ..(**register).clone()
+                })),
+                None => e.clone(),
+            },
+            AbstractExpression::Expression(op, left, right) => {
+                generate_expression(op, self.resolved_leaves(left), self.resolved_leaves(right))
+            }
+            other => self.resolved_selects(other),
+        }
+    }
+
     fn resolve_selects(&self, state: &mut MachineState) {
         if self.computer.select_definitions().is_empty() {
             return;
@@ -2598,7 +3344,13 @@ impl<M: Machine> Engine<M> {
             let Some(base) = register.base.clone() else {
                 continue;
             };
-            let mut resolved = base;
+            register.base = Some(self.resolved_selects(&base));
+        }
+    }
+
+    fn resolved_selects(&self, base: &AbstractExpression) -> AbstractExpression {
+        {
+            let mut resolved = base.clone();
             for name in resolved.get_abstracts() {
                 let Some((condition, taken, skipped)) =
                     self.computer.select_definitions().get(&name)
@@ -2629,7 +3381,7 @@ impl<M: Machine> Engine<M> {
                 };
                 resolved = substitute(&resolved, &name, &settled);
             }
-            register.base = Some(resolved);
+            resolved
         }
     }
 
@@ -2831,8 +3583,8 @@ impl<M: Machine> Engine<M> {
 
     fn ordered_by_consecutive_exits(
         &self,
-        (previous, current, continues): (&BranchPoint, &AbstractComparison, bool),
-        cycle: &[JumpRecord],
+        (previous, current, continues): (&BranchPoint<M::LoopLanes>, &AbstractComparison, bool),
+        cycle: &[JumpRecord<M::LoopLanes>],
         at_summary: &AbstractComparison,
     ) -> Option<AbstractComparison> {
         let continuing = |condition: &AbstractComparison, taken: bool| {
@@ -2917,6 +3669,49 @@ impl<M: Machine> Engine<M> {
                 AbstractExpression::Immediate(0),
             )
         })
+    }
+
+    fn proves_quietly_within(&self, fact: AbstractComparison, limit: u32) -> bool {
+        let mut assumptions = self.select_definitions_in(&fact);
+        let Some(negated) = comparison_to_ast(fact.not()) else {
+            return false;
+        };
+        assumptions.push(negated);
+        let mut bounded = Params::new();
+        bounded.set_u32("rlimit", limit);
+        self.computer.solver().set_params(&bounded);
+        let result = self.computer.solver().check_assumptions(&assumptions);
+        let mut unbounded = Params::new();
+        unbounded.set_u32("rlimit", 0);
+        self.computer.solver().set_params(&unbounded);
+        result == SatResult::Unsat
+    }
+
+    fn proves_with_selects(&self, fact: AbstractComparison) -> bool {
+        let mut assumptions = self.select_definitions_in(&fact);
+        let Some(negated) = comparison_to_ast(fact.clone().not()) else {
+            return false;
+        };
+        assumptions.push(negated);
+        let mut bounded = Params::new();
+        bounded.set_u32("rlimit", CONFINEMENT_RESOURCE_LIMIT);
+        self.computer.solver().set_params(&bounded);
+        let result = self.computer.solver().check_assumptions(&assumptions);
+        let mut unbounded = Params::new();
+        unbounded.set_u32("rlimit", 0);
+        self.computer.solver().set_params(&unbounded);
+        if result != SatResult::Unsat {
+            log::info!("confinement premise {fact} is {result:?}");
+            if result == SatResult::Sat {
+                for assumption in &assumptions {
+                    log::info!("  under {assumption}");
+                }
+                if let Some(model) = self.computer.solver().get_model() {
+                    log::info!("  model {model}");
+                }
+            }
+        }
+        result == SatResult::Unsat
     }
 
     pub(super) fn proves(&self, fact: AbstractComparison) -> bool {
@@ -3312,7 +4107,22 @@ impl<M: Machine> Engine<M> {
                 observed[i] = recorded.clone();
             }
         }
-        let broken = self.broken_obligations(&active, &expression, &observed, &current);
+        let leaving = matches!(
+            self.decide_from_solver(&expression),
+            Decision::Take(taken) if taken != active.entry_decision
+        );
+        if leaving {
+            log::info!(
+                "{} at line {} leaves on this arrival; the last iteration needs no repeat",
+                active.id,
+                active.pc
+            );
+        }
+        let broken = if leaving {
+            Vec::new()
+        } else {
+            self.broken_obligations(&active, &expression, &observed, &current)
+        };
         if !broken.is_empty() {
             self.refute_active_loop(&active, &expression, &observed, &broken);
             log::info!(
@@ -3333,6 +4143,12 @@ impl<M: Machine> Engine<M> {
                 );
             }
             return Discharge::Refuted;
+        }
+        if !leaving {
+            self.loop_history
+                .borrow_mut()
+                .validated_instances
+                .insert(active.instance);
         }
 
         let above = self.scopes_above(active.scope_id);
@@ -3437,6 +4253,38 @@ impl<M: Machine> Engine<M> {
         self.substitute_symbol(&name, &value);
     }
 
+    fn stays_confined(&self, confinement: &Confinement, current: &MachineState) -> bool {
+        let now = value_of(&current.0[confinement.register]);
+        if confinement.region.is_empty() {
+            return self.proves_with_selects(AbstractComparison::new(
+                ">=",
+                now,
+                AbstractExpression::Immediate(0),
+            ));
+        }
+        let start = AbstractExpression::Abstract(confinement.region.clone());
+        let floor = confinement
+            .floor
+            .map_or(start.clone(), |j| value_of(&current.0[j]));
+        let on_multiple = confinement.multiple == 1
+            || self.proves_with_selects(AbstractComparison::new(
+                "==",
+                generate_expression(
+                    "%",
+                    generate_expression("-", now.clone(), floor.clone()),
+                    AbstractExpression::Immediate(confinement.multiple),
+                ),
+                AbstractExpression::Immediate(0),
+            ));
+        on_multiple
+            && self.proves_with_selects(AbstractComparison::new(">=", now.clone(), floor))
+            && self.proves_with_selects(AbstractComparison::new(
+                "<=",
+                now,
+                generate_expression("+", start, confinement.length.clone()),
+            ))
+    }
+
     fn broken_obligations(
         &self,
         active: &ActiveLoop,
@@ -3490,7 +4338,10 @@ impl<M: Machine> Engine<M> {
             .into_iter()
             .filter(|(cell, before)| {
                 let now = self.computer.cell_content(cell);
-                let seen = self.pin_steps(&[invariant_of_register(before, &now)]);
+                let seen = self.pin_steps(&self.demote_varying_steps(
+                    vec![invariant_of_register(before, &now)],
+                    std::slice::from_ref(before),
+                ));
                 let recorded = active
                     .cells
                     .iter()
@@ -3547,6 +4398,16 @@ impl<M: Machine> Engine<M> {
             log::info!("{} a widened load left its width", active.id);
             broken.push(Obligation::Confined(register));
         }
+        let escaped: Vec<usize> = active
+            .confined
+            .iter()
+            .filter(|confinement| !self.stays_confined(confinement, current))
+            .map(|confinement| confinement.register)
+            .collect();
+        if !escaped.is_empty() {
+            log::info!("{} a confined pointer left its region", active.id);
+        }
+        broken.extend(escaped.into_iter().map(Obligation::Escaped));
         let unbounded: Vec<&Bound> = active
             .bounds
             .iter()
@@ -3580,6 +4441,7 @@ impl<M: Machine> Engine<M> {
         log::info!("{} broke {}", active.id, listed.join(", "));
         let mut drifting_cells = Vec::new();
         let mut uncarried = BTreeSet::new();
+        let mut escaped = BTreeSet::new();
         let mut unbounded = Vec::new();
         let mut moved = Vec::new();
         let (mut ghosts_repeat, mut slots_hold, mut steps_hold) = (true, true, true);
@@ -3595,7 +4457,20 @@ impl<M: Machine> Engine<M> {
                     uncarried.insert(*branch);
                 }
                 Obligation::Settled(_) => steps_hold = false,
+                Obligation::Escaped(i) => {
+                    if !matches!(active.invariants.get(*i), Some(LoopInvariant::Unknown)) {
+                        escaped.insert(*i);
+                    }
+                }
             }
+        }
+        let newly_unconfinable = self.update_record(active.pc, |record| {
+            let before = record.unconfinable.len();
+            record.unconfinable.extend(escaped.iter().copied());
+            record.unconfinable.len() > before
+        });
+        if newly_unconfinable {
+            self.loops.attempts.remove(&active.pc);
         }
         let cells_hold = drifting_cells.is_empty();
         let (wandering, drifting): (Vec<MemoryCell>, Vec<MemoryCell>) =
@@ -3666,5 +4541,84 @@ fn without_word_wraps(e: &AbstractExpression) -> AbstractExpression {
             generate_expression(op, without_word_wraps(left), without_word_wraps(right))
         }
         other => other.clone(),
+    }
+}
+
+fn is_fresh_symbol(symbol: &str) -> bool {
+    let Some((stem, number)) = symbol.rsplit_once('_') else {
+        return false;
+    };
+    stem != "select"
+        && !stem.is_empty()
+        && !number.is_empty()
+        && number.chars().all(|c| c.is_ascii_digit())
+        && stem.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+}
+
+const MAX_UNROLLED_LOW_BITS_MASK: i64 = 15;
+
+fn masked_operands(e: &AbstractExpression, found: &mut Vec<AbstractExpression>) {
+    match e {
+        AbstractExpression::Expression(op, left, right) => {
+            if op == "&" {
+                for (value, mask) in [(left, right), (right, left)] {
+                    if let AbstractExpression::Immediate(m) = **mask
+                        && (1..=MAX_UNROLLED_LOW_BITS_MASK).contains(&m)
+                        && (m + 1) & m == 0
+                    {
+                        found.push((**value).clone());
+                    }
+                }
+            }
+            masked_operands(left, found);
+            masked_operands(right, found);
+        }
+        AbstractExpression::Register(register) => {
+            if let Some(base) = &register.base {
+                masked_operands(base, found);
+            }
+        }
+        _ => (),
+    }
+}
+
+fn unit_walker_under_a_low_bits_test<'a>(
+    observed: &[LoopInvariant],
+    current: &[RegisterValue],
+    conditions: impl Iterator<Item = &'a AbstractComparison>,
+) -> Option<usize> {
+    let mut masked = Vec::new();
+    for condition in conditions {
+        if !matches!(condition.op.as_str(), "==" | "!=") {
+            continue;
+        }
+        masked_operands(&condition.left, &mut masked);
+        masked_operands(&condition.right, &mut masked);
+    }
+    observed.iter().enumerate().find_map(|(i, invariant)| {
+        let LoopInvariant::Linear(AbstractExpression::Immediate(-1 | 1)) = invariant else {
+            return None;
+        };
+        let now = value_of(current.get(i)?);
+        masked
+            .iter()
+            .any(|operand| {
+                linear_form(&generate_expression("-", operand.clone(), now.clone()))
+                    .is_some_and(|difference| difference.terms.is_empty())
+            })
+            .then_some(i)
+    })
+}
+
+fn signed_at_width(value: i64, width: i64) -> i64 {
+    if width >= 8 {
+        return value;
+    }
+    let bits = width * 8;
+    let low = value.rem_euclid(1i64 << bits);
+    if low >= 1i64 << (bits - 1) {
+        low - (1i64 << bits)
+    } else {
+        low
     }
 }

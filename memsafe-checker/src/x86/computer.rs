@@ -24,11 +24,15 @@ pub const RETURN: &str = "return";
 pub const RETURN_TO: &str = "return_to";
 pub const RETURN_ADDRESS_BYTES: i64 = 8;
 
+pub type DwordInterval = (AbstractExpression, AbstractExpression);
+pub type DwordLaneBounds = Box<[Option<DwordInterval>; VECTOR_COUNT]>;
+
 #[derive(Clone)]
 pub struct X86_64 {
     pub registers: [RegisterValue; GPR_COUNT],
     loaded: [bool; GPR_COUNT],
     pub vectors: Box<[RegisterValue; VECTOR_COUNT]>,
+    dword_lane_bounds: DwordLaneBounds,
     pub masks: [RegisterValue; MASK_COUNT],
     zero: Option<FlagValue>,
     neg: Option<FlagValue>,
@@ -38,6 +42,9 @@ pub struct X86_64 {
     pub memory_labels: BTreeMap<String, (String, i64)>,
     code_labels: Rc<BTreeSet<String>>,
     select_definitions: SelectDefinitions,
+    pointer_elements: BTreeMap<String, String>,
+    fresh_bounds: Vec<ast::Bool>,
+    element_ranges: BTreeMap<String, Vec<ElementRange>>,
     symbols_bounding_counter: BTreeMap<String, Vec<String>>,
     element_facts: ElementFacts,
     write_journal: Vec<CellWrite>,
@@ -95,6 +102,7 @@ impl X86_64 {
             registers,
             loaded: [false; GPR_COUNT],
             vectors: Box::new(std::array::from_fn(|_| unknown())),
+            dword_lane_bounds: Box::new(std::array::from_fn(|_| None)),
             masks: std::array::from_fn(|_| unknown()),
             zero: None,
             neg: None,
@@ -104,6 +112,9 @@ impl X86_64 {
             memory_labels: BTreeMap::new(),
             code_labels: Rc::default(),
             select_definitions: BTreeMap::new(),
+            pointer_elements: BTreeMap::new(),
+            fresh_bounds: Vec::new(),
+            element_ranges: BTreeMap::new(),
             symbols_bounding_counter: BTreeMap::new(),
             element_facts: Rc::default(),
             write_journal: Vec::new(),
@@ -140,10 +151,46 @@ impl X86_64 {
         if index < GPR_COUNT {
             self.registers[index] = value;
         } else if index < GPR_COUNT + VECTOR_COUNT {
-            self.vectors[index - GPR_COUNT] = value;
+            let index = index - GPR_COUNT;
+            if self.vectors[index] != value {
+                self.set_vector(index, value);
+            }
         } else {
             self.masks[index - GPR_COUNT - VECTOR_COUNT] = value;
         }
+    }
+
+    pub fn set_vector(&mut self, index: usize, value: RegisterValue) {
+        self.vectors[index] = value;
+        self.dword_lane_bounds[index] = None;
+    }
+
+    pub fn dword_lane_bounds(&self) -> DwordLaneBounds {
+        self.dword_lane_bounds.clone()
+    }
+
+    pub fn set_dword_lane_bounds(&mut self, bounds: DwordLaneBounds) {
+        self.dword_lane_bounds = bounds;
+    }
+
+    pub fn keep_invariant_dword_lanes(
+        &mut self,
+        previous: &DwordLaneBounds,
+        current: DwordLaneBounds,
+    ) {
+        for (index, (before, now)) in previous.iter().zip(current.iter()).enumerate() {
+            if before.is_some() && before == now && self.dword_lane_bounds[index].is_none() {
+                self.dword_lane_bounds[index] = now.clone();
+            }
+        }
+    }
+
+    pub fn dword_lanes(&self, index: usize) -> Option<&DwordInterval> {
+        self.dword_lane_bounds[index].as_ref()
+    }
+
+    pub fn bound_dword_lanes(&mut self, index: usize, interval: DwordInterval) {
+        self.dword_lane_bounds[index] = Some(interval);
     }
 
     pub fn register_at(&self, index: usize) -> RegisterValue {
@@ -170,11 +217,67 @@ impl X86_64 {
         AbstractExpression::Abstract(format!("{what}_{n}"))
     }
 
+    pub fn bound_fresh(&mut self, fact: ast::Bool) {
+        self.solver.assert(&fact);
+        self.fresh_bounds.push(fact);
+    }
+
+    pub fn unknown_within(&mut self, value: RegisterValue, high: i64) -> RegisterValue {
+        if high < 0 {
+            return value;
+        }
+        self.unknown_at_most(value, AbstractExpression::Immediate(high))
+    }
+
+    pub fn unknown_between(
+        &mut self,
+        low: AbstractExpression,
+        high: AbstractExpression,
+    ) -> RegisterValue {
+        let bounded = generate_expression(
+            "atmost",
+            generate_expression("atleast", self.fresh("element"), low),
+            high,
+        );
+        RegisterValue::new(RegisterKind::RegisterBase, Some(bounded), 0)
+    }
+
+    pub fn unknown_at_most(
+        &mut self,
+        value: RegisterValue,
+        high: AbstractExpression,
+    ) -> RegisterValue {
+        let exact = value.kind == RegisterKind::Immediate
+            || value.base.as_ref().is_some_and(|b| {
+                value.kind == RegisterKind::RegisterBase && is_exactly_translatable(b)
+            });
+        if exact {
+            return value;
+        }
+        let bounded = generate_expression(
+            "atmost",
+            generate_expression(
+                "atleast",
+                self.fresh("field"),
+                AbstractExpression::Immediate(0),
+            ),
+            high,
+        );
+        RegisterValue::new(RegisterKind::RegisterBase, Some(bounded), 0)
+    }
+
+    pub fn unknown_of_bits(&mut self, value: RegisterValue, bits: i64) -> RegisterValue {
+        if !(1..=62).contains(&bits) {
+            return value;
+        }
+        self.unknown_within(value, (1i64 << bits) - 1)
+    }
+
     pub fn fingerprint(&self, with_flags: bool) -> String {
         use std::fmt::Write;
         let mut out = format!(
-            "{:?}|{:?}|{:?}|{:?}|",
-            self.registers, self.loaded, self.vectors, self.masks
+            "{:?}|{:?}|{:?}|{:?}|{:?}|",
+            self.registers, self.loaded, self.vectors, self.dword_lane_bounds, self.masks
         );
         if with_flags {
             let _ = write!(
@@ -300,7 +403,7 @@ impl X86_64 {
             Operand::Register(Register::Gpr { index, width, high }) => {
                 self.write_gpr(*index, *width, *high, value)
             }
-            Operand::Register(Register::Vector { index, .. }) => self.vectors[*index] = value,
+            Operand::Register(Register::Vector { index, .. }) => self.set_vector(*index, value),
             Operand::Register(Register::Mask(k)) => self.masks[*k] = value,
             other => log::error!("cannot set {other:?} as a register"),
         }

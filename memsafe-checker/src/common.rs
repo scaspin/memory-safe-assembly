@@ -1,8 +1,10 @@
-use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::str::FromStr;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+use z3::ast::Ast;
 use z3::*;
 
 use crate::instruction_parser::{self, Arrangement};
@@ -103,7 +105,29 @@ pub fn check(solver: &Solver, assumptions: &[ast::Bool]) -> SatResult {
     check_within(solver, assumptions, check_timeout())
 }
 
+const BRANCH_ESCALATION_LIMIT: u32 = 50_000_000;
+
+pub fn check_branch(solver: &Solver, assumptions: &[ast::Bool]) -> SatResult {
+    escalate(
+        solver,
+        assumptions,
+        check_timeout(),
+        BRANCH_ESCALATION_LIMIT,
+        false,
+    )
+}
+
 pub fn check_within(solver: &Solver, assumptions: &[ast::Bool], budget: Duration) -> SatResult {
+    escalate(solver, assumptions, budget, u32::MAX, true)
+}
+
+fn escalate(
+    solver: &Solver,
+    assumptions: &[ast::Bool],
+    budget: Duration,
+    most_units: u32,
+    unlimited_last: bool,
+) -> SatResult {
     let deadline = Instant::now() + budget;
     let left = |cap: Duration| deadline.saturating_duration_since(Instant::now()).min(cap);
     let bounded = |solver: &Solver, units: u32, cap: Duration, run: &dyn Fn() -> SatResult| {
@@ -122,12 +146,19 @@ pub fn check_within(solver: &Solver, assumptions: &[ast::Bool], budget: Duration
     if decided != SatResult::Unknown {
         return decided;
     }
-    let facts: Vec<ast::Bool> = solver
+    let mut facts: Vec<ast::Bool> = solver
         .get_assertions()
         .into_iter()
         .chain(assumptions.iter().cloned())
         .collect();
-    for (engine, units, cap) in ESCALATION {
+    let identities = digit_identities_about(&facts);
+    facts.extend(identities.iter().cloned());
+    let assumptions: Vec<ast::Bool> = assumptions.iter().cloned().chain(identities).collect();
+    let assumptions = assumptions.as_slice();
+    for (engine, units, cap) in ESCALATION
+        .into_iter()
+        .filter(|(_, units, _)| *units <= most_units)
+    {
         let fresh = engine.solver();
         for fact in &facts {
             fresh.assert(fact);
@@ -136,6 +167,9 @@ pub fn check_within(solver: &Solver, assumptions: &[ast::Bool], budget: Duration
         if decided != SatResult::Unknown {
             return decided;
         }
+    }
+    if !unlimited_last {
+        return SatResult::Unknown;
     }
     bounded(solver, UNLIMITED, budget, &|| {
         solver.check_assumptions(assumptions)
@@ -1762,6 +1796,43 @@ fn disjoint_bits(a: &AbstractExpression, b: &AbstractExpression) -> bool {
     shifted_apart(a, b) || shifted_apart(b, a)
 }
 
+pub fn is_exactly_translatable(e: &AbstractExpression) -> bool {
+    expression_to_ast(e.clone()).is_some() && !has_opaque_bitwise(e)
+}
+
+fn has_opaque_bitwise(e: &AbstractExpression) -> bool {
+    match e {
+        AbstractExpression::Expression(op, left, right) => {
+            let constant =
+                |side: &AbstractExpression| matches!(side, AbstractExpression::Immediate(_));
+            (matches!(op.as_str(), "&" | "|" | "^") && !constant(left) && !constant(right))
+                || has_opaque_bitwise(left)
+                || has_opaque_bitwise(right)
+        }
+        AbstractExpression::Register(reg) => reg.base.as_ref().is_some_and(has_opaque_bitwise),
+        _ => false,
+    }
+}
+
+pub fn is_translatable_with_clamps(e: &AbstractExpression) -> bool {
+    match e {
+        AbstractExpression::Expression(op, left, right) if op == "atleast" || op == "atmost" => {
+            is_translatable_with_clamps(left) && is_translatable_with_clamps(right)
+        }
+        AbstractExpression::Expression(op, left, right) => {
+            matches!(
+                op.as_str(),
+                "+" | "-" | "*" | "/" | "%" | "&" | "^" | "|" | "lsl" | "lsr" | ">>"
+            ) && is_translatable_with_clamps(left)
+                && is_translatable_with_clamps(right)
+        }
+        AbstractExpression::Register(reg) => {
+            reg.base.as_ref().is_none_or(is_translatable_with_clamps)
+        }
+        _ => true,
+    }
+}
+
 pub fn is_translatable(e: &AbstractExpression) -> bool {
     match e {
         AbstractExpression::Expression(op, left, right) => {
@@ -1854,9 +1925,61 @@ fn masked_bits(value: &ast::Int, mask: &AbstractExpression) -> Option<ast::Int> 
 }
 
 fn bit_of(value: &ast::Int, bit: i64) -> ast::Int {
+    note_digit_identity(value, bit, 2);
     let weight = ast::Int::from_i64(bit);
     let two = ast::Int::from_i64(2);
     ast::Int::mul(&[&value.div(&weight).modulo(&two), &weight])
+}
+
+thread_local! {
+    static DIGIT_IDENTITIES: RefCell<BTreeMap<String, (ast::Dynamic, ast::Bool)>> = const { RefCell::new(BTreeMap::new()) };
+}
+
+fn note_digit_identity(value: &ast::Int, divisor: i64, modulus: i64) {
+    let Some(span) = divisor.checked_mul(modulus) else {
+        return;
+    };
+    if divisor <= 0 || modulus <= 0 {
+        return;
+    }
+    let divisor = ast::Int::from_i64(divisor);
+    let digit = value.div(&divisor).modulo(ast::Int::from_i64(modulus));
+    let identity = value.modulo(ast::Int::from_i64(span)).eq(ast::Int::add(&[
+        &ast::Int::mul(&[&divisor, &digit]),
+        &value.modulo(&divisor),
+    ]));
+    DIGIT_IDENTITIES.with_borrow_mut(|identities| {
+        identities
+            .entry(identity.to_string())
+            .or_insert((ast::Dynamic::from_ast(&digit), identity));
+    });
+}
+
+fn digit_identities_about(facts: &[ast::Bool]) -> Vec<ast::Bool> {
+    if DIGIT_IDENTITIES.with_borrow(|identities| identities.is_empty()) {
+        return Vec::new();
+    }
+    let mut seen: HashSet<ast::Dynamic> = HashSet::new();
+    let mut pending: Vec<ast::Dynamic> = facts
+        .iter()
+        .map(|fact| ast::Dynamic::from_ast(fact))
+        .collect();
+    while let Some(term) = pending.pop() {
+        if seen.contains(&term) {
+            continue;
+        }
+        if term.is_app() {
+            pending.extend(term.children());
+        }
+        seen.insert(term);
+    }
+    DIGIT_IDENTITIES.with_borrow(|identities| {
+        identities
+            .values()
+            .filter(|(digit, _)| seen.contains(digit))
+            .map(|(_, identity)| identity.clone())
+            .collect()
+    })
 }
 
 fn signed_word(value: &ast::Int, operand: &AbstractExpression) -> ast::Int {
@@ -2010,7 +2133,18 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     let divisor = two.power(&new2).to_int();
                     Some(new1.div(&divisor))
                 }
-                "%" => Some(new1.modulo(&new2)),
+                "%" => {
+                    if let AbstractExpression::Expression(inner_op, dividend, divisor) =
+                        old1.as_ref()
+                        && inner_op == "/"
+                        && let (AbstractExpression::Immediate(divisor), Some(modulus)) =
+                            (divisor.as_ref(), constant_shift)
+                        && let Some(dividend) = expression_to_ast((**dividend).clone())
+                    {
+                        note_digit_identity(&dividend, *divisor, modulus);
+                    }
+                    Some(new1.modulo(&new2))
+                }
                 "umulh" => {
                     let half_word = ast::Int::from_u64(1 << 32);
                     let word = ast::Int::mul(&[&half_word, &half_word]);

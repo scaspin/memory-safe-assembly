@@ -11,7 +11,8 @@ members = [
   "graviola-playground",
   "candle-playground",
   "ffmpeg-playground",
-  "openblas-playground"
+  "openblas-playground",
+  "compression-playground"
 ]
 exclude = ["scrape-asm"]
 resolver = "2"

@@ -29,6 +29,37 @@ pub struct ElementRange {
     pub signed: bool,
     pub op: String,
     pub bound: AbstractExpression,
+    pub field: Option<(i64, i64)>,
+}
+
+impl ElementRange {
+    pub fn field_fact(&self, element: &AbstractExpression) -> Option<AbstractComparison> {
+        self.field_fact_within(element, 0, self.width)
+    }
+
+    pub fn field_fact_within(
+        &self,
+        read: &AbstractExpression,
+        byte: i64,
+        width: i64,
+    ) -> Option<AbstractComparison> {
+        let (shift, bits) = self.field?;
+        let shift = shift - 8 * byte;
+        if shift < 0 || shift + bits > 8 * width {
+            return None;
+        }
+        let element = read;
+        let field = generate_expression(
+            "%",
+            generate_expression(
+                "/",
+                element.clone(),
+                AbstractExpression::Immediate(1 << shift),
+            ),
+            AbstractExpression::Immediate(1 << bits),
+        );
+        Some(AbstractComparison::new(&self.op, field, self.bound.clone()))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -114,12 +145,20 @@ pub trait MachineInstruction: Clone + Debug {
     fn flag_source(_code: &[Self], _branch_pc: usize) -> Option<usize> {
         None
     }
+
+    fn flag_zero_latch(
+        _code: &[Self],
+        _branch_pc: usize,
+    ) -> Option<(&'static str, Self::Operand, i64)> {
+        None
+    }
 }
 
 pub trait Machine: Clone {
     type Operand: Clone + Debug + PartialEq;
     type Instruction: MachineInstruction<Operand = Self::Operand>;
     type Lanes: Clone;
+    type LoopLanes: Clone + Debug;
 
     fn new() -> Self;
     fn execute(
@@ -149,6 +188,8 @@ pub trait Machine: Clone {
     fn loaded(&self, index: usize) -> bool;
     fn lanes(&self) -> Self::Lanes;
     fn set_lanes(&mut self, lanes: Self::Lanes);
+    fn loop_lanes(&self) -> Self::LoopLanes;
+    fn keep_loop_lanes(&mut self, previous: &Self::LoopLanes, current: Self::LoopLanes);
     fn set_flags(&mut self, flags: [Option<FlagValue>; 4]);
     fn set_unknown_flags(&mut self);
     fn fresh_index(&mut self) -> usize;
@@ -219,6 +260,61 @@ pub trait Machine: Clone {
 
     fn add_element_range(&mut self, _region: &str, _range: ElementRange) {}
 
+    fn element_ranges_of(&self, _region: &str) -> Vec<ElementRange> {
+        Vec::new()
+    }
+
+    fn retire_element_ranges(&mut self, _region: &str) {}
+
+    fn written_element_keeps_ranges(
+        &self,
+        ranges: &[ElementRange],
+        aligned: bool,
+        width: i64,
+        value: Option<&RegisterValue>,
+    ) -> bool {
+        let Some(value) = value.filter(|v| v.kind != RegisterKind::Number) else {
+            return false;
+        };
+        if !aligned || ranges.iter().any(|range| range.width != width) {
+            return false;
+        }
+        let whole = value.expression();
+        let word = 1i64.checked_shl(8 * width as u32).filter(|_| width < 8);
+        ranges.iter().all(|range| {
+            let fact = match (range.field, word) {
+                (Some(_), _) => range.field_fact(&whole),
+                (None, Some(word)) if !range.signed => Some(AbstractComparison::new(
+                    &range.op,
+                    generate_expression("%", whole.clone(), AbstractExpression::Immediate(word)),
+                    range.bound.clone(),
+                )),
+                _ => None,
+            };
+            fact.and_then(|fact| comparison_to_ast(fact.not()))
+                .is_some_and(|broken| {
+                    let mut assumptions = self.select_assumptions(&whole);
+                    assumptions.push(broken);
+                    self.solver().check_assumptions(&assumptions) == SatResult::Unsat
+                })
+        })
+    }
+
+    fn check_written_element(
+        &mut self,
+        region: &str,
+        aligned: bool,
+        width: i64,
+        value: Option<&RegisterValue>,
+    ) {
+        let ranges = self.element_ranges_of(region);
+        if ranges.is_empty() || self.written_element_keeps_ranges(&ranges, aligned, width, value) {
+            return;
+        }
+        log::info!("a write to {region} may break its element ranges, no longer assuming them");
+        self.retire_element_ranges(region);
+    }
+
     fn allow_red_zone(&mut self, _bytes: i64) {}
 
     fn findings(&self) -> Vec<String> {
@@ -287,6 +383,23 @@ pub trait Machine: Clone {
                     .with_alignment(4096)
             })
             .insert(address, value);
+    }
+
+    fn add_memory_value_abstract_sized(
+        &mut self,
+        region: String,
+        address: i64,
+        value: AbstractExpression,
+        width: i64,
+    ) {
+        let value = RegisterValue::new(RegisterKind::RegisterBase, Some(value), 0);
+        self.memory_mut()
+            .entry(region)
+            .or_insert_with(|| {
+                MemorySafeRegion::new(AbstractExpression::Immediate(0), RegionType::RW)
+                    .with_alignment(4096)
+            })
+            .insert_sized(address, value, width);
     }
 
     fn add_memory_pointer(&mut self, region: &str, at: i64, pointer: RegisterValue, width: i64) {
@@ -396,6 +509,12 @@ pub trait Machine: Clone {
     }
 
     fn store_cell(&mut self, cell: &MemoryCell, value: RegisterValue, width: i64) {
+        self.check_written_element(
+            &cell.region,
+            cell.offset % width.max(1) == 0,
+            width,
+            Some(&value),
+        );
         let Some(region) = self.memory().get(&cell.region) else {
             return;
         };
@@ -568,7 +687,13 @@ pub trait Machine: Clone {
         }
     }
 
-    fn forget_where_written(&mut self, base: &AbstractExpression, offset: i64, width: i64) {
+    fn forget_where_written(
+        &mut self,
+        base: &AbstractExpression,
+        offset: i64,
+        width: i64,
+        value: Option<&RegisterValue>,
+    ) {
         let named = base.get_abstracts();
         let regions: Vec<String> = self
             .memory()
@@ -590,6 +715,17 @@ pub trait Machine: Clone {
                 .as_ref()
                 .map(|start| ast::Int::sub(&[start, &ast::Int::new_const(name.clone())]));
             let kept = self.indexed_facts_apart(&name, within, width);
+            let aligned = named.contains(&name)
+                && width > 0
+                && start.as_ref().is_some_and(|start| {
+                    let within = ast::Int::sub(&[start, &ast::Int::new_const(name.clone())]);
+                    let misaligned = within
+                        .modulo(ast::Int::from_i64(width))
+                        .eq(ast::Int::from_i64(0))
+                        .not();
+                    self.solver().check_assumptions(&[misaligned]) == SatResult::Unsat
+                });
+            self.check_written_element(&name, aligned, width, value);
             let region = &self.memory()[&name];
             let slots: Vec<(i64, i64)> = region
                 .content
@@ -676,7 +812,7 @@ pub trait Machine: Clone {
             };
             pending.extend(taken.get_abstracts());
             pending.extend(skipped.get_abstracts());
-            if !is_translatable(taken) || !is_translatable(skipped) {
+            if !is_translatable_with_clamps(taken) || !is_translatable_with_clamps(skipped) {
                 continue;
             }
             if let (Some(condition), Some(taken), Some(skipped)) = (

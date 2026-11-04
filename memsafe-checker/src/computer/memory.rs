@@ -150,6 +150,10 @@ impl ARMCORTEXA {
                     .unwrap_or_else(|| panic!("Need memory region to load from {:?}", region_name));
                 let pristine = region.epoch == 0;
                 let value = match region.read(offset, width) {
+                    _ if self.writable_rows(&region_name) => {
+                        self.pristine_read = None;
+                        Some(self.unknown_load(width))
+                    }
                     Some(v) => {
                         for cell in region.overlapping(offset, width) {
                             self.note_element_read(&region_name, cell);
@@ -158,14 +162,18 @@ impl ARMCORTEXA {
                         Some(v)
                     }
                     None if region.overwritten(offset, width) => {
-                        self.pristine_read = None;
+                        self.pristine_read = self
+                            .element_read(&region_name, &address, width)
+                            .then(|| region_name.clone());
+                        self.pristine_read_byte = self.element_byte(&region_name, &address, width);
                         Some(self.unknown_load(width))
                     }
                     None => {
                         let unwritten = content_symbol(&region_name, offset, width, region.epoch);
-                        self.pristine_read = (pristine
-                            && self.element_read(&region_name, &address, width))
-                        .then(|| region_name.clone());
+                        self.pristine_read = self
+                            .element_read(&region_name, &address, width)
+                            .then(|| region_name.clone());
+                        self.pristine_read_byte = self.element_byte(&region_name, &address, width);
                         Some(
                             self.element_pointer(&region_name, &address, width)
                                 .filter(|_| pristine)
@@ -204,17 +212,24 @@ impl ARMCORTEXA {
                     .region_of(&base)
                     .map(|(region, ..)| region)
                     .filter(|region| self.memory.get(region).is_some_and(|r| r.pristine()));
-                let value = match &pristine {
-                    Some(region) => self
-                        .element_pointer(region, &address, width)
-                        .unwrap_or_else(|| self.unknown_load(width)),
-                    None => self
-                        .recall_slot(&base, address.offset, width)
-                        .unwrap_or_else(|| self.unknown_load(width)),
+                let rows = self
+                    .region_of(&base)
+                    .is_some_and(|(region, ..)| self.writable_rows(&region));
+                let recalled = match &pristine {
+                    _ if rows => None,
+                    Some(region) => self.element_pointer(region, &address, width),
+                    None => self.recall_slot(&base, address.offset, width),
                 };
+                let ranged = recalled.is_none() && !rows;
+                let value = recalled.unwrap_or_else(|| self.unknown_load(width));
                 let value = self.distinct_row(value);
-                self.pristine_read =
-                    pristine.filter(|region| self.element_read(region, &address, width));
+                self.pristine_read = self
+                    .region_of(&base)
+                    .map(|(region, ..)| region)
+                    .filter(|region| ranged && self.element_read(region, &address, width));
+                if let Some(region) = self.pristine_read.clone() {
+                    self.pristine_read_byte = self.element_byte(&region, &address, width);
+                }
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
                     base,
@@ -493,6 +508,9 @@ impl ARMCORTEXA {
             if let Some(region) = self.memory.get_mut(&name) {
                 region.keep_indexed_facts(kept);
             }
+            if !self.element_ranges_of(&name).is_empty() {
+                self.retire_element_ranges(&name);
+            }
         }
         self.rw_queue.push(MemoryAccess {
             kind: RegionType::WRITE,
@@ -548,6 +566,38 @@ impl ARMCORTEXA {
         .is_some_and(|misaligned| self.solver.check_assumptions(&[misaligned]) == SatResult::Unsat)
     }
 
+    fn element_byte(&self, region: &str, address: &RegisterValue, width: i64) -> i64 {
+        let Some(element) = self
+            .element_ranges
+            .get(region)
+            .and_then(|ranges| ranges.iter().map(|r| r.width).max())
+        else {
+            return 0;
+        };
+        let within = generate_expression(
+            "-",
+            instruction_aux::full_value(address),
+            AbstractExpression::Abstract(region.to_string()),
+        );
+        (0..element)
+            .step_by(width.max(1) as usize)
+            .find(|byte| {
+                comparison_to_ast(AbstractComparison::new(
+                    "!=",
+                    generate_expression(
+                        "%",
+                        within.clone(),
+                        AbstractExpression::Immediate(element),
+                    ),
+                    AbstractExpression::Immediate(*byte),
+                ))
+                .is_some_and(|elsewhere| {
+                    self.solver.check_assumptions(&[elsewhere]) == SatResult::Unsat
+                })
+            })
+            .unwrap_or(-1)
+    }
+
     fn element_read(&self, region: &str, address: &RegisterValue, width: i64) -> bool {
         self.element_ranges.contains_key(region) && self.aligned_within(region, address, width)
     }
@@ -563,7 +613,20 @@ impl ARMCORTEXA {
         if value.kind != RegisterKind::RegisterBase {
             return;
         }
+        let whole = instruction_aux::full_value(&value);
+        let byte = self.pristine_read_byte;
+        let facts: Vec<AbstractComparison> = ranges
+            .iter()
+            .filter(|range| range.width >= width && byte >= 0)
+            .filter_map(|range| range.field_fact_within(&whole, byte, width))
+            .collect();
+        for fact in facts {
+            if let Some(asserted) = comparison_to_ast(fact) {
+                self.bound_fresh(asserted);
+            }
+        }
         let ranges: Vec<ElementRange> = ranges.into_iter().filter(|r| r.width == width).collect();
+        let ranges: Vec<ElementRange> = ranges.into_iter().filter(|r| r.field.is_none()).collect();
         let sign_agrees = width == 8
             || ranges
                 .iter()
@@ -747,9 +810,9 @@ impl ARMCORTEXA {
                     address
                 );
                 let base = address.base.expect("Need base");
-                self.forget_where_written(&base, address.offset, width);
+                let value = self.get_register(&register);
+                self.forget_where_written(&base, address.offset, width, Some(&value));
                 if width <= 8 {
-                    let value = self.get_register(&register);
                     self.remember_slot(base.clone(), address.offset, value, width);
                 }
                 if self
@@ -815,7 +878,7 @@ impl ARMCORTEXA {
                     address
                 );
                 let base = address.base.expect("Need base");
-                self.forget_where_written(&base, address.offset, width);
+                self.forget_where_written(&base, address.offset, width, None);
                 if self
                     .region_of(&base)
                     .is_some_and(|(region, _, _)| region == "sp")

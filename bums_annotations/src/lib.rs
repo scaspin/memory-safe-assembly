@@ -904,20 +904,52 @@ fn indexed_bound_check(bound: &IndexedBound, original: &Expr) -> proc_macro2::To
 
 type PointerContent = (String, i64, String, &'static str, Option<(bool, Expr)>);
 
+fn tuple_field(input: &ExprBinary, inputs: &Punctuated<FnArg, Token![,]>) -> Option<(String, i64)> {
+    if !matches!(input.op, BinOp::Eq(_)) {
+        return None;
+    }
+    let Expr::Field(field) = &*input.left else {
+        return None;
+    };
+    let Expr::Path(base) = &*field.base else {
+        return None;
+    };
+    let Member::Unnamed(index) = &field.member else {
+        return None;
+    };
+    let name = base.path.segments[0].ident.to_string();
+    let tuple = inputs.iter().find_map(|argument| match argument {
+        FnArg::Typed(typed) => match (&*typed.pat, &*typed.ty) {
+            (Pat::Ident(ident), Type::Reference(reference)) if ident.ident == name => {
+                match &*reference.elem {
+                    Type::Tuple(tuple) => Some((tuple.clone(), reference.mutability.is_some())),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+        _ => None,
+    })?;
+    let (tuple, mutable) = tuple;
+    let (offsets, _) = tuple_layout(tuple.elems.iter());
+    let region = name + if mutable { "_as_mut_ptr" } else { "_as_ptr" };
+    Some((region, *offsets.get(index.index as usize)? as i64))
+}
+
 fn pointer_contents(
     input: &ExprBinary,
     arguments: &Punctuated<Expr, Token![,]>,
+    inputs: &Punctuated<FnArg, Token![,]>,
 ) -> Option<PointerContent> {
-    let (array, element) = indexed_element(input)?;
-    let (array_suffix, _) = passed_pointer(&array, arguments)?;
+    let (region, offset) = match indexed_element(input) {
+        Some((array, element)) => {
+            let (array_suffix, _) = passed_pointer(&array, arguments)?;
+            (format!("{}{}", array, array_suffix), element * 8)
+        }
+        None => tuple_field(input, inputs)?,
+    };
     let (slice, suffix, step) = pointer_source(&input.right)?;
-    Some((
-        format!("{}{}", array, array_suffix),
-        element * 8,
-        slice,
-        suffix,
-        step,
-    ))
+    Some((region, offset, slice, suffix, step))
 }
 
 const POINTER_FIELD_TYPES: [&str; 4] = ["usize", "u64", "isize", "i64"];
@@ -1041,8 +1073,45 @@ fn pointer_array_shape(input: &ExprBinary) -> Option<PointerArray> {
     })
 }
 
+fn integer_literal(e: &Expr) -> Option<i64> {
+    match e {
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(value),
+            ..
+        }) => value.base10_parse::<i64>().ok(),
+        Expr::Paren(inner) => integer_literal(&inner.expr),
+        _ => None,
+    }
+}
+
+fn element_field(input: &ExprBinary) -> Option<(Expr, (i64, i64))> {
+    let Expr::Binary(masked) = &*input.left else {
+        return None;
+    };
+    if !matches!(masked.op, BinOp::BitAnd(_)) {
+        return None;
+    }
+    let mask = integer_literal(&masked.right)?;
+    let bits = (mask + 1).trailing_zeros() as i64;
+    if mask <= 0 || (mask + 1) & mask != 0 {
+        return None;
+    }
+    let inner = match &*masked.left {
+        Expr::Paren(paren) => (*paren.expr).clone(),
+        other => other.clone(),
+    };
+    match &inner {
+        Expr::Binary(shifted) if matches!(shifted.op, BinOp::Shr(_)) => Some((
+            (*shifted.left).clone(),
+            (integer_literal(&shifted.right)?, bits),
+        )),
+        _ => Some((inner, (0, bits))),
+    }
+}
+
 fn element_range_array(input: &ExprBinary) -> Option<String> {
-    let Expr::Index(indexed) = &*input.left else {
+    let left = element_field(input).map_or_else(|| (*input.left).clone(), |(element, _)| element);
+    let Expr::Index(indexed) = &left else {
         return None;
     };
     let Expr::Range(range) = &*indexed.index else {
@@ -1436,7 +1505,7 @@ pub struct Annotation {
     input_types: BTreeMap<String, Type>,
     input_expressions: BTreeMap<String, Expr>,
     new_structs: BTreeMap<String, ItemStruct>,
-    pointer_offsets: BTreeMap<String, (bool, Expr)>,
+    pointer_offsets: BTreeMap<usize, (bool, Expr)>,
     pointer_values: Vec<PointerContent>,
     element_bounds: Vec<(String, i64, ExprBinary)>,
     element_ranges: Vec<(String, ExprBinary)>,
@@ -1454,6 +1523,98 @@ pub struct Verdict {
     pub failures: Vec<String>,
     pub findings: Vec<String>,
     pub diagnostics: Vec<String>,
+}
+
+fn lower_fields(
+    engine: &mut bums::engine::AnyEngine,
+    region: &str,
+    fields: &[(String, Type)],
+) -> std::result::Result<(), String> {
+    let (offsets, _) = tuple_layout(fields.iter().map(|(_, ty)| ty));
+    for (k, ((field, ty), offset)) in fields.iter().zip(offsets.iter()).enumerate() {
+        let value = AbstractExpression::Abstract(field.clone());
+        match ty {
+            Type::Path(p) => {
+                engine.add_abstract_to_memory_sized(
+                    region.to_string(),
+                    *offset as i64,
+                    value.clone(),
+                    field_layout(ty).0 as i64,
+                );
+                let bits = [
+                    ("u8", 8),
+                    ("u16", 16),
+                    ("u32", 32),
+                    ("u64", 64),
+                    ("usize", 64),
+                ]
+                .iter()
+                .find(|(unsigned, _)| p.path.is_ident(unsigned))
+                .map(|(_, bits)| *bits);
+                if let Some(bits) = bits {
+                    engine.add_invariant(AbstractComparison::new(
+                        ">=",
+                        value.clone(),
+                        AbstractExpression::Immediate(0),
+                    ));
+                    if bits < 64 {
+                        engine.add_invariant(AbstractComparison::new(
+                            "<",
+                            value,
+                            AbstractExpression::Immediate(1 << bits),
+                        ));
+                    }
+                }
+            }
+            Type::Ptr(pointer) => {
+                engine.add_abstract_to_memory_sized(region.to_string(), *offset as i64, value, 8);
+                let access = if pointer.mutability.is_some() {
+                    RegionType::RW
+                } else {
+                    RegionType::READ
+                };
+                match &*pointer.elem {
+                    Type::Array(blob) => engine.add_region(
+                        access,
+                        field.clone(),
+                        AbstractExpression::Immediate(calculate_size_of_array(blob) as i64),
+                    ),
+                    Type::Tuple(inner) => {
+                        let (_, size) = tuple_layout(inner.elems.iter());
+                        engine.add_region(
+                            access,
+                            field.clone(),
+                            AbstractExpression::Immediate(size as i64),
+                        );
+                        let inner_fields: Vec<(String, Type)> = inner
+                            .elems
+                            .iter()
+                            .enumerate()
+                            .map(|(i, ty)| (format!("{field}_field{i}"), ty.clone()))
+                            .collect();
+                        lower_fields(engine, field, &inner_fields)?;
+                    }
+                    Type::Path(p) => {
+                        let Some((length_field, _)) = fields.get(k + 1) else {
+                            return Err(
+                                "a pointer field must be followed by its usize length".to_string()
+                            );
+                        };
+                        let element = p.path.segments[0].ident.to_string();
+                        engine.add_region(
+                            access,
+                            field.clone(),
+                            byte_length(length_field, Some(&element)),
+                        );
+                    }
+                    other => todo!("pointer field to {:?}", other),
+                }
+            }
+            Type::Array(_) => {}
+            other => todo!("unsupported tuple type {:?}", other),
+        }
+    }
+    Ok(())
 }
 
 pub fn read_program(path: &std::path::Path) -> std::io::Result<Vec<String>> {
@@ -1562,14 +1723,25 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                     continue;
                 }
                 if let Some(array) = element_range_array(b) {
-                    let Expr::Index(indexed) = &*b.left else {
+                    let field = element_field(b);
+                    let element = field
+                        .as_ref()
+                        .map_or_else(|| (*b.left).clone(), |(e, _)| e.clone());
+                    let Expr::Index(indexed) = &element else {
                         unreachable!()
                     };
                     let (collection, op) = (&indexed.expr, &b.op);
                     let exact_bound = exact_value(&b.right);
+                    let read = match field {
+                        Some((_, (shift, bits))) => {
+                            let mask = (1i128 << bits) - 1;
+                            quote! { (((*e as i128) >> #shift) & #mask) }
+                        }
+                        None => quote! { (*e as i128) },
+                    };
                     asserts = quote! {
                         #asserts
-                        assert!(#collection.iter().all(|e| (*e as i128) #op #exact_bound));
+                        assert!(#collection.iter().all(|e| #read #op #exact_bound));
                     };
                     element_ranges.push((array, b.clone()));
                     continue;
@@ -1587,7 +1759,9 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                     }
                     continue;
                 }
-                if let Some(value) = pointer_contents(b, &attributes.argument_list) {
+                if let Some(value) =
+                    pointer_contents(b, &attributes.argument_list, &vars.item_fn.inputs)
+                {
                     let stored = &*b.left;
                     let source = wrapping_pointer(&b.right);
                     asserts = quote! { #asserts assert!((#stored) as usize == #source as usize); };
@@ -1892,7 +2066,7 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
 
     let mut extern_fn = vars.item_fn.clone();
     extern_fn.ident = fn_name.clone();
-    let mut pointer_offsets: BTreeMap<String, (bool, Expr)> = BTreeMap::new();
+    let mut pointer_offsets: BTreeMap<usize, (bool, Expr)> = BTreeMap::new();
     if !attributes.argument_list.is_empty() {
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();
         let mut span = proc_macro2::Span::call_site();
@@ -1937,7 +2111,7 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
                                 assert!(#exact <= #exact_buffer);
                             };
                         }
-                        pointer_offsets.insert(var_name.clone(), (scaled, expression));
+                        pointer_offsets.insert(new_args.len(), (scaled, expression));
                     }
                     match a.method.to_string().as_str() {
                         "len" => {
@@ -2439,7 +2613,7 @@ impl Annotation {
                                 let no_suffix =
                                     no_range.strip_suffix("_as_ptr").unwrap_or(no_range);
 
-                                if let Some((scaled, expression)) = pointer_offsets.get(no_suffix) {
+                                if let Some((scaled, expression)) = pointer_offsets.get(&i) {
                                     let mut offset = syn_expr_to_abstract_expression(expression);
                                     if *scaled && let Some(ty) = pointer_sizes.get(no_suffix) {
                                         offset = generate_expression(
@@ -2487,68 +2661,20 @@ impl Annotation {
                                             let s = new_structs
                                                 .get(no_suffix)
                                                 .expect("Need well defined struct");
-                                            let fields: Vec<&Field> = s.fields.iter().collect();
-                                            let (offsets, _) =
-                                                tuple_layout(fields.iter().map(|f| &f.ty));
-                                            let field_name = |f: &Field| {
-                                                f.ident
-                                                    .clone()
-                                                    .expect("tuple fields are named")
-                                                    .to_string()
-                                            };
-                                            for (k, (field, offset)) in
-                                                fields.iter().zip(offsets.iter()).enumerate()
-                                            {
-                                                let value =
-                                                    AbstractExpression::Abstract(field_name(field));
-                                                match &field.ty {
-                                                    Type::Path(_) => {
-                                                        engine.add_abstract_to_memory(
-                                                            name.clone(),
-                                                            *offset as i64,
-                                                            value,
-                                                        );
-                                                    }
-                                                    Type::Ptr(pointer) => {
-                                                        let Some(length_field) = fields.get(k + 1)
-                                                        else {
-                                                            return Err("a pointer field must be followed by its usize length".to_string());
-                                                        };
-                                                        let element = match &*pointer.elem {
-                                                            Type::Path(p) => {
-                                                                p.path.segments[0].ident.to_string()
-                                                            }
-                                                            _ => {
-                                                                todo!(
-                                                                    "pointer field to {:?}",
-                                                                    pointer.elem
-                                                                )
-                                                            }
-                                                        };
-                                                        engine.add_abstract_to_memory(
-                                                            name.clone(),
-                                                            *offset as i64,
-                                                            value,
-                                                        );
-                                                        engine.add_region(
-                                                            if pointer.mutability.is_some() {
-                                                                RegionType::WRITE
-                                                            } else {
-                                                                RegionType::READ
-                                                            },
-                                                            field_name(field),
-                                                            byte_length(
-                                                                &field_name(length_field),
-                                                                Some(&element),
-                                                            ),
-                                                        );
-                                                    }
-                                                    Type::Array(_) => {}
-                                                    _ => {
-                                                        todo!("unsupported tuple type {:?}", field)
-                                                    }
-                                                }
-                                            }
+                                            let fields: Vec<(String, Type)> = s
+                                                .fields
+                                                .iter()
+                                                .map(|f| {
+                                                    (
+                                                        f.ident
+                                                            .clone()
+                                                            .expect("tuple fields are named")
+                                                            .to_string(),
+                                                        f.ty.clone(),
+                                                    )
+                                                })
+                                                .collect();
+                                            lower_fields(&mut engine, &name, &fields)?;
                                             continue;
                                         }
 
@@ -2785,13 +2911,22 @@ impl Annotation {
                         element
                     ));
                 }
-                engine.add_element_range(
-                    array.clone() + suffix,
-                    calculate_size_of(element.clone()) as i64,
-                    element.starts_with('i'),
-                    operator_of(&comparison.op),
-                    syn_expr_to_abstract_expression(&comparison.right),
-                );
+                match element_field(comparison) {
+                    Some((_, field)) => engine.add_element_field_range(
+                        array.clone() + suffix,
+                        calculate_size_of(element.clone()) as i64,
+                        operator_of(&comparison.op),
+                        syn_expr_to_abstract_expression(&comparison.right),
+                        field,
+                    ),
+                    None => engine.add_element_range(
+                        array.clone() + suffix,
+                        calculate_size_of(element.clone()) as i64,
+                        element.starts_with('i'),
+                        operator_of(&comparison.op),
+                        syn_expr_to_abstract_expression(&comparison.right),
+                    ),
+                }
             }
             for shape in pointer_arrays {
                 let array = &shape.array;
@@ -3480,6 +3615,27 @@ mod tests {
         };
         assert_eq!(failures("strb wzr,[x2,#0]"), Vec::<String>::new());
         assert!(!failures("strb wzr,[x2,x1]").is_empty());
+    }
+
+    #[test]
+    fn two_pointers_into_one_buffer_keep_their_own_offsets() {
+        let verdict_for = |body: &[&str]| {
+            let attr: TokenStream = quote! {
+                "f.S", buf.as_mut_ptr().add(pos), buf.as_mut_ptr().add(pos - dist),
+                [buf.len() == pos + 1, dist >= 1, dist <= pos]
+            };
+            let item: TokenStream = quote! { fn f(buf: &mut [u8], pos: usize, dist: usize); };
+            let annotation = parse_annotation(attr, item).expect("annotation parses");
+            let mut program = vec!["f:".to_string()];
+            program.extend(body.iter().map(|line| line.to_string()));
+            annotation.check(&program).expect("the check runs").failures
+        };
+        assert_eq!(verdict_for(&["strb wzr,[x0]", "ret"]), Vec::<String>::new());
+        assert!(!verdict_for(&["strb wzr,[x0,#1]", "ret"]).is_empty());
+        assert_eq!(
+            verdict_for(&["strb wzr,[x1,#1]", "ret"]),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

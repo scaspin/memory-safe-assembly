@@ -710,6 +710,8 @@ fn unwrapped_requirements(
     }
 }
 
+const MAX_UNWRAPPED_STRIDE: i64 = 1 << 62;
+
 fn crossing_requirement(
     condition: &AbstractComparison,
     continues_when: bool,
@@ -768,8 +770,37 @@ fn crossing_requirement(
                 AbstractExpression::Immediate(0),
             )
         }
-        (false, "<" | "<=") => {
-            AbstractComparison::new("<=", exit.clone(), AbstractExpression::Immediate(1 << 62))
+        (false, "<" | "<=") if *stride <= MAX_UNWRAPPED_STRIDE => {
+            let overshoot = if (*stride as u64).is_power_of_two() {
+                generate_expression(
+                    "atmost",
+                    generate_expression(
+                        "%",
+                        distance.clone(),
+                        AbstractExpression::Immediate(*stride),
+                    ),
+                    AbstractExpression::Immediate(1),
+                )
+            } else {
+                AbstractExpression::Immediate(1)
+            };
+            let reached = generate_expression(
+                "+",
+                exit.clone(),
+                generate_expression("*", AbstractExpression::Immediate(stride - 1), overshoot),
+            );
+            let unfolded = |e: AbstractExpression, n: i64| {
+                AbstractExpression::Expression(
+                    "-".to_string(),
+                    Box::new(e),
+                    Box::new(AbstractExpression::Immediate(n)),
+                )
+            };
+            AbstractComparison::new(
+                "<=",
+                unfolded(unfolded(reached, i64::MAX), 1),
+                AbstractExpression::Immediate(i64::MAX),
+            )
         }
         _ => never,
     })
@@ -949,8 +980,8 @@ pub(super) fn summary_fact_to_ast(fact: &AbstractComparison) -> Option<ast::Bool
     translated
 }
 
-fn facts_for_exit(
-    (record, ghosts): (&JumpRecord, &[Ghost]),
+fn facts_for_exit<L>(
+    (record, ghosts): (&JumpRecord<L>, &[Ghost]),
     counter: &LoopCounter,
     invariants: &[LoopInvariant],
     bounded: bool,
@@ -1011,10 +1042,13 @@ pub(super) fn leaf_path(
         .map(|(path, _)| path)
 }
 
-pub(super) type GhostedRecord = (JumpRecord, Vec<Ghost>);
+pub(super) type GhostedRecord<L> = (JumpRecord<L>, Vec<Ghost>);
 
-pub(super) fn branches_walked(loop_pc: usize, cycle: &[JumpRecord]) -> Vec<JumpRecord> {
-    let mut walked: Vec<JumpRecord> = Vec::new();
+pub(super) fn branches_walked<L: Clone>(
+    loop_pc: usize,
+    cycle: &[JumpRecord<L>],
+) -> Vec<JumpRecord<L>> {
+    let mut walked: Vec<JumpRecord<L>> = Vec::new();
     for record in cycle {
         let pc = record.point.pc;
         if pc == loop_pc
@@ -1044,8 +1078,8 @@ fn without_word_signs(e: &AbstractExpression) -> AbstractExpression {
     }
 }
 
-fn held_on_the_cycle(
-    (record, ghosts): (&JumpRecord, &[Ghost]),
+fn held_on_the_cycle<L>(
+    (record, ghosts): (&JumpRecord<L>, &[Ghost]),
     counter: &LoopCounter,
     invariants: &[LoopInvariant],
     landings: &mut Vec<(AbstractComparison, AbstractComparison)>,
@@ -1149,7 +1183,7 @@ pub(super) fn cells_written(journal: &[CellWrite]) -> Vec<(MemoryCell, RegisterV
     seen
 }
 
-pub(super) fn summarize(
+pub(super) fn summarize<L>(
     id: LoopId,
     pc: usize,
     label: Option<String>,
@@ -1159,8 +1193,8 @@ pub(super) fn summarize(
     states: (
         &MachineState,
         &MachineState,
-        &[GhostedRecord],
-        &[GhostedRecord],
+        &[GhostedRecord<L>],
+        &[GhostedRecord<L>],
     ),
 ) -> Summary {
     let (condition, ghosts, operands) = guard;
@@ -1191,6 +1225,36 @@ pub(super) fn summarize(
                     AbstractExpression::Immediate(0),
                 ));
                 progress_facts.push(AbstractComparison::new(">=", span, progress.clone()));
+                updates.push((
+                    i,
+                    RegisterValue {
+                        kind: if cur.base.is_some() {
+                            cur.kind.clone()
+                        } else {
+                            RegisterKind::RegisterBase
+                        },
+                        base: Some(generate_expression("+", value_of(cur), progress)),
+                        offset: 0,
+                    },
+                ));
+            }
+            LoopInvariant::Ranged(low, high) => {
+                let progress = counter.symbol(LoopRole::Progress(i)).expression();
+                let rounds = generate_expression(
+                    "-",
+                    counter.expression(),
+                    AbstractExpression::Immediate(SUMMARY_ITERATION),
+                );
+                progress_facts.push(AbstractComparison::new(
+                    "<=",
+                    generate_expression("*", AbstractExpression::Immediate(low), rounds.clone()),
+                    progress.clone(),
+                ));
+                progress_facts.push(AbstractComparison::new(
+                    ">=",
+                    generate_expression("*", AbstractExpression::Immediate(high), rounds),
+                    progress.clone(),
+                ));
                 updates.push((
                     i,
                     RegisterValue {
@@ -1724,6 +1788,16 @@ pub(super) struct ActiveLoop {
     pub(super) settled_steps: Vec<SettledSelectStep>,
     pub(super) continuing: AbstractComparison,
     pub(super) bounds: Vec<Bound>,
+    pub(super) confined: Vec<Confinement>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct Confinement {
+    pub(super) register: usize,
+    pub(super) region: String,
+    pub(super) length: AbstractExpression,
+    pub(super) floor: Option<usize>,
+    pub(super) multiple: i64,
 }
 
 #[derive(Debug, Clone)]

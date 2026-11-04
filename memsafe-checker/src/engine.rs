@@ -83,7 +83,7 @@ fn is_fresh_flag(symbol: &str) -> bool {
     })
 }
 
-fn history_digest(history: &[JumpRecord]) -> u64 {
+fn history_digest<L: std::fmt::Debug>(history: &[JumpRecord<L>]) -> u64 {
     let mut hasher = DefaultHasher::new();
     format!("{history:?}").hash(&mut hasher);
     hasher.finish()
@@ -145,23 +145,24 @@ fn join_arms(
 }
 
 #[derive(Debug, Clone)]
-struct BranchPoint {
+struct BranchPoint<L> {
     pc: usize,
     condition: AbstractComparison,
     state: MachineState,
     journal_len: usize,
     slots: Vec<SymbolicSlot>,
     instructions_run: usize,
+    lanes: L,
 }
 
 #[derive(Debug, Clone)]
-struct JumpRecord {
-    point: BranchPoint,
+struct JumpRecord<L> {
+    point: BranchPoint<L>,
     taken: bool,
     resolved: bool,
 }
 
-fn visits_since_the_branch_turned(history: &[JumpRecord], pc: usize, taken: bool) -> usize {
+fn visits_since_the_branch_turned<L>(history: &[JumpRecord<L>], pc: usize, taken: bool) -> usize {
     history
         .iter()
         .rev()
@@ -250,7 +251,7 @@ pub struct Engine<M: Machine> {
     computer: M,
     loops: PathLoops<M>,
     loop_history: Rc<RefCell<LoopHistory>>,
-    jump_history: Vec<JumpRecord>,
+    jump_history: Vec<JumpRecord<M::LoopLanes>>,
     concrete_decisions: BTreeMap<usize, bool>,
     instructions_run: usize,
     select_history: Vec<usize>,
@@ -376,9 +377,14 @@ impl<M: Machine> Engine<M> {
                 .assert(bytes.le(ast::Int::from_i64(LARGEST_OBJECT_BYTES)));
         }
         let base = base.into();
-        self.computer
-            .solver()
-            .assert(ast::Int::new_const(base.clone()).ge(&zero));
+        let start = ast::Int::new_const(base.clone());
+        self.computer.solver().assert(start.ge(&zero));
+        if let Some(size) = expression_to_ast(length.clone()) {
+            let top = ast::Int::from_u64(u64::MAX);
+            self.computer
+                .solver()
+                .assert(ast::Int::add(&[&start, &size]).le(&top));
+        }
         self.computer.add_memory_region(base, ty, length);
     }
 
@@ -398,6 +404,17 @@ impl<M: Machine> Engine<M> {
     ) {
         self.computer
             .add_memory_value_abstract(region.into(), address, value);
+    }
+
+    pub fn add_abstract_to_memory_sized(
+        &mut self,
+        region: impl Into<String>,
+        address: i64,
+        value: AbstractExpression,
+        width: i64,
+    ) {
+        self.computer
+            .add_memory_value_abstract_sized(region.into(), address, value, width);
     }
 
     pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
@@ -464,6 +481,27 @@ impl<M: Machine> Engine<M> {
                 signed,
                 op: op.to_string(),
                 bound,
+                field: None,
+            },
+        );
+    }
+
+    pub fn add_element_field_range(
+        &mut self,
+        region: impl Into<String>,
+        element_size: i64,
+        op: &str,
+        bound: AbstractExpression,
+        field: (i64, i64),
+    ) {
+        self.computer.add_element_range(
+            &region.into(),
+            ElementRange {
+                width: element_size,
+                signed: false,
+                op: op.to_string(),
+                bound,
+                field: Some(field),
             },
         );
     }
@@ -1354,6 +1392,7 @@ impl<M: Machine> Engine<M> {
                         journal_len: self.computer.write_journal().len(),
                         slots: self.computer.symbolic_slots(),
                         instructions_run: self.instructions_run,
+                        lanes: self.computer.loop_lanes(),
                     },
                     taken,
                     resolved: false,
@@ -1379,7 +1418,7 @@ impl<M: Machine> Engine<M> {
         }
     }
 
-    fn branch_point(&self, pc: usize, condition: &AbstractComparison) -> BranchPoint {
+    fn branch_point(&self, pc: usize, condition: &AbstractComparison) -> BranchPoint<M::LoopLanes> {
         BranchPoint {
             pc,
             condition: condition.clone(),
@@ -1387,12 +1426,13 @@ impl<M: Machine> Engine<M> {
             journal_len: self.computer.write_journal().len(),
             slots: self.computer.symbolic_slots(),
             instructions_run: self.instructions_run,
+            lanes: self.computer.loop_lanes(),
         }
     }
 
     fn explore_arm(
         &mut self,
-        here: BranchPoint,
+        here: BranchPoint<M::LoopLanes>,
         taken: bool,
         dest: usize,
         depth: usize,
@@ -1533,6 +1573,7 @@ impl<M: Machine> Engine<M> {
                 journal_len: self.computer.write_journal().len(),
                 slots: self.computer.symbolic_slots(),
                 instructions_run: self.instructions_run,
+                lanes: self.computer.loop_lanes(),
             },
             taken: true,
             resolved: true,
@@ -1683,7 +1724,7 @@ impl<M: Machine> Engine<M> {
         &self,
         pc: usize,
         taken: bool,
-        history: &[JumpRecord],
+        history: &[JumpRecord<M::LoopLanes>],
         last_round: usize,
     ) -> bool {
         let loop_record = &history[last_round];
@@ -1804,7 +1845,7 @@ impl<M: Machine> Engine<M> {
         let under = |c: ast::Bool| {
             let mut assuming = defined.clone();
             assuming.push(c);
-            check(self.computer.solver(), &assuming)
+            check_branch(self.computer.solver(), &assuming)
         };
         match (under(holds), under(fails)) {
             (SatResult::Unsat, SatResult::Unsat) => Decision::Unreachable,
@@ -1875,6 +1916,16 @@ impl AnyEngine {
         forward!(self, e => e.add_abstract_to_memory(region, address, value))
     }
 
+    pub fn add_abstract_to_memory_sized(
+        &mut self,
+        region: impl Into<String>,
+        address: i64,
+        value: AbstractExpression,
+        width: i64,
+    ) {
+        forward!(self, e => e.add_abstract_to_memory_sized(region, address, value, width))
+    }
+
     pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
         forward!(self, e => e.add_abstract_expression_from(register, value))
     }
@@ -1928,6 +1979,17 @@ impl AnyEngine {
         bound: AbstractExpression,
     ) {
         forward!(self, e => e.add_element_range(region, element_size, signed, op, bound))
+    }
+
+    pub fn add_element_field_range(
+        &mut self,
+        region: impl Into<String>,
+        element_size: i64,
+        op: &str,
+        bound: AbstractExpression,
+        field: (i64, i64),
+    ) {
+        forward!(self, e => e.add_element_field_range(region, element_size, op, bound, field))
     }
 
     pub fn unread_element_facts(&self) -> Vec<String> {
@@ -2522,7 +2584,7 @@ mod tests {
         assert_eq!(at_summary(&held, &abstract_of("stride")), unchanged);
     }
 
-    fn history(runs: &[(usize, bool, usize)]) -> Vec<JumpRecord> {
+    fn history(runs: &[(usize, bool, usize)]) -> Vec<JumpRecord<()>> {
         let mut out = Vec::new();
         for &(pc, taken, times) in runs {
             for _ in 0..times {
@@ -2538,6 +2600,7 @@ mod tests {
                         journal_len: 0,
                         slots: Vec::new(),
                         instructions_run: 0,
+                        lanes: (),
                     },
                     taken,
                     resolved: false,

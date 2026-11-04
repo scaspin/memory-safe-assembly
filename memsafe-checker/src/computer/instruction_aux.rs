@@ -1,5 +1,7 @@
 use crate::computer::*;
 
+const SMALL_MASK_NODES: usize = 3;
+
 impl ARMCORTEXA {
     pub fn arithmetic(
         &mut self,
@@ -193,7 +195,186 @@ impl ARMCORTEXA {
         }
     }
 
-    pub fn bound_bitwise_result(&mut self, instruction: &Instruction) {
+    pub fn low_bits_left_after_clearing(
+        &mut self,
+        operands: &[Operand],
+    ) -> Option<AbstractExpression> {
+        let [
+            Operand::Register(prefix, _),
+            left,
+            right @ Operand::Register(..),
+        ] = operands
+        else {
+            return None;
+        };
+        let bits = match prefix {
+            RePrefix::W => 32,
+            RePrefix::X => 64,
+            _ => return None,
+        };
+        let left = full_value(&self.get_register(left));
+        let right = full_value(&self.get_register(right));
+        let unwrapped = match &right {
+            AbstractExpression::Expression(op, inner, modulus)
+                if op == "%" && **modulus == AbstractExpression::Immediate(1 << 32) =>
+            {
+                (**inner).clone()
+            }
+            other => other.clone(),
+        };
+        let AbstractExpression::Expression(op, masked, mask) = &unwrapped else {
+            return None;
+        };
+        let (AbstractExpression::Immediate(mask), true) = (&**mask, op == "&" && **masked == left)
+        else {
+            return None;
+        };
+        let cleared = (*mask as u64).trailing_zeros().min(63);
+        let word = if bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
+        };
+        let high = word & !((1u64 << cleared) - 1);
+        let within_word = crate::widening::unsigned_range(&left)
+            .is_some_and(|(low, top)| low >= 0 && (top as u64) <= word);
+        ((*mask as u64) & word == high && cleared > 0 && within_word)
+            .then(|| generate_expression("%", left, AbstractExpression::Immediate(1 << cleared)))
+    }
+
+    pub fn nonnegative_mask(&mut self, instruction: &Instruction) -> Option<AbstractExpression> {
+        let [_, first, second, rest @ ..] = instruction.operands.as_slice() else {
+            return None;
+        };
+        if !rest.is_empty() {
+            return None;
+        }
+        let first = self.get_register(first);
+        let second = self.get_register(second);
+        [second, first]
+            .into_iter()
+            .find_map(|value| match value.kind {
+                RegisterKind::Immediate if value.offset >= 0 => {
+                    Some(AbstractExpression::Immediate(value.offset))
+                }
+                RegisterKind::RegisterBase => {
+                    let mask = full_value(&value);
+                    if crate::widening::unsigned_range(&mask).is_some_and(|(low, _)| low >= 0) {
+                        return Some(mask);
+                    }
+                    if mask.size() > SMALL_MASK_NODES {
+                        return None;
+                    }
+                    let ast = expression_to_ast(mask.clone())?;
+                    self.unsat_within_budget(&[ast.lt(ast::Int::from_i64(0))])
+                        .then_some(mask)
+                }
+                _ => None,
+            })
+    }
+
+    pub fn bound_masked_result(
+        &mut self,
+        instruction: &Instruction,
+        mask: Option<AbstractExpression>,
+    ) {
+        let (Some(mask), Some(destination @ Operand::Register(..))) =
+            (mask, instruction.operands.first())
+        else {
+            return;
+        };
+        let value = self.get_register(destination);
+        let exact = value.kind == RegisterKind::Immediate
+            || value.base.as_ref().is_some_and(is_exactly_translatable);
+        if exact {
+            return;
+        }
+        let bounded = generate_expression(
+            "atmost",
+            generate_expression(
+                "atleast",
+                AbstractExpression::Abstract(self.fresh_symbol("masked")),
+                AbstractExpression::Immediate(0),
+            ),
+            mask,
+        );
+        self.set_register(destination, RegisterKind::RegisterBase, Some(bounded), 0);
+    }
+
+    pub fn bitwise_operand_bits(&mut self, instruction: &Instruction) -> Option<i64> {
+        let [_, first, second, rest @ ..] = instruction.operands.as_slice() else {
+            return None;
+        };
+        let register_bits = match second {
+            Operand::Register(RePrefix::W, _) => 32,
+            _ => 64,
+        };
+        let unshifted = self.get_register(second);
+        let shift = match rest.first() {
+            Some(Operand::Bitwise(op, amount)) => Some((op.to_string(), *amount)),
+            _ => None,
+        };
+        let shifted_out_bits = match &shift {
+            Some((op, amount)) if op == "lsr" && *amount > 0 => Some(register_bits - amount),
+            _ => None,
+        };
+        let shifted = match shift {
+            Some((op, amount)) => shift_imm(op, unshifted, amount),
+            None => unshifted,
+        };
+        let first = self.get_register(first);
+        let width_of = |value: &RegisterValue| {
+            let syntactic = crate::widening::unsigned_range(&full_value(value))
+                .filter(|(low, _)| *low >= 0)
+                .and_then(|(_, high)| [4, 8, 16, 31].into_iter().find(|&bits| high < 1i64 << bits));
+            if syntactic.is_some_and(|bits| bits <= 16) {
+                return syntactic;
+            }
+            let proved = [8, 16]
+                .into_iter()
+                .find(|&bits| self.fits_unsigned_within_budget(value, bits));
+            proved.or(syntactic)
+        };
+        let first_bits = width_of(&first)?;
+        let second_bits = width_of(&shifted).or(shifted_out_bits)?;
+        Some(first_bits.max(second_bits)).filter(|bits| *bits <= 62)
+    }
+
+    fn fits_unsigned_within_budget(&self, value: &RegisterValue, bits: i64) -> bool {
+        if value.kind != RegisterKind::RegisterBase {
+            return false;
+        }
+        let Some(ast) = expression_to_ast(full_value(value)) else {
+            return false;
+        };
+        let outside = ast::Bool::or(&[
+            ast.lt(ast::Int::from_i64(0)),
+            ast.ge(ast::Int::from_i64(1i64 << bits)),
+        ]);
+        self.unsat_within_budget(&[outside])
+    }
+
+    pub fn bound_bitwise_result(&mut self, instruction: &Instruction, bits: Option<i64>) {
+        if let (Some(bits), Some(destination @ Operand::Register(..))) =
+            (bits, instruction.operands.first())
+        {
+            let value = self.get_register(destination);
+            let exact = value.kind == RegisterKind::Immediate
+                || value.base.as_ref().is_some_and(is_exactly_translatable);
+            if !exact {
+                let bounded = generate_expression(
+                    "atmost",
+                    generate_expression(
+                        "atleast",
+                        AbstractExpression::Abstract(self.fresh_symbol("bitwise")),
+                        AbstractExpression::Immediate(0),
+                    ),
+                    AbstractExpression::Immediate((1i64 << bits) - 1),
+                );
+                self.set_register(destination, RegisterKind::RegisterBase, Some(bounded), 0);
+            }
+            return;
+        }
         let Some(destination @ Operand::Register(RePrefix::W, _)) = instruction.operands.first()
         else {
             return;

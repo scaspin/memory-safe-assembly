@@ -2,6 +2,8 @@ use crate::x86::computer::flags::Carry;
 use crate::x86::computer::memory::add_values;
 use crate::x86::computer::*;
 
+const PROOF_RESOURCE_LIMIT: u32 = 20_000_000;
+
 type Step = Result<ExecuteReturnType<Operand>, String>;
 
 const WIDEST_LOWEST_BIT_CASE: i64 = 62;
@@ -164,6 +166,14 @@ fn shift_by_register(value: &RegisterValue, count: &RegisterValue, width: i64) -
     )
 }
 
+fn is_low_bits_mask(value: &RegisterValue) -> bool {
+    matches!(
+        (&value.kind, &value.base, value.offset),
+        (RegisterKind::RegisterBase, Some(AbstractExpression::Expression(op, one, _)), -1)
+            if op == "lsl" && **one == AbstractExpression::Immediate(1)
+    )
+}
+
 fn enabled_bytes(mnemonic: &str, mask: &RegisterValue, width: i64) -> Option<AbstractExpression> {
     let element = match mnemonic {
         "vmovdqu8" => 1,
@@ -322,6 +332,9 @@ fn vector_access_width(i: &Instruction) -> i64 {
         .iter()
         .filter_map(|o| o.register().filter(|r| r.is_vector()).map(|r| r.width()))
         .max();
+    if let (Some(copies), Some(widest)) = (i.broadcast, widest_register) {
+        return widest / copies;
+    }
     if let Some(width) = narrowing_source_width(m, i.mnemonic.starts_with('v'), widest_register) {
         return width;
     }
@@ -374,6 +387,14 @@ fn vector_reads_only(mnemonic: &str) -> bool {
             | "pcmpistri"
             | "pcmpestrm"
             | "pcmpistrm"
+            | "kortestb"
+            | "kortestw"
+            | "kortestd"
+            | "kortestq"
+            | "ktestb"
+            | "ktestw"
+            | "ktestd"
+            | "ktestq"
     )
 }
 
@@ -397,6 +418,127 @@ fn vector_copies(mnemonic: &str) -> bool {
 }
 
 impl X86_64 {
+    fn shifted_right_unknown(
+        &mut self,
+        op: &str,
+        value: RegisterValue,
+        count: i64,
+        width: i64,
+    ) -> RegisterValue {
+        let count = count & if width == 8 { 63 } else { 31 };
+        match op {
+            "shr" if count > 0 => self.unknown_of_bits(value, width * 8 - count),
+            _ => value,
+        }
+    }
+
+    fn high_product_by_constant(
+        &self,
+        a: &RegisterValue,
+        b: &RegisterValue,
+        width: i64,
+    ) -> RegisterValue {
+        let (factor, constant) = match (&a.kind, &b.kind) {
+            (RegisterKind::RegisterBase, RegisterKind::Immediate) => (a, b.offset),
+            (RegisterKind::Immediate, RegisterKind::RegisterBase) => (b, a.offset),
+            _ => return unknown(),
+        };
+        if width != 8 || !self.proves_within(&factor.expression(), 0, i64::MAX) {
+            log::info!(
+                "multiply-high factor {} not proved non-negative",
+                factor.expression()
+            );
+            return unknown();
+        }
+        let half = AbstractExpression::Immediate(1 << 32);
+        let product = generate_expression(
+            "*",
+            factor.expression(),
+            AbstractExpression::Immediate(constant),
+        );
+        let shifted =
+            generate_expression("/", generate_expression("/", product, half.clone()), half);
+        let high = if constant < 0 {
+            generate_expression("+", factor.expression(), shifted)
+        } else {
+            shifted
+        };
+        RegisterValue::new(RegisterKind::RegisterBase, Some(high), 0)
+    }
+
+    fn low_bits_mask(&self, count: &RegisterValue, width: i64, adjust: i64) -> RegisterValue {
+        let bits = width * 8;
+        let most = if adjust == 0 { bits - 1 } else { bits };
+        match count.kind {
+            RegisterKind::Immediate if (0..=most).contains(&count.offset) => {
+                let set = if count.offset >= 64 {
+                    0
+                } else {
+                    1i64 << count.offset
+                };
+                RegisterValue::new_imm(set.wrapping_add(adjust))
+            }
+            RegisterKind::RegisterBase if self.proves_within(&count.expression(), 0, most) => {
+                RegisterValue::new(
+                    RegisterKind::RegisterBase,
+                    Some(generate_expression(
+                        "lsl",
+                        AbstractExpression::Immediate(1),
+                        count.expression(),
+                    )),
+                    adjust,
+                )
+            }
+            _ => unknown(),
+        }
+    }
+
+    fn hint_magic_division(&mut self, a: &RegisterValue, b: &RegisterValue, high: &RegisterValue) {
+        let (factor, constant) = match (&a.kind, &b.kind) {
+            (RegisterKind::RegisterBase, RegisterKind::Immediate) => (a, b.offset as u64),
+            (RegisterKind::Immediate, RegisterKind::RegisterBase) => (b, a.offset as u64),
+            _ => return,
+        };
+        if high.kind != RegisterKind::RegisterBase {
+            return;
+        }
+        let Some((divisor, shift, excess)) = magic_divisor(constant) else {
+            return;
+        };
+        let (Some(x), Some(h)) = (
+            expression_to_ast(factor.expression()),
+            expression_to_ast(high.expression()),
+        ) else {
+            return;
+        };
+        let scaled = ast::Int::mul(&[&x, &ast::Int::from_i64(1 << shift)]);
+        let times_divisor = ast::Int::mul(&[&h, &ast::Int::from_i64(divisor)]);
+        let low = ast::Int::sub(&[&scaled, &ast::Int::from_i64(divisor - 1)]);
+        let top = ast::Int::add(&[&scaled, &ast::Int::from_i64(excess / 2)]);
+        self.bound_fresh(times_divisor.ge(&low));
+        self.bound_fresh(times_divisor.le(&top));
+    }
+
+    fn proves_within(&self, expression: &AbstractExpression, low: i64, high: i64) -> bool {
+        let Some(value) = expression_to_ast(expression.clone()) else {
+            return false;
+        };
+        let outside = ast::Bool::or(&[
+            value.lt(ast::Int::from_i64(low)),
+            value.gt(ast::Int::from_i64(high)),
+        ]);
+        let mut assumptions = self.select_assumptions(expression);
+        assumptions.push(outside);
+        let mut bounded = Params::new();
+        bounded.set_u32("rlimit", PROOF_RESOURCE_LIMIT);
+        self.solver.set_params(&bounded);
+        let result = self.solver.check_assumptions(&assumptions);
+        let mut unbounded = Params::new();
+        unbounded.set_u32("rlimit", 0);
+        self.solver.set_params(&unbounded);
+        result == SatResult::Unsat
+    }
+
     pub fn execute(&mut self, pc: usize, instruction: &Instruction) -> Step {
         let ops = &instruction.operands;
         let m = instruction.mnemonic.as_str();
@@ -434,7 +576,8 @@ impl X86_64 {
                 };
                 let value = self.read(&ops[0], from)?;
                 let value = if m.starts_with("movz") {
-                    narrow(&value, from, false)
+                    let narrowed = narrow(&value, from, false);
+                    self.unknown_of_bits(narrowed, from * 8)
                 } else {
                     sign_extend(&value, from)
                 };
@@ -447,7 +590,8 @@ impl X86_64 {
                 let from = ops[0].register().map(|r| r.width()).unwrap_or(1);
                 let value = self.read(&ops[0], from)?;
                 let value = if m == "movzx" {
-                    narrow(&value, from, false)
+                    let narrowed = narrow(&value, from, false);
+                    self.unknown_of_bits(narrowed, from * 8)
                 } else {
                     sign_extend(&value, from)
                 };
@@ -477,7 +621,25 @@ impl X86_64 {
                 let src = self.read(&ops[0], width)?;
                 let dst = self.read(&ops[1], width)?;
                 let same_register = ops[0] == ops[1] && !ops[0].is_memory();
+                let all_ones = if width >= 8 {
+                    -1
+                } else {
+                    (1i64 << (width * 8)) - 1
+                };
+                let absorbing = [&src, &dst].into_iter().find_map(|v| {
+                    let bits = if width >= 8 {
+                        v.offset
+                    } else {
+                        v.offset & all_ones
+                    };
+                    match (m, v.kind == RegisterKind::Immediate, bits) {
+                        ("or", true, b) if b == all_ones => Some(RegisterValue::new_imm(all_ones)),
+                        ("and", true, 0) => Some(RegisterValue::new_imm(0)),
+                        _ => None,
+                    }
+                });
                 let result = match (m, same_register) {
+                    _ if absorbing.is_some() => absorbing.expect("checked by the guard"),
                     ("sub" | "xor", true) => RegisterValue::new_imm(0),
                     ("and" | "or", true) => dst.clone(),
                     _ => {
@@ -489,6 +651,28 @@ impl X86_64 {
                             _ => "^",
                         };
                         let r = combine(op, &dst, &src);
+                        let mask = [&src, &dst]
+                            .into_iter()
+                            .find(|v| v.kind == RegisterKind::Immediate)
+                            .map(|v| {
+                                if width >= 8 {
+                                    v.offset
+                                } else {
+                                    v.offset & ((1i64 << (width * 8)) - 1)
+                                }
+                            });
+                        let register_mask = [&src, &dst]
+                            .into_iter()
+                            .find(|v| {
+                                v.kind == RegisterKind::RegisterBase
+                                    && self.proves_within(&v.expression(), 0, i64::MAX)
+                            })
+                            .map(|v| v.expression());
+                        let r = match (mask, register_mask) {
+                            (Some(mask), _) if m == "and" => self.unknown_within(r, mask),
+                            (None, Some(mask)) if m == "and" => self.unknown_at_most(r, mask),
+                            _ => r,
+                        };
                         if m == "and"
                             && ops[1] == Operand::Register(gpr(RSP, 8))
                             && dst.base == Some(abstract_of(STACK))
@@ -570,7 +754,7 @@ impl X86_64 {
                 let dst = self.read(&ops[0], width)?;
                 let result = match dst.kind {
                     RegisterKind::Immediate => RegisterValue::new_imm(!dst.offset),
-                    _ => unknown(),
+                    _ => combine("-", &RegisterValue::new_imm(-1), &dst),
                 };
                 self.write(&ops[0], width, result)?;
             }
@@ -590,12 +774,29 @@ impl X86_64 {
                 self.flags_of_result(&result, width, Carry::Cleared);
             }
             "bt" | "bts" | "btr" | "btc" => {
-                let _ = self.read(&ops[1], width)?;
-                if m != "bt" {
+                let bit = self.read(&ops[0], width)?;
+                let dst = self.read(&ops[1], width)?;
+                if m == "bts" && dst.kind == RegisterKind::Immediate && dst.offset == 0 {
+                    let set = self.low_bits_mask(&bit, width, 0);
+                    self.write(&ops[1], width, set)?;
+                } else if m != "bt" {
                     self.write(&ops[1], width, unknown())?;
                 }
                 self.set_carry(None);
                 self.forget_signed_order();
+            }
+            "bzhi" => {
+                let count = self.read(&ops[0], width)?;
+                let src = self.read(&ops[1], width)?;
+                let all_ones = src.kind == RegisterKind::Immediate
+                    && (src.offset == -1 || (width == 4 && src.offset == 0xffff_ffff));
+                let result = if all_ones {
+                    self.low_bits_mask(&count, width, -1)
+                } else {
+                    unknown()
+                };
+                self.write(&ops[2], width, result)?;
+                self.set_unknown_flags();
             }
 
             "shl" | "sal" | "shr" | "sar" | "rol" | "ror" | "rcl" | "rcr" => {
@@ -609,7 +810,10 @@ impl X86_64 {
                 };
                 let dst = self.read(target, width)?;
                 let result = match count {
-                    Some(c) if !m.starts_with("rc") => shift(m, &dst, c, width),
+                    Some(c) if !m.starts_with("rc") => {
+                        let shifted = shift(m, &dst, c, width);
+                        self.shifted_right_unknown(m, shifted, c, width)
+                    }
                     None if (m == "shl" || m == "sal") && ops.len() == 2 => {
                         let c = self.read(&ops[0], 1)?;
                         shift_by_register(&dst, &c, width)
@@ -656,19 +860,38 @@ impl X86_64 {
                             }
                         }
                     }
+                    _ if m == "tzcnt" => self.unknown_within(unknown(), width * 8),
+                    _ if ops[0] == *dst => self.unknown_within(unknown(), width * 8 - 1),
                     _ => unknown(),
                 };
                 self.write(dst, width, value)?;
                 self.set_unknown_flags();
             }
-            "sarx" | "shlx" | "shrx" | "rorx" | "andn" | "bzhi" | "popcnt" | "lzcnt" | "bsr" => {
+            "sarx" | "shlx" | "shrx" | "rorx" => {
+                let count = self.read(&ops[0], 1)?;
+                let src = self.read(&ops[1], width)?;
+                let op = match m {
+                    "sarx" => "sar",
+                    "shlx" => "shl",
+                    "shrx" => "shr",
+                    _ => "ror",
+                };
+                let result = match count.kind {
+                    RegisterKind::Immediate => {
+                        let shifted = shift(op, &src, count.offset, width);
+                        self.shifted_right_unknown(op, shifted, count.offset, width)
+                    }
+                    _ if op == "shl" => shift_by_register(&src, &count, width),
+                    _ => unknown(),
+                };
+                self.write(&ops[2], width, result)?;
+            }
+            "andn" | "popcnt" | "lzcnt" | "bsr" => {
                 for source in &ops[..ops.len() - 1] {
                     self.read(source, width)?;
                 }
                 self.write(ops.last().expect("destination"), width, unknown())?;
-                if !matches!(m, "sarx" | "shlx" | "shrx" | "rorx") {
-                    self.set_unknown_flags();
-                }
+                self.set_unknown_flags();
             }
             "bswap" => {
                 let dst = self.read(&ops[0], width)?;
@@ -715,9 +938,17 @@ impl X86_64 {
                     }
                     _ => unknown(),
                 };
+                let high = self.high_product_by_constant(&rax, &src, width);
+                self.hint_magic_division(&rax, &src, &high);
                 self.write_gpr(RAX, width, false, low);
-                self.write_gpr(RDX, width, false, unknown());
+                self.write_gpr(RDX, width, false, high);
                 self.set_unknown_flags();
+            }
+            "crc32" => {
+                self.read(&ops[0], width)?;
+                let checksum = self.unknown_of_bits(unknown(), 32);
+                let destination = ops[1].register().map_or(4, |r| r.width());
+                self.write(&ops[1], destination, checksum)?;
             }
             "mulx" => {
                 self.read(&ops[0], width)?;
@@ -859,7 +1090,7 @@ impl X86_64 {
                     self.read(&ops[0], 16)?;
                 }
                 if let Some(Operand::Register(Register::Vector { index, .. })) = ops.last() {
-                    self.vectors[*index] = unknown();
+                    self.set_vector(*index, unknown());
                 }
             }
             "movbe" => {
@@ -959,7 +1190,7 @@ impl X86_64 {
                 Ok(())
             }
             Operand::Register(Register::Vector { index, .. }) => {
-                self.vectors[*index] = value;
+                self.set_vector(*index, value);
                 Ok(())
             }
             Operand::Register(Register::Mask(k)) => {
@@ -1189,6 +1420,345 @@ impl X86_64 {
         }
     }
 
+    fn constant_table_entry(
+        &self,
+        memory: &MemoryOperand,
+        width: i64,
+    ) -> Result<Option<Result<RegisterValue, Vec<AbstractComparison>>>, String> {
+        const MOST_ENTRIES: usize = 64;
+        let address = self.effective_address(memory)?;
+        let name = self.mem_safe_access(
+            &address,
+            RegionType::READ,
+            AbstractExpression::Immediate(width),
+        )?;
+        let region = &self.memory[&name];
+        let Some(base) = address.base.clone() else {
+            return Ok(None);
+        };
+        if region.kind != RegionType::READ || region.content.is_empty() {
+            return Ok(None);
+        }
+        let Some((_, symbol, label_offset)) = self.region_of(&base) else {
+            return Ok(None);
+        };
+        let within = generate_expression(
+            "+",
+            generate_expression("-", base, AbstractExpression::Abstract(symbol)),
+            AbstractExpression::Immediate(address.offset + label_offset),
+        );
+        let Some(offset) = expression_to_ast(within.clone()) else {
+            return Ok(None);
+        };
+        let mut offsets: Vec<i64> = Vec::new();
+        loop {
+            let excluded: Vec<ast::Bool> = offsets
+                .iter()
+                .map(|v| offset.eq(ast::Int::from_i64(*v)).not())
+                .collect();
+            match self.solver.check_assumptions(&excluded) {
+                SatResult::Unsat => break,
+                SatResult::Unknown => return Ok(None),
+                SatResult::Sat => {
+                    let Some(value) = self
+                        .solver
+                        .get_model()
+                        .and_then(|model| model.eval(&offset, true))
+                        .and_then(|value| value.as_i64())
+                    else {
+                        return Ok(None);
+                    };
+                    if offsets.contains(&value) || offsets.len() >= MOST_ENTRIES {
+                        return Ok(None);
+                    }
+                    offsets.push(value);
+                }
+            }
+        }
+        match offsets.as_slice() {
+            [only] => Ok(region.read(*only, width).map(Ok)),
+            [] => Ok(None),
+            _ => Ok(Some(Err(offsets
+                .iter()
+                .map(|v| {
+                    AbstractComparison::new("==", within.clone(), AbstractExpression::Immediate(*v))
+                })
+                .collect()))),
+        }
+    }
+
+    fn replicated_low_dword(
+        &mut self,
+        mnemonic: &str,
+        ops: &[Operand],
+    ) -> Result<Option<(RegisterValue, Option<DwordInterval>)>, String> {
+        let zeroes_upper = mnemonic.starts_with('v');
+        let (source, every_lane) = match (mnemonic.trim_start_matches('v'), ops) {
+            (
+                "pshufd",
+                [
+                    Operand::Immediate(order),
+                    source @ Operand::Register(Register::Vector { .. }),
+                    Operand::Register(Register::Vector { width, .. }),
+                ],
+            ) if order & 0xff == 0 => (self.read(source, 8)?, zeroes_upper && *width == 16),
+            (
+                "pbroadcastd",
+                [
+                    source @ Operand::Register(Register::Vector { .. }),
+                    Operand::Register(Register::Vector { .. }),
+                ],
+            ) => (self.read(source, 8)?, zeroes_upper),
+            (
+                "pbroadcastd",
+                [
+                    source @ Operand::Memory(_),
+                    Operand::Register(Register::Vector { .. }),
+                ],
+            ) => (self.read(source, 4)?, zeroes_upper),
+            _ => return Ok(None),
+        };
+        let low = narrow(&source, 4, false);
+        let interval = match low.kind {
+            RegisterKind::Number => None,
+            _ if !every_lane => None,
+            _ if self.proves_within(&low.expression(), 0, i32::MAX as i64) => {
+                Some((low.expression(), low.expression()))
+            }
+            _ => None,
+        };
+        let lanes = match low.kind {
+            RegisterKind::Immediate if low.offset < 1 << 31 => {
+                RegisterValue::new_imm(low.offset | (low.offset << 32))
+            }
+            RegisterKind::RegisterBase => RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(generate_expression(
+                    "*",
+                    low.expression(),
+                    AbstractExpression::Immediate((1 << 32) + 1),
+                )),
+                0,
+            ),
+            _ => unknown(),
+        };
+        Ok(Some((lanes, interval)))
+    }
+
+    fn low_lanes_within(&mut self, (low, high): &DwordInterval) -> RegisterValue {
+        if !self.proves_within(low, 0, i32::MAX as i64) {
+            return unknown();
+        }
+        let first = self.unknown_between(low.clone(), high.clone());
+        let second = self.unknown_between(low.clone(), high.clone());
+        RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression(
+                "+",
+                first.expression(),
+                generate_expression(
+                    "*",
+                    second.expression(),
+                    AbstractExpression::Immediate(1 << 32),
+                ),
+            )),
+            0,
+        )
+    }
+
+    fn clamped_to_dword_lanes(&self, source: usize, value: RegisterValue) -> RegisterValue {
+        let Some((low, high)) = self.dword_lanes(source).cloned() else {
+            return value;
+        };
+        let dword = narrow(&value, 4, false);
+        if dword.kind != RegisterKind::RegisterBase || !self.proves_within(&low, 0, i32::MAX as i64)
+        {
+            return value;
+        }
+        RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(generate_expression(
+                "atmost",
+                generate_expression("atleast", dword.expression(), low),
+                high,
+            )),
+            0,
+        )
+    }
+
+    fn vector_sources(ops: &[Operand]) -> Option<Vec<usize>> {
+        let (_, sources) = ops.split_last()?;
+        sources
+            .iter()
+            .map(|source| match source {
+                Operand::Register(Register::Vector { index, .. }) => Some(*index),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn and_with_bounded_dwords(
+        &mut self,
+        mnemonic: &str,
+        ops: &[Operand],
+    ) -> Option<(RegisterValue, Option<DwordInterval>)> {
+        if !matches!(mnemonic.trim_start_matches('v'), "pand" | "pandd" | "pandq") {
+            return None;
+        }
+        let indexes = Self::vector_sources(ops)?;
+        if mnemonic.starts_with('v') {
+            let nonnegative = indexes.iter().find_map(|i| {
+                let (low, high) = self.dword_lanes(*i)?.clone();
+                self.proves_within(&low, 0, i32::MAX as i64)
+                    .then_some((AbstractExpression::Immediate(0), high))
+            });
+            if let Some(interval) = nonnegative {
+                let lanes = self.low_lanes_within(&interval);
+                return Some((lanes, Some(interval)));
+            }
+        }
+        let mask = indexes
+            .iter()
+            .find_map(|i| replicated_dword(&self.vectors[*i]))?;
+        let lanes = self.low_lanes_within(&(AbstractExpression::Immediate(0), mask));
+        Some((lanes, None))
+    }
+
+    fn add_or_subtract_bounded_dwords(
+        &mut self,
+        mnemonic: &str,
+        ops: &[Operand],
+    ) -> Option<(RegisterValue, Option<DwordInterval>)> {
+        let subtract = match mnemonic {
+            "vpaddd" => false,
+            "vpsubd" => true,
+            _ => return None,
+        };
+        let [subtrahend, minuend] = Self::vector_sources(ops)?[..] else {
+            return None;
+        };
+        let (a_low, a_high) = self.dword_lanes(minuend)?.clone();
+        let (b_low, b_high) = self.dword_lanes(subtrahend)?.clone();
+        let (low, high) = if subtract {
+            (
+                generate_expression("-", a_low, b_high),
+                generate_expression("-", a_high, b_low),
+            )
+        } else {
+            (
+                generate_expression("+", a_low, b_low),
+                generate_expression("+", a_high, b_high),
+            )
+        };
+        let fits = |engine: &Self, e: &AbstractExpression| {
+            engine.proves_within(e, i32::MIN as i64, i32::MAX as i64)
+        };
+        if !fits(self, &low) || !fits(self, &high) {
+            return None;
+        }
+        let interval = (low, high);
+        Some((self.low_lanes_within(&interval), Some(interval)))
+    }
+
+    fn constant_dword_lanes(&self, memory: &MemoryOperand, width: i64) -> Option<DwordInterval> {
+        if !(16..=64).contains(&width) {
+            return None;
+        }
+        let address = self.effective_address(memory).ok()?;
+        let Some(AbstractExpression::Abstract(name)) = &address.base else {
+            return None;
+        };
+        let region = self.memory.get(name)?;
+        let dwords: Vec<i64> = (0..width / 4)
+            .map(|k| {
+                let value = region.read(address.offset + 4 * k, 4)?;
+                (value.kind == RegisterKind::Immediate).then_some(value.offset as u32 as i32 as i64)
+            })
+            .collect::<Option<_>>()?;
+        Some((
+            AbstractExpression::Immediate(*dwords.iter().min()?),
+            AbstractExpression::Immediate(*dwords.iter().max()?),
+        ))
+    }
+
+    fn dword_indexed_gather(&mut self, instruction: &Instruction) -> Step {
+        let mnemonic = instruction.mnemonic.trim_start_matches('v');
+        let element = match mnemonic {
+            "pgatherdd" | "gatherdps" | "pscatterdd" | "scatterdps" => 4,
+            "pgatherdq" | "gatherdpd" | "pscatterdq" | "scatterdpd" => 8,
+            _ => return Err(format!("unsupported gather {}", instruction.opcode)),
+        };
+        let scatter = mnemonic.contains("scatter");
+        let (memory, destination, completion) = match instruction.operands.as_slice() {
+            [
+                Operand::Register(Register::Vector { index: mask, .. }),
+                Operand::Memory(memory),
+                Operand::Register(Register::Vector { index, .. }),
+            ] if !scatter && instruction.mask.is_none() => (memory, Some(*index), Some(*mask)),
+            [
+                Operand::Memory(memory),
+                Operand::Register(Register::Vector { index, .. }),
+            ] if !scatter && instruction.mask.is_some() => (memory, Some(*index), None),
+            [
+                Operand::Register(Register::Vector { .. }),
+                Operand::Memory(memory),
+            ] if scatter && instruction.mask.is_some() => (memory, None, None),
+            _ => return Err(format!("unsupported gather {}", instruction.opcode)),
+        };
+        let Some(Register::Vector { index: lanes, .. }) = memory.index else {
+            return Err(format!("unsupported gather {}", instruction.opcode));
+        };
+        let Some((low, high)) = self.dword_lanes(lanes).cloned() else {
+            return Err(format!(
+                "{} indexed by {:?} whose lanes have no known bound",
+                instruction.mnemonic,
+                memory.index.expect("matched above")
+            ));
+        };
+        let fits = |engine: &Self, e: &AbstractExpression| {
+            engine.proves_within(e, i32::MIN as i64, i32::MAX as i64)
+        };
+        if !fits(self, &low) || !fits(self, &high) {
+            return Err(format!(
+                "{} lanes [{low}, {high}] not proved to be 32-bit indexes",
+                instruction.mnemonic
+            ));
+        }
+        let base = self.effective_address(&MemoryOperand {
+            index: None,
+            ..memory.clone()
+        })?;
+        let scale = AbstractExpression::Immediate(memory.scale);
+        let first = add_values(
+            &base,
+            &RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(generate_expression("*", low.clone(), scale.clone())),
+                0,
+            ),
+        );
+        let span = generate_expression(
+            "+",
+            generate_expression("*", generate_expression("-", high, low), scale),
+            AbstractExpression::Immediate(element),
+        );
+        if scatter {
+            self.store_range(&first, span)?;
+        } else {
+            self.load_range(&first, span)?;
+        }
+        if let Some(destination) = destination {
+            self.set_vector(destination, unknown());
+        }
+        if let Some(mask) = completion {
+            self.set_vector(mask, RegisterValue::new_imm(0));
+        }
+        if let Some(k) = instruction.mask {
+            self.masks[k] = RegisterValue::new_imm(0);
+        }
+        Ok(ExecuteReturnType::Next)
+    }
+
     fn vector_or_unsupported(&mut self, instruction: &Instruction) -> Step {
         let ops = &instruction.operands;
         let names_vector = ops.iter().any(|o| {
@@ -1202,6 +1772,91 @@ impl X86_64 {
             return Err(format!("unsupported instruction {}", instruction.opcode));
         }
         let width = vector_access_width(instruction);
+        if m.starts_with("kmov")
+            && let [
+                Operand::Memory(memory),
+                Operand::Register(Register::Mask(k)),
+            ] = ops.as_slice()
+        {
+            match self.constant_table_entry(memory, width)? {
+                Some(Ok(value)) => {
+                    self.masks[*k] = value;
+                    return Ok(ExecuteReturnType::Next);
+                }
+                Some(Err(cases)) => return Ok(ExecuteReturnType::Split(cases)),
+                None => (),
+            }
+        }
+        if m.contains("gather") || m.contains("scatter") {
+            return self.dword_indexed_gather(instruction);
+        }
+        if instruction.mask.is_none()
+            && let Some(Operand::Register(Register::Vector { index, .. })) = ops.last()
+            && let Some((lanes, interval)) = match self.replicated_low_dword(m, ops)? {
+                Some(replicated) => Some(replicated),
+                None => self
+                    .and_with_bounded_dwords(m, ops)
+                    .or_else(|| self.add_or_subtract_bounded_dwords(m, ops)),
+            }
+        {
+            self.set_vector(*index, lanes);
+            if let Some(interval) = interval {
+                self.bound_dword_lanes(*index, interval);
+            }
+            return Ok(ExecuteReturnType::Next);
+        }
+        if let (
+            "pextrd",
+            [
+                Operand::Immediate(lane @ 0..=3),
+                Operand::Register(Register::Vector { index: source, .. }),
+                Operand::Register(Register::Gpr {
+                    index, high: false, ..
+                }),
+            ],
+        ) = (m.trim_start_matches('v'), ops.as_slice())
+        {
+            let low = self.vectors[*source].clone();
+            let dword = match (low.kind.clone(), *lane, self.dword_lanes(*source).cloned()) {
+                (RegisterKind::RegisterBase, 1, _) => RegisterValue::new(
+                    RegisterKind::RegisterBase,
+                    Some(generate_expression(
+                        "/",
+                        low.expression(),
+                        AbstractExpression::Immediate(1 << 32),
+                    )),
+                    0,
+                ),
+                (RegisterKind::Immediate, 1, _) => RegisterValue::new_imm(low.offset >> 32),
+                (RegisterKind::Immediate | RegisterKind::RegisterBase, 0, _) => low,
+                (_, _, Some((low, high))) => self.unknown_between(low, high),
+                _ => unknown(),
+            };
+            let dword = self.clamped_to_dword_lanes(*source, dword);
+            self.write_gpr(*index, 4, false, dword);
+            return Ok(ExecuteReturnType::Next);
+        }
+        if instruction.mask.is_none()
+            && matches!(
+                m,
+                "vextracti128"
+                    | "vextracti32x4"
+                    | "vextracti64x2"
+                    | "vextracti32x8"
+                    | "vextracti64x4"
+            )
+            && let [
+                Operand::Immediate(_),
+                Operand::Register(Register::Vector { index: source, .. }),
+                Operand::Register(Register::Vector { index, .. }),
+            ] = ops.as_slice()
+            && let Some(interval) = self.dword_lanes(*source).cloned()
+        {
+            let lanes = self.low_lanes_within(&interval);
+            self.set_vector(*index, lanes);
+            self.bound_dword_lanes(*index, interval);
+            return Ok(ExecuteReturnType::Next);
+        }
         let Some((last, sources)) = ops.split_last() else {
             return Ok(ExecuteReturnType::Next);
         };
@@ -1227,7 +1882,7 @@ impl X86_64 {
             self.set_unknown_flags();
             match m.trim_start_matches('v') {
                 "pcmpestri" | "pcmpistri" => self.registers[RCX] = unknown(),
-                "pcmpestrm" | "pcmpistrm" => self.vectors[0] = unknown(),
+                "pcmpestrm" | "pcmpistrm" => self.set_vector(0, unknown()),
                 _ => (),
             }
             return Ok(ExecuteReturnType::Next);
@@ -1243,7 +1898,18 @@ impl X86_64 {
                 let address = self.effective_address(memory)?;
                 self.store_range(&address, masked.expect("checked by the guard"))?;
             }
-            Operand::Register(Register::Mask(k)) => self.masks[*k] = value,
+            Operand::Register(Register::Mask(k)) => {
+                self.masks[*k] = match sources {
+                    [
+                        Operand::Register(Register::Gpr {
+                            index, high: false, ..
+                        }),
+                    ] if copy && is_low_bits_mask(&self.registers[*index]) => {
+                        self.registers[*index].clone()
+                    }
+                    _ => value,
+                }
+            }
             Operand::Memory(_) => {
                 let stored = if copy && width == 8 { value } else { unknown() };
                 self.write(last, width, stored)?;
@@ -1251,13 +1917,49 @@ impl X86_64 {
             Operand::Register(Register::Gpr {
                 index, width: w, ..
             }) => {
-                let v = if copy { value } else { unknown() };
+                let v = match sources {
+                    [Operand::Register(Register::Vector { index: source, .. })]
+                        if copy && *w == 4 =>
+                    {
+                        self.clamped_to_dword_lanes(*source, value)
+                    }
+                    _ if copy => value,
+                    _ => unknown(),
+                };
                 self.write_gpr(*index, *w, false, v);
             }
-            Operand::Register(Register::Vector { index, .. }) => self.vectors[*index] = value,
+            Operand::Register(Register::Vector { index, .. }) => {
+                self.set_vector(*index, value);
+                if let [Operand::Memory(memory)] = sources
+                    && copy
+                    && masked.is_none()
+                    && m.starts_with('v')
+                    && let Some(interval) = self.constant_dword_lanes(memory, width)
+                {
+                    self.bound_dword_lanes(*index, interval);
+                }
+            }
             _ => (),
         }
         Ok(ExecuteReturnType::Next)
+    }
+}
+
+fn replicated_dword(low: &RegisterValue) -> Option<AbstractExpression> {
+    match (&low.kind, &low.base) {
+        (RegisterKind::Immediate, _) if low.offset >> 32 == low.offset & 0xffff_ffff => {
+            Some(AbstractExpression::Immediate(low.offset & 0xffff_ffff))
+        }
+        (RegisterKind::RegisterBase, Some(AbstractExpression::Expression(op, dword, factor)))
+            if op == "*"
+                && low.offset == 0
+                && **factor == AbstractExpression::Immediate((1 << 32) + 1)
+                && matches!(&**dword, AbstractExpression::Expression(m, _, modulus)
+                    if m == "%" && **modulus == AbstractExpression::Immediate(1 << 32)) =>
+        {
+            Some((**dword).clone())
+        }
+        _ => None,
     }
 }
 
@@ -1267,4 +1969,15 @@ fn jump_on(condition: FlagValue, label: &str) -> ExecuteReturnType<Operand> {
         FlagValue::Real(false) => ExecuteReturnType::Next,
         FlagValue::Abstract(c) => ExecuteReturnType::ConditionalJumpLabel(c, label.to_string()),
     }
+}
+
+fn magic_divisor(constant: u64) -> Option<(i64, i64, i64)> {
+    (0..=8i64).find_map(|shift| {
+        (2..=1024i64).find_map(|divisor| {
+            let product = constant as u128 * divisor as u128;
+            let power = 1u128 << (64 + shift);
+            let excess = product.checked_sub(power)?;
+            (excess < divisor as u128).then_some((divisor, shift, excess as i64))
+        })
+    })
 }
