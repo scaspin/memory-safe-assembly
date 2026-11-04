@@ -71,9 +71,12 @@ Case studies, each a crate of annotated declarations:
 | [ffmpeg-playground](ffmpeg-playground) | AArch64 | [FFmpeg](https://ffmpeg.org) codecs and DSP |
 | [openblas-playground](openblas-playground) | AArch64, x86-64 | [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS) BLAS kernels |
 | [candle-playground](candle-playground) | AArch64 | inline `asm!` in [candle](https://github.com/huggingface/candle) |
+| [compression-playground](compression-playground) | AArch64, x86-64 | [isa-l](https://github.com/intel/isa-l), [zlib-ng](https://github.com/zlib-ng/zlib-ng) and [zstd](https://github.com/facebook/zstd) |
 
 Other material:
 
+- [evaluation](evaluation): scripts that time the verification of every case study and plot
+  the results
 - [bugs/asm-cves](bugs/asm-cves): vulnerable and fixed versions of assembly behind published
   CVEs, used to show that BUMS rejects the vulnerable code
 - [asm-files](asm-files): assembly collected from cryptographic libraries

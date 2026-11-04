@@ -3,6 +3,7 @@ set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(dirname "$here")
 out=${OUT:-$here/results}
+known=${KNOWN:-$here/known-timeouts}
 runs=${RUNS:-3}
 jobs=${JOBS:-4}
 timeout=${TIMEOUT:-300}
@@ -24,6 +25,8 @@ suites=(
   "rav1d|rav1d-playground|"
   "rav1d-x86|rav1d-playground|--target $x86"
   "ffmpeg|ffmpeg-playground|--all-features"
+  "compression|compression-playground|"
+  "compression-x86|compression-playground|--target $x86"
 )
 for extra in ${EXTRA_SUITES:-}; do
   suites+=("$extra")
@@ -40,8 +43,8 @@ for run in $(seq 1 "$runs"); do
     [[ -s $tsv ]] && continue
     skipping=$out/run$run/$name.skip
     : >"$skipping"
-    if [[ -s $out/known-timeouts/$name.txt ]]; then
-      cat "$out/known-timeouts/$name.txt" >>"$skipping"
+    if [[ -s $known/$name.txt ]]; then
+      cat "$known/$name.txt" >>"$skipping"
     fi
     if [[ $run -gt 1 && -s $out/run1/$name.tsv ]]; then
       awk -F'\t' '$3 != "verified" {print $1}' "$out/run1/$name.tsv" >>"$skipping"
@@ -52,4 +55,16 @@ for run in $(seq 1 "$runs"); do
     (cd "$root" && "$check" "$crate" $flags --jobs "$jobs" --timeout "$timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.partial") | tail -1
     mv "$tsv.partial" "$tsv"
   done
+done
+
+mkdir -p "$out/sizes"
+for suite in "${suites[@]}"; do
+  IFS='|' read -r name crate flags <<<"$suite"
+  [[ -n $only && " $only " != *" $name "* ]] && continue
+  [[ $crate = /* ]] || crate=$root/$crate
+  sizes=$out/sizes/$name.tsv
+  [[ -s $sizes ]] && continue
+  echo "=== sizes $name $(date)"
+  (cd "$root" && "$check" "$crate" $flags --sizes) | awk -F'\t' 'NF == 3' >"$sizes.partial"
+  mv "$sizes.partial" "$sizes"
 done
