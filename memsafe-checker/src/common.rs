@@ -8,6 +8,8 @@ use z3::ast::Ast;
 use z3::*;
 
 use crate::instruction_parser::{self, Arrangement};
+pub use crate::profile::TimedSolver;
+use crate::profile::{self, Phase};
 
 pub struct EmptiedOnClone(Solver);
 
@@ -128,6 +130,7 @@ fn escalate(
     most_units: u32,
     unlimited_last: bool,
 ) -> SatResult {
+    let _solving = profile::enter(Phase::Solver);
     let deadline = Instant::now() + budget;
     let left = |cap: Duration| deadline.saturating_duration_since(Instant::now()).min(cap);
     let bounded = |solver: &Solver, units: u32, cap: Duration, run: &dyn Fn() -> SatResult| {
@@ -1996,6 +1999,7 @@ fn signed_word(value: &ast::Int, operand: &AbstractExpression) -> ast::Int {
 }
 
 pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
+    let _serializing = profile::enter(Phase::Serialization);
     match expression.clone() {
         AbstractExpression::Immediate(num) => Some(ast::Int::from_i64(num)),
         AbstractExpression::Abstract(a) => Some(ast::Int::new_const(a)),
@@ -2429,6 +2433,7 @@ mod tests {
 }
 
 pub fn comparison_to_ast(expression: AbstractComparison) -> Option<ast::Bool> {
+    let _serializing = profile::enter(Phase::Serialization);
     let left = expression_to_ast(*expression.left)?;
     let right = expression_to_ast(*expression.right)?;
     match expression.op.as_str() {

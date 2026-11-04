@@ -303,6 +303,7 @@ impl<M: Machine> Engine<M> {
         (pc, condition, jump_dest): (usize, AbstractComparison, usize),
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let explored = self.run(next, depth);
         let unvalidated = {
             let history = self.loop_history.borrow();
@@ -350,6 +351,7 @@ impl<M: Machine> Engine<M> {
         header: usize,
         end: usize,
     ) -> Option<(Vec<M::Operand>, Vec<usize>)> {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let mut written = Vec::new();
         let mut exits = Vec::new();
         let mut conditional_branches = 0;
@@ -391,6 +393,8 @@ impl<M: Machine> Engine<M> {
         exits: Vec<usize>,
         depth: usize,
     ) -> std::io::Result<Step> {
+        let _resolving = profile::enter(Phase::LoopResolution);
+        profile::loops_back_to(header);
         for register in &written {
             self.computer.set_register(
                 register,
@@ -512,6 +516,7 @@ impl<M: Machine> Engine<M> {
     }
 
     fn repeats_unboundedly(&self, pc: usize, taken: bool, expression: &AbstractComparison) -> bool {
+        let _resolving = profile::enter(Phase::LoopResolution);
         if expression.get_abstracts().is_empty()
             || self.loops.active.iter().any(|open| open.pc == pc)
         {
@@ -537,6 +542,7 @@ impl<M: Machine> Engine<M> {
         instruction: &M::Instruction,
         result: &Result<ExecuteReturnType<M::Operand>, String>,
     ) -> Option<(AbstractComparison, String)> {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let (op, tested, label, width) = match instruction.zero_test() {
             Some((op, tested, label)) => (op, tested.clone(), label.to_string(), 8),
             None => {
@@ -605,6 +611,7 @@ impl<M: Machine> Engine<M> {
         taken: bool,
         expression: &AbstractComparison,
     ) -> bool {
+        let _resolving = profile::enter(Phase::LoopResolution);
         if self.loops.active.iter().any(|open| open.pc == pc) {
             return false;
         }
@@ -971,6 +978,7 @@ impl<M: Machine> Engine<M> {
         depth: usize,
         expression: &AbstractComparison,
     ) -> Option<bool> {
+        let _resolving = profile::enter(Phase::LoopResolution);
         match self.summarize_loop(pc, depth, expression) {
             Ok(decision) => Some(decision),
             Err(decline) => {
@@ -1445,7 +1453,7 @@ impl<M: Machine> Engine<M> {
             .iter()
             .filter(|(requirement, _)| {
                 summary_fact_to_ast(requirement).is_none_or(|required| {
-                    self.computer.solver().check_assumptions(&[required.not()]) != SatResult::Unsat
+                    self.computer.solver().check_timed(&[required.not()]) != SatResult::Unsat
                 })
             })
             .map(|(_, landing)| landing.clone())
@@ -1835,7 +1843,7 @@ impl<M: Machine> Engine<M> {
             summary.counter.expression(),
             AbstractExpression::Immediate(SUMMARY_ITERATION),
         ))
-        .is_some_and(|base| self.computer.solver().check_assumptions(&[base]) == SatResult::Sat);
+        .is_some_and(|base| self.computer.solver().check_timed(&[base]) == SatResult::Sat);
         if !admits_base {
             self.pop_scope(scope_id);
             return Err(Decline::Contradicts(id));
@@ -2033,7 +2041,7 @@ impl<M: Machine> Engine<M> {
     fn pinned_value(&self, e: &AbstractExpression) -> Option<i64> {
         let term = expression_to_ast(e.clone())?;
         let mut assuming = self.computer.select_assumptions(e);
-        if self.computer.solver().check_assumptions(&assuming) != SatResult::Sat {
+        if self.computer.solver().check_timed(&assuming) != SatResult::Sat {
             return None;
         }
         let value = self
@@ -2043,7 +2051,7 @@ impl<M: Machine> Engine<M> {
             .eval(&term, true)?
             .as_i64()?;
         assuming.push(term.eq(ast::Int::from_i64(value)).not());
-        (self.computer.solver().check_assumptions(&assuming) == SatResult::Unsat).then_some(value)
+        (self.computer.solver().check_timed(&assuming) == SatResult::Unsat).then_some(value)
     }
 
     fn select_bound(&self, name: &str, fuel: usize) -> Option<i64> {
@@ -2350,7 +2358,7 @@ impl<M: Machine> Engine<M> {
         candidates.into_iter().find(|candidate| {
             let mut with = assuming.clone();
             with.push(term.eq(ast::Int::from_i64(*candidate)).not());
-            self.computer.solver().check_assumptions(&with) == SatResult::Unsat
+            self.computer.solver().check_timed(&with) == SatResult::Unsat
         })
     }
 
@@ -2371,8 +2379,7 @@ impl<M: Machine> Engine<M> {
             return false;
         };
         assuming.push(moved.eq(&step).not());
-        self.within_candidate_budget(|solver| solver.check_assumptions(&assuming))
-            == SatResult::Unsat
+        self.within_candidate_budget(|solver| solver.check_timed(&assuming)) == SatResult::Unsat
     }
 
     fn within_candidate_budget(&self, check: impl FnOnce(&Solver) -> SatResult) -> SatResult {
@@ -2689,7 +2696,7 @@ impl<M: Machine> Engine<M> {
             return false;
         };
         assuming.extend([past, rare_taken, continued]);
-        self.computer.solver().check_assumptions(&assuming) == SatResult::Unsat
+        self.computer.solver().check_timed(&assuming) == SatResult::Unsat
     }
 
     fn pinned_select_facts(
@@ -2945,7 +2952,7 @@ impl<M: Machine> Engine<M> {
                 let mut with = assuming.clone();
                 with.push(holds);
                 with.push(step.eq(ast::Int::from_i64(arm)).not());
-                self.computer.solver().check_assumptions(&with) == SatResult::Unsat
+                self.computer.solver().check_timed(&with) == SatResult::Unsat
             };
             refuted_when(condition.clone(), settled.rare)
                 && refuted_when(condition.not(), settled.usual)
@@ -3004,7 +3011,7 @@ impl<M: Machine> Engine<M> {
                 let write_end = ast::Int::add(&[&write_start, &ast::Int::from_i64(*width)]);
                 let overlap =
                     ast::Bool::and(&[&write_start.lt(&cell_end), &cell_start.lt(&write_end)]);
-                self.computer.solver().check_assumptions(&[overlap]) != SatResult::Unsat
+                self.computer.solver().check_timed(&[overlap]) != SatResult::Unsat
             });
             if may_overlap {
                 reached.push(cell);
@@ -3135,6 +3142,7 @@ impl<M: Machine> Engine<M> {
         continues: bool,
         cycle: &[JumpRecord<M::LoopLanes>],
     ) -> Option<(usize, usize, BTreeSet<usize>)> {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let branch_step = |pc: usize, taken: bool| -> Option<usize> {
             match self.static_successors(pc)?.as_slice() {
                 [target, fallthrough] => Some(if taken { *target } else { *fallthrough }),
@@ -3184,6 +3192,7 @@ impl<M: Machine> Engine<M> {
         source: usize,
         other_back_edges: bool,
     ) -> bool {
+        let _resolving = profile::enter(Phase::LoopResolution);
         if from == header {
             return true;
         }
@@ -3235,6 +3244,7 @@ impl<M: Machine> Engine<M> {
         before: &[JumpRecord<M::LoopLanes>],
         (loop_pc, entry, steps): (usize, &[RegisterValue], &[LoopInvariant]),
     ) -> Vec<GhostedRecord<M::LoopLanes>> {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let iteration_start = before.iter().rposition(|r| r.point.pc == loop_pc);
         exits
             .into_iter()
@@ -3363,13 +3373,11 @@ impl<M: Machine> Engine<M> {
                 let settled = if self
                     .computer
                     .solver()
-                    .check_assumptions(std::slice::from_ref(&holds))
+                    .check_timed(std::slice::from_ref(&holds))
                     == SatResult::Unsat
                 {
                     skipped
-                } else if self.computer.solver().check_assumptions(&[holds.not()])
-                    == SatResult::Unsat
-                {
+                } else if self.computer.solver().check_timed(&[holds.not()]) == SatResult::Unsat {
                     taken
                 } else {
                     continue;
@@ -3654,7 +3662,7 @@ impl<M: Machine> Engine<M> {
             comparison_to_ast(requirement).is_some_and(|requirement| {
                 self.computer
                     .solver()
-                    .check_assumptions(&[held_now.clone(), requirement.not()])
+                    .check_timed(&[held_now.clone(), requirement.not()])
                     == SatResult::Unsat
             })
         });
@@ -3715,9 +3723,8 @@ impl<M: Machine> Engine<M> {
     }
 
     pub(super) fn proves(&self, fact: AbstractComparison) -> bool {
-        comparison_to_ast(fact).is_some_and(|c| {
-            self.computer.solver().check_assumptions(&[c.not()]) == SatResult::Unsat
-        })
+        comparison_to_ast(fact)
+            .is_some_and(|c| self.computer.solver().check_timed(&[c.not()]) == SatResult::Unsat)
     }
 
     fn proves_within_budget(&self, fact: AbstractComparison) -> bool {
@@ -3738,6 +3745,7 @@ impl<M: Machine> Engine<M> {
         prefix: &[(AbstractComparison, bool)],
         expression: &mut AbstractComparison,
     ) -> bool {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let current = self.computer.get_state();
         let Some(entry) = self
             .loops
@@ -3950,6 +3958,7 @@ impl<M: Machine> Engine<M> {
         next: &MachineState,
         generalization: &Generalization,
     ) -> bool {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let Some(&(first, sign)) = generalization.steps.first() else {
             return false;
         };
@@ -4031,9 +4040,7 @@ impl<M: Machine> Engine<M> {
                             })
                             .zip(comparison_to_ast(now.clone()))
                             .is_some_and(|(was, now)| {
-                                self.computer
-                                    .solver()
-                                    .check_assumptions(&[was.eq(now).not()])
+                                self.computer.solver().check_timed(&[was.eq(now).not()])
                                     == SatResult::Unsat
                             })
                     }
@@ -4047,6 +4054,7 @@ impl<M: Machine> Engine<M> {
         active: ActiveLoop,
         expression: AbstractComparison,
     ) -> Discharge {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let since = active.history_len.min(self.jump_history.len());
         let left_through = self.jump_history[since..].iter().position(|record| {
             active
@@ -4210,7 +4218,7 @@ impl<M: Machine> Engine<M> {
         }
         self.loops.attempts.remove(&active.pc);
         self.rebuild_scopes(above);
-        if self.computer.solver().check() == SatResult::Unsat {
+        if self.computer.solver().check_timed(&[]) == SatResult::Unsat {
             log::info!(
                 "{} at line {} has no feasible exit on this path",
                 active.id,

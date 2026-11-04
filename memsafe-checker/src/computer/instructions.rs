@@ -607,9 +607,7 @@ impl ARMCORTEXA {
                                     instruction_aux::full_value(&divisor),
                                     AbstractExpression::Immediate(0),
                                 ))
-                                .is_some_and(|c| {
-                                    self.solver.check_assumptions(&[c]) == SatResult::Unsat
-                                })
+                                .is_some_and(|c| self.solver.check_timed(&[c]) == SatResult::Unsat)
                         }
                     };
                     match (constant(&dividend), constant(&divisor)) {

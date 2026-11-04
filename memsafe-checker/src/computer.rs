@@ -302,7 +302,7 @@ impl ARMCORTEXA {
             let mut bounded = Params::new();
             bounded.set_u32("rlimit", WORD_FIT_RESOURCE_LIMIT);
             self.solver.set_params(&bounded);
-            let result = self.solver.check_assumptions(&[outside]);
+            let result = self.solver.check_timed(&[outside]);
             let mut unbounded = Params::new();
             unbounded.set_u32("rlimit", 0);
             self.solver.set_params(&unbounded);
@@ -429,7 +429,7 @@ impl ARMCORTEXA {
                     ])),
                     &slot_start.lt(ast::Int::add(&[&start, &ast::Int::from_i64(width)])),
                 ]);
-                self.solver.check_assumptions(&[overlap]) == SatResult::Unsat
+                self.solver.check_timed(&[overlap]) == SatResult::Unsat
             })
             .collect();
     }

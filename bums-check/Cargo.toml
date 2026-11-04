@@ -8,6 +8,7 @@ name = "bums-check"
 path = "src/main.rs"
 
 [dependencies]
+bums = { path = "../memsafe-checker" }
 bums_annotations = { path = "../bums_annotations" }
 env_logger = "0.11"
 proc-macro2 = "1.0.78"

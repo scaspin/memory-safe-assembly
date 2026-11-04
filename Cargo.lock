@@ -124,6 +124,7 @@ dependencies = [
 name = "bums-check"
 version = "0.1.0"
 dependencies = [
+ "bums",
  "bums_annotations",
  "env_logger",
  "proc-macro2",

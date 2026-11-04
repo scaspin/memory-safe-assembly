@@ -9,6 +9,8 @@ use std::process::{Child, Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 const RESULT_MARKER: &str = "bums-check-result";
+const PROFILE_MARKER: &str = "bums-check-profile";
+const PROFILE_COLUMNS: usize = 11;
 const TARGET_VENDOR_VARIABLE: &str = "BUMS_CHECK_TARGET_VENDOR";
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -55,11 +57,17 @@ pub fn one(arguments: &[String]) -> ExitCode {
     let _ = env_logger::try_init();
     let evaluation = std::thread::Builder::new()
         .stack_size(1 << 30)
-        .spawn(move || evaluate(&asm_file, &attr, &item))
+        .spawn(move || {
+            let outcome = evaluate(&asm_file, &attr, &item);
+            (outcome, bums::profile::take())
+        })
         .expect("spawn the checking thread")
         .join();
     let (status, message) = match evaluation {
-        Ok(outcome) => outcome,
+        Ok((outcome, profile)) => {
+            println!("{PROFILE_MARKER}\t{}", profile_fields(&profile).join("\t"));
+            outcome
+        }
         Err(panic) => {
             let message = panic
                 .downcast_ref::<String>()
@@ -77,7 +85,25 @@ pub fn one(arguments: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+fn profile_fields(profile: &bums::profile::Profile) -> Vec<String> {
+    let seconds = |time: std::time::Duration| format!("{:.3}", time.as_secs_f64());
+    vec![
+        profile.instructions.len().to_string(),
+        profile.loop_headers.len().to_string(),
+        profile.steps.to_string(),
+        profile.solver_queries.to_string(),
+        seconds(profile.execution),
+        seconds(profile.loop_resolution),
+        seconds(profile.forking),
+        seconds(profile.solver_in_execution),
+        seconds(profile.solver_in_loops),
+        seconds(profile.parsing),
+        seconds(profile.serialization),
+    ]
+}
+
 fn evaluate(asm_file: &Path, attr: &str, item: &str) -> (Status, String) {
+    let _parsing = bums::profile::enter(bums::profile::Phase::Parsing);
     let tokens = |text: &str| text.parse::<proc_macro2::TokenStream>();
     let (Ok(attr), Ok(item)) = (tokens(attr), tokens(item)) else {
         return (Status::Error, "cannot tokenize the annotation".to_string());
@@ -111,6 +137,14 @@ fn evaluate(asm_file: &Path, attr: &str, item: &str) -> (Status, String) {
         return (Status::Fail, verdict.failures.join("; "));
     }
     (Status::Verified, String::new())
+}
+
+fn static_size(annotation: &Found, asm_dir: &Path) -> Option<usize> {
+    let parsed =
+        bums_annotations::parse_annotation(annotation.attr.clone(), annotation.item.clone())
+            .ok()?;
+    let program = bums_annotations::read_program(&asm_dir.join(&annotation.asm_file)).ok()?;
+    bums::engine::AnyEngine::new(program).static_size(&parsed.label)
 }
 
 fn host_triple() -> Result<String, String> {
@@ -152,6 +186,7 @@ struct Outcome {
     status: Status,
     seconds: f64,
     message: String,
+    profile: Vec<String>,
 }
 
 fn resident_kb(pids: &[u32]) -> BTreeMap<u32, u64> {
@@ -196,6 +231,15 @@ fn reported_outcome(log: &Path) -> Option<(Status, String)> {
     let mut fields = line.splitn(3, '\t').skip(1);
     let status = Status::from_name(fields.next()?)?;
     Some((status, fields.next().unwrap_or_default().to_string()))
+}
+
+fn reported_profile(log: &Path) -> Vec<String> {
+    log_tail(log)
+        .lines()
+        .rev()
+        .find_map(|line| line.strip_prefix(PROFILE_MARKER))
+        .map(|fields| fields.split('\t').skip(1).map(str::to_string).collect())
+        .unwrap_or_default()
 }
 
 fn last_log_line(log: &Path) -> String {
@@ -295,6 +339,17 @@ pub fn all(options: Options) -> Result<ExitCode, String> {
         None => package.build_script_out_dir(options.target.as_deref(), &options.features)?,
     };
     println!("bums-check: assembly from {}", asm_dir.display());
+    if options.sizes {
+        for annotation in &found {
+            println!(
+                "{}\t{}\t{}",
+                annotation.function,
+                relative(&annotation.file),
+                static_size(annotation, &asm_dir).unwrap_or_default()
+            );
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
 
     let (log_dir, temporary_logs) = match &options.log_dir {
         Some(directory) => (directory.clone(), false),
@@ -342,6 +397,7 @@ pub fn all(options: Options) -> Result<ExitCode, String> {
                         status: Status::Error,
                         seconds: 0.0,
                         message: error,
+                        profile: Vec::new(),
                     });
                     finished += 1;
                     report(
@@ -407,6 +463,7 @@ pub fn all(options: Options) -> Result<ExitCode, String> {
                         status,
                         seconds: elapsed.as_secs_f64(),
                         message,
+                        profile: reported_profile(&job.log),
                     };
                     finished += 1;
                     report(job, &outcome, finished, jobs.len(), &mut out);
@@ -459,7 +516,7 @@ pub fn all(options: Options) -> Result<ExitCode, String> {
 
 fn report(job: &Job, outcome: &Outcome, finished: usize, total: usize, out: &mut Option<File>) {
     let line = format!(
-        "{}\t{}\t{}\t{:.1}\t{}",
+        "{}\t{}\t{}\t{:.3}\t{}",
         job.found.function,
         job.file,
         outcome.status.name(),
@@ -467,7 +524,9 @@ fn report(job: &Job, outcome: &Outcome, finished: usize, total: usize, out: &mut
         outcome.message
     );
     println!("[{finished}/{total}] {}", line.replace('\t', "  "));
+    let mut profile = outcome.profile.clone();
+    profile.resize(PROFILE_COLUMNS, String::new());
     if let Some(file) = out {
-        let _ = writeln!(file, "{line}");
+        let _ = writeln!(file, "{line}\t{}", profile.join("\t"));
     }
 }

@@ -35,6 +35,7 @@ use crate::common::*;
 use crate::computer::ARMCORTEXA;
 use crate::loader::Listing;
 use crate::machine::*;
+use crate::profile::{self, Phase};
 use crate::widening::*;
 
 mod loops;
@@ -287,6 +288,7 @@ struct Scope {
 
 impl<M: Machine> Engine<M> {
     pub fn new<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> Engine<M> {
+        let _parsing = profile::enter(Phase::Parsing);
         let listing = Listing::<M::Instruction>::parse(lines);
         let mut computer = M::new();
 
@@ -562,6 +564,33 @@ impl<M: Machine> Engine<M> {
             .any(|(&start, &end)| start <= pc && pc <= end)
     }
 
+    pub fn static_size(&self, start: &str) -> Option<usize> {
+        let entry = self.get_linenumber_of_label(start.trim_matches(':').to_string(), 0)?;
+        let mut reached = BTreeSet::new();
+        let mut pending = vec![entry];
+        while let Some(pc) = pending.pop() {
+            let Some(instruction) = self.program.code.get(pc) else {
+                continue;
+            };
+            if !reached.insert(pc) {
+                continue;
+            }
+            if let Some(callee) = instruction
+                .call_target()
+                .and_then(|label| self.resolve_jump_target(label, pc).ok())
+            {
+                pending.push(callee);
+            }
+            pending.extend(self.static_successors(pc).unwrap_or_default());
+        }
+        Some(
+            reached
+                .iter()
+                .filter(|&&pc| !self.program.code[pc].is_label())
+                .count(),
+        )
+    }
+
     fn concrete_split(&self, condition: &AbstractComparison) -> Option<(String, Vec<i64>)> {
         let mut symbols = condition.get_abstracts();
         symbols.sort();
@@ -702,6 +731,7 @@ impl<M: Machine> Engine<M> {
     }
 
     fn fork(&self) -> Engine<M> {
+        let _forking = profile::enter(Phase::Forking);
         let mut forked = self.clone();
         let assertions = self.computer.solver().get_assertions();
         let solver = Solver::new();
@@ -760,6 +790,7 @@ impl<M: Machine> Engine<M> {
     }
 
     fn run(&mut self, start_pc: usize, depth: usize) -> std::io::Result<()> {
+        let _executing = profile::enter(Phase::Execution);
         let result = self.run_from(start_pc, depth);
         while let Some(active) = self.loops.active.last()
             && active.depth == depth
@@ -799,7 +830,12 @@ impl<M: Machine> Engine<M> {
         let length = self.program.code.len();
         while pc < length {
             match self.step(pc, depth, &mut unconditional_visits, reached)? {
-                Step::Continue(next) => pc = next,
+                Step::Continue(next) => {
+                    if next <= pc {
+                        profile::loops_back_to(next);
+                    }
+                    pc = next
+                }
                 Step::Stop => return Ok(()),
                 Step::Return => {
                     return self
@@ -813,6 +849,7 @@ impl<M: Machine> Engine<M> {
     }
 
     fn merge_key(&self, pc: usize) -> Option<String> {
+        let _serializing = profile::enter(Phase::Serialization);
         let fingerprint = self
             .computer
             .fingerprint(!M::Instruction::flags_dead(&self.program.code, pc))?;
@@ -900,6 +937,7 @@ impl<M: Machine> Engine<M> {
                 return Ok(Step::Stop);
             }
 
+            profile::executed(pc);
             log::info!("{:?}: {:?}", pc, instruction);
 
             let mut execute_result = self.computer.execute(pc, &instruction);
@@ -1354,6 +1392,9 @@ impl<M: Machine> Engine<M> {
                 Some(_) => {}
             }
         }
+        if jump_dest <= pc {
+            profile::loops_back_to(jump_dest);
+        }
         let decision = self.evaluate_branch_condition(pc, depth, &mut condition);
         self.follow_branch(pc, condition, decision, jump_dest, depth)
     }
@@ -1649,6 +1690,7 @@ impl<M: Machine> Engine<M> {
     }
 
     fn order_a_monotone_guard(&mut self, pc: usize, condition: &AbstractComparison, taken: bool) {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let Some(ordering) = self.ordering_from_a_monotone_guard(pc, condition, taken) else {
             return;
         };
@@ -1714,7 +1756,7 @@ impl<M: Machine> Engine<M> {
         let (behind, order) = if step == 1 { (">=", "<") } else { ("<=", ">") };
         let started_past =
             comparison_to_ast(AbstractComparison::new(behind, start, bound.clone()))?;
-        if self.computer.solver().check_assumptions(&[started_past]) != SatResult::Unsat {
+        if self.computer.solver().check_timed(&[started_past]) != SatResult::Unsat {
             return None;
         }
         Some(AbstractComparison::new(order, walker, bound))
@@ -1727,6 +1769,7 @@ impl<M: Machine> Engine<M> {
         history: &[JumpRecord<M::LoopLanes>],
         last_round: usize,
     ) -> bool {
+        let _resolving = profile::enter(Phase::LoopResolution);
         let loop_record = &history[last_round];
         let Some((source, header, _)) = self.cycle_back_edge(
             loop_record.point.pc,
@@ -1792,7 +1835,7 @@ impl<M: Machine> Engine<M> {
                 &distance.gt(ast::Int::from_i64(bound)),
                 &distance.lt(ast::Int::from_i64(-bound)),
             ]);
-            self.computer.solver().check_assumptions(&[outside]) == SatResult::Unsat
+            self.computer.solver().check_timed(&[outside]) == SatResult::Unsat
         })
     }
 
@@ -2038,6 +2081,10 @@ impl AnyEngine {
 
     pub fn start(&mut self, start: impl Into<String>) -> std::io::Result<()> {
         forward!(self, e => e.start(start))
+    }
+
+    pub fn static_size(&self, start: &str) -> Option<usize> {
+        forward!(self, e => e.static_size(start))
     }
 }
 
