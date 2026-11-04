@@ -226,6 +226,49 @@ impl ARMCORTEXA {
         self.set_register(destination, RegisterKind::RegisterBase, Some(bounded), 0);
     }
 
+    pub fn source_bit_widths(&mut self, instruction: &Instruction) -> Option<[u32; 2]> {
+        let [
+            _,
+            left @ Operand::Register(..),
+            right @ Operand::Register(..),
+        ] = instruction.operands.as_slice()
+        else {
+            return None;
+        };
+        let sources = [left, right].map(|operand| (operand.clone(), self.get_register(operand)));
+        let width = |(operand, value): &(Operand, RegisterValue)| {
+            let Operand::Register(prefix, _) = operand else {
+                return None;
+            };
+            if value.kind == RegisterKind::Number && value.base.is_none() {
+                return (value.offset >= 0).then(|| 64 - value.offset.leading_zeros());
+            }
+            let expression = value.expression();
+            let narrower = if *prefix == RePrefix::W { 31 } else { 62 };
+            self.proven_bit_width(&expression)
+                .filter(|&bits| bits <= narrower)
+        };
+        Some([width(&sources[0])?, width(&sources[1])?])
+    }
+
+    pub fn bound_by_source_widths(&mut self, instruction: &Instruction, widths: Option<[u32; 2]>) {
+        let (Some([left, right]), Some(destination)) = (widths, instruction.operands.first())
+        else {
+            return;
+        };
+        let result = self.get_register(destination).expression();
+        let ceiling = (1i64 << left.max(right)) - 1;
+        for (op, bound) in [(">=", 0), ("<=", ceiling)] {
+            if let Some(fact) = comparison_to_ast(AbstractComparison::new(
+                op,
+                result.clone(),
+                AbstractExpression::Immediate(bound),
+            )) {
+                self.bound_fresh(fact);
+            }
+        }
+    }
+
     pub fn fold_mask_within_aligned_region(&mut self, instruction: &Instruction) {
         let Some(destination @ Operand::Register(RePrefix::X, _)) = instruction.operands.first()
         else {

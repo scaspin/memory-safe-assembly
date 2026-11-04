@@ -320,6 +320,7 @@ pub enum LoopRole {
     Counter,
     Trips(Option<usize>),
     Progress(usize),
+    CellProgress(usize),
     Within(usize),
     Widened(usize),
     Flag(usize),
@@ -356,6 +357,8 @@ impl LoopSymbol {
                     LoopRole::Trips(Some(exit))
                 } else if let Some(i) = indexed("_progress_") {
                     LoopRole::Progress(i)
+                } else if let Some(k) = indexed("_cell_progress_") {
+                    LoopRole::CellProgress(k)
                 } else if let Some(i) = indexed("_within_") {
                     LoopRole::Within(i)
                 } else if let Some(i) = indexed("_widened_") {
@@ -391,6 +394,7 @@ impl fmt::Display for LoopSymbol {
             LoopRole::Trips(None) => write!(f, "_trips"),
             LoopRole::Trips(Some(exit)) => write!(f, "_trips{exit}"),
             LoopRole::Progress(i) => write!(f, "_progress_{i}"),
+            LoopRole::CellProgress(k) => write!(f, "_cell_progress_{k}"),
             LoopRole::Within(i) => write!(f, "_within_{i}"),
             LoopRole::Widened(i) => write!(f, "_widened_{i}"),
             LoopRole::Flag(k) => write!(f, "_flag_{k}"),
@@ -786,6 +790,7 @@ mod tests {
             LoopRole::Trips(None),
             LoopRole::Trips(Some(40)),
             LoopRole::Progress(3),
+            LoopRole::CellProgress(2),
             LoopRole::Within(1),
             LoopRole::Widened(0),
             LoopRole::Flag(2),

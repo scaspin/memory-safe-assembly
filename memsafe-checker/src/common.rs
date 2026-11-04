@@ -148,15 +148,7 @@ pub fn refuted_within(
     incremental_units: u32,
     fresh_units: u32,
 ) -> bool {
-    let unsat_within = |solver: &Solver, units: u32, run: &dyn Fn() -> SatResult| {
-        set_limits(solver, units, NO_TIMEOUT_MS);
-        let decided = run();
-        set_limits(solver, UNLIMITED, NO_TIMEOUT_MS);
-        decided == SatResult::Unsat
-    };
-    if unsat_within(solver, incremental_units, &|| {
-        solver.check_assumptions(std::slice::from_ref(assumption))
-    }) {
+    if refuted_incrementally_within(solver, assumption, incremental_units) {
         return true;
     }
     let fresh = ArithmeticEngine::Default.solver();
@@ -165,6 +157,19 @@ pub fn refuted_within(
     }
     fresh.assert(assumption);
     unsat_within(&fresh, fresh_units, &|| fresh.check())
+}
+
+pub fn refuted_incrementally_within(solver: &Solver, assumption: &ast::Bool, units: u32) -> bool {
+    unsat_within(solver, units, &|| {
+        solver.check_assumptions(std::slice::from_ref(assumption))
+    })
+}
+
+fn unsat_within(solver: &Solver, units: u32, run: &dyn Fn() -> SatResult) -> bool {
+    set_limits(solver, units, NO_TIMEOUT_MS);
+    let decided = run();
+    set_limits(solver, UNLIMITED, NO_TIMEOUT_MS);
+    decided == SatResult::Unsat
 }
 
 fn milliseconds(time: Duration) -> u32 {

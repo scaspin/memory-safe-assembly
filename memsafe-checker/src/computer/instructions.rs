@@ -343,8 +343,10 @@ impl ARMCORTEXA {
                     self.realign_below_stack_pointer(instruction);
                 }
                 "orr" => {
+                    let widths = self.source_bit_widths(instruction);
                     self.arithmetic("|", |x, y| x | y, instruction.operands.clone());
                     self.bound_bitwise_result(instruction);
+                    self.bound_by_source_widths(instruction, widths);
                 }
                 "orn" => {
                     self.arithmetic("!|", |x, y: i64| x | !y, instruction.operands.clone());

@@ -29,6 +29,8 @@ fn item_width(directive: &str) -> Option<i64> {
     }
 }
 
+const LINK_REGISTER: usize = 30;
+
 fn general_register_index(prefix: &RePrefix, number: usize) -> Option<usize> {
     match prefix {
         RePrefix::X | RePrefix::W => Some(number),
@@ -90,7 +92,7 @@ impl Instruction {
 impl MachineInstruction for Instruction {
     type Operand = Operand;
     const FIXED_WIDTH: Option<usize> = Some(4);
-    const TRACKED_REGISTERS: usize = 30;
+    const TRACKED_REGISTERS: usize = LINK_REGISTER + 1;
 
     fn statements(lines: Vec<String>) -> Vec<String> {
         lines
@@ -204,6 +206,9 @@ impl MachineInstruction for Instruction {
     }
 
     fn overwrites_without_reading(&self, register: usize) -> bool {
+        if register == LINK_REGISTER && matches!(self.opcode.as_str(), "bl" | "blr") {
+            return !self.mentions(register);
+        }
         let (written, read) = self
             .operands
             .split_at(self.overwritten_operands().min(self.operands.len()));
@@ -215,9 +220,13 @@ impl MachineInstruction for Instruction {
     }
 
     fn mentions(&self, register: usize) -> bool {
-        self.operands
-            .iter()
-            .any(|operand| operand_mentions(operand, register))
+        let returns_through_the_link_register =
+            register == LINK_REGISTER && self.opcode == "ret" && self.operands.is_empty();
+        returns_through_the_link_register
+            || self
+                .operands
+                .iter()
+                .any(|operand| operand_mentions(operand, register))
     }
 
     fn zero_test(&self) -> Option<(&'static str, &Operand, &str)> {

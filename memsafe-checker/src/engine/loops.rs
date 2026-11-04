@@ -177,6 +177,7 @@ pub(super) struct PcRecord {
     counted: BTreeSet<(LoopId, usize)>,
     unstable_registers: BTreeSet<usize>,
     unstable_cells: BTreeSet<MemoryCell>,
+    wandering_cells: BTreeSet<MemoryCell>,
     unstable_slots: bool,
     uncarried: BTreeSet<usize>,
     select_refuted: bool,
@@ -939,12 +940,15 @@ impl<M: Machine> Engine<M> {
             .journal_len
             .min(self.computer.write_journal().len());
         let unstable_cells = self.record_at(pc, |record| record.unstable_cells.clone());
+        let wandering_cells = self.record_at(pc, |record| record.wandering_cells.clone());
         let mut cells: Vec<(MemoryCell, LoopInvariant)> =
             cells_written(&self.computer.write_journal()[cycle_start..])
                 .into_iter()
                 .map(|(cell, before)| {
                     let now = self.computer.cell_content(&cell);
                     let invariant = match invariant_of_register(&before, &now) {
+                        _ if wandering_cells.contains(&cell) => LoopInvariant::Unknown,
+                        _ if self.advances_a_pointer(&before, &now) => LoopInvariant::NonDecreasing,
                         _ if unstable_cells.contains(&cell) => LoopInvariant::Unknown,
                         LoopInvariant::Fixed => LoopInvariant::Fixed,
                         LoopInvariant::Linear(step)
@@ -959,10 +963,35 @@ impl<M: Machine> Engine<M> {
                 .collect();
         for cell in unstable_cells {
             if cells.iter().all(|(known, _)| *known != cell) {
-                cells.push((cell, LoopInvariant::Unknown));
+                let holds_a_pointer = !wandering_cells.contains(&cell)
+                    && self
+                        .computer
+                        .carries_region(&self.computer.cell_content(&cell));
+                let invariant = if holds_a_pointer {
+                    LoopInvariant::NonDecreasing
+                } else {
+                    LoopInvariant::Unknown
+                };
+                cells.push((cell, invariant));
             }
         }
         cells
+    }
+
+    fn advances_a_pointer(&self, before: &RegisterValue, now: &RegisterValue) -> bool {
+        let stepped_by_a_constant = match invariant_of_register(before, now) {
+            LoopInvariant::Fixed => true,
+            LoopInvariant::Linear(step) => matches!(step, AbstractExpression::Immediate(_)),
+            _ => false,
+        };
+        !stepped_by_a_constant
+            && self.computer.carries_region(before)
+            && self.computer.carries_region(now)
+            && self.proves(AbstractComparison::new(
+                ">=",
+                now.expression(),
+                before.expression(),
+            ))
     }
 
     fn draft_summary(
@@ -1365,11 +1394,27 @@ impl<M: Machine> Engine<M> {
             .collect();
         self.computer.set_symbolic_slots(kept);
         let counter = LoopCounter::for_loop(id);
-        for (cell, invariant) in &cells {
+        for (k, (cell, invariant)) in cells.iter().enumerate() {
             let stored = self.computer.cell_content(cell);
             let generalized = match invariant {
                 LoopInvariant::Fixed => continue,
                 LoopInvariant::Linear(step) => stepped_by_the_counter(&stored, step, &counter),
+                LoopInvariant::NonDecreasing => {
+                    let progress = counter.symbol(LoopRole::CellProgress(k)).expression();
+                    let ahead = AbstractComparison::new(
+                        ">=",
+                        progress.clone(),
+                        AbstractExpression::Immediate(0),
+                    );
+                    if let Some(fact) = comparison_to_ast(ahead) {
+                        self.computer.solver().assert(fact);
+                    }
+                    RegisterValue {
+                        kind: RegisterKind::RegisterBase,
+                        base: Some(generate_expression("+", value_of(&stored), progress)),
+                        offset: 0,
+                    }
+                }
                 _ => RegisterValue::new(RegisterKind::Number, None, 0),
             };
             log::info!(
@@ -1479,9 +1524,13 @@ impl<M: Machine> Engine<M> {
             let LoopInvariant::Geometric(divisor) = invariant else {
                 continue;
             };
-            let Some(bound) = self.proven_upper_bound(&current.0[i]) else {
+            let Some(loose) = self.proven_upper_bound(&current.0[i]) else {
                 continue;
             };
+            let bound = self
+                .computer
+                .proven_bit_width(&value_of(&current.0[i]))
+                .map_or(loose, |bits| loose.min((1i64 << bits) - 1));
             let widened = counter.symbol(LoopRole::Widened(i)).expression();
             summary.facts.push(AbstractComparison::new(
                 ">=",
@@ -3447,7 +3496,9 @@ impl<M: Machine> Engine<M> {
                     .iter()
                     .find(|(known, _)| known == cell)
                     .map_or(LoopInvariant::Fixed, |(_, invariant)| invariant.clone());
-                !recorded.subsumes(&seen[0])
+                let advanced_as_recorded = recorded == LoopInvariant::NonDecreasing
+                    && self.advances_a_pointer(before, &now);
+                !(recorded.subsumes(&seen[0]) || advanced_as_recorded)
             })
             .map(|(cell, _)| cell)
             .chain(clobbered_cells)
@@ -3547,8 +3598,15 @@ impl<M: Machine> Engine<M> {
             }
         }
         let cells_hold = drifting_cells.is_empty();
+        let (wandering, drifting): (Vec<MemoryCell>, Vec<MemoryCell>) =
+            drifting_cells.into_iter().partition(|cell| {
+                active
+                    .cells
+                    .contains(&(cell.clone(), LoopInvariant::NonDecreasing))
+            });
         let newly_uncarried = self.update_record(active.pc, |record| {
-            record.unstable_cells.extend(drifting_cells);
+            record.unstable_cells.extend(drifting);
+            record.wandering_cells.extend(wandering);
             record.select_refuted |= !steps_hold;
             record.unstable_slots |= !slots_hold;
             let before = record.uncarried.len();

@@ -16,6 +16,7 @@ pub type MachineState = (
 );
 
 const FINITE_VALUES_RESOURCE_LIMIT: u32 = 5_000_000;
+const BIT_WIDTH_RESOURCE_LIMIT: u32 = 50_000;
 
 pub type SelectDefinitions =
     BTreeMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>;
@@ -491,6 +492,38 @@ pub trait Machine: Clone {
     fn proves(&self, fact: &AbstractComparison) -> bool {
         comparison_to_ast(fact.clone())
             .is_some_and(|holds| check(self.solver(), &[holds.not()]) == SatResult::Unsat)
+    }
+
+    fn proven_bit_width(&self, e: &AbstractExpression) -> Option<u32> {
+        let holds_cheaply = |op: &str, bound: i64| {
+            comparison_to_ast(AbstractComparison::new(
+                op,
+                e.clone(),
+                AbstractExpression::Immediate(bound),
+            ))
+            .is_some_and(|holds| {
+                refuted_incrementally_within(self.solver(), &holds.not(), BIT_WIDTH_RESOURCE_LIMIT)
+            })
+        };
+        let at_most = |bits: u32| holds_cheaply("<=", (1i64 << bits) - 1);
+        let widest = 62;
+        let non_negative = holds_cheaply(">=", 0);
+        if !non_negative || !at_most(widest) {
+            return None;
+        }
+        if at_most(0) {
+            return Some(0);
+        }
+        let (mut unproved, mut proved) = (0, widest);
+        while proved - unproved > 1 {
+            let bits = (unproved + proved) / 2;
+            if at_most(bits) {
+                proved = bits;
+            } else {
+                unproved = bits;
+            }
+        }
+        Some(proved)
     }
 
     fn add_field(
