@@ -528,6 +528,15 @@ impl ARMCORTEXA {
             return value;
         }
         let row = self.fresh_symbol(&format!("{rows}@row"));
+        if let Some(length) = self
+            .memory
+            .get(rows)
+            .and_then(|region| expression_to_ast(region.get_length()))
+        {
+            let start = ast::Int::new_const(row.clone());
+            self.bound_fresh(start.ge(ast::Int::from_i64(0)));
+            self.bound_fresh(ast::Int::add(&[&start, &length]).le(ast::Int::from_u64(u64::MAX)));
+        }
         self.memory_labels.insert(row.clone(), (rows.clone(), 0));
         RegisterValue::new(
             RegisterKind::RegisterBase,

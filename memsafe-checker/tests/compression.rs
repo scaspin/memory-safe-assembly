@@ -44,6 +44,32 @@ fn a_write_past_a_writable_row_is_caught() {
     assert!(writable_rows(program).is_err());
 }
 
+fn walk_bounded_by_another_row(read: &str) -> Result<(), String> {
+    writable_rows(&format!(
+        "start:
+        cmp x2, #16
+        b.lo done
+        ldr x6, [x0]
+        ldr x4, [x0, #8]
+        add x5, x4, x2
+        sub x5, x5, #16
+        loop:
+        {read}
+        add x6, x6, #16
+        add x4, x4, #16
+        cmp x4, x5
+        b.ls loop
+        done:
+        ret"
+    ))
+}
+
+#[test]
+fn a_walk_bounded_by_the_end_of_another_row_stays_in_its_own() {
+    assert_eq!(walk_bounded_by_another_row("ldr q0, [x6]"), Ok(()));
+    assert!(walk_bounded_by_another_row("ldr q0, [x6, #16]").is_err());
+}
+
 #[test]
 fn a_value_written_to_one_row_is_not_read_back_from_another() {
     let program = "start:
@@ -482,6 +508,29 @@ fn x86_masked_load_of_the_low_len_bytes_stays_in_a_short_buffer() {
         "ret",
     ];
     assert!(x86_short_buffer(&wider).is_err());
+}
+
+#[test]
+fn x86_mask_shifted_down_to_len_bits_stays_in_a_short_buffer() {
+    let program = |bias: &'static str| {
+        [
+            "start:",
+            "testq %rdx, %rdx",
+            "je done",
+            "cmpq $0x10, %rdx",
+            "jge done",
+            bias,
+            "negq %rax",
+            "movl $0xffff, %r8d",
+            "shrxq %rax, %r8, %rax",
+            "kmovw %eax, %k2",
+            "vmovdqu8 (%rsi), %xmm7 {%k2} {z}",
+            "done:",
+            "ret",
+        ]
+    };
+    assert_eq!(x86_short_buffer(&program("leaq 0x30(%rdx), %rax")), Ok(()));
+    assert!(x86_short_buffer(&program("leaq 0x31(%rdx), %rax")).is_err());
 }
 
 fn bytes_down_to_a_multiple_of_eight(read: &'static str) -> Vec<&'static str> {

@@ -166,6 +166,40 @@ fn shift_by_register(value: &RegisterValue, count: &RegisterValue, width: i64) -
     )
 }
 
+fn low_bits_shifted_right(
+    value: &RegisterValue,
+    count: &RegisterValue,
+    width: i64,
+) -> Option<RegisterValue> {
+    if value.kind != RegisterKind::Immediate || count.kind == RegisterKind::Number {
+        return None;
+    }
+    let set_bits = u64::try_from(value.offset).ok()?.checked_add(1)?;
+    if !set_bits.is_power_of_two() {
+        return None;
+    }
+    let bits = if width == 8 { 64 } else { 32 };
+    let amount = generate_expression("%", count.expression(), AbstractExpression::Immediate(bits));
+    let left = generate_expression(
+        "atleast",
+        generate_expression(
+            "-",
+            AbstractExpression::Immediate(set_bits.trailing_zeros() as i64),
+            amount,
+        ),
+        AbstractExpression::Immediate(0),
+    );
+    Some(RegisterValue::new(
+        RegisterKind::RegisterBase,
+        Some(generate_expression(
+            "lsl",
+            AbstractExpression::Immediate(1),
+            left,
+        )),
+        -1,
+    ))
+}
+
 fn is_low_bits_mask(value: &RegisterValue) -> bool {
     matches!(
         (&value.kind, &value.base, value.offset),
@@ -882,6 +916,9 @@ impl X86_64 {
                         self.shifted_right_unknown(op, shifted, count.offset, width)
                     }
                     _ if op == "shl" => shift_by_register(&src, &count, width),
+                    _ if op == "shr" => {
+                        low_bits_shifted_right(&src, &count, width).unwrap_or_else(unknown)
+                    }
                     _ => unknown(),
                 };
                 self.write(&ops[2], width, result)?;
