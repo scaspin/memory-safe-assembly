@@ -1072,7 +1072,7 @@ impl<M: Machine> Engine<M> {
         cycle: &Cycle<M::LoopLanes>,
     ) -> Result<Observation, Decline> {
         let mut entry = cycle.previous.state.clone();
-        self.forget_dead_registers(pc, expression, &mut [&mut entry]);
+        self.forget_dead_registers(pc, expression, cycle.continues, &mut [&mut entry]);
         let mut current = self.computer.get_state();
         let tested: Vec<AbstractComparison> = cycle
             .walked()
@@ -3032,13 +3032,19 @@ impl<M: Machine> Engine<M> {
         register: usize,
         returning_ends_the_function: bool,
     ) -> bool {
+        let starts = self.static_successors(from).unwrap_or_default();
+        self.is_overwritten_along(starts, register, returning_ends_the_function)
+    }
+
+    fn is_overwritten_along(
+        &self,
+        starts: Vec<usize>,
+        register: usize,
+        returning_ends_the_function: bool,
+    ) -> bool {
         let mut seen = BTreeSet::new();
-        let mut pending: Vec<(usize, Vec<usize>)> = self
-            .static_successors(from)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|pc| (pc, Vec::new()))
-            .collect();
+        let mut pending: Vec<(usize, Vec<usize>)> =
+            starts.into_iter().map(|pc| (pc, Vec::new())).collect();
         if pending.is_empty() {
             return false;
         }
@@ -3094,13 +3100,28 @@ impl<M: Machine> Engine<M> {
         true
     }
 
-    fn dead_after(&self, pc: usize) -> Rc<Vec<usize>> {
+    fn returning_ends_the_function(&self) -> bool {
         let has_calls = self
             .program
             .code
             .iter()
             .any(|instruction| instruction.flow() == Flow::Call);
-        let returning_ends_the_function = !has_calls || self.suspended.is_empty();
+        !has_calls || self.suspended.is_empty()
+    }
+
+    fn overwritten_when_continuing(&self, pc: usize, continues: bool, register: usize) -> bool {
+        let Some(successors) = self.static_successors(pc) else {
+            return false;
+        };
+        let [target, fallthrough] = successors.as_slice() else {
+            return false;
+        };
+        let staying = if continues { *target } else { *fallthrough };
+        self.is_overwritten_along(vec![staying], register, self.returning_ends_the_function())
+    }
+
+    fn dead_after(&self, pc: usize) -> Rc<Vec<usize>> {
+        let returning_ends_the_function = self.returning_ends_the_function();
         let key = (pc, returning_ends_the_function);
         if let Some(known) = self.dead_registers.borrow().get(&key) {
             return Rc::clone(known);
@@ -3121,6 +3142,7 @@ impl<M: Machine> Engine<M> {
         &mut self,
         pc: usize,
         guard: &AbstractComparison,
+        continues: bool,
         snapshots: &mut [&mut MachineState],
     ) {
         let read_by_guard = registers_in(guard);
@@ -3129,9 +3151,19 @@ impl<M: Machine> Engine<M> {
             .filter(|other| !dead.contains(other))
             .map(|other| self.computer.register_at(other))
             .collect();
-        for &register in dead.iter() {
+        let fresh_each_iteration: Vec<usize> = (0..M::Instruction::TRACKED_REGISTERS)
+            .filter(|register| !dead.contains(register))
+            .filter(|&register| {
+                let value = self.computer.register_at(register);
+                read_by_guard.contains(&value)
+                    && !self.tied_to_other_registers(register, &value)
+                    && self.overwritten_when_continuing(pc, continues, register)
+            })
+            .collect();
+        for &register in dead.iter().chain(fresh_each_iteration.iter()) {
             let value = self.computer.register_at(register);
-            if read_by_guard.contains(&value) && !live.contains(&value) {
+            if dead.contains(&register) && read_by_guard.contains(&value) && !live.contains(&value)
+            {
                 continue;
             }
             let forgotten = RegisterValue::new(RegisterKind::Number, None, 0);
@@ -3140,6 +3172,22 @@ impl<M: Machine> Engine<M> {
                 snapshot.0[register] = forgotten.clone();
             }
         }
+    }
+
+    fn tied_to_other_registers(&self, register: usize, value: &RegisterValue) -> bool {
+        let Some(base) = &value.base else {
+            return true;
+        };
+        let symbols = base.get_abstracts();
+        (0..M::Instruction::TRACKED_REGISTERS)
+            .filter(|&other| other != register)
+            .filter_map(|other| self.computer.register_at(other).base)
+            .any(|other| {
+                other
+                    .get_abstracts()
+                    .iter()
+                    .any(|symbol| symbols.contains(symbol))
+            })
     }
 
     pub(super) fn cycle_back_edge(
@@ -4088,7 +4136,12 @@ impl<M: Machine> Engine<M> {
 
         let mut active = active;
         let (mut summarized, mut entered) = (active.state.clone(), active.entry_state.clone());
-        self.forget_dead_registers(active.pc, &expression, &mut [&mut summarized, &mut entered]);
+        self.forget_dead_registers(
+            active.pc,
+            &expression,
+            active.entry_decision,
+            &mut [&mut summarized, &mut entered],
+        );
         active.state = summarized;
         active.entry_state = entered;
         let current = self.computer.get_state();

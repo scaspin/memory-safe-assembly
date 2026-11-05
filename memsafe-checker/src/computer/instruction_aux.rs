@@ -259,7 +259,7 @@ impl ARMCORTEXA {
             first.kind == RegisterKind::Number || second.kind == RegisterKind::Number;
         [second, first]
             .into_iter()
-            .find_map(|value| match value.kind {
+            .filter_map(|value| match value.kind {
                 RegisterKind::Immediate
                     if (0..=BYTE_INDEX_MASK).contains(&value.offset) && masks_an_unknown =>
                 {
@@ -279,6 +279,7 @@ impl ARMCORTEXA {
                 }
                 _ => None,
             })
+            .reduce(|tighter, other| generate_expression("atmost", tighter, other))
     }
 
     pub fn bound_masked_result(

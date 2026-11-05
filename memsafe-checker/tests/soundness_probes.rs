@@ -2753,3 +2753,96 @@ fn an_unknown_word_shifted_into_an_eor_is_not_narrowed_to_its_partner() {
         "accepted a read indexed by a doubled unknown word"
     );
 }
+
+fn blocks_until_a_nonzero_word(limit: &str) -> Vec<String> {
+    [
+        "start:",
+        "mov w8, #8",
+        "loop:",
+        "ldr q0, [x0]",
+        "fmov x9, d0",
+        "cbnz x9, out",
+        "mov x9, v0.d[1]",
+        "cbnz x9, out",
+        "sub w9, w8, #8",
+        "add w8, w8, #16",
+        "add x0, x0, #16",
+        limit,
+        "b.lo loop",
+        "ret",
+        "out:",
+        "rbit x9, x9",
+        "clz x9, x9",
+        "ret",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect()
+}
+
+#[test]
+fn a_block_scan_that_exits_on_data_or_its_count_stays_in_the_buffer() {
+    let program = blocks_until_a_nonzero_word("cmp w9, #0x30");
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    assert_eq!(run(&program, Some(64), &[]), Ok(()));
+}
+
+#[test]
+fn a_block_scan_whose_count_runs_one_block_past_the_buffer_is_rejected() {
+    let program = blocks_until_a_nonzero_word("cmp w9, #0x40");
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    assert!(
+        run(&program, Some(64), &[]).is_err(),
+        "accepted a fifth 16-byte read of a 64-byte buffer"
+    );
+}
+
+#[test]
+fn a_block_scan_bounded_only_by_its_data_is_rejected() {
+    let r = run(
+        &[
+            "start:",
+            "loop:",
+            "ldr q0, [x0]",
+            "add x0, x0, #16",
+            "fmov x9, d0",
+            "cbz x9, loop",
+            "ret",
+        ],
+        Some(64),
+        &[],
+    );
+    assert!(
+        r.is_err(),
+        "accepted a scan that only data in the buffer can stop"
+    );
+}
+
+fn indexed_by_leading_zeros_of_an_unknown(scale: &str) -> Vec<String> {
+    [
+        "start:",
+        "ld1 {v6.16b}, [x0]",
+        "aese v6.16b, v6.16b",
+        "fmov x9, d6",
+        "clz x9, x9",
+        scale,
+        "ldrb w3, [x0, x9]",
+        "ret",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect()
+}
+
+#[test]
+fn leading_zeros_of_an_unknown_word_count_at_most_its_width() {
+    let program = indexed_by_leading_zeros_of_an_unknown("lsr x9, x9, #3");
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    assert_eq!(run(&program, Some(64), &[]), Ok(()));
+    let program = indexed_by_leading_zeros_of_an_unknown("mov x9, x9");
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    assert!(
+        run(&program, Some(64), &[]).is_err(),
+        "accepted an index of up to 64 into a 64-byte buffer"
+    );
+}

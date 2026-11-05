@@ -1522,7 +1522,7 @@ mod tests {
     }
 
     #[test]
-    fn test_clz_of_an_unknown_stays_unknown() {
+    fn test_clz_of_an_unknown_counts_at_most_its_width() {
         let mut computer = ARMCORTEXA::new();
         computer.set_register(
             &Operand::Register(RePrefix::X, 1),
@@ -1531,12 +1531,10 @@ mod tests {
             0,
         );
         run(&mut computer, "clz w0, w1");
-        assert_eq!(
-            computer
-                .get_register(&Operand::Register(RePrefix::X, 0))
-                .kind,
-            RegisterKind::Number
-        );
+        let count = register_ast(&mut computer, Operand::Register(RePrefix::W, 0));
+        assert!(proves(&computer, count.ge(ast::Int::from_i64(0))));
+        assert!(proves(&computer, count.le(ast::Int::from_i64(32))));
+        assert!(!proves(&computer, count.le(ast::Int::from_i64(31))));
     }
 
     #[test]

@@ -511,7 +511,24 @@ impl ARMCORTEXA {
                         _ => 64,
                     };
                     let source = self.get_register(&instruction.operands[1]);
-                    let value = instruction_aux::count_leading_zeros(source, width);
+                    let value = match source.kind {
+                        RegisterKind::Number => RegisterValue::new(
+                            RegisterKind::RegisterBase,
+                            Some(generate_expression(
+                                "atmost",
+                                generate_expression(
+                                    "atleast",
+                                    AbstractExpression::Abstract(
+                                        self.fresh_symbol("leading_zeros"),
+                                    ),
+                                    AbstractExpression::Immediate(0),
+                                ),
+                                AbstractExpression::Immediate(width as i64),
+                            )),
+                            0,
+                        ),
+                        _ => instruction_aux::count_leading_zeros(source, width),
+                    };
                     self.set_register(dst, value.kind, value.base, value.offset);
                 }
                 "extr" => {
