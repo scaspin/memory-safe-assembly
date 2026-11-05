@@ -1011,10 +1011,7 @@ impl ARMCORTEXA {
                             } else if provable(&holds.clone().not()) {
                                 FlagValue::Real(false)
                             } else {
-                                return Ok(ExecuteReturnType::Split(vec![
-                                    holds.clone(),
-                                    holds.not(),
-                                ]));
+                                FlagValue::Abstract(holds)
                             }
                         }
                         real => real,
@@ -1038,7 +1035,7 @@ impl ARMCORTEXA {
                                 Some(FlagValue::Real(v)),
                             ]);
                         }
-                        FlagValue::Abstract(_) => unreachable!("decided above"),
+                        FlagValue::Abstract(_) => self.set_unknown_flags(),
                     }
                 }
                 _ => todo!(

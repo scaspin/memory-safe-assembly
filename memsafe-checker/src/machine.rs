@@ -16,7 +16,7 @@ pub type MachineState = (
 );
 
 const FINITE_VALUES_RESOURCE_LIMIT: u32 = 5_000_000;
-const BIT_WIDTH_RESOURCE_LIMIT: u32 = 50_000;
+pub(crate) const BIT_WIDTH_RESOURCE_LIMIT: u32 = 50_000;
 
 pub type SelectDefinitions =
     BTreeMap<String, (AbstractComparison, AbstractExpression, AbstractExpression)>;

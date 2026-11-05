@@ -2051,7 +2051,13 @@ impl<M: Machine> Engine<M> {
             .eval(&term, true)?
             .as_i64()?;
         assuming.push(term.eq(ast::Int::from_i64(value)).not());
-        (self.computer.solver().check_timed(&assuming) == SatResult::Unsat).then_some(value)
+        refuted_within(
+            self.computer.solver(),
+            &ast::Bool::and(&assuming),
+            OBLIGATION_INCREMENTAL_RESOURCE_LIMIT,
+            OBLIGATION_RESOURCE_LIMIT,
+        )
+        .then_some(value)
     }
 
     fn select_bound(&self, name: &str, fuel: usize) -> Option<i64> {

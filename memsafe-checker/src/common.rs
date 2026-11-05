@@ -1935,7 +1935,7 @@ fn bit_of(value: &ast::Int, bit: i64) -> ast::Int {
 }
 
 thread_local! {
-    static DIGIT_IDENTITIES: RefCell<BTreeMap<String, (ast::Dynamic, ast::Bool)>> = const { RefCell::new(BTreeMap::new()) };
+    static DIGIT_IDENTITIES: RefCell<DigitIdentities> = RefCell::new(DigitIdentities::default());
 }
 
 fn note_digit_identity(value: &ast::Int, divisor: i64, modulus: i64) {
@@ -1952,14 +1952,22 @@ fn note_digit_identity(value: &ast::Int, divisor: i64, modulus: i64) {
         &value.modulo(&divisor),
     ]));
     DIGIT_IDENTITIES.with_borrow_mut(|identities| {
-        identities
-            .entry(identity.to_string())
-            .or_insert((ast::Dynamic::from_ast(&digit), identity));
+        if identities.noted.insert(identity.clone()) {
+            identities
+                .in_order
+                .push((ast::Dynamic::from_ast(&digit), identity));
+        }
     });
 }
 
+#[derive(Default)]
+struct DigitIdentities {
+    noted: HashSet<ast::Bool>,
+    in_order: Vec<(ast::Dynamic, ast::Bool)>,
+}
+
 fn digit_identities_about(facts: &[ast::Bool]) -> Vec<ast::Bool> {
-    if DIGIT_IDENTITIES.with_borrow(|identities| identities.is_empty()) {
+    if DIGIT_IDENTITIES.with_borrow(|identities| identities.in_order.is_empty()) {
         return Vec::new();
     }
     let mut seen: HashSet<ast::Dynamic> = HashSet::new();
@@ -1978,7 +1986,8 @@ fn digit_identities_about(facts: &[ast::Bool]) -> Vec<ast::Bool> {
     }
     DIGIT_IDENTITIES.with_borrow(|identities| {
         identities
-            .values()
+            .in_order
+            .iter()
             .filter(|(digit, _)| seen.contains(digit))
             .map(|(_, identity)| identity.clone())
             .collect()

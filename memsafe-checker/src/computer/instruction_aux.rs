@@ -1,6 +1,7 @@
 use crate::computer::*;
 
 const SMALL_MASK_NODES: usize = 3;
+const BYTE_INDEX_MASK: i64 = 0xff;
 
 impl ARMCORTEXA {
     pub fn arithmetic(
@@ -212,8 +213,11 @@ impl ARMCORTEXA {
             RePrefix::X => 64,
             _ => return None,
         };
-        let left = full_value(&self.get_register(left));
-        let right = full_value(&self.get_register(right));
+        let (left, right) = (self.get_register(left), self.get_register(right));
+        if left.kind == RegisterKind::Number || right.kind == RegisterKind::Number {
+            return None;
+        }
+        let (left, right) = (full_value(&left), full_value(&right));
         let unwrapped = match &right {
             AbstractExpression::Expression(op, inner, modulus)
                 if op == "%" && **modulus == AbstractExpression::Immediate(1 << 32) =>
@@ -251,10 +255,14 @@ impl ARMCORTEXA {
         }
         let first = self.get_register(first);
         let second = self.get_register(second);
+        let masks_an_unknown =
+            first.kind == RegisterKind::Number || second.kind == RegisterKind::Number;
         [second, first]
             .into_iter()
             .find_map(|value| match value.kind {
-                RegisterKind::Immediate if value.offset >= 0 => {
+                RegisterKind::Immediate
+                    if (0..=BYTE_INDEX_MASK).contains(&value.offset) && masks_an_unknown =>
+                {
                     Some(AbstractExpression::Immediate(value.offset))
                 }
                 RegisterKind::RegisterBase => {
@@ -324,6 +332,9 @@ impl ARMCORTEXA {
         };
         let first = self.get_register(first);
         let width_of = |value: &RegisterValue| {
+            if value.kind == RegisterKind::Number {
+                return None;
+            }
             let syntactic = crate::widening::unsigned_range(&full_value(value))
                 .filter(|(low, _)| *low >= 0)
                 .and_then(|(_, high)| [4, 8, 16, 31].into_iter().find(|&bits| high < 1i64 << bits));
@@ -351,7 +362,11 @@ impl ARMCORTEXA {
             ast.lt(ast::Int::from_i64(0)),
             ast.ge(ast::Int::from_i64(1i64 << bits)),
         ]);
-        self.unsat_within_budget(&[outside])
+        crate::common::refuted_incrementally_within(
+            &self.solver,
+            &outside,
+            crate::machine::BIT_WIDTH_RESOURCE_LIMIT,
+        )
     }
 
     pub fn bound_bitwise_result(&mut self, instruction: &Instruction, bits: Option<i64>) {

@@ -2731,3 +2731,25 @@ fn rows_behind_a_pointer_array_are_not_one_row() {
         "two rows were assumed to hold the same byte"
     );
 }
+
+#[test]
+fn an_unknown_word_shifted_into_an_eor_is_not_narrowed_to_its_partner() {
+    let r = run(
+        &[
+            "start:",
+            "ld1 {v6.16b}, [x0]",
+            "aese v6.16b, v6.16b",
+            "fmov x9, d6",
+            "mov x11, #7",
+            "eor x9, x11, x9, lsl #1",
+            "ldrb w3, [x0, x9]",
+            "ret",
+        ],
+        Some(16),
+        &[],
+    );
+    assert!(
+        r.is_err(),
+        "accepted a read indexed by a doubled unknown word"
+    );
+}
