@@ -3246,3 +3246,47 @@ fn a_counted_walk_within_its_region_is_proved_safe() {
 fn a_zero_count_that_wraps_the_counter_is_rejected() {
     assert_rejected_access(analyze_counted_walk(0));
 }
+
+fn counter_saved_across_a_call(table_bytes: i64) -> Result<(), String> {
+    init();
+    let mut program: Vec<String> = [
+        "start:",
+        "stp x29, x30, [sp, #-16]!",
+        "mov x20, #1020",
+        "loop:",
+        "sub x20, x20, #4",
+        "bl helper",
+        "lsr x2, x20, #4",
+        "ldr x3, [x0, x2, lsl #3]",
+        "cbnz x20, loop",
+        "ldp x29, x30, [sp], #16",
+        "ret",
+        "helper:",
+        "stp x19, x20, [sp, #-16]!",
+        "mov x20, #0",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let costly_enough_to_summarize = 1000;
+    program.extend((0..costly_enough_to_summarize).map(|_| "add x9, x9, #1".to_string()));
+    program.extend(["ldp x19, x20, [sp], #16".to_string(), "ret".to_string()]);
+    let mut engine = bums::engine::ExecutionEngine::new(program);
+    engine.add_abstract_from(0, "base");
+    engine.add_region(
+        RegionType::READ,
+        "base",
+        AbstractExpression::Immediate(table_bytes),
+    );
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_counter_a_callee_saves_and_restores_still_drives_its_loop() {
+    assert_eq!(counter_saved_across_a_call(512), Ok(()));
+}
+
+#[test]
+fn a_counter_a_callee_saves_and_restores_still_catches_a_short_table() {
+    assert_rejected_access(counter_saved_across_a_call(256));
+}

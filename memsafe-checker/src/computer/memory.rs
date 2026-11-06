@@ -130,6 +130,27 @@ impl ARMCORTEXA {
         Ok(())
     }
 
+    fn forget_spills_overlapping(&mut self, region: &str, offset: i64, width: i64) {
+        self.register_spills
+            .retain(|(spilled_region, spilled_at), (spilled_width, _)| {
+                spilled_region != region
+                    || *spilled_at >= offset + width
+                    || offset >= *spilled_at + *spilled_width
+            });
+    }
+
+    fn reads_back_a_spill(
+        &self,
+        region: &str,
+        offset: i64,
+        width: i64,
+        value: &RegisterValue,
+    ) -> bool {
+        self.register_spills
+            .get(&(region.to_string(), offset))
+            .is_some_and(|(spilled_width, spilled)| *spilled_width == width && spilled == value)
+    }
+
     fn settled_stack_address(&self, address: RegisterValue) -> RegisterValue {
         let stack = AbstractExpression::Abstract("sp".to_string());
         let Some(base) = &address.base else {
@@ -218,6 +239,7 @@ impl ARMCORTEXA {
                     .get(&region_name)
                     .unwrap_or_else(|| panic!("Need memory region to load from {:?}", region_name));
                 let pristine = region.epoch == 0;
+                let mut restores_a_spill = false;
                 let value = match region.read(offset, width) {
                     _ if self.writable_rows(&region_name) => {
                         self.pristine_read = None;
@@ -228,6 +250,7 @@ impl ARMCORTEXA {
                             self.note_element_read(&region_name, cell);
                         }
                         self.pristine_read = None;
+                        restores_a_spill = self.reads_back_a_spill(&region_name, offset, width, &v);
                         Some(v)
                     }
                     None if region.overwritten(offset, width) => {
@@ -253,7 +276,9 @@ impl ARMCORTEXA {
                 match value.map(|v| self.distinct_row(v)) {
                     Some(v) => {
                         self.set_register(&t, v.kind.clone(), v.base.clone(), v.offset);
-                        self.mark_loaded(&t);
+                        if !restores_a_spill {
+                            self.mark_loaded(&t);
+                        }
                         self.rw_queue.push(MemoryAccess {
                             kind: RegionType::READ,
                             base: AbstractExpression::Abstract(base.clone()),
@@ -868,7 +893,17 @@ impl ARMCORTEXA {
             if let Some(AbstractExpression::Abstract(base)) = region.clone() {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
+                let spills_a_computed_register = width <= 8
+                    && matches!(
+                        &register,
+                        Operand::Register(RePrefix::X | RePrefix::W, n) if !self.loaded[*n]
+                    );
                 let register = self.get_register(&register);
+                self.forget_spills_overlapping(&region, offset, width);
+                if spills_a_computed_register {
+                    self.register_spills
+                        .insert((region.clone(), offset), (width, register.clone()));
+                }
                 self.store_cell(&MemoryCell { region, offset }, register, width);
 
                 log::info!(
@@ -937,6 +972,7 @@ impl ARMCORTEXA {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let register = self.get_register(&register);
+                self.forget_spills_overlapping(&region, offset, width);
                 self.store_cell(&MemoryCell { region, offset }, register, width);
 
                 log::info!(
