@@ -41,6 +41,31 @@ impl ARMCORTEXA {
                 ) {
                     (Some(_cond), Some(set_ast), Some(clear_ast)) => {
                         let name = format!("carry_{}", self.next_carry());
+                        let set_is_clear_plus_one =
+                            set.base == clear.base && set.offset == clear.offset + 1;
+                        if set_is_clear_plus_one {
+                            self.select_definitions.insert(
+                                name.clone(),
+                                (
+                                    condition.clone(),
+                                    AbstractExpression::Immediate(1),
+                                    AbstractExpression::Immediate(0),
+                                ),
+                            );
+                            let carry_bit = AbstractExpression::Abstract(name);
+                            let base = match clear.base {
+                                Some(base) => generate_expression("+", base, carry_bit),
+                                None => carry_bit,
+                            };
+                            let base = self.capped(base);
+                            self.set_register(
+                                &dest,
+                                RegisterKind::RegisterBase,
+                                Some(base),
+                                clear.offset,
+                            );
+                            return Ok(ExecuteReturnType::Next);
+                        }
                         let result = ast::Int::new_const(name.clone());
                         let constants_did_not_wrap = clear.offset <= set.offset;
                         if constants_did_not_wrap {
