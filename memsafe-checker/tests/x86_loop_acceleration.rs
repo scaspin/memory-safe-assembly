@@ -457,3 +457,54 @@ fn jump_table_missing_a_feasible_width_is_reported() {
     let err = analyze_width(program).unwrap_err();
     assert!(err.contains("jump table has no entry 4"), "{err}");
 }
+
+fn two_blocks_a_round(before_the_loop: &str, in_the_loop: &str) -> Vec<String> {
+    let advance_second =
+        |choose_second| lines(&["leaq 64(%rdi),%r13", "cmpq %r10,%r13", choose_second]);
+    let mut program = lines(&["start:", "leaq (%rdi,%rsi,1),%r10"]);
+    program.extend(advance_second(before_the_loop));
+    program.extend(lines(&[
+        "L$loop:",
+        "movdqu (%rdi),%xmm0",
+        "movdqu 48(%rdi),%xmm0",
+        "movdqu (%r13),%xmm1",
+        "movdqu 48(%r13),%xmm1",
+        "addq $128,%rdi",
+    ]));
+    program.extend(advance_second(in_the_loop));
+    program.extend(lines(&["cmpq %r10,%rdi", "jb L$loop", "ret"]));
+    program
+}
+
+#[test]
+fn a_second_block_chosen_afresh_each_round_stays_in_the_buffer() {
+    assert_eq!(
+        analyze_accelerated(
+            two_blocks_a_round("cmovaeq %rdi,%r13", "cmovaeq %rdi,%r13"),
+            RegionType::READ,
+            64,
+            64
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_second_block_kept_when_it_starts_at_the_end_is_rejected() {
+    assert_rejected_access(analyze_accelerated(
+        two_blocks_a_round("cmovaq %rdi,%r13", "cmovaq %rdi,%r13"),
+        RegionType::READ,
+        64,
+        64,
+    ));
+}
+
+#[test]
+fn a_second_block_kept_at_the_end_only_inside_the_loop_is_rejected() {
+    assert_rejected_access(analyze_accelerated(
+        two_blocks_a_round("cmovaeq %rdi,%r13", "cmovaq %rdi,%r13"),
+        RegionType::READ,
+        64,
+        64,
+    ));
+}

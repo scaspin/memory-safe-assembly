@@ -1665,6 +1665,15 @@ pub(super) fn comparison_with_counter_at(
 }
 
 #[derive(Debug, Clone)]
+pub(super) struct ChosenRegister {
+    pub(super) register: usize,
+    pub(super) leader: usize,
+    pub(super) condition: AbstractComparison,
+    pub(super) taken: i64,
+    pub(super) skipped: i64,
+}
+
+#[derive(Debug, Clone)]
 pub(super) struct SettledSelectStep {
     pub(super) register: usize,
     pub(super) holds_the_select: bool,
@@ -1786,6 +1795,7 @@ pub(super) struct ActiveLoop {
     pub(super) blind_writes_at_summary: usize,
     pub(super) slots: Vec<SymbolicSlot>,
     pub(super) settled_steps: Vec<SettledSelectStep>,
+    pub(super) chosen: Vec<ChosenRegister>,
     pub(super) continuing: AbstractComparison,
     pub(super) bounds: Vec<Bound>,
     pub(super) confined: Vec<Confinement>,

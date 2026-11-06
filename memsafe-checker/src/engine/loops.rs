@@ -19,6 +19,7 @@ enum Obligation {
     Bound(Bound),
     Carried(usize),
     Settled(usize),
+    Chosen(usize),
     Escaped(usize),
 }
 
@@ -34,6 +35,7 @@ impl fmt::Display for Obligation {
             Obligation::Bound(bound) => write!(f, "bound {}", bound.key()),
             Obligation::Carried(branch) => write!(f, "branch fact of line {branch}"),
             Obligation::Settled(i) => write!(f, "settled step of x{i}"),
+            Obligation::Chosen(i) => write!(f, "chosen select of x{i}"),
             Obligation::Escaped(i) => write!(f, "confinement of x{i}"),
         }
     }
@@ -137,6 +139,7 @@ struct Observation {
 struct Draft {
     summary: Summary,
     settled_steps: Vec<SettledSelectStep>,
+    chosen: Vec<ChosenRegister>,
     pinned_selects: Vec<ast::Bool>,
     continuing: AbstractComparison,
     bounds: Vec<Bound>,
@@ -200,6 +203,7 @@ pub(super) struct PcRecord {
     unstable_slots: bool,
     uncarried: BTreeSet<usize>,
     select_refuted: bool,
+    chosen_refuted: bool,
     unconfinable: BTreeSet<usize>,
 }
 
@@ -1403,6 +1407,12 @@ impl<M: Machine> Engine<M> {
             &ghosts,
             &continuing_now,
         );
+        let chosen = self.choose_registers(
+            &mut summary,
+            (expression, branch_decision),
+            entry_state,
+            current_state,
+        );
         let pinned_selects = self.pinned_select_facts(&summary, entry_state, current_state);
         let continuing = summary.continuing.clone();
         log::info!(
@@ -1432,6 +1442,7 @@ impl<M: Machine> Engine<M> {
         Draft {
             summary,
             settled_steps,
+            chosen,
             pinned_selects,
             continuing,
             bounds,
@@ -1664,6 +1675,7 @@ impl<M: Machine> Engine<M> {
         let Draft {
             mut summary,
             settled_steps,
+            chosen,
             pinned_selects,
             continuing,
             bounds,
@@ -1951,6 +1963,7 @@ impl<M: Machine> Engine<M> {
             blind_writes_at_summary: self.computer.blind_stack_writes().len(),
             slots: self.computer.symbolic_slots(),
             settled_steps,
+            chosen,
             continuing,
             bounds,
             confined,
@@ -2926,6 +2939,166 @@ impl<M: Machine> Engine<M> {
             }
         }
         uncarried
+    }
+
+    fn choose_registers(
+        &mut self,
+        summary: &mut Summary,
+        (staying, continues_when): (&AbstractComparison, bool),
+        entry: &MachineState,
+        current: &MachineState,
+    ) -> Vec<ChosenRegister> {
+        if self.record_at(summary.pc, |record| record.chosen_refuted) {
+            return Vec::new();
+        }
+        let mut chosen = Vec::new();
+        for i in 0..summary.invariants.len().min(current.0.len()) {
+            let Some(candidate) = self.choice_over_a_leader(&summary.invariants, &current.0, i)
+            else {
+                continue;
+            };
+            let holds_at_entry = self.while_staying(staying, continues_when, |engine| {
+                engine.chosen_holds(&candidate, &entry.0)
+            });
+            if !holds_at_entry || !self.chosen_holds(&candidate, &current.0) {
+                continue;
+            }
+            let leader = summary
+                .updates
+                .iter()
+                .find(|(j, _)| *j == candidate.leader)
+                .map_or_else(|| current.0[candidate.leader].clone(), |(_, u)| u.clone());
+            let Some(leader_base) = leader.base.clone() else {
+                continue;
+            };
+            let name = format!("{}_chosen_{i}", summary.counter.name());
+            let condition = chosen_condition(&candidate.condition, &value_of(&leader));
+            self.computer.select_definitions_mut().insert(
+                name.clone(),
+                (
+                    condition.clone(),
+                    AbstractExpression::Immediate(leader.offset + candidate.taken),
+                    AbstractExpression::Immediate(leader.offset + candidate.skipped),
+                ),
+            );
+            let register = RegisterValue::new(
+                current.0[i].kind.clone(),
+                Some(generate_expression(
+                    "+",
+                    leader_base,
+                    AbstractExpression::Abstract(name.clone()),
+                )),
+                0,
+            );
+            log::info!(
+                "{} x{i} is x{} + {} when {condition}, else + {}",
+                summary.id,
+                candidate.leader,
+                candidate.taken,
+                candidate.skipped
+            );
+            match summary.updates.iter_mut().find(|(j, _)| *j == i) {
+                Some(update) => update.1 = register,
+                None => summary.updates.push((i, register)),
+            }
+            summary.invariants[i] = LoopInvariant::Unknown;
+            chosen.push(candidate);
+        }
+        chosen
+    }
+
+    fn choice_over_a_leader(
+        &self,
+        invariants: &[LoopInvariant],
+        current: &[RegisterValue],
+        i: usize,
+    ) -> Option<ChosenRegister> {
+        let now = &current[i];
+        if now.kind != RegisterKind::RegisterBase {
+            return None;
+        }
+        let AbstractExpression::Expression(op, left, right) = now.base.as_ref()? else {
+            return None;
+        };
+        if op != "+" {
+            return None;
+        }
+        let selects = self.computer.select_definitions();
+        let (base, select) = [(left, right), (right, left)].into_iter().find_map(
+            |(base, select)| match &**select {
+                AbstractExpression::Abstract(name) if selects.contains_key(name) => {
+                    Some(((**base).clone(), name.clone()))
+                }
+                _ => None,
+            },
+        )?;
+        let (
+            condition,
+            AbstractExpression::Immediate(taken),
+            AbstractExpression::Immediate(skipped),
+        ) = selects.get(&select)?.clone()
+        else {
+            return None;
+        };
+        let leader = (0..invariants.len().min(current.len())).find(|&j| {
+            j != i
+                && matches!(
+                    invariants[j],
+                    LoopInvariant::Linear(AbstractExpression::Immediate(_))
+                )
+                && current[j].kind == RegisterKind::RegisterBase
+                && current[j].base.as_ref() == Some(&base)
+        })?;
+        let at = current[leader].offset;
+        let relative =
+            |e: &AbstractExpression| relative_to_leader(e, &base, at, current, invariants);
+        Some(ChosenRegister {
+            register: i,
+            leader,
+            condition: AbstractComparison::new(
+                &condition.op,
+                relative(&condition.left)?,
+                relative(&condition.right)?,
+            ),
+            taken: taken + now.offset - at,
+            skipped: skipped + now.offset - at,
+        })
+    }
+
+    fn chosen_holds(&self, chosen: &ChosenRegister, state: &[RegisterValue]) -> bool {
+        let (Some(leader), Some(held)) = (state.get(chosen.leader), state.get(chosen.register))
+        else {
+            return false;
+        };
+        let (leader, held) = (value_of(leader), value_of(held));
+        let condition = chosen_condition(&chosen.condition, &leader);
+        let mut assuming = self.computer.select_assumptions(&held);
+        assuming.extend(self.computer.select_assumptions(&leader));
+        assuming.extend(self.computer.select_assumptions(&condition.left));
+        assuming.extend(self.computer.select_assumptions(&condition.right));
+        let (Some(condition), Some(held), Some(leader)) = (
+            comparison_to_ast(condition),
+            expression_to_ast(held),
+            expression_to_ast(leader),
+        ) else {
+            return false;
+        };
+        let refuted_when = |holds: ast::Bool, offset: i64| {
+            let mut with = assuming.clone();
+            with.push(holds);
+            with.push(
+                held.eq(ast::Int::add(&[&leader, &ast::Int::from_i64(offset)]))
+                    .not(),
+            );
+            refuted_within(
+                self.computer.solver(),
+                &ast::Bool::and(&with),
+                OBLIGATION_INCREMENTAL_RESOURCE_LIMIT,
+                OBLIGATION_RESOURCE_LIMIT,
+            )
+        };
+        refuted_when(condition.clone(), chosen.taken)
+            && refuted_when(condition.not(), chosen.skipped)
     }
 
     fn unrepeated_settled_step(&self, active: &ActiveLoop) -> Option<usize> {
@@ -4436,6 +4609,13 @@ impl<M: Machine> Engine<M> {
             self.unrepeated_settled_step(active)
                 .map(Obligation::Settled),
         );
+        broken.extend(
+            active
+                .chosen
+                .iter()
+                .find(|chosen| !self.chosen_holds(chosen, &current.0))
+                .map(|chosen| Obligation::Chosen(chosen.register)),
+        );
         if !self.computer.slots_kept(&active.slots) {
             log::info!("{} a saved slot did not survive the body", active.id);
             broken.push(Obligation::Slots);
@@ -4512,6 +4692,7 @@ impl<M: Machine> Engine<M> {
         let mut unbounded = Vec::new();
         let mut moved = Vec::new();
         let (mut ghosts_repeat, mut slots_hold, mut steps_hold) = (true, true, true);
+        let mut chosen_hold = true;
         for obligation in broken {
             match obligation {
                 Obligation::Step(i) => moved.push(*i),
@@ -4524,6 +4705,7 @@ impl<M: Machine> Engine<M> {
                     uncarried.insert(*branch);
                 }
                 Obligation::Settled(_) => steps_hold = false,
+                Obligation::Chosen(_) => chosen_hold = false,
                 Obligation::Escaped(i) => {
                     if !matches!(active.invariants.get(*i), Some(LoopInvariant::Unknown)) {
                         escaped.insert(*i);
@@ -4550,6 +4732,7 @@ impl<M: Machine> Engine<M> {
             record.unstable_cells.extend(drifting);
             record.wandering_cells.extend(wandering);
             record.select_refuted |= !steps_hold;
+            record.chosen_refuted |= !chosen_hold;
             record.unstable_slots |= !slots_hold;
             let before = record.uncarried.len();
             record.uncarried.extend(uncarried.iter().copied());
@@ -4608,6 +4791,51 @@ fn without_word_wraps(e: &AbstractExpression) -> AbstractExpression {
             generate_expression(op, without_word_wraps(left), without_word_wraps(right))
         }
         other => other.clone(),
+    }
+}
+
+fn chosen_condition(
+    template: &AbstractComparison,
+    leader: &AbstractExpression,
+) -> AbstractComparison {
+    AbstractComparison::new(
+        &template.op,
+        substitute(&template.left, DERIVED_LEADER, leader),
+        substitute(&template.right, DERIVED_LEADER, leader),
+    )
+}
+
+fn relative_to_leader(
+    e: &AbstractExpression,
+    base: &AbstractExpression,
+    at: i64,
+    current: &[RegisterValue],
+    invariants: &[LoopInvariant],
+) -> Option<AbstractExpression> {
+    match e {
+        AbstractExpression::Register(r) if r.base.as_ref() == Some(base) => {
+            Some(generate_expression(
+                "+",
+                AbstractExpression::Abstract(DERIVED_LEADER.to_string()),
+                AbstractExpression::Immediate(r.offset - at),
+            ))
+        }
+        AbstractExpression::Register(r) => {
+            let held: Vec<usize> = (0..current.len().min(invariants.len()))
+                .filter(|&k| current[k] == **r)
+                .collect();
+            (r.base.is_none()
+                || (!held.is_empty()
+                    && held.iter().all(|&k| invariants[k] == LoopInvariant::Fixed)))
+            .then(|| e.clone())
+        }
+        AbstractExpression::Expression(op, left, right) => Some(generate_expression(
+            op,
+            relative_to_leader(left, base, at, current, invariants)?,
+            relative_to_leader(right, base, at, current, invariants)?,
+        )),
+        AbstractExpression::Immediate(_) => Some(e.clone()),
+        _ => None,
     }
 }
 
