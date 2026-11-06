@@ -35,7 +35,6 @@ Settings come from the environment:
 | `TIMEOUT` | 300 | seconds per function before it counts as TIMEOUT |
 | `SLOW_TIMEOUT` | 1800 | the same for the functions listed in `slow/` |
 | `OUT` | `evaluation/results` | where results go (ignored by git) |
-| `KNOWN` | `evaluation/known-timeouts` | skip lists, one file per suite |
 | `SLOW` | `evaluation/slow` | functions given `SLOW_TIMEOUT`, one file per suite |
 | `ONLY` | all | space-separated suite names to run |
 | `EXTRA_SUITES` | none | more suites, each `name\|crate-dir\|bums-check flags` |
@@ -43,11 +42,10 @@ Settings come from the environment:
 A full evaluation takes several hours, mostly in run 1, where every timeout costs the full
 `TIMEOUT`. Memory stays within `JOBS` times `bums-check`'s per-function cap (4 GB by default).
 
-## Known timeouts
+## Timeouts
 
-`known-timeouts/<suite>.txt` lists functions that exceed the timeout and are skipped in every
-run. They are reported as skipped rather than as TIMEOUT. Keep these lists short: a function
-belongs there only if it times out consistently and costs a full timeout per run.
+Run 1 checks every annotated function; nothing is skipped. A function that exceeds its timeout
+is recorded as TIMEOUT and counts as unverified, the same as FAIL, MEMCAP and ERROR.
 
 ## Slow functions
 
@@ -55,14 +53,14 @@ belongs there only if it times out consistently and costs a full timeout per run
 scalar multiplications in bignum, which run a loop of several thousand instructions through
 calls. Each run checks them in a second pass with `SLOW_TIMEOUT` and adds their rows to the
 suite's TSV, so they count as verified with their real time. A function belongs here only once
-it has verified within `SLOW_TIMEOUT`; one that never finishes belongs in `known-timeouts`.
+it has verified within `SLOW_TIMEOUT`; one that never finishes stays a TIMEOUT under `TIMEOUT`.
 
 ## Results
 
 ```
 results/
   run<N>/<suite>.tsv    one row per function checked in that run
-  run<N>/<suite>.skip   the functions skipped in that run
+  run<N>/<suite>.skip   the functions a later run leaves out because run 1 did not verify them
   sizes/<suite>.tsv     function, file, statically reachable instructions
 ```
 

@@ -3,7 +3,6 @@ set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(dirname "$here")
 out=${OUT:-$here/results}
-known=${KNOWN:-$here/known-timeouts}
 slow=${SLOW:-$here/slow}
 runs=${RUNS:-3}
 jobs=${JOBS:-4}
@@ -45,9 +44,6 @@ for run in $(seq 1 "$runs"); do
     [[ -s $tsv ]] && continue
     skipping=$out/run$run/$name.skip
     : >"$skipping"
-    if [[ -s $known/$name.txt ]]; then
-      cat "$known/$name.txt" >>"$skipping"
-    fi
     if [[ $run -gt 1 && -s $out/run1/$name.tsv ]]; then
       awk -F'\t' '$3 != "verified" {print $1}' "$out/run1/$name.tsv" >>"$skipping"
     fi
