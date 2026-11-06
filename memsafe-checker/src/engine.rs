@@ -1282,8 +1282,8 @@ impl<M: Machine> Engine<M> {
             ))
         })?;
         match (
-            check(self.computer.solver(), &[take]),
-            check(self.computer.solver(), &[skip]),
+            check_branch(self.computer.solver(), &[take]),
+            check_branch(self.computer.solver(), &[skip]),
         ) {
             (SatResult::Sat, SatResult::Unsat) => {
                 self.add_constraint(condition, true);
