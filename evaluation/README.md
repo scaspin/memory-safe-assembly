@@ -33,8 +33,10 @@ Settings come from the environment:
 | `RUNS` | 3 | number of runs |
 | `JOBS` | 4 | functions checked in parallel |
 | `TIMEOUT` | 300 | seconds per function before it counts as TIMEOUT |
+| `SLOW_TIMEOUT` | 1800 | the same for the functions listed in `slow/` |
 | `OUT` | `evaluation/results` | where results go (ignored by git) |
 | `KNOWN` | `evaluation/known-timeouts` | skip lists, one file per suite |
+| `SLOW` | `evaluation/slow` | functions given `SLOW_TIMEOUT`, one file per suite |
 | `ONLY` | all | space-separated suite names to run |
 | `EXTRA_SUITES` | none | more suites, each `name\|crate-dir\|bums-check flags` |
 
@@ -46,6 +48,14 @@ A full evaluation takes several hours, mostly in run 1, where every timeout cost
 `known-timeouts/<suite>.txt` lists functions that exceed the timeout and are skipped in every
 run. They are reported as skipped rather than as TIMEOUT. Keep these lists short: a function
 belongs there only if it times out consistently and costs a full timeout per run.
+
+## Slow functions
+
+`slow/<suite>.txt` lists functions that verify but need longer than `TIMEOUT`, such as the
+scalar multiplications in bignum, which run a loop of several thousand instructions through
+calls. Each run checks them in a second pass with `SLOW_TIMEOUT` and adds their rows to the
+suite's TSV, so they count as verified with their real time. A function belongs here only once
+it has verified within `SLOW_TIMEOUT`; one that never finishes belongs in `known-timeouts`.
 
 ## Results
 

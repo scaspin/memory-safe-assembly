@@ -4,9 +4,11 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(dirname "$here")
 out=${OUT:-$here/results}
 known=${KNOWN:-$here/known-timeouts}
+slow=${SLOW:-$here/slow}
 runs=${RUNS:-3}
 jobs=${JOBS:-4}
 timeout=${TIMEOUT:-300}
+slow_timeout=${SLOW_TIMEOUT:-1800}
 x86=x86_64-apple-darwin
 check=$root/target/release/bums-check
 
@@ -49,10 +51,23 @@ for run in $(seq 1 "$runs"); do
     if [[ $run -gt 1 && -s $out/run1/$name.tsv ]]; then
       awk -F'\t' '$3 != "verified" {print $1}' "$out/run1/$name.tsv" >>"$skipping"
     fi
+    slow_list=$slow/$name.txt
+    cat "$skipping" >"$skipping.main"
+    [[ -s $slow_list ]] && cat "$slow_list" >>"$skipping.main"
     skip=()
-    [[ -s $skipping ]] && skip=(--skip-file "$skipping")
+    [[ -s $skipping.main ]] && skip=(--skip-file "$skipping.main")
     echo "=== run $run $name $(date)"
     (cd "$root" && "$check" "$crate" $flags --jobs "$jobs" --timeout "$timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.partial") | tail -1
+    rm -f "$skipping.main"
+    if [[ -s $slow_list ]]; then
+      pattern="^($(paste -sd'|' "$slow_list"))\$"
+      skip=()
+      [[ -s $skipping ]] && skip=(--skip-file "$skipping")
+      echo "=== run $run $name slow $(date)"
+      (cd "$root" && "$check" "$crate" $flags --filter "$pattern" --jobs "$jobs" --timeout "$slow_timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.slow") | tail -1
+      [[ -f $tsv.slow ]] && cat "$tsv.slow" >>"$tsv.partial"
+      rm -f "$tsv.slow"
+    fi
     mv "$tsv.partial" "$tsv"
   done
 done
