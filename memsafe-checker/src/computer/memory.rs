@@ -60,7 +60,76 @@ fn unproved_reason(path: SatResult) -> Option<&'static str> {
     }
 }
 
+fn extends(facts: &[ast::Bool], prefix: &[ast::Bool]) -> bool {
+    facts.len() >= prefix.len() && facts.iter().zip(prefix).all(|(fact, known)| fact == known)
+}
+
+fn solver_holding(facts: &[ast::Bool]) -> Solver {
+    let solver = Solver::new();
+    for fact in facts {
+        solver.assert(fact);
+    }
+    solver
+}
+
 impl ARMCORTEXA {
+    fn defer_path_check(
+        &self,
+        selects: Vec<ast::Bool>,
+        access: String,
+    ) -> Result<(), MemorySafetyError> {
+        let facts = self.solver.get_assertions();
+        if !extends(&facts, &self.pending_path_checks.borrow().trail) {
+            self.settle_path_checks()?;
+        }
+        let mut pending = self.pending_path_checks.borrow_mut();
+        let known_facts = facts.len();
+        pending.trail = facts;
+        pending.accesses.push(PendingAccess {
+            known_facts,
+            selects,
+            line: self.current_line,
+            access,
+        });
+        Ok(())
+    }
+
+    pub fn settle_path_checks(&self) -> Result<(), MemorySafetyError> {
+        let pending = self.pending_path_checks.take();
+        if pending.accesses.is_empty() {
+            return Ok(());
+        }
+        let mut every_select: Vec<ast::Bool> = Vec::new();
+        for select in pending.accesses.iter().flat_map(|a| a.selects.iter()) {
+            if !every_select.contains(select) {
+                every_select.push(select.clone());
+            }
+        }
+        let whole_path = if extends(&self.solver.get_assertions(), &pending.trail) {
+            check(&self.solver, &every_select)
+        } else {
+            check(&solver_holding(&pending.trail), &every_select)
+        };
+        log::info!(
+            "settled {} deferred path checks over {} facts: {whole_path:?}",
+            pending.accesses.len(),
+            pending.trail.len()
+        );
+        if whole_path == SatResult::Sat {
+            return Ok(());
+        }
+        for access in &pending.accesses {
+            let prefix = solver_holding(&pending.trail[..access.known_facts]);
+            if let Some(why) = unproved_reason(check(&prefix, &access.selects)) {
+                return Err(MemorySafetyError::new(&format!(
+                    "line {}: {} unprovable: {why}",
+                    access.line, access.access
+                )));
+            }
+        }
+        Ok(())
+    }
+
     fn settled_stack_address(&self, address: RegisterValue) -> RegisterValue {
         let stack = AbstractExpression::Abstract("sp".to_string());
         let Some(base) = &address.base else {
@@ -1256,12 +1325,13 @@ impl ARMCORTEXA {
             check(&self.solver, &with(&u)),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
-                if let Some(why) = unproved_reason(check(&self.solver, &selects)) {
-                    return Err(MemorySafetyError::new(&format!(
-                        "{ty} of {width} bytes at {} unprovable: {why}",
+                self.defer_path_check(
+                    selects,
+                    format!(
+                        "{ty} of {width} bytes at {}",
                         format_address(&base_expr, offset)
-                    )));
-                }
+                    ),
+                )?;
                 log::info!(
                     "{ty} at {} proved in bounds",
                     format_address(&base_expr, offset)

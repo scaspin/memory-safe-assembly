@@ -321,6 +321,10 @@ pub trait Machine: Clone {
         Vec::new()
     }
 
+    fn settle_path_checks(&self) -> Result<(), String> {
+        Ok(())
+    }
+
     fn names_region(&self, symbol: &str) -> bool {
         self.memory().contains_key(symbol) || self.memory_labels().contains_key(symbol)
     }

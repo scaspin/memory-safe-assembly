@@ -24,6 +24,20 @@ pub const RETURN_TO: &str = "return_to";
 pub const MAX_EXPRESSION_NODES: usize = 150;
 const WORD_FIT_RESOURCE_LIMIT: u32 = 5_000_000;
 
+#[derive(Clone, Default)]
+pub(crate) struct PendingPathChecks {
+    trail: Vec<ast::Bool>,
+    accesses: Vec<PendingAccess>,
+}
+
+#[derive(Clone)]
+pub(crate) struct PendingAccess {
+    known_facts: usize,
+    selects: Vec<ast::Bool>,
+    line: usize,
+    access: String,
+}
+
 #[derive(Clone)]
 pub struct ARMCORTEXA {
     pub registers: [RegisterValue; 33],
@@ -44,6 +58,7 @@ pub struct ARMCORTEXA {
     stack_arguments: i64,
     pub red_zone: i64,
     findings: Rc<RefCell<Vec<String>>>,
+    pending_path_checks: RefCell<PendingPathChecks>,
     current_line: usize,
     alignment: i64,
     flag_counter: usize,
@@ -227,6 +242,7 @@ impl ARMCORTEXA {
             stack_arguments: 0,
             red_zone: 0,
             findings: Rc::default(),
+            pending_path_checks: RefCell::default(),
             current_line: 0,
             alignment: 4,
             flag_counter: 0,

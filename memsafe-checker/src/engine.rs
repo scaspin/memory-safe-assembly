@@ -792,6 +792,13 @@ impl<M: Machine> Engine<M> {
     fn run(&mut self, start_pc: usize, depth: usize) -> std::io::Result<()> {
         let _executing = profile::enter(Phase::Execution);
         let result = self.run_from(start_pc, depth);
+        let result = match self.computer.settle_path_checks() {
+            Ok(()) => result,
+            Err(earlier) => {
+                log::error!("{earlier}");
+                Err(Error::other(earlier))
+            }
+        };
         while let Some(active) = self.loops.active.last()
             && active.depth == depth
         {

@@ -593,4 +593,8 @@ impl Machine for ARMCORTEXA {
     fn findings(&self) -> Vec<String> {
         ARMCORTEXA::findings(self)
     }
+
+    fn settle_path_checks(&self) -> Result<(), String> {
+        ARMCORTEXA::settle_path_checks(self).map_err(|err| err.to_string())
+    }
 }
