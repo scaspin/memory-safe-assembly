@@ -7,7 +7,8 @@ slow=${SLOW:-$here/slow}
 runs=${RUNS:-3}
 jobs=${JOBS:-4}
 timeout=${TIMEOUT:-300}
-slow_timeout=${SLOW_TIMEOUT:-1800}
+slow_timeout=${SLOW_TIMEOUT:-2700}
+slow_steps=${SLOW_STEPS:-20000000}
 x86=x86_64-apple-darwin
 check=$root/target/release/bums-check
 
@@ -60,7 +61,7 @@ for run in $(seq 1 "$runs"); do
       skip=()
       [[ -s $skipping ]] && skip=(--skip-file "$skipping")
       echo "=== run $run $name slow $(date)"
-      (cd "$root" && "$check" "$crate" $flags --filter "$pattern" --jobs "$jobs" --timeout "$slow_timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.slow") | tail -1
+      (cd "$root" && BUMS_MAX_STEPS=$slow_steps "$check" "$crate" $flags --filter "$pattern" --jobs "$jobs" --timeout "$slow_timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.slow") | tail -1
       [[ -f $tsv.slow ]] && cat "$tsv.slow" >>"$tsv.partial"
       rm -f "$tsv.slow"
     fi

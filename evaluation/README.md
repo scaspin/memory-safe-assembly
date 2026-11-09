@@ -33,7 +33,8 @@ Settings come from the environment:
 | `RUNS` | 3 | number of runs |
 | `JOBS` | 4 | functions checked in parallel |
 | `TIMEOUT` | 300 | seconds per function before it counts as TIMEOUT |
-| `SLOW_TIMEOUT` | 1800 | the same for the functions listed in `slow/` |
+| `SLOW_TIMEOUT` | 2700 | the same for the functions listed in `slow/` |
+| `SLOW_STEPS` | 20000000 | instructions the engine may execute for a function in `slow/` |
 | `OUT` | `evaluation/results` | where results go (ignored by git) |
 | `SLOW` | `evaluation/slow` | functions given `SLOW_TIMEOUT`, one file per suite |
 | `ONLY` | all | space-separated suite names to run |
@@ -51,7 +52,8 @@ is recorded as TIMEOUT and counts as unverified, the same as FAIL, MEMCAP and ER
 
 `slow/<suite>.txt` lists functions that verify but need longer than `TIMEOUT`, such as the
 scalar multiplications in bignum, which run a loop of several thousand instructions through
-calls. Each run checks them in a second pass with `SLOW_TIMEOUT` and adds their rows to the
+calls, or chacha20_poly1305_seal, whose tail re-summarizes the same byte loops on thousands of
+paths. Each run checks them in a second pass with `SLOW_TIMEOUT` and `SLOW_STEPS` and adds their rows to the
 suite's TSV, so they count as verified with their real time. A function belongs here only once
 it has verified within `SLOW_TIMEOUT`; one that never finishes stays a TIMEOUT under `TIMEOUT`.
 
