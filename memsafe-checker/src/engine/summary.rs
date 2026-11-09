@@ -1808,7 +1808,6 @@ pub(super) struct Confinement {
     pub(super) length: AbstractExpression,
     pub(super) floor: Option<usize>,
     pub(super) multiple: i64,
-    pub(super) least: i64,
 }
 
 #[derive(Debug, Clone)]

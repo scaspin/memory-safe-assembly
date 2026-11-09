@@ -185,17 +185,15 @@ pub fn refuted_within(
     incremental_units: u32,
     fresh_units: u32,
 ) -> bool {
-    refuted_incrementally_within(solver, assumption, incremental_units)
-        || refuted_freshly_within(solver, assumption, fresh_units)
-}
-
-pub fn refuted_freshly_within(solver: &Solver, assumption: &ast::Bool, units: u32) -> bool {
+    if refuted_incrementally_within(solver, assumption, incremental_units) {
+        return true;
+    }
     let fresh = ArithmeticEngine::Default.solver();
     for fact in solver.get_assertions() {
         fresh.assert(&fact);
     }
     fresh.assert(assumption);
-    unsat_within(&fresh, units, &|| fresh.check())
+    unsat_within(&fresh, fresh_units, &|| fresh.check())
 }
 
 pub fn refuted_incrementally_within(solver: &Solver, assumption: &ast::Bool, units: u32) -> bool {
