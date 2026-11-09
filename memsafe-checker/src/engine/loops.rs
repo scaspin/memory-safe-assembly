@@ -1221,6 +1221,7 @@ impl<M: Machine> Engine<M> {
                     length,
                     floor,
                     multiple,
+                    least: 0,
                 });
             }
         }
@@ -1741,19 +1742,20 @@ impl<M: Machine> Engine<M> {
                 ) || matches!(invariant, LoopInvariant::Ranged(_, high) if *high <= 0)
                     || (matches!(invariant, LoopInvariant::Unknown) && leaders.contains(&i));
                 if !self.computer.carries_region(&current_state.0[i]) {
-                    let zero = AbstractExpression::Immediate(0);
+                    let least = self.counter_floor(invariant, &summarized.0[i]);
+                    let floor = AbstractExpression::Immediate(least);
                     let stays_natural = counts_down
                         && current_state.0[i].kind == RegisterKind::RegisterBase
                         && [&entry_state, &current_state].iter().all(|state| {
                             self.proves_with_selects(AbstractComparison::new(
                                 ">=",
                                 value_of(&state.0[i]),
-                                zero.clone(),
+                                floor.clone(),
                             ))
                         });
                     if stays_natural {
-                        log::info!("{id} x{i} counts down without going below zero");
-                        let fact = AbstractComparison::new(">=", value_of(&summarized.0[i]), zero);
+                        log::info!("{id} x{i} counts down without going below {least}");
+                        let fact = AbstractComparison::new(">=", value_of(&summarized.0[i]), floor);
                         if let Some(asserted) = comparison_to_ast(fact.clone()) {
                             self.computer.solver().assert(asserted);
                         }
@@ -1764,6 +1766,7 @@ impl<M: Machine> Engine<M> {
                             length: AbstractExpression::Immediate(0),
                             floor: None,
                             multiple: 1,
+                            least,
                         });
                     }
                     continue;
@@ -1792,6 +1795,7 @@ impl<M: Machine> Engine<M> {
                     length,
                     floor: None,
                     multiple: 1,
+                    least: 0,
                 });
             }
         }
@@ -4493,13 +4497,41 @@ impl<M: Machine> Engine<M> {
         self.substitute_symbol(&name, &value);
     }
 
+    fn counter_floor(&self, invariant: &LoopInvariant, summarized: &RegisterValue) -> i64 {
+        let LoopInvariant::Linear(AbstractExpression::Immediate(step)) = invariant else {
+            return 0;
+        };
+        if *step >= 0 {
+            return 0;
+        }
+        let Some(value) = expression_to_ast(value_of(summarized)) else {
+            return 0;
+        };
+        let next = ast::Int::add(&[&value, &ast::Int::from_i64(*step)]);
+        let carries = |least: i64| {
+            let floor = ast::Int::from_i64(least);
+            let mut assuming = self.computer.select_assumptions(&value_of(summarized));
+            assuming.push(value.ge(&floor));
+            assuming.push(next.lt(&floor));
+            refuted_freshly_within(
+                self.computer.solver(),
+                &ast::Bool::and(&assuming),
+                OBLIGATION_RESOURCE_LIMIT,
+            )
+        };
+        [0, *step]
+            .into_iter()
+            .find(|&least| carries(least))
+            .unwrap_or(0)
+    }
+
     fn stays_confined(&self, confinement: &Confinement, current: &MachineState) -> bool {
         let now = value_of(&current.0[confinement.register]);
         if confinement.region.is_empty() {
             return self.proves_with_selects(AbstractComparison::new(
                 ">=",
                 now,
-                AbstractExpression::Immediate(0),
+                AbstractExpression::Immediate(confinement.least),
             ));
         }
         let start = AbstractExpression::Abstract(confinement.region.clone());

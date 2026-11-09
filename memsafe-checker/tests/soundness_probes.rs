@@ -2846,3 +2846,34 @@ fn leading_zeros_of_an_unknown_word_count_at_most_its_width() {
         "accepted an index of up to 64 into a 64-byte buffer"
     );
 }
+
+fn bytes_from_the_end(read: &[&str]) -> Vec<String> {
+    let mut program: Vec<String> = ["start:", "cbz x1, done", "sub x4, x1, #1", "loop:"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    program.extend(read.iter().map(|l| l.to_string()));
+    program.extend(
+        ["subs x4, x4, #1", "b.ge loop", "done:", "ret"]
+            .into_iter()
+            .map(String::from),
+    );
+    program
+}
+
+#[test]
+fn a_countdown_that_leaves_at_minus_one_reads_every_byte_in_bounds() {
+    let program = bytes_from_the_end(&["ldrb w5, [x0, x4]"]);
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    assert_eq!(run(&program, None, &[]), Ok(()));
+}
+
+#[test]
+fn a_countdown_that_leaves_at_minus_one_reading_one_ahead_is_rejected() {
+    let program = bytes_from_the_end(&["add x6, x4, #1", "ldrb w5, [x0, x6]"]);
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    assert!(
+        run(&program, None, &[]).is_err(),
+        "accepted a read one past the end on the first iteration"
+    );
+}
