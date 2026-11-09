@@ -1,1 +1,2 @@
 chacha20_poly1305_seal
+chacha20_poly1305_open
