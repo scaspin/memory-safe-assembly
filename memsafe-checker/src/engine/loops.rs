@@ -4350,6 +4350,19 @@ impl<M: Machine> Engine<M> {
             {
                 observed[i] = recorded.clone();
             }
+            if let LoopInvariant::Tracks(j, k) = recorded
+                && observed[i] != *recorded
+                && before.0[*j].kind != RegisterKind::Number
+                && after.0[*j].kind != RegisterKind::Number
+            {
+                let leader_moved =
+                    generate_expression("-", value_of(&after.0[*j]), value_of(&before.0[*j]));
+                let step =
+                    generate_expression("*", AbstractExpression::Immediate(*k), leader_moved);
+                if self.proves_step(&before.0[i], &after.0[i], &step) {
+                    observed[i] = recorded.clone();
+                }
+            }
         }
         let leaving = matches!(
             self.decide_from_solver(&expression),
