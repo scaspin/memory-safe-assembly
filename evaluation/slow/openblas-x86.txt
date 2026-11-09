@@ -1,1 +1,2 @@
 zaxpy_k
+idamax_k
