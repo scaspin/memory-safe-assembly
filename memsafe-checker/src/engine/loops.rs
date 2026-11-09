@@ -61,6 +61,7 @@ enum Decline {
     Contradicts(LoopId),
     LowBitsWalker(usize),
     EscapedLeader(LoopId, usize, usize),
+    ConcretelyBounded(usize, i64),
 }
 
 impl Decline {
@@ -70,6 +71,9 @@ impl Decline {
             Decline::ChangingLoad => {
                 log::info!("line {pc} tests a load that changed since the last visit, unrolling")
             }
+            Decline::ConcretelyBounded(branch, remaining) => log::info!(
+                "line {pc} loops through line {branch}, which leaves after {remaining} more concrete iterations, unrolling"
+            ),
             Decline::OutOfTries => {
                 log::info!(
                     "loop at line {pc} failed {} summaries, unrolling",
@@ -172,7 +176,16 @@ pub(super) struct PathLoops<M: Machine> {
     pub(super) pending: Option<(usize, Box<Engine<M>>)>,
     pub(super) value_ranges: BTreeMap<String, i64>,
     pub(super) concrete_latch_visits: BTreeMap<usize, (usize, i64)>,
+    pub(super) concrete_latch_ends: BTreeMap<usize, ConcreteLatchEnd>,
     pub(super) costly_latches: BTreeSet<usize>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ConcreteLatchEnd {
+    target: usize,
+    value: i64,
+    closing: Option<i64>,
+    visited_at: usize,
 }
 
 impl<M: Machine> PathLoops<M> {
@@ -186,6 +199,7 @@ impl<M: Machine> PathLoops<M> {
             pending: None,
             value_ranges: BTreeMap::new(),
             concrete_latch_visits: BTreeMap::new(),
+            concrete_latch_ends: BTreeMap::new(),
             costly_latches: BTreeSet::new(),
         }
     }
@@ -563,7 +577,8 @@ impl<M: Machine> Engine<M> {
             Ok(ExecuteReturnType::ConditionalJumpLabel(..)) if costly => {}
             _ => return None,
         }
-        if self.get_linenumber_of_label(label.clone(), pc)? > pc {
+        let target = self.get_linenumber_of_label(label.clone(), pc)?;
+        if target > pc {
             return None;
         }
         let tested = self.computer.get_register(&tested);
@@ -590,6 +605,21 @@ impl<M: Machine> Engine<M> {
             return Some((condition, label));
         }
         let now = (self.instructions_run, value);
+        let closing = self
+            .loops
+            .concrete_latch_visits
+            .get(&pc)
+            .map(|(_, before)| before - value)
+            .filter(|closing| *closing != 0);
+        self.loops.concrete_latch_ends.insert(
+            pc,
+            ConcreteLatchEnd {
+                target,
+                value,
+                closing,
+                visited_at: self.instructions_run,
+            },
+        );
         if let Some((run_before, value_before)) = self.loops.concrete_latch_visits.insert(pc, now) {
             let closing = value_before - value;
             let per_iteration = (self.instructions_run - run_before) as i64;
@@ -607,6 +637,35 @@ impl<M: Machine> Engine<M> {
             }
         }
         None
+    }
+
+    fn concretely_bounded_branch(
+        &self,
+        pc: usize,
+        cycle: &Cycle<M::LoopLanes>,
+    ) -> Option<(usize, i64)> {
+        let since = cycle.previous.instructions_run;
+        let per_iteration = self.instructions_run.saturating_sub(since) as i64;
+        self.loops
+            .concrete_latch_ends
+            .iter()
+            .find_map(|(&latch, end)| {
+                let remaining = match end.closing {
+                    Some(closing)
+                        if end.value.signum() == closing.signum() && end.value % closing == 0 =>
+                    {
+                        end.value / closing
+                    }
+                    Some(_) => return None,
+                    None => end.value.abs(),
+                };
+                (end.target <= pc
+                    && pc < latch
+                    && end.visited_at >= since
+                    && remaining.saturating_mul(per_iteration) <= UNROLLING_INSTRUCTION_BUDGET
+                    && remaining as usize <= self.revisit_cap())
+                .then_some((latch, remaining))
+            })
     }
 
     fn unrolling_costs_too_much(
@@ -1002,6 +1061,9 @@ impl<M: Machine> Engine<M> {
         expression: &AbstractComparison,
     ) -> Result<bool, Decline> {
         let cycle = self.locate_cycle(pc, expression)?;
+        if let Some((branch, remaining)) = self.concretely_bounded_branch(pc, &cycle) {
+            return Err(Decline::ConcretelyBounded(branch, remaining));
+        }
         let mut observation = self.observe(pc, expression, &cycle)?;
         let guard = observation.guard.clone();
         let expression = &guard;

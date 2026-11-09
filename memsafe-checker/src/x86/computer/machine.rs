@@ -193,6 +193,10 @@ impl MachineInstruction for Instruction {
         let op = match code.get(branch_pc)?.mnemonic.as_str() {
             "jne" | "jnz" => "!=",
             "je" | "jz" => "==",
+            "jg" | "jnle" => "<",
+            "jge" | "jnl" => "<=",
+            "jl" | "jnge" => ">",
+            "jle" | "jng" => ">=",
             _ => return None,
         };
         let setter = code.get(branch_pc.checked_sub(1)?)?;

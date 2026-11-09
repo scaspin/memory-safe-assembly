@@ -508,3 +508,33 @@ fn a_second_block_kept_at_the_end_only_inside_the_loop_is_rejected() {
         64,
     ));
 }
+
+fn search_then_tail(length: i64) -> Result<(), String> {
+    let program = lines(&[
+        "start:",
+        "movq $5, %rcx",
+        "L$loop:",
+        "movq (%rdi), %rax",
+        "testq %rax, %rax",
+        "jne L$found",
+        "addq $8, %rdi",
+        "decq %rcx",
+        "jg L$loop",
+        "movq (%rdi), %rax",
+        "L$found:",
+        "ret",
+    ]);
+    let mut engine = engine_for(program, RegionType::READ);
+    engine.add_invariant(length_is(length));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_search_with_a_concrete_count_reads_its_tail_in_bounds() {
+    assert_eq!(search_then_tail(48), Ok(()));
+}
+
+#[test]
+fn a_search_with_a_concrete_count_reading_a_tail_past_the_end_is_rejected() {
+    assert_rejected_access(search_then_tail(40));
+}
