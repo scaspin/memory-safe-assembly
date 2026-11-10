@@ -23,6 +23,7 @@ pub const STACK: &str = "sp";
 pub const RETURN: &str = "return";
 pub const RETURN_TO: &str = "return_to";
 pub const RETURN_ADDRESS_BYTES: i64 = 8;
+pub const SYSV_RED_ZONE: i64 = 128;
 
 pub type DwordInterval = (AbstractExpression, AbstractExpression);
 pub type DwordLaneBounds = Box<[Option<DwordInterval>; VECTOR_COUNT]>;

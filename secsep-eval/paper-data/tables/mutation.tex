@@ -1,0 +1,20 @@
+\begin{tabular}{llcc}
+\toprule
+Mutant & Fault & BUMS & SecSep\\
+\midrule
+salsa20-A & read word 16 of a 16-word input & \ding{51} & $\triangle$\\
+salsa20-B & byte loop runs to message[len] & \ding{51} & $\triangle$\\
+sha512-A & tail length mask 255 instead of 127 & \ding{51} & $\triangle$\\
+sha512-B & block count doubled & \ding{51} & $\circ$\\
+chacha20-A & vector read one byte late & \ding{51} & $\triangle$\\
+chacha20-B & every block 64 bytes (min removed) & \ding{51} & $\triangle$\\
+poly1305-A & unrolled tail read at +4 & \ding{51} & $\triangle$\\
+poly1305-B & single-byte loop counts n&7 & \ding{51} & $\triangle$\\
+x25519-A & peer key read at +29 (4 bytes) & \ding{51} & $\triangle$\\
+x25519-B & store s[32] of a 32-byte output & \ding{51} & $\triangle$\\
+ed25519\_sign-A & read s[61..64] of a 64-byte input & \ding{51} & $\triangle$\\
+ed25519\_sign-B & message copy reads one byte past & \ding{51} & $\triangle$\\
+\bottomrule
+\end{tabular}
+% \ding{51} rejected at the faulting instruction; $\circ$ type checker rejects the function;
+% $\triangle$ inference raised an exception (no location); \ding{55} accepted. Needs \usepackage{pifont}.

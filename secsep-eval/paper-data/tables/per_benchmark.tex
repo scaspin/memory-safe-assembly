@@ -1,0 +1,15 @@
+\begin{tabular}{lrrrrrrr}
+\toprule
+Benchmark & \#Fn & \multicolumn{2}{c}{Clauses} & \multicolumn{2}{c}{Tokens} & \multicolumn{2}{c}{Time (s)}\\
+ & & SecSep & BUMS & SecSep & BUMS & SecSep & BUMS\\
+\midrule
+salsa20 & 2 & 6 & 6 & 62 & 78 & 23 & 2\\
+sha512 & 2 & 7 & 7 & 72 & 90 & 200 & 13\\
+chacha20 & 2 & 12 & 9 & 101 & 120 & 201 & 56\\
+x25519 & 4 & 14 & 10 & 118 & 168 & 750 & 128\\
+poly1305 & 5 & 84 & 13 & 1084 & 260 & 931 & 264\\
+ed25519\_sign & 6 & 19 & 17 & 240 & 232 & 2140 & 933\\
+\midrule
+Total & 21 & 142 & 62 & 1677 & 948 & 4245 & 1396\\
+\bottomrule
+\end{tabular}

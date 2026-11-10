@@ -1,0 +1,2 @@
+salsa20_words	src/lib.rs	FAIL	0.1	line 1 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+salsa20	src/lib.rs	FAIL	0.1	line 234 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)

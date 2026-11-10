@@ -1,0 +1,7 @@
+benchmark,functions_compared,secsep_clauses,bums_clauses,secsep_tokens,bums_tokens,secsep_cpu_s,bums_wall_s,bums_all_verified,secsep_whole_program_wall_s,secsep_paper_anno_lines_all_functions
+salsa20,2,6,6,62,78,23.1,1.7,True,30.11,5
+sha512,2,7,7,72,90,200.1,13.4,True,188.79,5
+chacha20,2,12,9,101,120,201.2,56.1,True,177.91,7
+x25519,4,14,10,118,168,749.7,128.3,True,853.46,7
+poly1305,5,84,13,1084,260,931.3,263.5,True,1378.68,74
+ed25519_sign,6,19,17,240,232,2139.6,932.6,True,2265.45,24

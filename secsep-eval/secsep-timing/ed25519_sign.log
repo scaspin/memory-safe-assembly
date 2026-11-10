@@ -1,0 +1,55 @@
+[INFO] <MainProcess> - Working on 1 benchmark(s)...
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Preprocess) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Preprocess) time elapsed: [34m0.78 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Preprocess) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Single Type Infer) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Single Type Infer) time elapsed: [34m834.79 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Single Type Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Valid Region Infer) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Valid Region Infer) time elapsed: [34m204.64 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Valid Region Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Taint Type Infer) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Taint Type Infer) time elapsed: [34m85.88 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Taint Type Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Change Infer) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Change Infer) time elapsed: [34m1.96 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Change Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Type Checker) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Type Checker) time elapsed: [34m1132.52 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Type Checker) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) time elapsed: [34m1.37 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [35mInstalling ../benchmark/analysis/ed25519_sign/ed25519_sign.tf3.s[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) time elapsed: [34m0.93 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [35mInstalling ../benchmark/analysis/ed25519_sign/ed25519_sign.tf2.s[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) time elapsed: [34m0.94 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [35mInstalling ../benchmark/analysis/ed25519_sign/ed25519_sign.tf1.s[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) started
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) time elapsed: [34m0.94 seconds[39m
+[INFO] <SpawnPoolWorker-2> - [ed25519_sign] (Transformation) (delta: 0x800000) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-2> - [35mInstalling ../benchmark/analysis/ed25519_sign/ed25519_sign.tf.s[39m
+[INFO] <SpawnPoolWorker-2> - Successfully processed ed25519_sign
+[INFO] <MainProcess> - All benchmark(s) completed successfully
+     2265.45 real      2248.93 user        11.13 sys
+           803651584  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              491263  page reclaims
+                3977  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   1  signals received
+                1908  voluntary context switches
+               97250  involuntary context switches
+            18256787  instructions retired
+            10037104  cycles elapsed
+             1081656  peak memory footprint

@@ -221,6 +221,14 @@ fn rep_stos_checks_the_whole_range() {
     c.add_memory_region("buf".to_string(), RegionType::RW, abstract_of("len"));
     c.set_abstract("rdi".to_string(), abstract_of("buf"));
     c.set_abstract("rcx".to_string(), abstract_of("len"));
+    assert!(
+        c.execute(0, &Instruction::new("rep stosb".to_string()))
+            .is_err()
+    );
+    c.solver
+        .assert(ast::Int::new_const("len").ge(ast::Int::from_i64(0)));
+    c.set_abstract("rdi".to_string(), abstract_of("buf"));
+    c.set_abstract("rcx".to_string(), abstract_of("len"));
     run(&mut c, "rep stosb");
     assert_eq!(c.registers[RCX], RegisterValue::new_imm(0));
     c.set_abstract("rdi".to_string(), abstract_of("buf"));
@@ -287,4 +295,27 @@ fn a_32_bit_result_below_zero_sets_the_sign_flag() {
     };
     let taken = comparison_to_ast(condition).unwrap();
     assert_eq!(c.solver.check_assumptions(&[taken]), SatResult::Unsat);
+}
+
+#[test]
+fn a_64_bit_not_of_a_symbol_is_its_negation_minus_one() {
+    let mut c = X86_64::new();
+    c.set_abstract("rcx".to_string(), abstract_of("n"));
+    run(&mut c, "notq %rcx");
+    run(&mut c, "addq $5,%rcx");
+    c.solver
+        .assert(ast::Int::new_const("n").eq(ast::Int::from_i64(3)));
+    let value = expression_to_ast(c.registers[RCX].expression()).expect("a known value");
+    assert_eq!(
+        check(&c.solver, &[value.eq(ast::Int::from_i64(1)).not()]),
+        SatResult::Unsat
+    );
+}
+
+#[test]
+fn a_32_bit_not_of_a_symbol_is_unknown() {
+    let mut c = X86_64::new();
+    c.set_abstract("rcx".to_string(), abstract_of("n"));
+    run(&mut c, "notl %ecx");
+    assert_eq!(c.registers[RCX].kind, RegisterKind::Number);
 }

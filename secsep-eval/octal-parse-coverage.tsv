@@ -1,0 +1,52 @@
+file	insns	parsed	unsupported	parse_error	distinct_bad	top_bad
+chacha20.s	374	374	0	0	0	
+ed25519_sign.s	21850	21834	16	0	4	callq:10 psrad:2 pmovmskb:2 pcmpeqb:2
+poly1305.s	776	776	0	0	0	
+salsa20.s	327	327	0	0	0	
+sha512.s	5667	5657	10	0	1	callq:10
+x25519.s	21853	21837	16	0	4	callq:10 psrad:2 pmovmskb:2 pcmpeqb:2
+aesni-gcm-x86_64-linux.S	653	128	465	60	23	vpxor:116 vaesenc:90 vmovdqu:77 vpclmulqdq:66 vmovups:40 vpshufb:36 vpaddb:17 vpunpckhqdq:12 vpaddd:12 vaesenclast:12 movbeq:12 vpalignr:6
+aesni-x86_64-linux.S	1494	1433	9	52	7	movups:28 pslldq:20 _CET_ENDBR:7 prefetcht0:2 //:2 movdqu:1 leaq:1
+ghash-ssse3-x86_64-linux.S	210	188	2	20	4	psrldq:12 pslldq:6 _CET_ENDBR:2 //:2
+ghash-x86_64-linux.S	842	421	347	74	23	vpxor:124 vpclmulqdq:76 vmovdqu:66 vpunpckhqdq:25 vpshufb:25 pslldq:19 psrldq:18 vpsrldq:9 vpsrlq:7 vpsllq:7 vpslldq:7 vxorps:6
+md5-x86_64-linux.S	641	638	1	2	2	//:2 _CET_ENDBR:1
+p256_beeu-x86_64-asm-linux.S	182	159	15	8	6	vmovdqu:8 shrdq:6 cmovcq:4 bsfq:2 //:2 _CET_ENDBR:1
+p256-x86_64-asm-linux.S	3276	2769	216	291	23	mulxq:100 adoxq:90 adcxq:86 cmovcq:61 cmovzq:22 vmovdqa:21 vpxor:19 leaq:15 vpand:14 cmovncq:11 _CET_ENDBR:11 pcmpeqd:10
+rdrand-x86_64-linux.S	20	16	2	2	2	_CET_ENDBR:2 //:2
+sha1-x86_64-linux.S	5178	4321	219	638	20	rorxl:320 vpxor:132 vpaddd:63 vmovdqu:52 vpsrld:48 andnl:40 vpslld:36 vpor:36 vpalignr:36 vmovdqa:30 vpshufb:16 vpsrldq:12
+sha256-x86_64-linux.S	3558	3385	146	27	16	vpxor:32 vpaddd:24 vpsrld:20 movdqa:17 vpsrlq:16 vpshufb:12 vmovdqa:11 vpslld:8 vpshufd:8 vpalignr:8 vmovdqu:4 psrldq:4
+sha512-x86_64-linux.S	2465	2227	236	2	11	vpxor:64 vpsrlq:48 vpaddq:40 vpsllq:32 vmovdqa:17 vpalignr:16 vpshufb:8 vmovdqu:8 vzeroupper:2 //:2 _CET_ENDBR:1
+vpaes-x86_64-linux.S	481	469	6	6	4	_CET_ENDBR:6 pslldq:2 movhlps:2 //:2
+x86_64-mont-linux.S	918	814	34	70	9	adcxq:35 mulxq:31 adoxq:29 pcmpeqd:3 //:2 leaq:1 cmovcq:1 _CET_ENDBR:1 .Lsub::1
+x86_64-mont5-linux.S	2673	2304	162	207	12	adcxq:112 adoxq:87 mulxq:78 pcmpeqd:64 leaq:8 _CET_ENDBR:6 cmovcq:4 andnq:4 movq:2 //:2 jrcxz:1 .Lsub::1
+aesni-gcm-x86_64-apple.S	669	108	465	96	45	vpxor:116 vaesenc:90 vmovdqu:77 vpclmulqdq:66 vmovups:40 vpshufb:36 vpaddb:17 vpunpckhqdq:12 vpaddd:12 vaesenclast:12 movbeq:12 vpalignr:6
+aesni-x86_64-apple.S	1603	1252	9	342	128	jmp:51 call:33 movups:28 jnz:25 pslldq:20 je:18 jb:15 jz:11 movdqa:7 jbe:7 _CET_ENDBR:7 jnc:5
+ghash-ssse3-x86_64-apple.S	219	177	2	40	15	psrldq:12 jnz:7 pslldq:6 movdqa:4 _CET_ENDBR:2 //:2 L$reverse_bytes::1 L$oop_row_6::1 L$oop_row_5::1 L$oop_row_4::1 L$oop_row_3::1 L$oop_row_2::1
+ghash-x86_64-apple.S	861	388	347	126	55	vpxor:124 vpclmulqdq:76 vmovdqu:66 vpunpckhqdq:25 vpshufb:25 pslldq:19 psrldq:18 vpsrldq:9 jz:9 vpsrlq:7 vpsllq:7 vpslldq:7
+md5-x86_64-apple.S	645	636	1	8	8	//:2 je:1 jb:1 _CET_ENDBR:1 L$prologue::1 L$loop::1 L$epilogue::1 L$end::1
+p256_beeu-x86_64-asm-apple.S	197	144	15	38	26	vmovdqu:8 shrdq:6 jz:5 cmovcq:4 jnz:3 jmp:3 jne:2 jnc:2 bsfq:2 //:2 _CET_ENDBR:1 L$shift1_1::1
+p256-x86_64-asm-apple.S	3339	2718	216	405	93	mulxq:100 adoxq:90 adcxq:86 cmovcq:61 cmovzq:22 vmovdqa:21 vpxor:19 leaq:19 vpand:14 movq:14 cmovncq:11 _CET_ENDBR:11
+rdrand-x86_64-apple.S	23	13	2	8	8	_CET_ENDBR:2 //:2 jz:1 jnz:1 jnc:1 L$out::1 L$loop::1 L$err::1
+sha1-x86_64-apple.S	5196	4302	219	675	44	rorxl:320 vpxor:132 vpaddd:63 vmovdqu:52 vpsrld:48 andnl:40 vpslld:36 vpor:36 vpalignr:36 vmovdqa:30 vpshufb:16 vpsrldq:12
+sha256-x86_64-apple.S	3574	3368	146	60	37	vpxor:32 vpaddd:24 vpsrld:20 movdqa:17 vpsrlq:16 vpshufb:12 vmovdqa:11 vpslld:8 vpshufd:8 vpalignr:8 jmp:7 vmovdqu:4
+sha512-x86_64-apple.S	2474	2218	236	20	25	vpxor:64 vpsrlq:48 vpaddq:40 vpsllq:32 vmovdqa:17 vpalignr:16 vpshufb:8 vmovdqu:8 jmp:4 vzeroupper:2 jb:2 //:2
+vpaes-x86_64-apple.S	533	410	6	117	67	movdqa:17 jmp:10 leaq:9 jnz:7 jz:6 _CET_ENDBR:6 pxor:3 pslldq:2 movhlps:2 jnc:2 je:2 //:2
+x86_64-mont-apple.S	961	761	34	166	59	adcxq:35 mulxq:31 adoxq:29 jmp:21 jnz:11 ja:8 jb:6 jne:5 pcmpeqd:3 //:2 leaq:1 jz:1
+x86_64-mont5-apple.S	2753	2205	162	386	100	adcxq:112 adoxq:87 mulxq:78 pcmpeqd:64 jmp:43 jnz:19 leaq:12 ja:10 jb:9 _CET_ENDBR:6 je:5 jne:4
+damax_k-x86_64.S	257	134	64	59	10	maxpd:44 andps:42 movhps:15 nopl:8 unpcklpd:4 prefetcht0:4 nopw:3 unpckhpd:1 pcmpeqb:1 maxsd:1
+dasum_k-x86_64.S	172	94	9	69	9	addpd:31 andps:30 nopw:4 nopl:4 movhpd:4 prefetcht0:2 pcmpeqb:1 haddpd:1 addsd:1
+daxpy_k-x86_64.S	418	267	29	122	10	mulpd:50 addpd:50 nopl:19 movhpd:12 prefetcht0:8 mulsd:4 addsd:4 nopw:2 unpcklpd:1 movhps:1
+dcopy_k-x86_64.S	274	229	29	16	5	nopl:17 movhps:9 prefetcht0:8 nopw:6 movlps:5
+ddot_k-x86_64.S	312	184	17	111	9	addpd:49 mulpd:46 prefetcht0:8 mulsd:8 nopl:7 addsd:7 nopw:1 movhps:1 haddpd:1
+dgemm_beta-x86_64.S	92	72	9	11	4	mulsd:9 nopl:6 nopw:4 ucomisd:1
+dgemv_n-x86_64.S	802	519	46	237	10	addpd:98 mulpd:84 nopl:25 prefetcht0:14 movhpd:14 addsd:12 movlpd:10 movddup:10 nopw:9 mulsd:7
+dmax_k-x86_64.S	214	133	63	18	8	maxpd:44 movhps:15 nopw:7 nopl:5 unpcklpd:4 prefetcht0:4 unpckhpd:1 maxsd:1
+dnrm2_k-x86_64.S	116	43	30	43	9	faddp:21 fmul:18 fldl:18 nopw:6 fldz:4 nopl:3 prefetcht0:1 fstpl:1 fsqrt:1
+drot_k-x86_64.S	683	356	21	306	12	mulpd:160 subpd:40 addpd:40 movhps:23 movlpd:19 mulsd:16 nopl:11 prefetcht0:8 subsd:4 addsd:4 unpckhpd:1 nopw:1
+dscal_k-x86_64.S	322	257	22	43	7	mulpd:23 mulsd:17 nopl:10 nopw:7 prefetcht0:6 unpcklpd:1 comisd:1
+dswap_k-x86_64.S	328	295	23	10	5	nopl:14 prefetcht0:8 movhps:5 nopw:3 movlps:3
+idamax_k-x86_64.S	716	401	143	172	14	andpd:105 maxpd:61 comisd:40 movhpd:38 nopl:13 cmpeqpd:12 nopw:11 orpd:9 unpcklpd:8 prefetcht0:6 unpckhpd:4 maxsd:4
+saxpy_k-x86_64.S	876	509	60	307	9	mulps:97 addps:97 movss:83 nopl:37 prefetcht0:16 mulss:14 addss:14 nopw:8 movhps:1
+zasum_k-x86_64.S	167	90	9	68	10	addpd:31 andps:25 movhpd:5 andpd:5 nopw:3 nopl:3 prefetcht0:2 pcmpeqb:1 haddpd:1 addsd:1
+zaxpy_k-x86_64.S	1279	597	41	641	14	mulpd:234 addpd:234 movhps:51 movddup:48 movhpd:46 movlpd:23 nopl:20 prefetcht0:16 unpcklpd:2 nopw:2 movlps:2 addsd:2
+zdotu_k-x86_64.S	1169	570	39	560	9	addpd:232 mulpd:230 movhps:94 nopl:20 prefetcht0:16 nopw:3 movlps:2 subsd:1 addsd:1

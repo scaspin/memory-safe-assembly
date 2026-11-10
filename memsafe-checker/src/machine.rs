@@ -590,8 +590,29 @@ pub trait Machine: Clone {
         };
         let kept =
             self.indexed_facts_apart(&cell.region, Some(ast::Int::from_i64(cell.offset)), width);
-        for k in region.overlapping(cell.offset, width) {
+        let overlapped = region.overlapping(cell.offset, width);
+        let uncovered: Vec<(i64, RegisterValue, i64)> = overlapped
+            .iter()
+            .filter_map(|k| Some((*k, region.content.get(k)?, region.width_at(*k).unwrap_or(8))))
+            .flat_map(|(k, old, old_width)| {
+                bytes_left_uncovered(k, old, old_width, cell.offset, width)
+            })
+            .collect();
+        for k in overlapped {
             self.forget_cell(&cell.region, k);
+        }
+        for (piece_offset, piece, piece_width) in uncovered {
+            let Some(region) = self.memory_mut().get_mut(&cell.region) else {
+                return;
+            };
+            region.put(piece_offset, Some((piece, Some(piece_width))));
+            self.write_journal_mut().push(CellWrite {
+                cell: MemoryCell {
+                    region: cell.region.clone(),
+                    offset: piece_offset,
+                },
+                previous: None,
+            });
         }
         let Some(region) = self.memory_mut().get_mut(&cell.region) else {
             return;
@@ -616,10 +637,20 @@ pub trait Machine: Clone {
         start: Option<ast::Int>,
         width: i64,
     ) -> Vec<IndexedFact> {
-        let (Some(region), Some(start)) = (self.memory().get(region), start) else {
+        self.indexed_facts_apart_spanning(region, start, Some(ast::Int::from_i64(width)))
+    }
+
+    fn indexed_facts_apart_spanning(
+        &self,
+        region: &str,
+        start: Option<ast::Int>,
+        length: Option<ast::Int>,
+    ) -> Vec<IndexedFact> {
+        let (Some(region), Some(start), Some(length)) = (self.memory().get(region), start, length)
+        else {
             return Vec::new();
         };
-        let end = ast::Int::add(&[&start, &ast::Int::from_i64(width)]);
+        let end = ast::Int::add(&[&start, &length]);
         region
             .indexed_facts()
             .iter()
@@ -764,6 +795,21 @@ pub trait Machine: Clone {
         width: i64,
         value: Option<&RegisterValue>,
     ) {
+        self.forget_where_spanned(base, offset, &AbstractExpression::Immediate(width), value);
+    }
+
+    fn forget_where_spanned(
+        &mut self,
+        base: &AbstractExpression,
+        offset: i64,
+        length: &AbstractExpression,
+        value: Option<&RegisterValue>,
+    ) {
+        let fixed_width = match length {
+            AbstractExpression::Immediate(width) => Some(*width),
+            _ => None,
+        };
+        let length = expression_to_ast(length.clone());
         let named = base.get_abstracts();
         let regions: Vec<String> = self
             .memory()
@@ -784,19 +830,26 @@ pub trait Machine: Clone {
             let within = start
                 .as_ref()
                 .map(|start| ast::Int::sub(&[start, &ast::Int::new_const(name.clone())]));
-            let kept = self.indexed_facts_apart(&name, within, width);
-            let aligned = named.contains(&name)
-                && width > 0
-                && !self.element_ranges_of(&name).is_empty()
-                && start.as_ref().is_some_and(|start| {
-                    let within = ast::Int::sub(&[start, &ast::Int::new_const(name.clone())]);
-                    let misaligned = within
-                        .modulo(ast::Int::from_i64(width))
-                        .eq(ast::Int::from_i64(0))
-                        .not();
-                    self.solver().check_assumptions(&[misaligned]) == SatResult::Unsat
-                });
-            self.check_written_element(&name, aligned, width, value);
+            let kept = self.indexed_facts_apart_spanning(&name, within, length.clone());
+            let aligned = fixed_width.is_some_and(|width| {
+                named.contains(&name)
+                    && width > 0
+                    && !self.element_ranges_of(&name).is_empty()
+                    && start.as_ref().is_some_and(|start| {
+                        let within = ast::Int::sub(&[start, &ast::Int::new_const(name.clone())]);
+                        let misaligned = within
+                            .modulo(ast::Int::from_i64(width))
+                            .eq(ast::Int::from_i64(0))
+                            .not();
+                        self.solver().check_assumptions(&[misaligned]) == SatResult::Unsat
+                    })
+            });
+            self.check_written_element(
+                &name,
+                aligned,
+                fixed_width.unwrap_or(0),
+                value.filter(|_| fixed_width.is_some()),
+            );
             let region = &self.memory()[&name];
             let slots: Vec<(i64, i64)> = region
                 .content
@@ -804,16 +857,20 @@ pub trait Machine: Clone {
                 .map(|k| (*k, region.width_at(*k).unwrap_or(8)))
                 .collect();
             for (k, slot_width) in slots {
-                let apart = start.as_ref().is_some_and(|start| {
-                    let slot_start = ast::Int::add(&[
-                        &ast::Int::new_const(name.clone()),
-                        &ast::Int::from_i64(k),
-                    ]);
-                    let slot_end = ast::Int::add(&[&slot_start, &ast::Int::from_i64(slot_width)]);
-                    let end = ast::Int::add(&[start, &ast::Int::from_i64(width)]);
-                    let overlap = ast::Bool::and(&[&start.lt(&slot_end), &slot_start.lt(&end)]);
-                    self.solver().check_timed(&[overlap]) == SatResult::Unsat
-                });
+                let apart = start
+                    .as_ref()
+                    .zip(length.as_ref())
+                    .is_some_and(|(start, length)| {
+                        let slot_start = ast::Int::add(&[
+                            &ast::Int::new_const(name.clone()),
+                            &ast::Int::from_i64(k),
+                        ]);
+                        let slot_end =
+                            ast::Int::add(&[&slot_start, &ast::Int::from_i64(slot_width)]);
+                        let end = ast::Int::add(&[start, length]);
+                        let overlap = ast::Bool::and(&[&start.lt(&slot_end), &slot_start.lt(&end)]);
+                        self.solver().check_timed(&[overlap]) == SatResult::Unsat
+                    });
                 if !apart {
                     self.forget_cell(&name, k);
                 }
@@ -1098,11 +1155,27 @@ pub fn substituted(
             base: r.base.as_ref().map(|b| substituted(b, symbol, value)),
             ..(**r).clone()
         })),
-        AbstractExpression::Expression(op, a, b) => generate_expression(
-            op,
-            substituted(a, symbol, value),
-            substituted(b, symbol, value),
-        ),
+        AbstractExpression::Expression(op, a, b) => {
+            let (a, b) = (substituted(a, symbol, value), substituted(b, symbol, value));
+            match (op.as_str(), &a, &b) {
+                ("/", AbstractExpression::Immediate(x), AbstractExpression::Immediate(y))
+                    if *x >= 0 && *y > 0 =>
+                {
+                    AbstractExpression::Immediate(x / y)
+                }
+                ("%", AbstractExpression::Immediate(x), AbstractExpression::Immediate(y))
+                    if *x >= 0 && *y > 0 =>
+                {
+                    AbstractExpression::Immediate(x % y)
+                }
+                ("*", AbstractExpression::Immediate(x), AbstractExpression::Immediate(y))
+                    if x.checked_mul(*y).is_some() =>
+                {
+                    AbstractExpression::Immediate(x * y)
+                }
+                _ => generate_expression(op, a, b),
+            }
+        }
         other => other.clone(),
     }
 }
@@ -1144,9 +1217,62 @@ impl Isa {
     }
 }
 
+fn bytes_left_uncovered(
+    start: i64,
+    old: &RegisterValue,
+    old_width: i64,
+    written: i64,
+    written_width: i64,
+) -> Vec<(i64, RegisterValue, i64)> {
+    if old.kind != RegisterKind::Immediate || old.base.is_some() || !(1..=8).contains(&old_width) {
+        return Vec::new();
+    }
+    let bits = old.offset as u64;
+    let piece = |from: i64, to: i64| {
+        let width = to - from;
+        let shifted = bits.checked_shr(8 * (from - start) as u32).unwrap_or(0);
+        let kept = if width >= 8 {
+            shifted
+        } else {
+            shifted & ((1u64 << (8 * width)) - 1)
+        };
+        (from, RegisterValue::new_imm(kept as i64), width)
+    };
+    let end = start + old_width;
+    let written_end = written.saturating_add(written_width);
+    let mut pieces = Vec::new();
+    if start < written {
+        pieces.push(piece(start, written.min(end)));
+    }
+    if written_end < end {
+        pieces.push(piece(written_end.max(start), end));
+    }
+    pieces
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_narrow_store_keeps_the_bytes_of_a_wider_constant_it_does_not_cover() {
+        let old = RegisterValue::new_imm(0x0000_0040_1122_3344);
+        let pieces = bytes_left_uncovered(216, &old, 8, 216, 4);
+        assert_eq!(pieces.len(), 1);
+        assert_eq!(pieces[0].0, 220);
+        assert_eq!(pieces[0].1.offset, 0x40);
+        assert_eq!(pieces[0].2, 4);
+        let middle = bytes_left_uncovered(0, &old, 8, 2, 2);
+        let shown: Vec<(i64, i64, i64)> =
+            middle.iter().map(|(o, v, w)| (*o, v.offset, *w)).collect();
+        assert_eq!(shown, vec![(0, 0x3344, 2), (4, 0x40, 4)]);
+        let symbolic = RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract("x".to_string())),
+            0,
+        );
+        assert!(bytes_left_uncovered(0, &symbolic, 8, 0, 4).is_empty());
+    }
 
     #[test]
     fn detects_att_x86() {

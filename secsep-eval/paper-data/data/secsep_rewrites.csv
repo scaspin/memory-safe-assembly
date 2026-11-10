@@ -1,0 +1,7 @@
+benchmark,functions,rewritten_instructions,emitted_instructions,delta_shifted,stores,loads,push_pop,calls,top_kinds
+salsa20,3,74,96,74,26,13,33,2,"{""UInst:Mov/st"": 26, ""Push"": 17, ""Pop"": 16, ""UInst:Mov/ld"": 7, ""BInst:Xor/ld"": 5, ""Call"": 2, ""UInst:MovZ/ld"": 1}"
+sha512,3,225,295,226,88,102,28,7,"{""UInst:Mov/st"": 86, ""UInst:Mov/ld"": 82, ""BInst:Add/ld"": 16, ""Push"": 14, ""Pop"": 14, ""Call"": 7, ""BInst:Xor/ld"": 4, ""BInst:Xor/st"": 2}"
+chacha20,3,39,65,39,7,8,22,2,"{""Push"": 11, ""Pop"": 11, ""UInst:Mov/st"": 7, ""UInst:MovZ/ld"": 5, ""Call"": 2, ""BInst:Xorp/ld"": 2, ""UInst:Mov/ld"": 1}"
+x25519,5,1564,1663,1579,770,709,56,20,"{""UInst:Mov/st"": 770, ""BInst:Adc/ld"": 262, ""BInst:Add/ld"": 248, ""UInst:Mov/ld"": 195, ""Push"": 28, ""Pop"": 28, ""Call"": 20, ""BInst:Sub/ld"": 4}"
+poly1305,7,183,498,153,55,42,47,39,"{""UInst:Mov/st"": 54, ""Call"": 39, ""UInst:Mov/ld"": 31, ""Push"": 24, ""Pop"": 23, ""BInst:Add/ld"": 11, ""BInst:Add/st"": 1}"
+ed25519_sign,11,2411,3257,2446,1052,1119,129,69,"{""UInst:Mov/st"": 1052, ""UInst:Mov/ld"": 454, ""BInst:Add/ld"": 323, ""BInst:Adc/ld"": 260, ""UInst:MovZ/ld"": 82, ""Call"": 69, ""Push"": 65, ""Pop"": 64}"

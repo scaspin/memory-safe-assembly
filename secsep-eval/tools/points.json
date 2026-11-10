@@ -1,0 +1,485 @@
+[
+ {
+  "fn": "salsa20_words",
+  "bench": "salsa20",
+  "bums": {
+   "clauses": 2,
+   "tokens": 34,
+   "status": "verified",
+   "time": 0.1,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 2,
+   "tokens": 22,
+   "time": 13.05,
+   "phases": {
+    "single": 2.27,
+    "taint": 1.96,
+    "range": 1.09,
+    "check": 7.73
+   },
+   "queries": 1875
+  }
+ },
+ {
+  "fn": "salsa20",
+  "bench": "salsa20",
+  "bums": {
+   "clauses": 4,
+   "tokens": 44,
+   "status": "verified",
+   "time": 1.6,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 4,
+   "tokens": 40,
+   "time": 10.07,
+   "phases": {
+    "single": 2.56,
+    "taint": 0.85,
+    "range": 0.42,
+    "check": 6.24
+   },
+   "queries": 1610
+  }
+ },
+ {
+  "fn": "chacha_core",
+  "bench": "chacha20",
+  "bums": {
+   "clauses": 2,
+   "tokens": 34,
+   "status": "verified",
+   "time": 0.1,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 2,
+   "tokens": 15,
+   "time": 1.01,
+   "phases": {
+    "single": 0.18,
+    "range": 0.09,
+    "taint": 0.07,
+    "check": 0.67
+   },
+   "queries": 495
+  }
+ },
+ {
+  "fn": "CRYPTO_chacha_20",
+  "bench": "chacha20",
+  "bums": {
+   "clauses": 7,
+   "tokens": 86,
+   "status": "verified",
+   "time": 58.4,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 10,
+   "tokens": 86,
+   "time": 200.18,
+   "phases": {
+    "single": 102.22,
+    "range": 24.44,
+    "taint": 12.92,
+    "check": 60.6
+   },
+   "queries": 10016
+  }
+ },
+ {
+  "fn": "CRYPTO_poly1305_init",
+  "bench": "poly1305",
+  "bums": {
+   "clauses": 2,
+   "tokens": 50,
+   "status": "verified",
+   "time": 0.1,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 3,
+   "tokens": 27,
+   "time": 1.5,
+   "phases": {
+    "range": 0.01,
+    "taint": 0.0,
+    "check": 1.43,
+    "single": 0.05
+   },
+   "queries": 253
+  }
+ },
+ {
+  "fn": "CRYPTO_poly1305_update",
+  "bench": "poly1305",
+  "bums": {
+   "clauses": 4,
+   "tokens": 62,
+   "status": "verified",
+   "time": 227.0,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 21,
+   "tokens": 274,
+   "time": 827.83,
+   "phases": {
+    "range": 65.97,
+    "taint": 12.25,
+    "check": 518.23,
+    "single": 231.38
+   },
+   "queries": 10199
+  }
+ },
+ {
+  "fn": "CRYPTO_poly1305_finish",
+  "bench": "poly1305",
+  "bums": {
+   "clauses": 3,
+   "tokens": 59,
+   "status": "verified",
+   "time": 5.8,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 18,
+   "tokens": 246,
+   "time": 11.41,
+   "phases": {
+    "range": 0.53,
+    "taint": 0.72,
+    "check": 8.65,
+    "single": 1.52
+   },
+   "queries": 1044
+  }
+ },
+ {
+  "fn": "poly1305_donna_mul",
+  "bench": "poly1305",
+  "bums": {
+   "clauses": 1,
+   "tokens": 35,
+   "status": "verified",
+   "time": 0.1,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 19,
+   "tokens": 249,
+   "time": 3.8,
+   "phases": {
+    "range": 0.01,
+    "taint": 0.21,
+    "check": 3.56,
+    "single": 0.01
+   },
+   "queries": 269
+  }
+ },
+ {
+  "fn": "poly1305_update",
+  "bench": "poly1305",
+  "bums": {
+   "clauses": 3,
+   "tokens": 54,
+   "status": "verified",
+   "time": 23.8,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 23,
+   "tokens": 288,
+   "time": 86.74,
+   "phases": {
+    "range": 7.03,
+    "taint": 4.05,
+    "check": 42.38,
+    "single": 33.3
+   },
+   "queries": 6590
+  }
+ },
+ {
+  "fn": "sha512_block_data_order",
+  "bench": "sha512",
+  "bums": {
+   "clauses": 4,
+   "tokens": 50,
+   "status": "verified",
+   "time": 1.0,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 4,
+   "tokens": 44,
+   "time": 90.07,
+   "phases": {
+    "single": 7.36,
+    "range": 13.26,
+    "taint": 16.99,
+    "check": 52.47
+   },
+   "queries": 4444
+  }
+ },
+ {
+  "fn": "SHA512",
+  "bench": "sha512",
+  "bums": {
+   "clauses": 3,
+   "tokens": 40,
+   "status": "verified",
+   "time": 11.6,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 3,
+   "tokens": 28,
+   "time": 110.05,
+   "phases": {
+    "single": 38.81,
+    "range": 8.94,
+    "taint": 6.85,
+    "check": 55.45
+   },
+   "queries": 5490
+  }
+ },
+ {
+  "fn": "fe_mul_impl",
+  "bench": "x25519",
+  "bums": {
+   "clauses": 3,
+   "tokens": 49,
+   "status": "verified",
+   "time": 0.1,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 7,
+   "tokens": 54,
+   "time": 8.49,
+   "phases": {
+    "taint": 1.38,
+    "range": 0.01,
+    "check": 6.76,
+    "single": 0.34
+   },
+   "queries": 589
+  }
+ },
+ {
+  "fn": "fe_tobytes",
+  "bench": "x25519",
+  "bums": {
+   "clauses": 2,
+   "tokens": 34,
+   "status": "verified",
+   "time": 0.1,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 1,
+   "tokens": 14,
+   "time": 18.21,
+   "phases": {
+    "taint": 0.2,
+    "range": 0.01,
+    "check": 16.54,
+    "single": 1.47
+   },
+   "queries": 680
+  }
+ },
+ {
+  "fn": "fe_loose_invert",
+  "bench": "x25519",
+  "bums": {
+   "clauses": 2,
+   "tokens": 34,
+   "status": "verified",
+   "time": 2.9,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 1,
+   "tokens": 14,
+   "time": 210.85,
+   "phases": {
+    "taint": 2.03,
+    "range": 20.55,
+    "check": 142.86,
+    "single": 45.41
+   },
+   "queries": 8901
+  }
+ },
+ {
+  "fn": "X25519",
+  "bench": "x25519",
+  "bums": {
+   "clauses": 3,
+   "tokens": 51,
+   "status": "verified",
+   "time": 114.8,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 5,
+   "tokens": 36,
+   "time": 512.13,
+   "phases": {
+    "taint": 7.28,
+    "range": 17.47,
+    "check": 353.8,
+    "single": 133.58
+   },
+   "queries": 6871
+  }
+ },
+ {
+  "fn": "ge_madd",
+  "bench": "ed25519_sign",
+  "bums": {
+   "clauses": 3,
+   "tokens": 49,
+   "status": "verified",
+   "time": 0.2,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 7,
+   "tokens": 112,
+   "time": 26.21,
+   "phases": {
+    "single": 8.48,
+    "taint": 0.22,
+    "check": 17.48,
+    "range": 0.02
+   },
+   "queries": 1783
+  }
+ },
+ {
+  "fn": "ge_p2_dbl",
+  "bench": "ed25519_sign",
+  "bums": {
+   "clauses": 2,
+   "tokens": 34,
+   "status": "verified",
+   "time": 0.2,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 3,
+   "tokens": 48,
+   "time": 15.27,
+   "phases": {
+    "single": 0.78,
+    "taint": 1.05,
+    "check": 13.42,
+    "range": 0.02
+   },
+   "queries": 996
+  }
+ },
+ {
+  "fn": "table_select",
+  "bench": "ed25519_sign",
+  "bums": {
+   "clauses": 5,
+   "tokens": 41,
+   "status": "verified",
+   "time": 0.2,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 1,
+   "tokens": 10,
+   "time": 91.76,
+   "phases": {
+    "single": 43.6,
+    "taint": 5.38,
+    "check": 37.1,
+    "range": 5.68
+   },
+   "queries": 5538
+  }
+ },
+ {
+  "fn": "x25519_ge_scalarmult_base",
+  "bench": "ed25519_sign",
+  "bums": {
+   "clauses": 2,
+   "tokens": 34,
+   "status": "verified",
+   "time": 29.8,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 2,
+   "tokens": 15,
+   "time": 219.04,
+   "phases": {
+    "single": 63.91,
+    "taint": 8.09,
+    "check": 142.08,
+    "range": 4.96
+   },
+   "queries": 8825
+  }
+ },
+ {
+  "fn": "x25519_sc_reduce",
+  "bench": "ed25519_sign",
+  "bums": {
+   "clauses": 1,
+   "tokens": 19,
+   "status": "verified",
+   "time": 0.1,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 1,
+   "tokens": 12,
+   "time": 9.03,
+   "phases": {
+    "single": 3.41,
+    "taint": 0.22,
+    "check": 5.4,
+    "range": 0.01
+   },
+   "queries": 1327
+  }
+ },
+ {
+  "fn": "ED25519_sign",
+  "bench": "ed25519_sign",
+  "bums": {
+   "clauses": 4,
+   "tokens": 55,
+   "status": "verified",
+   "time": 891.0,
+   "reason": ""
+  },
+  "secsep": {
+   "clauses": 5,
+   "tokens": 43,
+   "time": 1778.31,
+   "phases": {
+    "single": 719.63,
+    "taint": 41.24,
+    "check": 867.96,
+    "range": 149.47
+   },
+   "queries": 34526
+  }
+ }
+]

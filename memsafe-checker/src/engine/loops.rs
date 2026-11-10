@@ -1154,8 +1154,11 @@ impl<M: Machine> Engine<M> {
             && let Some(successors) = self.static_successors(pc)
             && let [target, fallthrough] = successors.as_slice()
             && let other = if continues { *fallthrough } else { *target }
-            && self.stays_in_loop(other, header, source, pc != source)
             && !self.can_leave_cycle(other, &walked)
+            && (self.stays_in_loop(other, header, source, pc != source)
+                || (pc == source
+                    && self.stays_in_loop(other, header, source, true)
+                    && self.exits_elsewhere(pc, &walked)))
         {
             return Err(Decline::InsideBody);
         }
@@ -1548,11 +1551,19 @@ impl<M: Machine> Engine<M> {
         }
         let mut candidates = bound_candidates(&summary.invariants, &current_state.0);
         candidates.extend(self.word_limits(&summary.invariants, &current_state.0, expression));
-        let bounds: Vec<Bound> = candidates
+        let mut bounds: Vec<Bound> = candidates
             .into_iter()
             .filter(|bound| !attempt.rejected_bounds.contains(&bound.key()))
             .filter(|bound| self.plausible(bound, &entry_state.0, &current_state.0))
             .collect();
+        bounds.extend(self.while_staying(expression, branch_decision, |engine| {
+            engine
+                .down_counter_floors(&summary.invariants, &current_state.0, expression)
+                .into_iter()
+                .filter(|bound| !attempt.rejected_bounds.contains(&bound.key()))
+                .filter(|bound| engine.plausible(bound, &entry_state.0, &current_state.0))
+                .collect::<Vec<Bound>>()
+        }));
         Draft {
             summary,
             settled_steps,
@@ -3752,6 +3763,20 @@ impl<M: Machine> Engine<M> {
         false
     }
 
+    fn exits_elsewhere(&self, pc: usize, walked: &BTreeSet<usize>) -> bool {
+        walked
+            .iter()
+            .filter(|&&branch| branch != pc)
+            .any(|&branch| {
+                self.static_successors(branch).is_some_and(|successors| {
+                    successors.len() == 2
+                        && successors.iter().any(|next| {
+                            !walked.contains(next) && self.can_leave_cycle(*next, walked)
+                        })
+                })
+            })
+    }
+
     fn can_leave_cycle(&self, from: usize, walked: &BTreeSet<usize>) -> bool {
         let mut seen = BTreeSet::new();
         let mut pending = vec![from];
@@ -4070,6 +4095,51 @@ impl<M: Machine> Engine<M> {
             Some(_) => self.implied(&moved) && !self.implied(&stayed),
             None => self.implied(&bound.at(previous)) && self.implied(&bound.at(current)),
         }
+    }
+
+    fn down_counter_floors(
+        &self,
+        invariants: &[LoopInvariant],
+        current: &[RegisterValue],
+        guard: &AbstractComparison,
+    ) -> Vec<Bound> {
+        let in_guard = registers_in(guard);
+        let read_by_guard = |now: &RegisterValue| {
+            in_guard.iter().any(|r| {
+                r == now
+                    || word_view(now) == *r
+                    || self.implied(&AbstractComparison::new(
+                        "==",
+                        r.expression(),
+                        now.expression(),
+                    ))
+            })
+        };
+        let counting_down: Vec<usize> = invariants
+            .iter()
+            .zip(current)
+            .enumerate()
+            .filter(|(_, (invariant, now))| {
+                matches!(
+                    invariant,
+                    LoopInvariant::Linear(AbstractExpression::Immediate(step)) if *step < 0
+                ) && now.kind != RegisterKind::Number
+            })
+            .map(|(register, _)| register)
+            .collect();
+        counting_down
+            .into_iter()
+            .filter(|&register| read_by_guard(&current[register]))
+            .flat_map(|register| {
+                [1, 0].map(|floor| Bound {
+                    register,
+                    op: ">=",
+                    other: None,
+                    offset: 0,
+                    anchor: Some(AbstractExpression::Immediate(floor)),
+                })
+            })
+            .collect()
     }
 
     fn word_limits(
@@ -5016,6 +5086,12 @@ impl<M: Machine> Engine<M> {
                 .insert(active.instance);
         }
 
+        let held_on_leaving: Vec<AbstractComparison> = active
+            .bounds
+            .iter()
+            .map(|bound| bound.at(&current.0))
+            .filter(|bound| self.implied(bound))
+            .collect();
         let above = self.scopes_above(active.scope_id);
         self.pop_scope(active.scope_id);
         self.loops.active.pop();
@@ -5064,7 +5140,7 @@ impl<M: Machine> Engine<M> {
                 .filter_map(summary_fact_to_ast),
         );
         kept.extend(active.nested_facts.iter().cloned());
-        for bound in active.bounds.iter().map(|bound| bound.at(&current.0)) {
+        for bound in held_on_leaving {
             kept.extend(self.select_definitions_in(&bound));
             kept.extend(comparison_to_ast(bound));
         }
@@ -5304,11 +5380,14 @@ impl<M: Machine> Engine<M> {
             log::info!("{} a confined pointer left its region", active.id);
         }
         broken.extend(escaped.into_iter().map(Obligation::Escaped));
-        let unbounded: Vec<&Bound> = active
-            .bounds
-            .iter()
-            .filter(|bound| !self.implied(&bound.at(&current.0)))
-            .collect();
+        let unbounded: Vec<&Bound> =
+            self.while_staying(expression, active.entry_decision, |engine| {
+                active
+                    .bounds
+                    .iter()
+                    .filter(|bound| !engine.implied(&bound.at(&current.0)))
+                    .collect()
+            });
         if !unbounded.is_empty() {
             let keys: Vec<String> = unbounded.iter().map(|bound| bound.key()).collect();
             log::info!("{} bounds {keys:?} not re-established", active.id);

@@ -176,6 +176,59 @@ fn encoded_code<I: MachineInstruction>(directives: &[(String, String)]) -> Vec<S
     }
 }
 
+fn string_literal_bytes(operand: &str) -> Option<Vec<u8>> {
+    let body = operand.trim().strip_prefix('"')?.strip_suffix('"')?;
+    let mut bytes = Vec::new();
+    let mut chars = body.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            let mut buffer = [0; 4];
+            bytes.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
+            continue;
+        }
+        let escaped = chars.next()?;
+        let byte = match escaped {
+            '0'..='7' => {
+                let mut value = escaped.to_digit(8)?;
+                for _ in 0..2 {
+                    match chars.peek().and_then(|d| d.to_digit(8)) {
+                        Some(digit) => {
+                            value = value * 8 + digit;
+                            chars.next();
+                        }
+                        None => break,
+                    }
+                }
+                value as u8
+            }
+            'x' | 'X' => {
+                let mut value = 0u32;
+                let mut digits = 0;
+                while let Some(digit) = chars.peek().and_then(|d| d.to_digit(16)) {
+                    value = value * 16 + digit;
+                    digits += 1;
+                    chars.next();
+                }
+                if digits == 0 {
+                    return None;
+                }
+                value as u8
+            }
+            'n' => b'\n',
+            't' => b'\t',
+            'r' => b'\r',
+            'b' => 8,
+            'f' => 12,
+            'v' => 11,
+            'a' => 7,
+            '\\' | '"' | '\'' => escaped as u8,
+            _ => return None,
+        };
+        bytes.push(byte);
+    }
+    Some(bytes)
+}
+
 fn emits_bytes<I: MachineInstruction>(directive: &str) -> bool {
     I::item_width(directive).is_some()
         || matches!(
@@ -407,6 +460,23 @@ impl<I: MachineInstruction> Listing<I> {
             }
             ".globl" | ".global" | ".private_extern" | ".hidden" | ".type" | ".local" | ".weak" => {
             }
+            ".ascii" | ".asciz" | ".string" => {
+                let Some(mut bytes) = string_literal_bytes(rest) else {
+                    log::warn!("data directive {directive} {rest} not modelled");
+                    return;
+                };
+                if directive != ".ascii" {
+                    bytes.push(0);
+                }
+                for byte in bytes {
+                    data.items.push(DataItem {
+                        offset: data.size,
+                        width: 1,
+                        value: DataValue::Literal(byte as i64),
+                    });
+                    data.size += 1;
+                }
+            }
             _ => {
                 let Some(width) = I::item_width(directive) else {
                     log::warn!("data directive {directive} not modelled");
@@ -630,6 +700,38 @@ mod tests {
         let l = listing(&["f:", "ret", "tbl:", ".long 1", "g:", "ret"]);
         assert_eq!(unsupported_encodings(&l), 0);
         assert!(l.data_symbols.contains_key("tbl"));
+    }
+
+    #[test]
+    fn string_directives_occupy_their_bytes_in_data_sections() {
+        let l = Listing::<crate::x86::instruction_parser::Instruction>::parse([
+            "f:",
+            "ret",
+            "\t.section .rodata",
+            "tbl:",
+            "\t.ascii \"\\205;#\\x41\\\\\"",
+            "\t.asciz \"ab\"",
+            "after:",
+            "\t.quad 7",
+        ]);
+        let data = &l.data[0];
+        let bytes: Vec<DataValue> = data.items[..8].iter().map(|i| i.value.clone()).collect();
+        let expected: Vec<DataValue> = [
+            0o205,
+            b';' as i64,
+            b'#' as i64,
+            0x41,
+            b'\\' as i64,
+            b'a' as i64,
+            b'b' as i64,
+            0,
+        ]
+        .into_iter()
+        .map(|b: i64| DataValue::Literal(b))
+        .collect();
+        assert_eq!(bytes, expected);
+        assert_eq!(l.data_symbols["after"].offset, 8);
+        assert_eq!(data.size, 16);
     }
 
     #[test]

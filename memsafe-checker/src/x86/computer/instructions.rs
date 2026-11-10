@@ -8,6 +8,34 @@ type Step = Result<ExecuteReturnType<Operand>, String>;
 
 const WIDEST_LOWEST_BIT_CASE: i64 = 62;
 
+const CALLER_SAVED: [usize; 9] = [RAX, RCX, RDX, RSI, RDI, 8, 9, 10, 11];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LibcRoutine {
+    Fill,
+    Copy,
+}
+
+fn libc_routine(label: &str) -> Option<LibcRoutine> {
+    match label.strip_suffix("@PLT").unwrap_or(label) {
+        "memset" | "_memset" => Some(LibcRoutine::Fill),
+        "memcpy" | "_memcpy" | "memmove" | "_memmove" => Some(LibcRoutine::Copy),
+        _ => None,
+    }
+}
+
+fn byte_length(count: &RegisterValue, element: i64) -> Option<AbstractExpression> {
+    match count.kind {
+        RegisterKind::Immediate => Some(AbstractExpression::Immediate(count.offset * element)),
+        RegisterKind::RegisterBase => Some(generate_expression(
+            "*",
+            count.expression(),
+            AbstractExpression::Immediate(element),
+        )),
+        RegisterKind::Number => None,
+    }
+}
+
 fn translatable_mask(mask: i64) -> bool {
     let low_bits = mask > 0 && (mask as u64).wrapping_add(1).is_power_of_two();
     let single = mask > 0 && (mask as u64).is_power_of_two();
@@ -1139,6 +1167,10 @@ impl X86_64 {
                 self.registers[RBP] = value;
             }
             "call" => match ops.first() {
+                Some(Operand::Label(label)) if libc_routine(label).is_some() => {
+                    let routine = libc_routine(label).expect("checked by the guard");
+                    self.call_libc_routine(routine)?;
+                }
                 Some(Operand::Label(label)) => {
                     self.push(RegisterValue::new(
                         RegisterKind::RegisterBase,
@@ -1518,6 +1550,51 @@ impl X86_64 {
         Ok(ExecuteReturnType::Next)
     }
 
+    fn require_unsigned_length(
+        &self,
+        what: &str,
+        length: &AbstractExpression,
+    ) -> Result<(), String> {
+        if let AbstractExpression::Immediate(n) = length {
+            return if *n >= 0 {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{what} length {n} is negative, which an unsigned count reads as nearly 2^64"
+                ))
+            };
+        }
+        let length_ast = expression_to_ast(length.clone())
+            .ok_or_else(|| format!("{what} with an untranslatable length {length}"))?;
+        if check(&self.solver, &[length_ast.lt(ast::Int::from_i64(0))]) != SatResult::Unsat {
+            return Err(format!(
+                "{what} length {length} may be negative, which an unsigned count reads as nearly 2^64"
+            ));
+        }
+        Ok(())
+    }
+
+    fn call_libc_routine(&mut self, routine: LibcRoutine) -> Result<(), String> {
+        let destination = self.registers[RDI].clone();
+        let source = self.registers[RSI].clone();
+        let length = byte_length(&self.registers[RDX], 1)
+            .ok_or_else(|| format!("{routine:?} with a length of unknown value"))?;
+        self.require_unsigned_length(&format!("{routine:?}"), &length)?;
+        if routine == LibcRoutine::Copy {
+            self.load_range(&source, length.clone())?;
+        }
+        self.store_range(&destination, length)?;
+        for register in CALLER_SAVED {
+            self.registers[register] = unknown();
+        }
+        for vector in self.vectors.iter_mut() {
+            *vector = unknown();
+        }
+        self.registers[RAX] = destination;
+        self.set_unknown_flags();
+        Ok(())
+    }
+
     fn string_operation(&mut self, m: &str, instruction: &Instruction) -> Step {
         let element = instruction.suffix_width.unwrap_or(1);
         let repeated = !instruction.prefixes.is_empty()
@@ -1527,17 +1604,11 @@ impl X86_64 {
         } else {
             RegisterValue::new_imm(1)
         };
-        let length = match count.kind {
-            RegisterKind::Immediate => AbstractExpression::Immediate(count.offset * element),
-            RegisterKind::RegisterBase => generate_expression(
-                "*",
-                count.expression(),
-                AbstractExpression::Immediate(element),
-            ),
-            RegisterKind::Number => {
-                return Err(format!("rep {m} with a count of unknown value"));
-            }
-        };
+        let length = byte_length(&count, element)
+            .ok_or_else(|| format!("rep {m} with a count of unknown value"))?;
+        if repeated {
+            self.require_unsigned_length(&format!("rep {m}"), &length)?;
+        }
         let rdi = self.registers[RDI].clone();
         let rsi = self.registers[RSI].clone();
         let advanced = |r: &RegisterValue| match &length {

@@ -1487,7 +1487,12 @@ mod tests {
         assert_eq!(x(&mut computer, 3).offset, 7);
         run(&mut computer, "str w2, [x0, #12]");
         run(&mut computer, "ldr x4, [x0, #8]");
-        assert_ne!(x(&mut computer, 4).kind, RegisterKind::Immediate);
+        assert_eq!(x(&mut computer, 4).kind, RegisterKind::Immediate);
+        assert_eq!(x(&mut computer, 4).offset, (9 << 32) | 7);
+        set_symbolic(&mut computer, 5, "s", 0);
+        run(&mut computer, "str w5, [x0, #8]");
+        run(&mut computer, "ldr x6, [x0, #8]");
+        assert_ne!(x(&mut computer, 6).kind, RegisterKind::Immediate);
     }
 
     #[test]

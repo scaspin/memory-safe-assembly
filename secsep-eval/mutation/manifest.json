@@ -1,0 +1,98 @@
+[
+ {
+  "id": "salsa20-A",
+  "bench": "salsa20",
+  "function": "salsa20_words",
+  "old": "\tmovl\t12(%rsi), %eax",
+  "new": "\tmovl\t64(%rsi), %eax",
+  "what": "read word 16 of a 16-word input"
+ },
+ {
+  "id": "salsa20-B",
+  "bench": "salsa20",
+  "function": "salsa20",
+  "old": "\tcmpq\t%r15, %rbp\n\tje\t.LBB2_6",
+  "new": "\tcmpq\t%r15, %rbp\n\tja\t.LBB2_6",
+  "what": "byte loop runs to message[len]"
+ },
+ {
+  "id": "sha512-A",
+  "bench": "sha512",
+  "function": "SHA512",
+  "old": "\tandl\t$127, %r13d",
+  "new": "\tandl\t$255, %r13d",
+  "what": "tail length mask 255 instead of 127"
+ },
+ {
+  "id": "sha512-B",
+  "bench": "sha512",
+  "function": "SHA512",
+  "old": "\tshrq\t$7, %rdx",
+  "new": "\tshrq\t$6, %rdx",
+  "what": "block count doubled"
+ },
+ {
+  "id": "chacha20-A",
+  "bench": "chacha20",
+  "function": "CRYPTO_chacha_20",
+  "old": "\tmovups\t16(%r15,%rcx), %xmm1",
+  "new": "\tmovups\t17(%r15,%rcx), %xmm1",
+  "what": "vector read one byte late"
+ },
+ {
+  "id": "chacha20-B",
+  "bench": "chacha20",
+  "function": "CRYPTO_chacha_20",
+  "old": "\tcmovbq\t%r14, %r13",
+  "new": "\tmovq\t%r13, %r13",
+  "what": "every block 64 bytes (min removed)"
+ },
+ {
+  "id": "poly1305-A",
+  "bench": "poly1305",
+  "function": "poly1305_update",
+  "old": "\tmovzbl\t1(%r15,%rcx), %edx",
+  "new": "\tmovzbl\t4(%r15,%rcx), %edx",
+  "what": "unrolled tail read at +4"
+ },
+ {
+  "id": "poly1305-B",
+  "bench": "poly1305",
+  "function": "poly1305_update",
+  "old": "\tandq\t$3, %rsi",
+  "new": "\tandq\t$7, %rsi",
+  "what": "single-byte loop counts n&7"
+ },
+ {
+  "id": "x25519-A",
+  "bench": "x25519",
+  "function": "X25519",
+  "old": "\tmovl\t28(%rdx), %r11d",
+  "new": "\tmovl\t29(%rdx), %r11d",
+  "what": "peer key read at +29 (4 bytes)"
+ },
+ {
+  "id": "x25519-B",
+  "bench": "x25519",
+  "function": "fe_tobytes",
+  "old": "\tmovb\t%dl, 31(%rdi)",
+  "new": "\tmovb\t%dl, 32(%rdi)",
+  "what": "store s[32] of a 32-byte output"
+ },
+ {
+  "id": "ed25519_sign-A",
+  "bench": "ed25519_sign",
+  "function": "x25519_sc_reduce",
+  "old": "\tmovl\t60(%rdi), %r12d",
+  "new": "\tmovl\t61(%rdi), %r12d",
+  "what": "read s[61..64] of a 64-byte input"
+ },
+ {
+  "id": "ed25519_sign-B",
+  "bench": "ed25519_sign",
+  "function": "ED25519_sign",
+  "old": "\tja\t.LBB118_4\n# %bb.3:\n\tmovq\t%r12, %rsi\n\tmovq\t%r15, %rdx",
+  "new": "\tja\t.LBB118_4\n# %bb.3:\n\tmovq\t%r12, %rsi\n\tleaq\t1(%r15), %rdx",
+  "what": "message copy reads one byte past"
+ }
+]

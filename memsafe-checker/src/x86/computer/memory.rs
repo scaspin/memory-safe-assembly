@@ -104,9 +104,19 @@ impl X86_64 {
         ]);
 
         let (low, high) = if name == STACK {
-            let max = expression_to_ast(region.get_length()).expect("stack length");
+            let stack_pointer = &self.registers[RSP];
+            let deepest = (stack_pointer.kind == RegisterKind::RegisterBase)
+                .then(|| expression_to_ast(stack_pointer.expression()))
+                .flatten()
+                .ok_or_else(|| {
+                    format!(
+                        "{ty} at {} has no frame to measure: the stack pointer is unknown",
+                        format_address(&base_expr, address.offset)
+                    )
+                })?;
+            let allocated = deepest.lt(&start).ite(&deepest, &start);
             (
-                ast::Int::sub(&[&start, &max]),
+                ast::Int::sub(&[&allocated, &ast::Int::from_i64(SYSV_RED_ZONE)]),
                 ast::Int::add(&[&start, &ast::Int::from_i64(self.stack_top)]),
             )
         } else {
@@ -518,12 +528,19 @@ impl X86_64 {
     ) -> Result<(), String> {
         let region = self.mem_safe_access(address, RegionType::WRITE, length.clone())?;
         self.note_access(RegionType::WRITE, address);
-        let width = match length {
-            AbstractExpression::Immediate(n) => n,
-            _ => 1 << 40,
-        };
         let base = address.base.clone().expect("checked by the access");
-        self.forget_written(&region, &base, address.offset, width, None);
+        match length {
+            AbstractExpression::Immediate(n) => {
+                self.forget_written(&region, &base, address.offset, n, None)
+            }
+            spanned => {
+                self.forget_where_spanned(&base, address.offset, &spanned, None);
+                if region == STACK {
+                    self.blind_stack_writes
+                        .push((base, address.offset, 1 << 40));
+                }
+            }
+        }
         Ok(())
     }
 

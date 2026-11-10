@@ -1,0 +1,5 @@
+CRYPTO_poly1305_init	src/lib.rs	FAIL	0.1	line 10 (movl): write of 4 bytes at state_as_mut_ptr - 8388608 not provably within region of length 96
+CRYPTO_poly1305_update	src/lib.rs	FAIL	0.1	line 37 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+CRYPTO_poly1305_finish	src/lib.rs	FAIL	0.1	line 357 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+poly1305_donna_mul	src/lib.rs	FAIL	0.1	line 989 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+poly1305_update	src/lib.rs	FAIL	0.1	line 192 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)

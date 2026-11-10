@@ -1175,7 +1175,10 @@ impl<M: Machine> Engine<M> {
             log::info!("{:?}: {:?}", pc, instruction);
 
             let mut execute_result = self.computer.execute(pc, &instruction);
-            if instruction.flow() == Flow::Call && execute_result.is_ok() {
+            if instruction.flow() == Flow::Call
+                && execute_result.is_ok()
+                && !matches!(execute_result, Ok(ExecuteReturnType::Next))
+            {
                 if self.suspended.len() >= MAX_CALL_DEPTH {
                     return Err(Error::other(format!(
                         "line {pc}: calls nested deeper than {MAX_CALL_DEPTH}"
@@ -1217,7 +1220,12 @@ impl<M: Machine> Engine<M> {
                         match self.get_linenumber_of_label(label.clone(), pc) {
                             Some(n) => {
                                 log::info!("jumping to: {}", n);
-                                Self::note_unconditional_jump(unconditional_visits, n)?;
+                                let repeated = if instruction.flow() == Flow::Call {
+                                    pc
+                                } else {
+                                    n
+                                };
+                                Self::note_unconditional_jump(unconditional_visits, repeated)?;
                                 Ok(Step::Continue(n))
                             }
                             None => {

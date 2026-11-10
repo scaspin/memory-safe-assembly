@@ -1,0 +1,37 @@
+[INFO] <MainProcess> - Working on 1 benchmark(s)...
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Preprocess) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Preprocess) time elapsed: [34m0.81 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Preprocess) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Single Type Infer) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Single Type Infer) time elapsed: [34m961.62 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Single Type Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Valid Region Infer) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Valid Region Infer) time elapsed: [34m205.21 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Valid Region Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Taint Type Infer) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Taint Type Infer) time elapsed: [34m89.19 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Taint Type Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Change Infer) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Change Infer) time elapsed: [34m1.91 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Change Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Type Checker) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Type Checker) time elapsed: [34m1410.16 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Type Checker) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) time elapsed: [34m1.99 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [35mInstalling ../benchmark/analysis/ed25519_sign/ed25519_sign.tf3.s[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) time elapsed: [34m1.38 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [35mInstalling ../benchmark/analysis/ed25519_sign/ed25519_sign.tf2.s[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) time elapsed: [34m1.93 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) (push/pop TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [35mInstalling ../benchmark/analysis/ed25519_sign/ed25519_sign.tf1.s[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) started
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) time elapsed: [34m1.66 seconds[39m
+[INFO] <SpawnPoolWorker-5> - [ed25519_sign] (Transformation) (delta: 0x800000) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-5> - [35mInstalling ../benchmark/analysis/ed25519_sign/ed25519_sign.tf.s[39m
+[INFO] <SpawnPoolWorker-5> - Successfully processed ed25519_sign
+[INFO] <MainProcess> - All benchmark(s) completed successfully

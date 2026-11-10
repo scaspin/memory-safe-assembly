@@ -538,3 +538,294 @@ fn a_search_with_a_concrete_count_reads_its_tail_in_bounds() {
 fn a_search_with_a_concrete_count_reading_a_tail_past_the_end_is_rejected() {
     assert_rejected_access(search_then_tail(40));
 }
+
+#[test]
+fn a_helper_called_from_four_sites_of_a_long_concrete_loop_is_followed() {
+    let program = lines(&[
+        "start:",
+        "pushq %rbx",
+        "movl $300,%ebx",
+        ".Lround:",
+        "callq helper",
+        "callq helper",
+        "callq helper",
+        "callq helper",
+        "decl %ebx",
+        "jne .Lround",
+        "popq %rbx",
+        "retq",
+        "helper:",
+        "xorl %eax,%eax",
+        "retq",
+    ]);
+    assert_eq!(analyze(program), Ok(()));
+}
+
+#[test]
+fn unbounded_recursion_is_still_rejected() {
+    let program = lines(&["start:", "callq start", "retq"]);
+    assert!(analyze(program).is_err());
+}
+
+fn four_byte_walk_from(start: &[&str]) -> Vec<String> {
+    let mut program = vec!["start:"];
+    program.extend_from_slice(start);
+    program.extend_from_slice(&[
+        "cmpq %rcx,%rsi",
+        "je .Ldone",
+        ".Lfour:",
+        "movzbl (%rdi,%rcx),%eax",
+        "movzbl 1(%rdi,%rcx),%eax",
+        "movzbl 2(%rdi,%rcx),%eax",
+        "movzbl 3(%rdi,%rcx),%eax",
+        "addq $4,%rcx",
+        "cmpq %rcx,%rsi",
+        "jne .Lfour",
+        ".Ldone:",
+        "retq",
+    ]);
+    lines(&program)
+}
+
+#[test]
+fn a_four_byte_walk_that_lands_exactly_on_the_length_is_proved_safe() {
+    let program = four_byte_walk_from(&["movq %rsi,%rcx", "andq $3,%rcx"]);
+    assert_eq!(analyze_with(program, at_least(0)), Ok(()));
+}
+
+#[test]
+fn a_four_byte_walk_that_can_step_over_the_length_is_rejected() {
+    let program = four_byte_walk_from(&["movq %rsi,%rcx", "andq $1,%rcx"]);
+    assert_rejected_access(analyze_with(program, at_least(0)));
+    let from_zero = four_byte_walk_from(&["xorl %ecx,%ecx"]);
+    assert_rejected_access(analyze_with(from_zero, at_least(0)));
+}
+
+#[test]
+fn rep_stos_whose_count_can_wrap_below_zero_is_rejected() {
+    init();
+    let program = lines(&[
+        "start:",
+        "movl $16,%ecx",
+        "subq %rsi,%rcx",
+        "xorl %eax,%eax",
+        "rep stosb",
+        "ret",
+    ]);
+    let mut engine = ExecutionEngine::new(program.clone());
+    engine.add_abstract_from(0, "dst");
+    engine.add_abstract_from(1, "used");
+    engine.add_region(RegionType::WRITE, "dst", AbstractExpression::Immediate(16));
+    engine.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("used"),
+        AbstractExpression::Immediate(0),
+    ));
+    let err = engine.start("start").unwrap_err().to_string();
+    assert!(err.contains("may be negative"), "{err}");
+
+    let mut bounded = ExecutionEngine::new(program);
+    bounded.add_abstract_from(0, "dst");
+    bounded.add_abstract_from(1, "used");
+    bounded.add_region(RegionType::WRITE, "dst", AbstractExpression::Immediate(16));
+    bounded.add_invariant(AbstractComparison::new(
+        ">=",
+        abstract_of("used"),
+        AbstractExpression::Immediate(0),
+    ));
+    bounded.add_invariant(AbstractComparison::new(
+        "<=",
+        abstract_of("used"),
+        AbstractExpression::Immediate(16),
+    ));
+    assert!(bounded.start("start").is_ok());
+}
+
+fn masked_tail_copy(byte_mask: i64) -> Vec<String> {
+    lines(&[
+        "start:",
+        "movq %rsi,%rcx",
+        "andq $8,%rcx",
+        "movq %rcx,%rdx",
+        "notq %rdx",
+        "addq %rsi,%rdx",
+        "movq %rsi,%r8",
+        &format!("andq ${byte_mask},%r8"),
+        "je .Lquads",
+        ".Lsingle:",
+        "movzbl (%rdi,%rcx),%eax",
+        "incq %rcx",
+        "decq %r8",
+        "jne .Lsingle",
+        ".Lquads:",
+        "cmpq $3,%rdx",
+        "jb .Ldone",
+        ".Lquad:",
+        "movzbl (%rdi,%rcx),%eax",
+        "movzbl 3(%rdi,%rcx),%eax",
+        "addq $4,%rcx",
+        "cmpq %rcx,%rsi",
+        "jne .Lquad",
+        ".Ldone:",
+        "retq",
+    ])
+}
+
+fn below(n: i64) -> AbstractComparison {
+    AbstractComparison::new("<", abstract_of("length"), AbstractExpression::Immediate(n))
+}
+
+#[test]
+fn a_tail_split_by_length_masks_is_proved_safe() {
+    let mut engine = engine_for(masked_tail_copy(3), RegionType::READ);
+    engine.add_invariant(below(16));
+    engine.add_invariant(at_least(0));
+    assert_eq!(engine.start("start").map_err(|e| e.to_string()), Ok(()));
+}
+
+#[test]
+fn a_tail_whose_single_bytes_overlap_the_quads_is_rejected() {
+    let mut engine = engine_for(masked_tail_copy(7), RegionType::READ);
+    engine.add_invariant(below(16));
+    engine.add_invariant(at_least(0));
+    assert!(engine.start("start").is_err());
+}
+
+fn shrinking_block_loop(body: &[&str]) -> Vec<String> {
+    let mut program = vec![
+        "start:",
+        "testq %rsi,%rsi",
+        "je .Lout",
+        "movq %rsi,%r14",
+        ".Lblock:",
+        "cmpq $64,%r14",
+        "movl $64,%r13d",
+        "cmovbq %r14,%r13",
+    ];
+    program.extend_from_slice(body);
+    program.extend_from_slice(&[
+        "addq %r13,%rdi",
+        "subq %r13,%r14",
+        "jne .Lblock",
+        ".Lout:",
+        "retq",
+    ]);
+    lines(&program)
+}
+
+#[test]
+fn a_full_block_read_in_a_shrinking_last_block_is_rejected() {
+    let program = shrinking_block_loop(&["movups 48(%rdi),%xmm0"]);
+    assert!(analyze_with(program, at_least(0)).is_err());
+}
+
+#[test]
+fn a_shrinking_block_loop_that_branches_on_the_short_block_is_proved_safe() {
+    let program = shrinking_block_loop(&[
+        "cmpq $64,%r13",
+        "jb .Lshort",
+        "addq $1,%rax",
+        "jmp .Lnext",
+        ".Lshort:",
+        "movq %r13,%rcx",
+        "andq $3,%rcx",
+        "je .Lnext",
+        ".Lbyte:",
+        "addq $2,%rax",
+        "decq %rcx",
+        "jne .Lbyte",
+        ".Lnext:",
+    ]);
+    assert_eq!(analyze_with(program, at_least(0)), Ok(()));
+}
+
+#[test]
+fn reading_the_first_byte_of_each_shrinking_block_is_proved_safe() {
+    let program = shrinking_block_loop(&[
+        "movzbl (%rdi),%eax",
+        "cmpq $64,%r13",
+        "jb .Lshort",
+        "addq $1,%rax",
+        "jmp .Lnext",
+        ".Lshort:",
+        "movq %r13,%rcx",
+        "andq $3,%rcx",
+        "je .Lnext",
+        ".Lbyte:",
+        "addq $2,%rax",
+        "decq %rcx",
+        "jne .Lbyte",
+        ".Lnext:",
+    ]);
+    assert_eq!(analyze_with(program, at_least(0)), Ok(()));
+}
+
+#[test]
+fn reading_a_byte_past_each_shrinking_block_is_rejected() {
+    let program = shrinking_block_loop(&["movzbl 64(%rdi),%eax"]);
+    assert_rejected_access(analyze_with(program, at_least(0)));
+}
+
+#[test]
+fn a_down_counter_allowed_below_zero_gets_no_floor() {
+    let program = lines(&[
+        "start:",
+        "testq %rsi,%rsi",
+        "je .Lout",
+        "movq %rsi,%r14",
+        ".Lblock:",
+        "movzbl (%rdi),%eax",
+        "addq $64,%rdi",
+        "subq $64,%r14",
+        "cmpq $-64,%r14",
+        "jg .Lblock",
+        ".Lout:",
+        "retq",
+    ]);
+    assert_rejected_access(analyze_with(program, at_least(0)));
+}
+
+fn latch_above_the_body(first_read: &str) -> Vec<String> {
+    lines(&[
+        "start:",
+        "testq %rsi,%rsi",
+        "je .Lout",
+        "movq %rsi,%r14",
+        "jmp .Lhead",
+        ".Llatch:",
+        "addq %r13,%rdi",
+        "subq %r13,%r14",
+        "je .Lout",
+        ".Lhead:",
+        "cmpq $64,%r14",
+        "movl $64,%r13d",
+        "cmovbq %r14,%r13",
+        first_read,
+        "movq %r13,%rcx",
+        "andq $96,%rcx",
+        "cmpq %rcx,%r13",
+        "je .Llatch",
+        "movq %r13,%rdx",
+        "andq $3,%rdx",
+        "je .Llatch",
+        ".Lbyte:",
+        "addq $1,%rax",
+        "decq %rdx",
+        "jne .Lbyte",
+        "jmp .Llatch",
+        ".Lout:",
+        "retq",
+    ])
+}
+
+#[test]
+fn a_loop_with_several_back_edges_into_its_latch_is_summarized_at_the_latch() {
+    let program = latch_above_the_body("movzbl (%rdi),%eax");
+    assert_eq!(analyze_with(program, at_least(0)), Ok(()));
+}
+
+#[test]
+fn a_loop_with_several_back_edges_still_catches_a_read_past_the_block() {
+    let program = latch_above_the_body("movzbl 64(%rdi),%eax");
+    assert_rejected_access(analyze_with(program, at_least(0)));
+}
