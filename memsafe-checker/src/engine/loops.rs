@@ -994,8 +994,8 @@ impl<M: Machine> Engine<M> {
         let rebuilt = substitute(template, DERIVED_LEADER, &value_of(leader));
         let held = value_of(follower);
         rebuilt == held
-            || (is_translatable(&rebuilt)
-                && is_translatable(&held)
+            || (expression_to_ast(rebuilt.clone()).is_some()
+                && expression_to_ast(held.clone()).is_some()
                 && self.proves(AbstractComparison::new("==", rebuilt, held)))
     }
 
@@ -1010,7 +1010,7 @@ impl<M: Machine> Engine<M> {
         let now = value_of(follower_now);
         let leader_then = value_of(leader_then);
         let leader_now = value_of(leader_now);
-        if then.size() > MAX_EXPRESSION_NODES || !is_translatable(&now) {
+        if then.size() > MAX_EXPRESSION_NODES || expression_to_ast(now.clone()).is_none() {
             return None;
         }
         let placeholder = AbstractExpression::Abstract(DERIVED_LEADER.to_string());

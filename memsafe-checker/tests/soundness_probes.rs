@@ -2877,3 +2877,47 @@ fn a_countdown_that_leaves_at_minus_one_reading_one_ahead_is_rejected() {
         "accepted a read one past the end on the first iteration"
     );
 }
+
+fn read_through_a_shifted_position(offset: &'static str) -> Vec<&'static str> {
+    vec![
+        "start:",
+        "ubfx w3, w2, #8, #6",
+        "and x5, x2, #15",
+        "add x5, x5, #1",
+        "mov w8, #0",
+        "asr w9, w8, #6",
+        "loop:",
+        offset,
+        "ldrb w10, [x0, w11, sxtw]",
+        "sub w8, w8, w3, lsl #1",
+        "asr w9, w8, #6",
+        "subs x5, x5, #1",
+        "b.ne loop",
+        "ret",
+    ]
+}
+
+#[test]
+fn an_index_derived_from_a_position_by_an_arithmetic_shift_stays_in_bounds() {
+    assert_eq!(
+        run(
+            &read_through_a_shifted_position("add w11, w9, #32"),
+            Some(64),
+            &[]
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn an_index_derived_from_a_position_reading_before_the_start_is_rejected() {
+    assert!(
+        run(
+            &read_through_a_shifted_position("add w11, w9, #29"),
+            Some(64),
+            &[]
+        )
+        .is_err(),
+        "accepted index -1"
+    );
+}
