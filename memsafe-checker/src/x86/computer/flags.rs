@@ -86,7 +86,18 @@ impl X86_64 {
             return;
         }
         match (&dst.kind, &src.kind) {
-            (RegisterKind::Number, _) | (_, RegisterKind::Number) => self.set_unknown_flags(),
+            (RegisterKind::Number, _) | (_, RegisterKind::Number) => {
+                self.set_unknown_flags();
+                let (Some(left), Some(right)) = (
+                    self.unsigned_view(dst, width),
+                    self.unsigned_view(src, width),
+                ) else {
+                    return;
+                };
+                let difference = generate_expression("-", left.clone(), right.clone());
+                self.zero = compare("==", difference, AbstractExpression::Immediate(0));
+                self.carry = compare("<", left, right);
+            }
             (RegisterKind::Immediate, RegisterKind::Immediate) => {
                 let (a, b) = (
                     dst.offset as u64 & mask(width),
@@ -114,6 +125,32 @@ impl X86_64 {
                 self.neg = compare("<", difference, AbstractExpression::Immediate(0));
                 self.carry = compare("<", left, right);
                 self.set_signed_order("-", (dst, src, 0), width, true);
+            }
+        }
+    }
+
+    fn unsigned_view(&mut self, value: &RegisterValue, width: i64) -> Option<AbstractExpression> {
+        let largest = ast::Int::from_u64(mask(width));
+        match value.kind {
+            RegisterKind::Number => {
+                let symbol = self.fresh("compared");
+                let fresh = expression_to_ast(symbol.clone())?;
+                self.bound_fresh(ast::Bool::and(&[
+                    &fresh.ge(ast::Int::from_i64(0)),
+                    &fresh.le(&largest),
+                ]));
+                Some(symbol)
+            }
+            RegisterKind::Immediate if value.base.is_none() => {
+                let bits = value.offset as u64 & mask(width);
+                i64::try_from(bits).ok().map(AbstractExpression::Immediate)
+            }
+            _ => {
+                let expression = AbstractExpression::Register(Box::new(value.clone()));
+                let exact = expression_to_ast(expression.clone())?;
+                let outside =
+                    ast::Bool::or(&[&exact.lt(ast::Int::from_i64(0)), &exact.gt(&largest)]);
+                (check(&self.solver, &[outside]) == SatResult::Unsat).then_some(expression)
             }
         }
     }

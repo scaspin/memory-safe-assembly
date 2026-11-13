@@ -984,10 +984,16 @@ fn trip_of<'a, F>(condition: &'a AbstractComparison, step_of: &F) -> Option<Trip
 where
     F: Fn(&RegisterValue) -> AbstractExpression,
 {
-    match (
-        expression_step(&condition.left, step_of),
-        expression_step(&condition.right, step_of),
-    ) {
+    let lands_exactly = matches!(condition.op.as_str(), "==" | "!=");
+    let side_step = |side: &AbstractExpression| match side {
+        AbstractExpression::Expression(op, inner, width)
+            if lands_exactly && op == "sext" && **width == AbstractExpression::Immediate(32) =>
+        {
+            expression_step(inner, step_of)
+        }
+        other => expression_step(other, step_of),
+    };
+    match (side_step(&condition.left), side_step(&condition.right)) {
         (Some(s), Some(z)) if is_zero_step(&z) && !is_zero_step(&s) => {
             Some((&condition.right, &condition.left, s))
         }

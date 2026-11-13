@@ -2270,32 +2270,53 @@ impl<M: Machine> Engine<M> {
                 .find("_?")
                 .is_some_and(|at| !active.iter().any(|open| *open == symbol[..at + 2]))
         };
+        let pinned_step = |step: &AbstractExpression| {
+            (!step.get_abstracts().is_empty() && step.size() <= MAX_STEP_BOUND_NODES)
+                .then(|| self.pinned_value(step))
+                .flatten()
+        };
         invariants
             .into_iter()
-            .map(|invariant| match invariant {
-                LoopInvariant::Linear(step)
-                    if step
-                        .get_abstracts()
-                        .iter()
-                        .any(|symbol| finished_counter(symbol)) =>
+            .map(|invariant| {
+                if let LoopInvariant::Linear(step) = &invariant
+                    && let Some(value) = pinned_step(step)
                 {
-                    LoopInvariant::Unknown
+                    return LoopInvariant::Linear(AbstractExpression::Immediate(value));
                 }
-                LoopInvariant::Linear(step)
-                    if step
-                        .get_abstracts()
-                        .iter()
-                        .any(|symbol| is_fresh_symbol(symbol) && !known.contains(symbol)) =>
-                {
-                    match self.step_bounds(&step) {
-                        Some((low, high)) if low >= 0 => LoopInvariant::AtMost(high),
-                        Some((low, high)) => LoopInvariant::Ranged(low, high),
-                        None => LoopInvariant::Unknown,
-                    }
-                }
-                other => other,
+                self.demoted(invariant, &known, &finished_counter)
             })
             .collect()
+    }
+
+    fn demoted(
+        &self,
+        invariant: LoopInvariant,
+        known: &BTreeSet<String>,
+        finished_counter: &dyn Fn(&str) -> bool,
+    ) -> LoopInvariant {
+        match invariant {
+            LoopInvariant::Linear(step)
+                if step
+                    .get_abstracts()
+                    .iter()
+                    .any(|symbol| finished_counter(symbol)) =>
+            {
+                LoopInvariant::Unknown
+            }
+            LoopInvariant::Linear(step)
+                if step
+                    .get_abstracts()
+                    .iter()
+                    .any(|symbol| is_fresh_symbol(symbol) && !known.contains(symbol)) =>
+            {
+                match self.step_bounds(&step) {
+                    Some((low, high)) if low >= 0 => LoopInvariant::AtMost(high),
+                    Some((low, high)) => LoopInvariant::Ranged(low, high),
+                    None => LoopInvariant::Unknown,
+                }
+            }
+            other => other,
+        }
     }
 
     fn step_bounds(&self, step: &AbstractExpression) -> Option<(i64, i64)> {

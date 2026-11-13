@@ -200,6 +200,24 @@ $q$ between $0$ and the other operand's signed value (the product with a factor 
 $[0,1)$). `umov`/`smov`/`mov`/`fmov` to a general register read an exact lane (sign
 extended for `smov`).
 
+**Scalable vectors** (`computer/sve.rs`). The vector length is one symbol
+$\mathit{VL}$ (`sve_vector_bytes`) with $16 \le \mathit{VL} \le 256$ and
+$16 \mid \mathit{VL}$, and `incb x` adds it. `whilelo p.T, x_s, x_e` records the
+predicate's active lanes as the pair $(\rho(x_s), \rho(x_e))$ with its element size, tied
+to the registers $s, e$, and sets $Z := \rho(x_s) \ge \rho(x_e)$ (no lane active),
+$N := \rho(x_s) < \rho(x_e)$, $C := \rho(x_s) + \mathit{VL}/|T| > \rho(x_e)$ (last lane
+inactive), $V := 0$. A predicated `ld1b`/`st1b` at $[x_n, x_m]$ under a byte predicate
+whose recorded start equals $\rho(x_m)$ touches a subset of
+$[\rho(x_n){+}\rho(x_s),\ \rho(x_n){+}\rho(x_e))$; its first and last bytes are checked in
+one region, and a store forgets cells and slots over the at most $\mathit{VL} \le 256$
+bytes from its first byte. Any other predicated access, an unrecorded predicate, or an index
+that is not the recorded start is an error. A write to $z_n$ forgets $v_n$ (including its
+lane bounds and exact lanes); a write to a predicate forgets it and all flags; `prfb`
+touches nothing. At a loop summary, a predicate is kept only if it was tied to the same
+registers, with their values unchanged since the `whilelo`, at both of the two iterations
+the cycle compares; it is then re-tied to the summarized values of those registers. Every
+other SVE instruction is an error.
+
 ### 1.5 States and contexts
 
 $$
@@ -424,7 +442,17 @@ also produces a $\mathsf{sel}$ between its two results (`carry_select`).
 index aligned and inside the table. If several entries are feasible (at most 16), the
 instruction returns $\mathsf{split}\,[\,\iota = e_1, \ldots, \iota = e_j\,]$ and is re-run
 once per entry (§4). One feasible entry is read directly. x86 `tzcnt`/`bsf` split the
-same way over the lowest set bit.
+same way over the lowest set bit. `ccmp`/`ccmn` whose condition $c$ is undecided split
+over $[c, \neg c]$ when $c$ or a compared value mentions a declared region's base, row
+label or length symbol, so each arm sets either the comparison's flags or the immediate
+NZCV; otherwise all four flags become fresh (constant-time data chains would only multiply
+paths). An x86 `cmp` with an opaque operand keeps $Z$ and $C$ over a fresh value in
+$[0, 2^{8w})$ when the other operand is proved in that range, and forgets $N$ and $V$. On x86 a 1–4 byte load from a never-written constant
+section at a symbolic offset $o$ (`constant_table_range`) is instead a fresh value between
+the least and greatest entry the load can reach: the entries at offsets in $[o_{lo}, o_{hi}]$
+(the proved bounds of $o$) congruent to $o_{lo}$ modulo the largest power of two
+$m \le 64$, $m \ge$ the width, with $o \equiv o_{lo} \pmod m$ proved, so a load of one
+field of a table of records ranges over that field alone.
 
 **Indirect jump.** `br`/`blr` return $\mathsf{jmpind}\ v$. The engine resolves it through
 the address map: $v$ must be $\langle S\rangle{+}n$ with $S$ a label or data symbol whose
@@ -839,6 +867,7 @@ $\mathsf{reach}(\mathsf{Fix}) = 0$, $\mathsf{reach}(\mathsf{Lin}(m)) = m$ for a 
 $m$, $\mathsf{reach}(\mathsf{AtMost}(k)) = k$:
 
 $$
+\iota \sqsubseteq \mathsf{Fix} \iff \mathsf{reach}(\iota) = 0 \qquad
 \mathsf{Fix} \sqsubseteq \mathsf{Within}(k) \qquad
 \mathsf{Within}(k) \sqsubseteq \mathsf{Within}(k') \iff k \le k' \qquad
 \iota \sqsubseteq \mathsf{AtMost}(k) \iff \mathsf{reach}(\iota) \in [0, k]
@@ -875,7 +904,10 @@ A narrowed register is compared under its narrowing.
 with something sharper when the solver can justify it:
 
 - $\mathsf{Lin}(k)$ when $\Pi$ pins the step to $k$ (`pinned_value`: a model's value,
-  then a proof that no other value is possible);
+  then a proof that no other value is possible). This is tried before a step that
+  mentions a closed inner loop's counter or a symbol fresh in the cycle is demoted
+  (`demote_varying_steps`), so an outer loop whose inner loop always runs the same number
+  of trips on this path keeps a constant step;
 - $\mathsf{Lin}(\delta)$ when the step, once the counters of closed inner loops are
   settled to their exit values, or written over symbols no other moving register carries,
   is proved (`proves_step`);
@@ -973,7 +1005,11 @@ $$
 
   Before $\Phi$ is asserted, each requirement must be proved under $\Pi$; a fact whose
   requirement is not proved is dropped from $\Phi$ and from the exit facts. This is why a
-  stride that can step over a `!=` bound gets no trip count.
+  stride that can step over a `!=` bound gets no trip count. Under $=$ or $\neq$ a walker
+  read as $\mathsf{sext}_{32}(e)$ steps with $e$ (`trip_of`), and $D$ is measured on the
+  sign-extended start: once $D \bmod |s| = 0$ and $D \trianglerighteq_s 0$ are proved, the
+  word moves from its start to the bound in whole steps, so it stays in the signed 32-bit
+  range and never wraps. Ordered guards do not look through the extension.
 - $\Phi_{\text{geo}}$ (`bound_geometric_walks`): for $\mathsf{Geo}(d)$ with a proved upper
   bound $B$ on the current value, $0 \le \alpha_i \le B$; if the loop continues while that
   register is nonzero, also $\kappa \le N - 1 + \lceil\log_d\rceil(B)$ (`divisions_to_zero`).
@@ -994,7 +1030,11 @@ condition, every other fact of $\Phi$ must then be *implied*: $\Pi \wedge \mathi
 \wedge \neg\phi$ unsat. A fact that is not is dropped, and if the definitions contradict
 the path the summary is declined. Region lengths are at most $2^{63}{-}1$ bytes
 (`add_region`), the largest object Rust or C can hold, so a walk bounded by a length
-does not wrap.
+does not wrap. A declared region of positive length starts at or above address 4096
+(`LOWEST_MAPPED_ADDRESS`): no supported OS maps the first page, so no allocation lives
+there. An empty region may still start anywhere, as the dangling pointer of an empty Rust
+slice does, so a bound like $R + \mathit{len} - 3$ cannot wrap below zero for a nonempty
+buffer but still can for an empty one.
 
 Trip facts are linear, and division appears only in the closed-counter window (§6.5).
 Counters are recorded in `symbols_bounding_counter`, so $\Delta^\ast$ of any term that

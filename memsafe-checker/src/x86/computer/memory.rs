@@ -232,18 +232,22 @@ impl X86_64 {
             }
         }
         low = floor;
-        let residue = low.rem_euclid(width);
-        if (high - low) / width > MOST_ENTRIES
-            || !proves(
+        let keeps_residue = |stride: i64| {
+            proves(
                 within
-                    .modulo(ast::Int::from_i64(width))
-                    .eq(ast::Int::from_i64(residue)),
+                    .modulo(ast::Int::from_i64(stride))
+                    .eq(ast::Int::from_i64(low.rem_euclid(stride))),
             )
-        {
+        };
+        let stride = [64, 32, 16, 8, 4, 2, 1]
+            .into_iter()
+            .filter(|stride| *stride >= width)
+            .find(|stride| keeps_residue(*stride))?;
+        if (high - low) / stride > MOST_ENTRIES {
             return None;
         }
         let entries: Option<Vec<i64>> = (low..=high)
-            .step_by(width as usize)
+            .step_by(stride as usize)
             .map(|at| match table.read(at, width) {
                 Some(entry) if entry.kind == RegisterKind::Immediate && entry.base.is_none() => {
                     Some(entry.offset & ((1i64 << (8 * width)) - 1))

@@ -160,14 +160,12 @@ pub fn operand_from_string(a: String) -> Operand {
                 let parts = a.split_at(1);
                 let prefix = parts.0;
                 if let Ok(num) = parts.1.parse::<usize>() {
-                    return Operand::Register(
-                        match prefix {
-                            "x" => RePrefix::X,
-                            "w" => RePrefix::W,
-                            _ => panic!("Unknown register prefix: {}", prefix),
-                        },
-                        num,
-                    );
+                    return match prefix {
+                        "x" => Operand::Register(RePrefix::X, num),
+                        "w" => Operand::Register(RePrefix::W, num),
+                        "z" => Operand::Label(a),
+                        _ => panic!("Unknown register prefix: {}", prefix),
+                    };
                 }
             }
         }

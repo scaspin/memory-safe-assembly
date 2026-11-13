@@ -62,6 +62,7 @@ fn runs_past_the_end(pc: usize) -> Error {
 }
 
 const LARGEST_OBJECT_BYTES: i64 = i64::MAX;
+const LOWEST_MAPPED_ADDRESS: i64 = 4096;
 
 const MAX_EXPLORED_KEY_BYTES: usize = 256 << 20;
 
@@ -529,6 +530,9 @@ impl<M: Machine> Engine<M> {
             self.computer
                 .solver()
                 .assert(ast::Int::add(&[&start, &size]).le(&top));
+            let occupied = size.gt(&zero);
+            let mapped = start.ge(ast::Int::from_i64(LOWEST_MAPPED_ADDRESS));
+            self.computer.solver().assert(occupied.implies(&mapped));
         }
         self.computer.add_memory_region(base, ty, length);
     }
@@ -2827,7 +2831,9 @@ mod tests {
         assert_eq!(at_summary(&held, &abstract_of("stride")), unchanged);
     }
 
-    fn history(runs: &[(usize, bool, usize)]) -> Vec<JumpRecord<()>> {
+    type Aarch64LoopLanes = <crate::computer::ARMCORTEXA as crate::machine::Machine>::LoopLanes;
+
+    fn history(runs: &[(usize, bool, usize)]) -> Vec<JumpRecord<Aarch64LoopLanes>> {
         let mut out = Vec::new();
         for &(pc, taken, times) in runs {
             for _ in 0..times {
@@ -2843,7 +2849,7 @@ mod tests {
                         journal_len: 0,
                         slots: Vec::new(),
                         instructions_run: 0,
-                        lanes: (),
+                        lanes: Default::default(),
                     },
                     taken,
                     resolved: false,

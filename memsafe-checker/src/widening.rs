@@ -709,6 +709,7 @@ impl LoopInvariant {
             (LoopInvariant::NonIncreasing, LoopInvariant::Ranged(_, high)) => *high <= 0,
             (LoopInvariant::Within(bound), LoopInvariant::Within(seen)) => seen <= bound,
             (LoopInvariant::Within(_), LoopInvariant::Fixed) => true,
+            (LoopInvariant::Fixed, _) => other.reach() == Some(0),
             (LoopInvariant::AtMost(bound), _) => other
                 .reach()
                 .is_some_and(|step| (0..=*bound).contains(&step)),
@@ -1462,6 +1463,15 @@ mod tests {
         assert!(!four.subsumes(&LoopInvariant::Fixed));
         assert!(!LoopInvariant::Fixed.subsumes(&four));
         assert!(!LoopInvariant::Fixed.subsumes(&LoopInvariant::Unknown));
+    }
+
+    #[test]
+    fn a_fixed_register_subsumes_a_step_proved_zero() {
+        let zero = LoopInvariant::Linear(AbstractExpression::Immediate(0));
+        let one = LoopInvariant::Linear(AbstractExpression::Immediate(1));
+        assert!(LoopInvariant::Fixed.subsumes(&zero));
+        assert!(!LoopInvariant::Fixed.subsumes(&one));
+        assert!(!LoopInvariant::Fixed.subsumes(&LoopInvariant::AtMost(1)));
     }
 
     #[test]

@@ -157,6 +157,45 @@ fn compare_of_abstracts_branches_on_their_ordering() {
 }
 
 #[test]
+fn an_unknown_operand_is_compared_as_an_unsigned_value_of_its_width() {
+    let mut c = X86_64::new();
+    c.registers[RDX] = unknown();
+    c.set_immediate("rax".to_string(), 0);
+    run(&mut c, "cmpq %rax,%rdx");
+    let below_zero = match run(&mut c, "jb L$x") {
+        ExecuteReturnType::ConditionalJumpLabel(cond, _) => comparison_to_ast(cond).unwrap(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(check(&c.solver, &[below_zero]), SatResult::Unsat);
+    c.set_immediate("rax".to_string(), 1);
+    run(&mut c, "cmpq %rax,%rdx");
+    let below_one = match run(&mut c, "jb L$x") {
+        ExecuteReturnType::ConditionalJumpLabel(cond, _) => comparison_to_ast(cond).unwrap(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(check(&c.solver, &[below_one]), SatResult::Sat);
+}
+
+#[test]
+fn an_unknown_operand_against_a_possibly_negative_one_leaves_the_carry_unknown() {
+    let mut c = X86_64::new();
+    c.registers[RDX] = unknown();
+    c.set_abstract("rax".to_string(), abstract_of("n"));
+    run(&mut c, "cmpq %rax,%rdx");
+    match run(&mut c, "jb L$x") {
+        ExecuteReturnType::ConditionalJumpLabel(cond, _) => {
+            assert!(
+                cond.left
+                    .get_abstracts()
+                    .iter()
+                    .any(|a| a.starts_with("carry_flag"))
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
 fn rep_stos_checks_the_whole_range() {
     let mut c = X86_64::new();
     c.add_memory_region("buf".to_string(), RegionType::RW, abstract_of("len"));

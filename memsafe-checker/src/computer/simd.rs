@@ -652,6 +652,15 @@ impl ARMCORTEXA {
         }
     }
 
+    pub(crate) fn forget_vector(&mut self, register: usize) {
+        self.simd_registers[register] = SimdRegister::default();
+        self.apply_lane_effect(LaneEffect::Vectors(vec![lanes_bounded_by(
+            register,
+            [u8::MAX; 16],
+        )]));
+        self.lane_bounds.exact[register] = None;
+    }
+
     pub fn apply_lane_effect(&mut self, effect: LaneEffect) {
         match effect {
             LaneEffect::Vectors(written) => {

@@ -120,6 +120,110 @@ fn a_register_mask_one_past_the_table_is_caught() {
     assert!(table_of(0, program).is_err());
 }
 
+fn buffer_of_len(program: &str) -> Result<(), String> {
+    init();
+    let mut engine = bums::engine::ExecutionEngine::new(program.lines().map(str::trim));
+    engine.add_abstract_from(0, "buf");
+    engine.add_abstract_from(1, "len");
+    engine.add_region(RegionType::READ, "buf", abstract_of("len"));
+    engine.add_invariant(fact("<=", abstract_of("len"), imm(1 << 20)));
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_ccmp_under_a_pointer_bit_test_guards_its_read() {
+    let program = "start:
+        tst x0, #0x2
+        ccmp x1, #0x1, #0x0, ne
+        b.hi read
+        ret
+        read:
+        ldrh w3, [x0]
+        ret";
+    assert_eq!(buffer_of_len(program), Ok(()));
+}
+
+#[test]
+fn a_ccmp_whose_fallback_flags_pass_its_guard_is_caught() {
+    let program = "start:
+        tst x0, #0x2
+        ccmp x1, #0x1, #0x2, ne
+        b.hi read
+        ret
+        read:
+        ldrh w3, [x0]
+        ret";
+    assert!(buffer_of_len(program).is_err());
+}
+
+fn word_counter_up_to_zero(setup: &str) -> String {
+    format!(
+        "start:
+        cmp x1, #16
+        b.lo done
+        {setup}
+        cbz w9, done
+        chunk:
+        ldr q0, [x8], #16
+        adds w9, w9, #16
+        b.ne chunk
+        done:
+        ret"
+    )
+}
+
+#[test]
+fn a_word_counter_starting_at_a_multiple_of_its_step_lands_on_zero() {
+    let setup = "sub w9, w1, #1
+        and w9, w9, #0xf
+        add w9, w9, #1
+        add x8, x0, x9
+        sub w9, w9, w1";
+    assert_eq!(buffer_of_len(&word_counter_up_to_zero(setup)), Ok(()));
+}
+
+#[test]
+fn a_word_counter_that_can_step_over_zero_is_caught() {
+    let setup = "mov x8, x0
+        sub w9, wzr, w1";
+    assert!(buffer_of_len(&word_counter_up_to_zero(setup)).is_err());
+}
+
+fn blocks_of_chunks(read: &str) -> String {
+    format!(
+        "start:
+        lsr x10, x1, #5
+        cbz x10, done
+        mov x11, #4
+        block:
+        cmp x10, #4
+        csel x11, x10, x11, le
+        add x8, x0, x11, lsl #5
+        chunk:
+        {read}
+        add x0, x0, #32
+        cmp x0, x8
+        b.ne chunk
+        sub x10, x10, x11
+        cbnz x10, block
+        done:
+        ret"
+    )
+}
+
+#[test]
+fn a_block_of_chunks_advances_its_pointer_by_a_constant_per_block() {
+    assert_eq!(
+        buffer_of_len(&blocks_of_chunks("ld1 { v4.16b, v5.16b }, [x0]")),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_block_of_chunks_reading_past_its_chunk_is_caught() {
+    assert!(buffer_of_len(&blocks_of_chunks("ldr q0, [x0, #32]")).is_err());
+}
+
 fn byte_table(length: i64, program: &str) -> Result<(), String> {
     init();
     let mut engine = bums::engine::ExecutionEngine::new(program.lines().map(str::trim));
@@ -200,6 +304,30 @@ fn x86_input(length: i64, program: &[&str]) -> Result<(), String> {
     engine.add_abstract_from(1, "in");
     engine.add_region(RegionType::READ, "in", imm(length));
     engine.start("start").map_err(|e| e.to_string())
+}
+
+const X86_SECOND_FIELD_OF_A_RECORD_TABLE: [&str; 11] = [
+    "start:",
+    "movl (%rsi), %eax",
+    "andl $3, %eax",
+    "leaq lut(%rip), %rcx",
+    "movzwl 2(%rcx,%rax,4), %edx",
+    "movb (%rsi,%rdx), %cl",
+    "ret",
+    "\t.section .rodata",
+    "lut:",
+    "\t.size lut, 16",
+    "\t.short 300, 15, 200, 3, 100, 0, 320, 7",
+];
+
+#[test]
+fn x86_a_table_read_at_one_field_of_its_records_is_bounded_by_that_field() {
+    assert_eq!(x86_input(16, &X86_SECOND_FIELD_OF_A_RECORD_TABLE), Ok(()));
+}
+
+#[test]
+fn x86_a_table_read_at_one_field_of_its_records_still_reaches_its_largest_value() {
+    assert!(x86_input(15, &X86_SECOND_FIELD_OF_A_RECORD_TABLE).is_err());
 }
 
 #[test]

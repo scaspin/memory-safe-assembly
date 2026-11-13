@@ -15,6 +15,7 @@ pub(crate) use instructions::is_floating_point;
 mod machine;
 mod memory;
 mod simd;
+mod sve;
 pub(crate) use simd::{
     arrangement_of, maxima_covering, range_fits_lane, split_vector_operands, vector_access_width,
     vector_index,
@@ -77,6 +78,8 @@ pub struct ARMCORTEXA {
     last_executed: Option<usize>,
     table_splits_allowed: bool,
     pristine_read_byte: i64,
+    predicates: [Option<sve::ActiveLanes>; 16],
+    vector_bytes_bounded: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -262,6 +265,8 @@ impl ARMCORTEXA {
             indexed_read: None,
             table_splits_allowed: true,
             pristine_read_byte: 0,
+            predicates: Default::default(),
+            vector_bytes_bounded: false,
             last_executed: None,
             solver: EmptiedOnClone::new(solver),
         }
@@ -368,6 +373,23 @@ impl ARMCORTEXA {
             }
             None => panic!("pointer elements need a region {target} to point into"),
         }
+    }
+
+    pub(crate) fn mentions_a_region(&self, expressions: &[AbstractExpression]) -> bool {
+        let named: BTreeSet<String> = self
+            .memory
+            .iter()
+            .filter(|(name, _)| name.as_str() != "sp")
+            .flat_map(|(name, region)| {
+                std::iter::once(name.clone()).chain(region.get_length().get_abstracts())
+            })
+            .chain(self.memory_labels.keys().cloned())
+            .filter(|symbol| symbol != "MAX")
+            .collect();
+        expressions
+            .iter()
+            .flat_map(|e| e.get_abstracts())
+            .any(|symbol| named.contains(&symbol))
     }
 
     fn holds_many(&self, base: &AbstractExpression) -> bool {
@@ -499,6 +521,7 @@ impl ARMCORTEXA {
             self.pristine_read,
             self.saved_flags,
         );
+        let _ = write!(out, "|{:?}", self.predicates);
         out
     }
 

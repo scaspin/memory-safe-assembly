@@ -1,3 +1,4 @@
+use crate::computer::sve::PredicateTies;
 use crate::computer::*;
 use crate::instruction_parser::decode_vector_only_word;
 
@@ -403,7 +404,7 @@ impl Machine for ARMCORTEXA {
     type Operand = Operand;
     type Instruction = Instruction;
     type Lanes = (Box<[SimdRegister; 32]>, Box<LaneBounds>);
-    type LoopLanes = ();
+    type LoopLanes = PredicateTies;
 
     const RETURN_REGISTER: usize = 0;
     const RESULT_POINTER_REGISTER: usize = 8;
@@ -477,9 +478,13 @@ impl Machine for ARMCORTEXA {
         self.lane_bounds = lane_bounds;
     }
 
-    fn loop_lanes(&self) {}
+    fn loop_lanes(&self) -> PredicateTies {
+        self.intact_predicate_ties()
+    }
 
-    fn keep_loop_lanes(&mut self, _previous: &(), _current: ()) {}
+    fn keep_loop_lanes(&mut self, previous: &PredicateTies, current: PredicateTies) {
+        self.keep_predicates_tied_in_both(previous, current)
+    }
 
     fn set_flags(&mut self, flags: [Option<FlagValue>; 4]) {
         ARMCORTEXA::set_flags(self, flags)

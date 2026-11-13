@@ -296,6 +296,9 @@ impl ARMCORTEXA {
     ) -> Result<ExecuteReturnType, String> {
         self.set_current_line(pc);
         self.note_pc_for_exact_lanes(pc);
+        if super::sve::is_scalable(instruction) {
+            return self.scalable(instruction);
+        }
         let effect = self.plan_lane_effect(instruction);
         let exact = self.plan_exact_lanes(instruction);
         let result = self.execute_instruction(pc, instruction);
@@ -1050,6 +1053,8 @@ impl ARMCORTEXA {
                         }
                         real => real,
                     };
+                    let compared =
+                        [left, right].map(|operand| self.get_register(operand).expression());
                     match decided {
                         FlagValue::Real(true) => {
                             let bits = Self::flag_bits(&instruction.operands);
@@ -1068,6 +1073,17 @@ impl ARMCORTEXA {
                                 Some(FlagValue::Real(nzcv & 2 != 0)),
                                 Some(FlagValue::Real(v)),
                             ]);
+                        }
+                        FlagValue::Abstract(holds)
+                            if comparison_to_ast(holds.clone()).is_some()
+                                && self.mentions_a_region(&[
+                                    holds.left.as_ref().clone(),
+                                    holds.right.as_ref().clone(),
+                                    compared[0].clone(),
+                                    compared[1].clone(),
+                                ]) =>
+                        {
+                            return Ok(ExecuteReturnType::Split(vec![holds.clone(), holds.not()]));
                         }
                         FlagValue::Abstract(_) => self.set_unknown_flags(),
                     }

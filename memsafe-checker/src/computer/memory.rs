@@ -1012,6 +1012,57 @@ impl ARMCORTEXA {
         }
     }
 
+    pub fn access_span(
+        &mut self,
+        first: &RegisterValue,
+        last: &RegisterValue,
+        most_bytes: i64,
+        ty: RegionType,
+    ) -> Result<(), MemorySafetyError> {
+        let region_named = |address: &RegisterValue| {
+            address_base(address)
+                .ok()
+                .and_then(|base| self.region_of(&base))
+                .map(|(region, ..)| region)
+        };
+        if region_named(first).is_none() || region_named(first) != region_named(last) {
+            return Err(MemorySafetyError::new(&format!(
+                "{ty} from {} to {} does not stay in one region",
+                first.expression(),
+                last.expression()
+            )));
+        }
+        self.mem_safe_vector_access(first, 1, ty)?;
+        self.mem_safe_vector_access(last, 1, ty)?;
+        if ty == RegionType::READ {
+            return Ok(());
+        }
+        let region = first.base.clone();
+        if self.wrote_into_many(&region, first.offset, most_bytes) {
+            return Ok(());
+        }
+        let base = address_base(first)?;
+        self.forget_slots_overlapping(&base, first.offset, most_bytes);
+        if let AbstractExpression::Abstract(name) = &base {
+            let (region, offset) = self.get_memory_pointer(name.clone(), first.offset);
+            self.forget_spills_overlapping(&region, offset, most_bytes);
+        }
+        self.forget_where_written(&base, first.offset, most_bytes, None);
+        if self
+            .region_of(&base)
+            .is_some_and(|(region, _, _)| region == "sp")
+        {
+            self.blind_stack_writes
+                .push((base.clone(), first.offset, most_bytes));
+        }
+        self.rw_queue.push(MemoryAccess {
+            kind: RegionType::WRITE,
+            base,
+            offset: first.offset,
+        });
+        Ok(())
+    }
+
     fn data_symbol_at(&self, section: &str, offset: i64) -> Option<(String, String, i64)> {
         self.memory_labels
             .iter()

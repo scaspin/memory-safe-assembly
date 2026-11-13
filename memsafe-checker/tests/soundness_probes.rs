@@ -60,6 +60,34 @@ fn csel_false_side_uses_its_own_option() {
     );
 }
 
+const READ_BEFORE_END_MINUS_THREE: [&str; 7] = [
+    "start:",
+    "add x3, x0, x1",
+    "sub x3, x3, #3",
+    "cmp x0, x3",
+    "b.hs done",
+    "ldr w4, [x0]",
+    "done:",
+];
+
+#[test]
+fn an_end_minus_three_bound_does_not_wrap_for_a_nonempty_buffer() {
+    let mut program = vec!["start:", "cbz x1, done"];
+    program.extend(&READ_BEFORE_END_MINUS_THREE[1..]);
+    program.push("ret");
+    assert_eq!(run(&program, None, &[]), Ok(()));
+}
+
+#[test]
+fn an_end_minus_three_bound_wraps_for_an_empty_slice_at_a_dangling_pointer() {
+    let mut program = READ_BEFORE_END_MINUS_THREE.to_vec();
+    program.push("ret");
+    assert!(
+        run(&program, None, &[]).is_err(),
+        "accepted a read when an empty slice's dangling base makes base + 0 - 3 wrap"
+    );
+}
+
 #[test]
 fn compare_of_unknown_data_does_not_reuse_stale_flags() {
     let r = run(
