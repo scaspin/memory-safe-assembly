@@ -28,34 +28,54 @@ struct AttributeList {
     filename: LitStr,
     _separator: Option<Token![,]>,
     red_zone: Option<LitInt>,
+    abi: Option<LitStr>,
     argument_list: Punctuated<Expr, Token![,]>,
 }
 
 const APPLE_ARM64_RED_ZONE: i64 = 128;
 const RED_ZONE_NEEDS_APPLE: &str =
     "red_zone relies on the Apple arm64 ABI and is accepted only for an Apple target";
+const RUST_ABI_NEEDS_APPLE: &str = "abi = \"Rust\" models the unstable Rust ABI as the pinned rustc 1.93 lowers it, which was confirmed only for Apple targets";
 
-fn parse_red_zone(input: ParseStream) -> Result<Option<LitInt>> {
-    let names_red_zone = input
-        .fork()
-        .parse::<Ident>()
-        .is_ok_and(|name| name == "red_zone");
-    if !(names_red_zone && input.peek2(Token![=])) {
-        return Ok(None);
-    }
-    input.parse::<Ident>()?;
-    input.parse::<Token![=]>()?;
-    let bytes = input.parse()?;
-    input.parse::<Option<Token![,]>>()?;
-    Ok(Some(bytes))
+fn named_option(input: ParseStream) -> Option<String> {
+    let name = input.fork().parse::<Ident>().ok()?.to_string();
+    (matches!(name.as_str(), "red_zone" | "abi") && input.peek2(Token![=])).then_some(name)
 }
 
 impl Parse for AttributeList {
     fn parse(input: ParseStream) -> Result<Self> {
+        let filename = input.parse()?;
+        let _separator = input.parse()?;
+        let mut red_zone = None;
+        let mut abi: Option<LitStr> = None;
+        while let Some(name) = named_option(input) {
+            let ident: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let repeated = match name.as_str() {
+                "red_zone" => red_zone.replace(input.parse()?).is_some(),
+                _ => abi.replace(input.parse()?).is_some(),
+            };
+            if repeated {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    format!("{name} is given twice"),
+                ));
+            }
+            input.parse::<Option<Token![,]>>()?;
+        }
+        if let Some(abi) = &abi
+            && !matches!(abi.value().as_str(), "C" | "Rust")
+        {
+            return Err(syn::Error::new_spanned(
+                abi,
+                "abi must be \"C\" (the default) or \"Rust\"",
+            ));
+        }
         Ok(Self {
-            filename: input.parse()?,
-            _separator: input.parse()?,
-            red_zone: parse_red_zone(input)?,
+            filename,
+            _separator,
+            red_zone,
+            abi,
             argument_list: punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)?,
         })
     }
@@ -667,9 +687,65 @@ fn plain_scalar(ty: &Type) -> Option<String> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CallingConvention {
+    C,
+    Rust,
+}
+
+const LARGEST_RUST_AGGREGATE_IN_A_REGISTER: usize = 8;
+
+fn inhabited_by_every_bit_pattern(ty: &Type) -> std::result::Result<String, &'static str> {
+    let element = plain_scalar(ty).ok_or("an aggregate result must hold integers or floats")?;
+    let every_bit_pattern_is_a_value = matches!(
+        element.as_str(),
+        "u8" | "u16"
+            | "u32"
+            | "u64"
+            | "usize"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "i64"
+            | "isize"
+            | "f32"
+            | "f64"
+    );
+    if !every_bit_pattern_is_a_value {
+        return Err(
+            "an aggregate result must hold integers or floats that every bit pattern inhabits",
+        );
+    }
+    Ok(element)
+}
+
+fn rust_aggregate_contract(
+    elements: &[&Type],
+    is_tuple: bool,
+) -> std::result::Result<ReturnContract, &'static str> {
+    let mut kinds = BTreeSet::new();
+    for element in elements {
+        kinds.insert(inhabited_by_every_bit_pattern(element)?);
+    }
+    let (Some(element), 1) = (kinds.first(), kinds.len()) else {
+        return Err("a Rust ABI aggregate result must have one element type");
+    };
+    let bytes = calculate_size_of(element.clone()) * elements.len();
+    let scalar_pair = is_tuple && elements.len() == 2;
+    if scalar_pair || bytes <= LARGEST_RUST_AGGREGATE_IN_A_REGISTER {
+        Ok(ReturnContract::default())
+    } else {
+        Ok(ReturnContract {
+            indirect_bytes: Some(bytes as i64),
+            conditions: Vec::new(),
+        })
+    }
+}
+
 fn return_contract(
     isa: bums::machine::Isa,
     output: &ReturnType,
+    convention: CallingConvention,
 ) -> std::result::Result<ReturnContract, String> {
     let ty = match output {
         ReturnType::Default => return Ok(ReturnContract::default()),
@@ -684,21 +760,23 @@ fn return_contract(
     match ty {
         Type::Tuple(unit) if unit.elems.is_empty() => Ok(ReturnContract::default()),
         Type::Ptr(_) => Ok(ReturnContract::default()),
+        Type::Tuple(tuple) if convention == CallingConvention::Rust && tuple.elems.len() >= 2 => {
+            let elements: Vec<&Type> = tuple.elems.iter().collect();
+            rust_aggregate_contract(&elements, true).or_else(&unsupported)
+        }
         Type::Array(array) => {
-            let Some(element) = plain_scalar(&array.elem) else {
-                return unsupported("an array result must hold integers or floats");
+            let element = match inhabited_by_every_bit_pattern(&array.elem) {
+                Ok(element) => element,
+                Err(why) => return unsupported(why),
             };
-            if scalar_return_conditions(isa, &element) != Some(Vec::new())
-                || matches!(element.as_str(), "u128" | "i128")
-            {
-                return unsupported(
-                    "an array result must hold integers or floats that every bit pattern inhabits",
-                );
-            }
             let Some(length) = integer_literal(&array.len).filter(|n| *n > 0) else {
                 return unsupported("an array result needs a positive literal length");
             };
             let length = length as usize;
+            if convention == CallingConvention::Rust {
+                let elements = vec![&*array.elem; length];
+                return rust_aggregate_contract(&elements, false).or_else(&unsupported);
+            }
             let bytes = calculate_size_of(element.clone()) * length;
             let floats_in_vector_registers = isa == bums::machine::Isa::Aarch64
                 && matches!(element.as_str(), "f32" | "f64")
@@ -718,7 +796,7 @@ fn return_contract(
                 conditions,
             }),
             None => unsupported(
-                "the C ABI result of this type, and the values Rust trusts it to hold, are not modelled",
+                "where this type's result is returned, and the values Rust trusts it to hold, are not modelled",
             ),
         },
     }
@@ -1643,6 +1721,7 @@ pub struct Annotation {
     pub expansion: TokenStream,
     signature: Signature,
     red_zone: Option<i64>,
+    convention: CallingConvention,
     argument_list: Punctuated<Expr, Token![,]>,
     regions: Vec<FnArg>,
     input_sizes: BTreeMap<String, usize>,
@@ -1771,12 +1850,16 @@ pub fn read_program(path: &std::path::Path) -> std::io::Result<Vec<String>> {
 
 pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotation> {
     let vars: CallColon = syn::parse2(item)?;
+    let mut attributes: AttributeList = syn::parse2(attr)?;
+    let convention = match attributes.abi.as_ref().map(LitStr::value).as_deref() {
+        Some("Rust") => CallingConvention::Rust,
+        _ => CallingConvention::C,
+    };
     for isa in [bums::machine::Isa::Aarch64, bums::machine::Isa::X86_64] {
-        if let Err(problem) = return_contract(isa, &vars.item_fn.output) {
+        if let Err(problem) = return_contract(isa, &vars.item_fn.output, convention) {
             return Err(syn::Error::new_spanned(&vars.item_fn.output, problem));
         }
     }
-    let mut attributes: AttributeList = syn::parse2(attr)?;
     let red_zone = attributes
         .red_zone
         .as_ref()
@@ -2449,6 +2532,12 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
             compile_error!(#RED_ZONE_NEEDS_APPLE);
         }
     });
+    let rust_abi_target_check = (convention == CallingConvention::Rust).then(|| {
+        quote! {
+            #[cfg(not(target_vendor = "apple"))]
+            compile_error!(#RUST_ABI_NEEDS_APPLE);
+        }
+    });
 
     let unchecked_pointer_fields: Vec<(String, usize)> = new_structs
         .iter()
@@ -2468,15 +2557,23 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
     {
         original_fn_call.unsafety = Some(Default::default());
     }
+    let extern_abi = match convention {
+        CallingConvention::C => quote! { "C" },
+        CallingConvention::Rust => quote! { "Rust" },
+    };
     let (returned_array_declaration, extern_output, unwrapped_result) = match output {
-        ReturnType::Type(arrow, ty) if matches!(&**ty, Type::Array(_)) => (
-            quote! {
-                #[repr(C)]
-                struct ReturnedArray(#ty);
-            },
-            quote! { #arrow ReturnedArray },
-            quote! { #invocation.0 },
-        ),
+        ReturnType::Type(arrow, ty)
+            if convention == CallingConvention::C && matches!(&**ty, Type::Array(_)) =>
+        {
+            (
+                quote! {
+                    #[repr(C)]
+                    struct ReturnedArray(#ty);
+                },
+                quote! { #arrow ReturnedArray },
+                quote! { #invocation.0 },
+            )
+        }
         _ => (quote! {}, quote! { #output }, quote! { #invocation }),
     };
     let unsafe_block: Stmt = parse_quote! {
@@ -2488,7 +2585,7 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
 
             #returned_array_declaration
 
-            unsafe extern "C" {
+            unsafe extern #extern_abi {
                 #extern_fn #extern_output;
             }
             unsafe {
@@ -2520,9 +2617,11 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         expansion: quote! {
             #unsafe_block
             #red_zone_target_check
+            #rust_abi_target_check
         },
         signature: vars.item_fn.clone(),
         red_zone,
+        convention,
         argument_list,
         regions: arguments_to_memory_safe_regions,
         input_sizes,
@@ -2661,8 +2760,13 @@ impl Annotation {
     }
 
     pub fn unsupported_on(&self, target_vendor: &str) -> Option<String> {
-        (self.red_zone.is_some() && target_vendor != "apple")
-            .then(|| RED_ZONE_NEEDS_APPLE.to_string())
+        if target_vendor == "apple" {
+            return None;
+        }
+        if self.red_zone.is_some() {
+            return Some(RED_ZONE_NEEDS_APPLE.to_string());
+        }
+        (self.convention == CallingConvention::Rust).then(|| RUST_ABI_NEEDS_APPLE.to_string())
     }
 
     pub fn check(&self, program: &[String]) -> std::result::Result<Verdict, String> {
@@ -2696,7 +2800,7 @@ impl Annotation {
             if let Some(bytes) = red_zone {
                 engine.allow_red_zone(*bytes);
             }
-            let returned = return_contract(engine.isa(), output)?;
+            let returned = return_contract(engine.isa(), output, self.convention)?;
             if let Some(bytes) = returned.indirect_bytes {
                 engine.return_through_pointer(format!("{fn_name}_result"), bytes);
             }
@@ -3839,6 +3943,12 @@ mod tests {
         );
         assert!(!failures_returning(array.clone(), &["str wzr,[x8]", "ret"]).is_empty());
         assert!(!failures_returning(array, &["movl $0,(%rdi)", "ret"]).is_empty());
+        for narrow in [quote! { [u8; 16] }, quote! { [i16; 4] }] {
+            assert_eq!(
+                failures_returning(narrow, &["mov x0,#-1", "mov x1,#-1", "ret"]),
+                Vec::<String>::new()
+            );
+        }
     }
 
     #[test]
@@ -3954,6 +4064,114 @@ mod tests {
         assert!(!x86(&["movq $0,%rbx", "ret"]).is_empty());
         assert!(!x86(&["movl $0,%r12d", "ret"]).is_empty());
         assert_eq!(x86(&["movq $0,%r11", "ret"]), Vec::<String>::new());
+    }
+
+    fn failures_returning_through_the_rust_abi(output: TokenStream, body: &[&str]) -> Vec<String> {
+        let attr: TokenStream = quote! { "f.S", abi = "Rust", table.as_ptr(), i, [i < 16] };
+        let item: TokenStream = quote! { fn f(table: &[u8; 16], i: usize) -> #output; };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        let mut program = vec!["f:".to_string()];
+        program.extend(body.iter().map(|line| line.to_string()));
+        annotation.check(&program).expect("the check runs").failures
+    }
+
+    #[test]
+    fn a_rust_abi_aggregate_over_8_bytes_is_written_through_the_result_pointer() {
+        let four_floats = quote! { (f32, f32, f32, f32) };
+        assert_eq!(
+            failures_returning_through_the_rust_abi(
+                four_floats.clone(),
+                &["stp s0,s1,[x8]", "stp s2,s3,[x8,#8]", "ret"]
+            ),
+            Vec::<String>::new()
+        );
+        assert!(
+            !failures_returning_through_the_rust_abi(
+                four_floats.clone(),
+                &["str s0,[x8,#16]", "ret"]
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            failures_returning_through_the_rust_abi(
+                four_floats,
+                &[
+                    "movzbl (%rsi,%rdx),%eax",
+                    "movq %rax,8(%rdi)",
+                    "movq %rdi,%rax",
+                    "ret"
+                ]
+            ),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            failures_returning_through_the_rust_abi(
+                quote! { [u32; 3] },
+                &["str w1,[x8,#8]", "ret"]
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn a_rust_abi_pair_or_an_aggregate_of_8_bytes_comes_back_in_registers() {
+        for output in [
+            quote! { (u64, u64) },
+            quote! { (f32, f32) },
+            quote! { [u8; 8] },
+        ] {
+            assert!(
+                !failures_returning_through_the_rust_abi(output.clone(), &["str xzr,[x8]", "ret"])
+                    .is_empty(),
+                "{} wrote through x8",
+                spelled(output)
+            );
+        }
+        assert_eq!(
+            failures_returning_through_the_rust_abi(
+                quote! { [u64; 2] },
+                &["stp xzr,xzr,[x8]", "ret"]
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn the_rust_abi_is_declared_as_such_and_only_for_apple_targets() {
+        let attr: TokenStream = quote! { "f.S", abi = "Rust", n };
+        let item: TokenStream = quote! { fn f(n: usize) -> (f32, f32, f32, f32); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        let expansion = without_spaces(&annotation.expansion.to_string());
+        assert!(expansion.contains("unsafeextern\"Rust\"{"));
+        assert!(!expansion.contains("ReturnedArray"));
+        assert!(expansion.contains("#[cfg(not(target_vendor=\"apple\"))]compile_error!"));
+        assert_eq!(annotation.unsupported_on("apple"), None);
+        assert!(annotation.unsupported_on("unknown").is_some());
+
+        let c_tuple = parse_annotation(
+            quote! { "f.S", n },
+            quote! { fn f(n: usize) -> (f32, f32, f32, f32); },
+        );
+        assert!(c_tuple.is_err());
+        for attr in [
+            quote! { "f.S", abi = "system", n },
+            quote! { "f.S", abi = "Rust", abi = "Rust", n },
+        ] {
+            assert!(parse_annotation(attr, quote! { fn f(n: usize); }).is_err());
+        }
+        for mixed in [
+            quote! { (u32, f32) },
+            quote! { (bool, bool, bool) },
+            quote! { (u64,) },
+        ] {
+            let attr: TokenStream = quote! { "f.S", abi = "Rust", n };
+            let item: TokenStream = quote! { fn f(n: usize) -> #mixed; };
+            assert!(
+                parse_annotation(attr, item).is_err(),
+                "{} was accepted",
+                spelled(mixed)
+            );
+        }
     }
 
     #[test]

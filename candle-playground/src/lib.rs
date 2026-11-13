@@ -35,11 +35,11 @@ fn candle_q6k_vec_dot(n: usize, xs: &[u8], ys: &[u8]) -> f32;
 #[bums::check_mem_safe("candle_q8k_vec_dot.S", n, xs.as_ptr(), xs.len() / 292, ys.as_ptr(), ys.len() / 292, [xs.len() % 292 == 0, ys.len() % 292 == 0])]
 fn candle_q8k_vec_dot(n: usize, xs: &[u8], ys: &[u8]) -> f32;
 
-#[bums::check_mem_safe("candle_q4k_vec_dot_4.S", n, xs0.as_ptr(), xs0.len() / 144, xs1.as_ptr(), xs1.len() / 144, xs2.as_ptr(), xs2.len() / 144, xs3.as_ptr(), xs3.len() / 144, ys.as_ptr(), ys.len() / 292, [xs0.len() % 144 == 0, xs1.len() % 144 == 0, xs2.len() % 144 == 0, xs3.len() % 144 == 0, ys.len() % 292 == 0])]
-fn candle_q4k_vec_dot_4(n: usize, xs0: &[u8], xs1: &[u8], xs2: &[u8], xs3: &[u8], ys: &[u8]) -> [u32; 4];
+#[bums::check_mem_safe("candle_q4k_vec_dot_4.S", abi = "Rust", n, xs0.as_ptr(), xs0.len() / 144, xs1.as_ptr(), xs1.len() / 144, xs2.as_ptr(), xs2.len() / 144, xs3.as_ptr(), xs3.len() / 144, ys.as_ptr(), ys.len() / 292, [xs0.len() % 144 == 0, xs1.len() % 144 == 0, xs2.len() % 144 == 0, xs3.len() % 144 == 0, ys.len() % 292 == 0])]
+fn candle_q4k_vec_dot_4(n: usize, xs0: &[u8], xs1: &[u8], xs2: &[u8], xs3: &[u8], ys: &[u8]) -> (f32, f32, f32, f32);
 
-#[bums::check_mem_safe("candle_q6k_vec_dot_4.S", n, xs0.as_ptr(), xs0.len() / 210, xs1.as_ptr(), xs1.len() / 210, xs2.as_ptr(), xs2.len() / 210, xs3.as_ptr(), xs3.len() / 210, ys.as_ptr(), ys.len() / 292, [xs0.len() % 210 == 0, xs1.len() % 210 == 0, xs2.len() % 210 == 0, xs3.len() % 210 == 0, ys.len() % 292 == 0])]
-fn candle_q6k_vec_dot_4(n: usize, xs0: &[u8], xs1: &[u8], xs2: &[u8], xs3: &[u8], ys: &[u8]) -> [u32; 4];
+#[bums::check_mem_safe("candle_q6k_vec_dot_4.S", abi = "Rust", n, xs0.as_ptr(), xs0.len() / 210, xs1.as_ptr(), xs1.len() / 210, xs2.as_ptr(), xs2.len() / 210, xs3.as_ptr(), xs3.len() / 210, ys.as_ptr(), ys.len() / 292, [xs0.len() % 210 == 0, xs1.len() % 210 == 0, xs2.len() % 210 == 0, xs3.len() % 210 == 0, ys.len() % 292 == 0])]
+fn candle_q6k_vec_dot_4(n: usize, xs0: &[u8], xs1: &[u8], xs2: &[u8], xs3: &[u8], ys: &[u8]) -> (f32, f32, f32, f32);
 
 #[bums::check_mem_safe("candle_q4_0_vec_dot.S", n, xs.as_ptr(), xs.len() / 18, ys.as_ptr(), ys.len() / 34, [xs.len() % 18 == 0, ys.len() % 34 == 0])]
 fn candle_q4_0_vec_dot(n: usize, xs: &[u8], ys: &[u8]) -> f32;
