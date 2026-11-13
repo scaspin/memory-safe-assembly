@@ -269,6 +269,57 @@ pub struct Engine<M: Machine> {
     caller_jump_visits: Vec<BTreeMap<usize, usize>>,
     ledger: Rc<RefCell<SummaryLedger>>,
     symbolic_trial: Option<(usize, String, usize)>,
+    return_conditions: Rc<Vec<ReturnCondition>>,
+    argument_shift: usize,
+    callee_saved_at_entry: Rc<Vec<(usize, AbstractExpression)>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReturnView {
+    Whole,
+    Unsigned(u32),
+    Signed(u32),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReturnCondition {
+    pub description: String,
+    pub view: ReturnView,
+    pub allowed: Vec<(AbstractExpression, AbstractExpression)>,
+}
+
+impl ReturnCondition {
+    pub fn within(
+        description: impl Into<String>,
+        view: ReturnView,
+        allowed: &[(i64, i64)],
+    ) -> Self {
+        ReturnCondition {
+            description: description.into(),
+            view,
+            allowed: allowed
+                .iter()
+                .map(|(low, high)| {
+                    (
+                        AbstractExpression::Immediate(*low),
+                        AbstractExpression::Immediate(*high),
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    fn viewed(&self, value: AbstractExpression) -> AbstractExpression {
+        match self.view {
+            ReturnView::Whole => value,
+            ReturnView::Unsigned(bits) => {
+                generate_expression("zext", value, AbstractExpression::Immediate(bits as i64))
+            }
+            ReturnView::Signed(bits) => {
+                generate_expression("sext", value, AbstractExpression::Immediate(bits as i64))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -359,7 +410,98 @@ impl<M: Machine> Engine<M> {
             caller_jump_visits: Vec::new(),
             ledger: Rc::default(),
             symbolic_trial: None,
+            return_conditions: Rc::new(Vec::new()),
+            argument_shift: 0,
+            callee_saved_at_entry: Rc::new(Vec::new()),
         }
+    }
+
+    pub fn require_of_return_value(&mut self, condition: ReturnCondition) {
+        Rc::make_mut(&mut self.return_conditions).push(condition);
+    }
+
+    pub fn return_through_pointer(&mut self, region: impl Into<String>, bytes: i64) {
+        let region = region.into();
+        self.computer.set_register_at(
+            M::RESULT_POINTER_REGISTER,
+            RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(region.clone())),
+                0,
+            ),
+        );
+        self.add_region(
+            RegionType::WRITE,
+            region.clone(),
+            AbstractExpression::Immediate(bytes),
+        );
+        if M::RESULT_POINTER_TAKES_AN_ARGUMENT {
+            self.argument_shift = 1;
+            let pointer = AbstractExpression::Abstract(region);
+            self.require_of_return_value(ReturnCondition {
+                description: "the address of the result it was passed".to_string(),
+                view: ReturnView::Whole,
+                allowed: vec![(pointer.clone(), pointer)],
+            });
+        }
+    }
+
+    fn check_return_value(&self, pc: usize) -> Result<(), String> {
+        let returned = self.computer.register_at(M::RETURN_REGISTER).expression();
+        for condition in self.return_conditions.iter() {
+            let value = condition.viewed(returned.clone());
+            let outside: Option<Vec<ast::Bool>> = condition
+                .allowed
+                .iter()
+                .map(|(low, high)| {
+                    let below = comparison_to_ast(AbstractComparison::new(
+                        "<",
+                        value.clone(),
+                        low.clone(),
+                    ))?;
+                    let above = comparison_to_ast(AbstractComparison::new(
+                        ">",
+                        value.clone(),
+                        high.clone(),
+                    ))?;
+                    Some(ast::Bool::or(&[&below, &above]))
+                })
+                .collect();
+            let proven = outside.is_some_and(|outside| {
+                let mut assuming = self.computer.select_assumptions(&value);
+                assuming.push(ast::Bool::and(&outside.iter().collect::<Vec<_>>()));
+                check(self.computer.solver(), &assuming) == SatResult::Unsat
+            });
+            if !proven {
+                return Err(format!(
+                    "line {pc}: the return value {returned} may not be {}",
+                    condition.description
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn check_callee_saved_restored(&self, pc: usize) -> Result<(), String> {
+        for (index, entry) in self.callee_saved_at_entry.iter() {
+            let value = self.computer.register_at(*index).expression();
+            if value == *entry {
+                continue;
+            }
+            let restored =
+                comparison_to_ast(AbstractComparison::new("!=", value.clone(), entry.clone()))
+                    .is_some_and(|changed| {
+                        let mut assuming = self.computer.select_assumptions(&value);
+                        assuming.push(changed);
+                        check(self.computer.solver(), &assuming) == SatResult::Unsat
+                    });
+            if !restored {
+                return Err(format!(
+                    "line {pc}: callee-saved register {entry} not restored on return: it holds {value}"
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub fn add_region(
@@ -420,12 +562,15 @@ impl<M: Machine> Engine<M> {
     }
 
     pub fn add_abstract_expression_from(&mut self, register: usize, value: AbstractExpression) {
-        self.computer.set_argument(register, value);
+        self.computer
+            .set_argument(register + self.argument_shift, value);
     }
 
     pub fn add_abstract_from(&mut self, register: usize, value: impl Into<String>) {
-        self.computer
-            .set_argument(register, AbstractExpression::Abstract(value.into()));
+        self.computer.set_argument(
+            register + self.argument_shift,
+            AbstractExpression::Abstract(value.into()),
+        );
     }
 
     pub fn add_element_fact(
@@ -552,6 +697,27 @@ impl<M: Machine> Engine<M> {
             None => return Err(Error::other("Start label not found in program")),
         };
 
+        for &index in M::CALLEE_SAVED_REGISTERS {
+            let at_entry = self.computer.register_at(index);
+            if at_entry.kind == RegisterKind::Number && at_entry.base.is_none() {
+                self.computer.set_register_at(
+                    index,
+                    RegisterValue::new(
+                        RegisterKind::RegisterBase,
+                        Some(AbstractExpression::Abstract(format!(
+                            "callee_saved_{index}_at_entry"
+                        ))),
+                        0,
+                    ),
+                );
+            }
+        }
+        self.callee_saved_at_entry = Rc::new(
+            M::CALLEE_SAVED_REGISTERS
+                .iter()
+                .map(|&index| (index, self.computer.register_at(index).expression()))
+                .collect(),
+        );
         let res = self.run(pc, 0);
         debug_assert!(self.scopes.is_empty(), "solver scopes left open");
         res
@@ -848,6 +1014,8 @@ impl<M: Machine> Engine<M> {
                     return self
                         .computer
                         .check_stack_pointer_restored(pc)
+                        .and_then(|()| self.check_callee_saved_restored(pc))
+                        .and_then(|()| self.check_return_value(pc))
                         .map_err(Error::other);
                 }
             }
@@ -1955,6 +2123,14 @@ impl AnyEngine {
 
     pub fn add_abstract(&mut self, register: impl Into<String>, value: AbstractExpression) {
         forward!(self, e => e.add_abstract(register, value))
+    }
+
+    pub fn require_of_return_value(&mut self, condition: ReturnCondition) {
+        forward!(self, e => e.require_of_return_value(condition))
+    }
+
+    pub fn return_through_pointer(&mut self, region: impl Into<String>, bytes: i64) {
+        forward!(self, e => e.return_through_pointer(region, bytes))
     }
 
     pub fn add_abstract_to_memory(

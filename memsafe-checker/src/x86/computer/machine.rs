@@ -221,6 +221,18 @@ impl Machine for X86_64 {
     type Lanes = DwordLaneBounds;
     type LoopLanes = DwordLaneBounds;
 
+    const RETURN_REGISTER: usize = crate::x86::instruction_parser::RAX;
+    const RESULT_POINTER_REGISTER: usize = crate::x86::instruction_parser::RDI;
+    const RESULT_POINTER_TAKES_AN_ARGUMENT: bool = true;
+    const CALLEE_SAVED_REGISTERS: &'static [usize] = &[
+        crate::x86::instruction_parser::RBX,
+        crate::x86::instruction_parser::RBP,
+        12,
+        13,
+        14,
+        15,
+    ];
+
     fn new() -> Self {
         X86_64::new()
     }

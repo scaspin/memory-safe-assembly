@@ -402,8 +402,8 @@ fn rip_relative_table_reads_are_bounded_by_the_data() {
     let table = |offset: i64| {
         lines(&[
             "start:",
-            "leaq K(%rip),%rbp",
-            &format!("movl {offset}(%rbp),%eax"),
+            "leaq K(%rip),%r10",
+            &format!("movl {offset}(%r10),%eax"),
             "ret",
             ".p2align 4",
             "K:",
@@ -460,15 +460,15 @@ fn jump_table_missing_a_feasible_width_is_reported() {
 
 fn two_blocks_a_round(before_the_loop: &str, in_the_loop: &str) -> Vec<String> {
     let advance_second =
-        |choose_second| lines(&["leaq 64(%rdi),%r13", "cmpq %r10,%r13", choose_second]);
+        |choose_second| lines(&["leaq 64(%rdi),%r11", "cmpq %r10,%r11", choose_second]);
     let mut program = lines(&["start:", "leaq (%rdi,%rsi,1),%r10"]);
     program.extend(advance_second(before_the_loop));
     program.extend(lines(&[
         "L$loop:",
         "movdqu (%rdi),%xmm0",
         "movdqu 48(%rdi),%xmm0",
-        "movdqu (%r13),%xmm1",
-        "movdqu 48(%r13),%xmm1",
+        "movdqu (%r11),%xmm1",
+        "movdqu 48(%r11),%xmm1",
         "addq $128,%rdi",
     ]));
     program.extend(advance_second(in_the_loop));
@@ -480,7 +480,7 @@ fn two_blocks_a_round(before_the_loop: &str, in_the_loop: &str) -> Vec<String> {
 fn a_second_block_chosen_afresh_each_round_stays_in_the_buffer() {
     assert_eq!(
         analyze_accelerated(
-            two_blocks_a_round("cmovaeq %rdi,%r13", "cmovaeq %rdi,%r13"),
+            two_blocks_a_round("cmovaeq %rdi,%r11", "cmovaeq %rdi,%r11"),
             RegionType::READ,
             64,
             64
@@ -492,7 +492,7 @@ fn a_second_block_chosen_afresh_each_round_stays_in_the_buffer() {
 #[test]
 fn a_second_block_kept_when_it_starts_at_the_end_is_rejected() {
     assert_rejected_access(analyze_accelerated(
-        two_blocks_a_round("cmovaq %rdi,%r13", "cmovaq %rdi,%r13"),
+        two_blocks_a_round("cmovaq %rdi,%r11", "cmovaq %rdi,%r11"),
         RegionType::READ,
         64,
         64,
@@ -502,7 +502,7 @@ fn a_second_block_kept_when_it_starts_at_the_end_is_rejected() {
 #[test]
 fn a_second_block_kept_at_the_end_only_inside_the_loop_is_rejected() {
     assert_rejected_access(analyze_accelerated(
-        two_blocks_a_round("cmovaeq %rdi,%r13", "cmovaq %rdi,%r13"),
+        two_blocks_a_round("cmovaeq %rdi,%r11", "cmovaq %rdi,%r11"),
         RegionType::READ,
         64,
         64,

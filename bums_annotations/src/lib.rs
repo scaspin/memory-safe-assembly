@@ -590,14 +590,152 @@ fn argument_register_names(isa: bums::machine::Isa, arguments: usize) -> Vec<Str
     }
 }
 
+const LARGEST_RESULT_IN_REGISTERS: usize = 16;
+const AARCH64_HOMOGENEOUS_FLOAT_MEMBERS: usize = 4;
+
+#[derive(Debug, Default, PartialEq)]
+struct ReturnContract {
+    indirect_bytes: Option<i64>,
+    conditions: Vec<bums::engine::ReturnCondition>,
+}
+
+fn scalar_return_conditions(
+    isa: bums::machine::Isa,
+    scalar: &str,
+) -> Option<Vec<bums::engine::ReturnCondition>> {
+    use bums::engine::{ReturnCondition, ReturnView};
+    let aarch64 = isa == bums::machine::Isa::Aarch64;
+    let extended_to_a_word = |view: ReturnView, low: i64, high: i64| {
+        if aarch64 {
+            vec![ReturnCondition::within(
+                format!("a {scalar} extended to the 32 bits of w0 that the caller reads"),
+                view,
+                &[(low, high)],
+            )]
+        } else {
+            Vec::new()
+        }
+    };
+    match scalar {
+        "bool" => Some(vec![if aarch64 {
+            ReturnCondition::within(
+                "a bool, 0 or 1 across the 32 bits of w0 that the caller reads",
+                ReturnView::Unsigned(32),
+                &[(0, 1)],
+            )
+        } else {
+            ReturnCondition::within("a bool, 0 or 1 in al", ReturnView::Unsigned(8), &[(0, 1)])
+        }]),
+        "char" => Some(vec![ReturnCondition::within(
+            "a char, a Unicode scalar value",
+            ReturnView::Unsigned(32),
+            &[(0, 0xD7FF), (0xE000, 0x10FFFF)],
+        )]),
+        "u8" => Some(extended_to_a_word(
+            ReturnView::Unsigned(32),
+            0,
+            u8::MAX as i64,
+        )),
+        "u16" => Some(extended_to_a_word(
+            ReturnView::Unsigned(32),
+            0,
+            u16::MAX as i64,
+        )),
+        "i8" => Some(extended_to_a_word(
+            ReturnView::Signed(32),
+            i8::MIN as i64,
+            i8::MAX as i64,
+        )),
+        "i16" => Some(extended_to_a_word(
+            ReturnView::Signed(32),
+            i16::MIN as i64,
+            i16::MAX as i64,
+        )),
+        "u32" | "i32" | "u64" | "i64" | "usize" | "isize" | "u128" | "i128" | "f32" | "f64" => {
+            Some(Vec::new())
+        }
+        _ => None,
+    }
+}
+
+fn plain_scalar(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Path(p) if p.qself.is_none() => p.path.get_ident().map(|ident| ident.to_string()),
+        Type::Paren(inner) => plain_scalar(&inner.elem),
+        Type::Group(inner) => plain_scalar(&inner.elem),
+        _ => None,
+    }
+}
+
+fn return_contract(
+    isa: bums::machine::Isa,
+    output: &ReturnType,
+) -> std::result::Result<ReturnContract, String> {
+    let ty = match output {
+        ReturnType::Default => return Ok(ReturnContract::default()),
+        ReturnType::Type(_, ty) => &**ty,
+    };
+    let unsupported = |why: &str| {
+        Err(format!(
+            "returning {} is not supported: {why}",
+            spelled(quote! { #ty })
+        ))
+    };
+    match ty {
+        Type::Tuple(unit) if unit.elems.is_empty() => Ok(ReturnContract::default()),
+        Type::Ptr(_) => Ok(ReturnContract::default()),
+        Type::Array(array) => {
+            let Some(element) = plain_scalar(&array.elem) else {
+                return unsupported("an array result must hold integers or floats");
+            };
+            if scalar_return_conditions(isa, &element) != Some(Vec::new())
+                || matches!(element.as_str(), "u128" | "i128")
+            {
+                return unsupported(
+                    "an array result must hold integers or floats that every bit pattern inhabits",
+                );
+            }
+            let Some(length) = integer_literal(&array.len).filter(|n| *n > 0) else {
+                return unsupported("an array result needs a positive literal length");
+            };
+            let length = length as usize;
+            let bytes = calculate_size_of(element.clone()) * length;
+            let floats_in_vector_registers = isa == bums::machine::Isa::Aarch64
+                && matches!(element.as_str(), "f32" | "f64")
+                && length <= AARCH64_HOMOGENEOUS_FLOAT_MEMBERS;
+            if floats_in_vector_registers || bytes <= LARGEST_RESULT_IN_REGISTERS {
+                Ok(ReturnContract::default())
+            } else {
+                Ok(ReturnContract {
+                    indirect_bytes: Some(bytes as i64),
+                    conditions: Vec::new(),
+                })
+            }
+        }
+        _ => match plain_scalar(ty).and_then(|scalar| scalar_return_conditions(isa, &scalar)) {
+            Some(conditions) => Ok(ReturnContract {
+                indirect_bytes: None,
+                conditions,
+            }),
+            None => unsupported(
+                "the C ABI result of this type, and the values Rust trusts it to hold, are not modelled",
+            ),
+        },
+    }
+}
+
 fn entry_registers(
     isa: bums::machine::Isa,
     named: &BTreeSet<String>,
     arguments: usize,
     indirect_result: bool,
 ) -> std::result::Result<Vec<(String, EntryRegister)>, Vec<String>> {
-    let mut bound = argument_register_names(isa, arguments);
-    if indirect_result && isa == bums::machine::Isa::Aarch64 {
+    let result_pointer_takes_an_argument = isa == bums::machine::Isa::X86_64;
+    let mut bound = argument_register_names(
+        isa,
+        arguments + usize::from(indirect_result && result_pointer_takes_an_argument),
+    );
+    if indirect_result && !result_pointer_takes_an_argument {
         bound.push("x8".to_string());
     }
     let mut problems = Vec::new();
@@ -1633,6 +1771,11 @@ pub fn read_program(path: &std::path::Path) -> std::io::Result<Vec<String>> {
 
 pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotation> {
     let vars: CallColon = syn::parse2(item)?;
+    for isa in [bums::machine::Isa::Aarch64, bums::machine::Isa::X86_64] {
+        if let Err(problem) = return_contract(isa, &vars.item_fn.output) {
+            return Err(syn::Error::new_spanned(&vars.item_fn.output, problem));
+        }
+    }
     let mut attributes: AttributeList = syn::parse2(attr)?;
     let red_zone = attributes
         .red_zone
@@ -2325,6 +2468,17 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
     {
         original_fn_call.unsafety = Some(Default::default());
     }
+    let (returned_array_declaration, extern_output, unwrapped_result) = match output {
+        ReturnType::Type(arrow, ty) if matches!(&**ty, Type::Array(_)) => (
+            quote! {
+                #[repr(C)]
+                struct ReturnedArray(#ty);
+            },
+            quote! { #arrow ReturnedArray },
+            quote! { #invocation.0 },
+        ),
+        _ => (quote! {}, quote! { #output }, quote! { #invocation }),
+    };
     let unsafe_block: Stmt = parse_quote! {
         #original_fn_call {
 
@@ -2332,12 +2486,14 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
 
             #struct_decs;
 
+            #returned_array_declaration
+
             unsafe extern "C" {
-                #extern_fn #output;
+                #extern_fn #extern_output;
             }
             unsafe {
                 #before_call
-                let result = #invocation;
+                let result = #unwrapped_result;
                 #after_call
                 return result;
             }
@@ -2540,6 +2696,13 @@ impl Annotation {
             if let Some(bytes) = red_zone {
                 engine.allow_red_zone(*bytes);
             }
+            let returned = return_contract(engine.isa(), output)?;
+            if let Some(bytes) = returned.indirect_bytes {
+                engine.return_through_pointer(format!("{fn_name}_result"), bytes);
+            }
+            for condition in returned.conditions.iter().cloned() {
+                engine.require_of_return_value(condition);
+            }
 
             for (i, a) in arguments_to_memory_safe_regions.iter().enumerate() {
                 let name;
@@ -2619,6 +2782,18 @@ impl Annotation {
                                     name.strip_suffix("_end_ptr_range").unwrap_or(no_mut_name);
                                 let no_suffix =
                                     no_range.strip_suffix("_as_ptr").unwrap_or(no_range);
+                                let from_a_reference = no_suffix != name
+                                    && matches!(
+                                        input_types.get(no_suffix),
+                                        Some(Type::Reference(_))
+                                    );
+                                if from_a_reference {
+                                    engine.add_invariant(AbstractComparison::new(
+                                        "!=",
+                                        AbstractExpression::Abstract(name.clone()),
+                                        AbstractExpression::Immediate(0),
+                                    ));
+                                }
 
                                 if let Some((scaled, expression)) = pointer_offsets.get(&i) {
                                     let mut offset = syn_expr_to_abstract_expression(expression);
@@ -2769,13 +2944,11 @@ impl Annotation {
                 }
             }
 
-            let indirect_result =
-                matches!(output, ReturnType::Type(_, ty) if matches!(&**ty, Type::Array(_)));
             let registers = entry_registers(
                 engine.isa(),
                 &self.register_preconditions,
                 arguments_to_memory_safe_regions.len(),
-                indirect_result,
+                returned.indirect_bytes.is_some(),
             )
             .map_err(|problems| problems.join("; "))?;
             for (name, register) in registers {
@@ -3050,17 +3223,6 @@ impl Annotation {
                         )
                         .placed(base, stride),
                 )?;
-            }
-            if let ReturnType::Type(_, ty) = output
-                && let Type::Array(a) = &**ty
-            {
-                let result = format!("{fn_name}_result");
-                engine.add_abstract("x8", AbstractExpression::Abstract(result.clone()));
-                engine.add_region(
-                    RegionType::WRITE,
-                    result,
-                    AbstractExpression::Immediate(calculate_size_of_array(a) as i64),
-                );
             }
             log::info!(target: "bums_macros", "checking {label}");
             let started = std::time::Instant::now();
@@ -3657,6 +3819,223 @@ mod tests {
             verdict_for(&["strb wzr,[x1,#1]", "ret"]),
             Vec::<String>::new()
         );
+    }
+
+    fn failures_returning(output: TokenStream, body: &[&str]) -> Vec<String> {
+        let attr: TokenStream = quote! { "f.S", table.as_ptr(), i, [i < 16] };
+        let item: TokenStream = quote! { fn f(table: &[u8; 16], i: usize) -> #output; };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        let mut program = vec!["f:".to_string()];
+        program.extend(body.iter().map(|line| line.to_string()));
+        annotation.check(&program).expect("the check runs").failures
+    }
+
+    #[test]
+    fn a_16_byte_array_comes_back_in_registers_so_x8_is_not_a_result_pointer() {
+        let array = quote! { [u32; 4] };
+        assert_eq!(
+            failures_returning(array.clone(), &["mov x0,#1", "mov x1,#2", "ret"]),
+            Vec::<String>::new()
+        );
+        assert!(!failures_returning(array.clone(), &["str wzr,[x8]", "ret"]).is_empty());
+        assert!(!failures_returning(array, &["movl $0,(%rdi)", "ret"]).is_empty());
+    }
+
+    #[test]
+    fn floats_up_to_four_come_back_in_vector_registers_on_aarch64_only() {
+        assert!(!failures_returning(quote! { [f64; 4] }, &["str xzr,[x8]", "ret"]).is_empty());
+        assert_eq!(
+            failures_returning(
+                quote! { [f64; 4] },
+                &["movq $0,24(%rdi)", "movq %rdi,%rax", "ret"]
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn an_array_over_16_bytes_is_written_through_x8_on_aarch64() {
+        let array = quote! { [u64; 4] };
+        assert_eq!(
+            failures_returning(
+                array.clone(),
+                &[
+                    "ldrb w2,[x0,x1]",
+                    "stp x2,x2,[x8]",
+                    "stp x2,x2,[x8,#16]",
+                    "ret"
+                ]
+            ),
+            Vec::<String>::new()
+        );
+        assert!(!failures_returning(array, &["str xzr,[x8,#32]", "ret"]).is_empty());
+    }
+
+    #[test]
+    fn an_array_over_16_bytes_takes_rdi_and_moves_the_arguments_up_on_x86() {
+        let array = quote! { [u64; 4] };
+        let filled = |load: &str| {
+            failures_returning(
+                array.clone(),
+                &[
+                    load,
+                    "movq %rax,(%rdi)",
+                    "movq %rax,24(%rdi)",
+                    "movq %rdi,%rax",
+                    "ret",
+                ],
+            )
+        };
+        assert_eq!(filled("movzbl (%rsi,%rdx),%eax"), Vec::<String>::new());
+        assert!(!filled("movzbl (%rdi,%rsi),%eax").is_empty());
+        assert!(
+            !failures_returning(
+                array.clone(),
+                &["movq $0,32(%rdi)", "movq %rdi,%rax", "ret"]
+            )
+            .is_empty()
+        );
+        let without_rax = failures_returning(array, &["movq $0,(%rdi)", "ret"]);
+        assert!(
+            without_rax
+                .iter()
+                .any(|failure| failure.contains("the address of the result")),
+            "{without_rax:?}"
+        );
+    }
+
+    #[test]
+    fn a_bool_result_must_be_0_or_1_in_the_bits_the_caller_reads() {
+        let bool_result = |body: &[&str]| failures_returning(quote! { bool }, body);
+        assert_eq!(
+            bool_result(&["cmp x1,#3", "cset w0,eq", "ret"]),
+            Vec::<String>::new()
+        );
+        assert!(!bool_result(&["mov w0,#2", "ret"]).is_empty());
+        assert!(!bool_result(&["mov w0,#0x100", "ret"]).is_empty());
+        assert!(!bool_result(&["ldrb w0,[x0,x1]", "ret"]).is_empty());
+        assert!(!bool_result(&["ret"]).is_empty());
+        assert_eq!(
+            bool_result(&["movl $0x100,%eax", "ret"]),
+            Vec::<String>::new()
+        );
+        assert!(!bool_result(&["movl $2,%eax", "ret"]).is_empty());
+    }
+
+    #[test]
+    fn a_callee_saved_register_must_hold_its_entry_value_on_return() {
+        let failures = |body: &[&str]| failures_returning(quote! { u64 }, body);
+        assert_eq!(
+            failures(&[
+                "stp x19,x20,[sp,#-16]!",
+                "mov x19,#0",
+                "ldp x19,x20,[sp],#16",
+                "ret"
+            ]),
+            Vec::<String>::new()
+        );
+        let clobbered = failures(&["mov x19,#0", "ret"]);
+        assert!(
+            clobbered
+                .iter()
+                .any(|failure| failure.contains("callee-saved register x19")),
+            "{clobbered:?}"
+        );
+        assert!(!failures(&["mov x29,sp", "ret"]).is_empty());
+        let x86 = |body: &[&str]| {
+            let mut program = vec!["movq %rdi,%rax"];
+            program.extend_from_slice(body);
+            failures(&program)
+        };
+        assert_eq!(
+            x86(&["pushq %rbx", "movq $0,%rbx", "popq %rbx", "ret"]),
+            Vec::<String>::new()
+        );
+        assert!(!x86(&["movq $0,%rbx", "ret"]).is_empty());
+        assert!(!x86(&["movl $0,%r12d", "ret"]).is_empty());
+        assert_eq!(x86(&["movq $0,%r11", "ret"]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_pointer_taken_from_a_reference_is_never_null() {
+        let guarded = |register: &str| {
+            failures_returning(
+                quote! { bool },
+                &[
+                    &format!("cbz {register},null"),
+                    "mov w0,#1",
+                    "ret",
+                    "null:",
+                    "mov w0,#-1",
+                    "ret",
+                ],
+            )
+        };
+        assert_eq!(guarded("x0"), Vec::<String>::new());
+        assert!(!guarded("x1").is_empty());
+    }
+
+    #[test]
+    fn a_narrow_integer_result_is_extended_to_32_bits_on_aarch64() {
+        let failures = |output: TokenStream, body: &[&str]| failures_returning(output, body);
+        assert_eq!(
+            failures(quote! { u16 }, &["ldrh w0,[x0]", "ret"]),
+            Vec::<String>::new()
+        );
+        assert!(!failures(quote! { u16 }, &["mov w0,#0x10000", "ret"]).is_empty());
+        assert_eq!(
+            failures(quote! { u16 }, &["movl $0x10000,%eax", "ret"]),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            failures(quote! { i16 }, &["ldrsh w0,[x0]", "ret"]),
+            Vec::<String>::new()
+        );
+        assert!(!failures(quote! { i16 }, &["mov w0,#0xffff", "ret"]).is_empty());
+        assert_eq!(
+            failures(quote! { u32 }, &["mov x0,#-1", "ret"]),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn a_char_result_must_be_a_unicode_scalar_value() {
+        assert_eq!(
+            failures_returning(quote! { char }, &["mov w0,#65", "ret"]),
+            Vec::<String>::new()
+        );
+        assert!(!failures_returning(quote! { char }, &["mov w0,#0xd800", "ret"]).is_empty());
+        assert!(!failures_returning(quote! { char }, &["mov w0,#0x110000", "ret"]).is_empty());
+    }
+
+    #[test]
+    fn a_result_whose_valid_values_are_not_modelled_is_refused() {
+        for output in [
+            quote! { &u8 },
+            quote! { Option<u8> },
+            quote! { (u64, u64) },
+            quote! { [bool; 4] },
+            quote! { core::num::NonZeroU32 },
+        ] {
+            let attr: TokenStream = quote! { "f.S", n };
+            let item: TokenStream = quote! { fn f(n: usize) -> #output; };
+            assert!(
+                parse_annotation(attr, item).is_err(),
+                "{} was accepted",
+                spelled(output)
+            );
+        }
+    }
+
+    #[test]
+    fn an_array_result_is_declared_through_a_repr_c_struct() {
+        let attr: TokenStream = quote! { "f.S", n };
+        let item: TokenStream = quote! { fn f(n: usize) -> [u32; 4]; };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        let expansion = without_spaces(&annotation.expansion.to_string());
+        assert!(expansion.contains("#[repr(C)]structReturnedArray([u32;4]);"));
+        assert!(expansion.contains("->ReturnedArray;"));
+        assert!(expansion.contains(".0;"));
     }
 
     #[test]

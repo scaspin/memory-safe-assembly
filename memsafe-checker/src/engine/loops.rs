@@ -3320,7 +3320,10 @@ impl<M: Machine> Engine<M> {
                         && let Some((&site, outer)) = return_sites.split_last()
                     {
                         pending.push((site, outer.to_vec()));
-                    } else if !returning_ends_the_function {
+                    } else if !returning_ends_the_function
+                        || (instruction.flow() == Flow::Return
+                            && M::CALLEE_SAVED_REGISTERS.contains(&register))
+                    {
                         return false;
                     }
                 }

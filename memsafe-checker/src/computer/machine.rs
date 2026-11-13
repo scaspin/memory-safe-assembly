@@ -379,6 +379,11 @@ impl Machine for ARMCORTEXA {
     type Lanes = (Box<[SimdRegister; 32]>, Box<LaneBounds>);
     type LoopLanes = ();
 
+    const RETURN_REGISTER: usize = 0;
+    const RESULT_POINTER_REGISTER: usize = 8;
+    const RESULT_POINTER_TAKES_AN_ARGUMENT: bool = false;
+    const CALLEE_SAVED_REGISTERS: &'static [usize] = &[19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
+
     fn new() -> Self {
         ARMCORTEXA::new()
     }

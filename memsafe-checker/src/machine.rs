@@ -160,6 +160,11 @@ pub trait Machine: Clone {
     type Lanes: Clone;
     type LoopLanes: Clone + Debug;
 
+    const RETURN_REGISTER: usize;
+    const RESULT_POINTER_REGISTER: usize;
+    const RESULT_POINTER_TAKES_AN_ARGUMENT: bool;
+    const CALLEE_SAVED_REGISTERS: &'static [usize];
+
     fn new() -> Self;
     fn execute(
         &mut self,

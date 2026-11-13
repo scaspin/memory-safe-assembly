@@ -144,11 +144,11 @@ fn loop_without_the_clamp_reads_past_the_end() {
 fn table_walk_ending_on_a_sentinel_byte_is_bounded_by_the_table() {
     let program = [
         "start:",
-        "leaq K(%rip),%rbp",
+        "leaq K(%rip),%r10",
         "L$loop:",
-        "movl (%rbp),%eax",
-        "leaq 4(%rbp),%rbp",
-        "cmpb $0,3(%rbp)",
+        "movl (%r10),%eax",
+        "leaq 4(%r10),%r10",
+        "cmpb $0,3(%r10)",
         "jne L$loop",
         "ret",
         ".p2align 4",

@@ -284,9 +284,9 @@ fn x86_crc32_is_a_32_bit_value() {
     let program = [
         "start:",
         "movq (%rsi), %rax",
-        "crc32q %rax, %rbx",
-        "shrl $24, %ebx",
-        "movb (%rsi,%rbx), %cl",
+        "crc32q %rax, %r10",
+        "shrl $24, %r10d",
+        "movb (%rsi,%r10), %cl",
         "ret",
     ];
     assert_eq!(x86_input(256, &program), Ok(()));
