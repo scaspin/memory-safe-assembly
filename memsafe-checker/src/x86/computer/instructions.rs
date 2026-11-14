@@ -597,7 +597,24 @@ impl X86_64 {
 
             "mov" | "movabs" => {
                 let value = self.read(&ops[0], width)?;
-                self.write(&ops[1], width, value)?;
+                match (&ops[0], &ops[1]) {
+                    (
+                        Operand::Address(..),
+                        Operand::Register(Register::Gpr {
+                            index,
+                            width: 4,
+                            high: false,
+                        }),
+                    ) => {
+                        let whole_register = Operand::Register(Register::Gpr {
+                            index: *index,
+                            width: 8,
+                            high: false,
+                        });
+                        self.write(&whole_register, 8, value)?;
+                    }
+                    _ => self.write(&ops[1], width, value)?,
+                }
                 if ops[0].is_memory() {
                     self.mark_loaded(&ops[1]);
                 }
@@ -1037,6 +1054,15 @@ impl X86_64 {
                     ))?;
                     return Ok(ExecuteReturnType::JumpLabel(label.clone()));
                 }
+                Some(Operand::Indirect(target)) => {
+                    let destination = self.read(target, 8)?;
+                    self.push(RegisterValue::new(
+                        RegisterKind::RegisterBase,
+                        Some(abstract_of(RETURN_TO)),
+                        (pc + 1) as i64,
+                    ))?;
+                    return Ok(ExecuteReturnType::JumpIndirect(destination));
+                }
                 other => return Err(format!("indirect call through {other:?} is not modelled")),
             },
             "ret" => {
@@ -1066,6 +1092,10 @@ impl X86_64 {
             "jmp" => match ops.first() {
                 Some(Operand::Label(label)) => {
                     return Ok(ExecuteReturnType::JumpLabel(label.clone()));
+                }
+                Some(Operand::Indirect(target)) => {
+                    let destination = self.read(target, 8)?;
+                    return Ok(ExecuteReturnType::JumpIndirect(destination));
                 }
                 other => return Err(format!("indirect jump through {other:?} is not modelled")),
             },
@@ -1202,6 +1232,11 @@ impl X86_64 {
             Operand::Register(Register::Mask(k)) => Ok(self.masks[*k].clone()),
             Operand::Register(_) => Ok(unknown()),
             Operand::Immediate(v) => Ok(RegisterValue::new_imm(*v)),
+            Operand::Address(symbol, offset) => {
+                let mut address = self.symbol_value(symbol)?;
+                address.offset += offset;
+                Ok(address)
+            }
             Operand::Memory(m) if m.segment => Ok(unknown()),
             Operand::Memory(m) => {
                 let address = self.effective_address(m)?;
@@ -1946,6 +1981,10 @@ impl X86_64 {
                     }
                     _ => value,
                 }
+            }
+            Operand::Memory(_) if copy && width > 8 => {
+                self.write(last, width, unknown())?;
+                self.write(last, 8, value)?;
             }
             Operand::Memory(_) => {
                 let stored = if copy && width == 8 { value } else { unknown() };

@@ -970,13 +970,30 @@ impl ARMCORTEXA {
 
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);
                 }
-                "mrs" => {
-                    let dest = instruction
-                        .operands
-                        .first()
-                        .expect("mrs needs a destination register");
-                    self.set_register(dest, RegisterKind::Number, None, 0);
-                }
+                "mrs" => match instruction.operands.as_slice() {
+                    [dest, Operand::Label(system_register)]
+                        if system_register.eq_ignore_ascii_case("nzcv") =>
+                    {
+                        let snapshot = self.save_flags();
+                        self.set_register(
+                            dest,
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(snapshot)),
+                            0,
+                        );
+                    }
+                    [dest, ..] => self.set_register(dest, RegisterKind::Number, None, 0),
+                    [] => return Err("mrs needs a destination register".to_string()),
+                },
+                "msr" => match instruction.operands.as_slice() {
+                    [Operand::Label(system_register), source]
+                        if system_register.eq_ignore_ascii_case("nzcv") =>
+                    {
+                        let saved = self.get_register(source);
+                        self.restore_flags(&saved);
+                    }
+                    other => return Err(format!("msr to {other:?} is not modelled")),
+                },
                 op if op.starts_with("b.") => {
                     let Some(Operand::Label(label)) = instruction.operands.first() else {
                         return Err(format!("{op} needs a target label"));

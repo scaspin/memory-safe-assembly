@@ -49,7 +49,7 @@ impl X86_64 {
         Ok(address)
     }
 
-    fn symbol_value(&self, symbol: &str) -> Result<RegisterValue, String> {
+    pub(super) fn symbol_value(&self, symbol: &str) -> Result<RegisterValue, String> {
         let name = symbol.trim_start_matches('_');
         let (base, offset) = if self.memory.contains_key(name) {
             (name.to_string(), 0)

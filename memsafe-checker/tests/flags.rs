@@ -479,3 +479,89 @@ fn a_word_countdown_rebased_before_its_walk_bounds_its_walk() {
         Ok(())
     );
 }
+
+fn branch_to_overread_after(setup: &[&str], branch: &str) -> Result<(), String> {
+    let mut body: Vec<&str> = setup.to_vec();
+    body.extend([branch, "ret", "bad:", "ldr w4, [x0, #64]"]);
+    run_with_unknown_flags(&body)
+}
+
+#[test]
+fn msr_restores_the_flags_mrs_saved_not_the_latest_comparison() {
+    let saved_not_equal = ["add x1,#0,#3", "add x2,#0,#7", "cmp x1,x2", "mrs x9, NZCV"];
+    let then_equal = ["cmp x0, x0", "msr NZCV, x9"];
+    let setup: Vec<&str> = saved_not_equal
+        .iter()
+        .chain(then_equal.iter())
+        .copied()
+        .collect();
+    assert!(branch_to_overread_after(&setup, "b.ne bad").is_err());
+    assert!(branch_to_overread_after(&setup, "b.eq bad").is_ok());
+}
+
+#[test]
+fn msr_restores_abstract_flags_across_an_intervening_comparison() {
+    let setup = ["cmp x2, x3", "mrs x9, NZCV", "cmp x0, x0", "msr NZCV, x9"];
+    assert!(branch_to_overread_after(&setup, "b.ne bad").is_err());
+    let consistent = [
+        "cmp x2, x3",
+        "b.ne done",
+        "mrs x9, NZCV",
+        "cmp x0, x0",
+        "add x1,#0,#3",
+        "add x5,#0,#7",
+        "cmp x1, x5",
+        "msr NZCV, x9",
+        "b.ne bad",
+        "done:",
+    ];
+    assert!(branch_to_overread_after(&consistent, "ret").is_ok());
+}
+
+#[test]
+fn msr_of_a_changed_snapshot_leaves_the_flags_unknown() {
+    let setup = [
+        "cmp x0, x0",
+        "mrs x9, NZCV",
+        "eor x9, x9, #0x40000000",
+        "msr NZCV, x9",
+    ];
+    assert!(branch_to_overread_after(&setup, "b.ne bad").is_err());
+    assert!(branch_to_overread_after(&setup, "b.eq bad").is_err());
+}
+
+#[test]
+fn msr_of_a_known_value_decodes_the_nzcv_bits() {
+    let zero_set = ["mov x9, #0x40000000", "msr NZCV, x9"];
+    assert!(branch_to_overread_after(&zero_set, "b.ne bad").is_ok());
+    assert!(branch_to_overread_after(&zero_set, "b.eq bad").is_err());
+    let carry_set = ["mov x9, #0x20000000", "msr NZCV, x9"];
+    assert!(branch_to_overread_after(&carry_set, "b.lo bad").is_ok());
+    assert!(branch_to_overread_after(&carry_set, "b.hs bad").is_err());
+    let negative_without_overflow = ["mov x9, #0x80000000", "msr NZCV, x9"];
+    assert!(branch_to_overread_after(&negative_without_overflow, "b.ge bad").is_ok());
+    assert!(branch_to_overread_after(&negative_without_overflow, "b.lt bad").is_err());
+}
+
+#[test]
+fn flags_restored_by_msr_allow_both_safe_branches() {
+    let result = run_with_unknown_flags(&[
+        "cmp x3, x2",
+        "mrs x9, NZCV",
+        "cmp x2, x3",
+        "msr NZCV, x9",
+        "cinc w4, w4, hs",
+        "b.ne other",
+        "ldr w5, [x0, #60]",
+        "ret",
+        "other:",
+        "ldr w5, [x0, #56]",
+    ]);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn msr_to_another_system_register_is_refused() {
+    let result = run_with_unknown_flags(&["msr TPIDR_EL0, x2"]);
+    assert!(result.is_err(), "{result:?}");
+}

@@ -316,6 +316,10 @@ impl X86_64 {
         if width >= 8 || value.kind != RegisterKind::RegisterBase {
             return narrow(value, width, false);
         }
+        let narrowed = narrow(value, width, false);
+        if narrowed.kind == RegisterKind::Immediate {
+            return narrowed;
+        }
         let Some(v) = expression_to_ast(value.expression()) else {
             return narrow(value, width, false);
         };
@@ -366,9 +370,28 @@ impl X86_64 {
                             0,
                         )
                     }
+                    (RegisterKind::Number, new_kind)
+                        if !high && new_kind != RegisterKind::Number =>
+                    {
+                        let modulus = AbstractExpression::Immediate(1i64 << (width * 8));
+                        let unknown_high_part = generate_expression(
+                            "*",
+                            generate_expression("/", old.expression(), modulus.clone()),
+                            modulus.clone(),
+                        );
+                        RegisterValue::new(
+                            RegisterKind::RegisterBase,
+                            Some(generate_expression(
+                                "+",
+                                unknown_high_part,
+                                generate_expression("%", value.expression(), modulus),
+                            )),
+                            0,
+                        )
+                    }
                     _ => unknown(),
                 };
-                self.registers[index] = merged;
+                self.registers[index] = settled(merged);
             }
         }
     }
@@ -466,6 +489,15 @@ impl X86_64 {
     }
 }
 
+fn settled(value: RegisterValue) -> RegisterValue {
+    match (&value.kind, &value.base) {
+        (RegisterKind::RegisterBase, Some(AbstractExpression::Immediate(constant))) => {
+            RegisterValue::new_imm(constant.wrapping_add(value.offset))
+        }
+        _ => value,
+    }
+}
+
 pub fn narrow(value: &RegisterValue, width: i64, high: bool) -> RegisterValue {
     if width >= 8 {
         return value.clone();
@@ -488,7 +520,7 @@ pub fn narrow(value: &RegisterValue, width: i64, high: bool) -> RegisterValue {
             } else {
                 whole
             };
-            RegisterValue::new(
+            settled(RegisterValue::new(
                 RegisterKind::RegisterBase,
                 Some(generate_expression(
                     "%",
@@ -496,7 +528,7 @@ pub fn narrow(value: &RegisterValue, width: i64, high: bool) -> RegisterValue {
                     AbstractExpression::Immediate(1i64 << bits),
                 )),
                 0,
-            )
+            ))
         }
     }
 }

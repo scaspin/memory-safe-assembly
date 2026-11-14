@@ -183,6 +183,7 @@ pub(super) struct PathLoops<M: Machine> {
 #[derive(Clone, Copy)]
 pub(super) struct ConcreteLatchEnd {
     target: usize,
+    continues_at_its_value: bool,
     value: i64,
     closing: Option<i64>,
     visited_at: usize,
@@ -609,12 +610,20 @@ impl<M: Machine> Engine<M> {
             .loops
             .concrete_latch_visits
             .get(&pc)
-            .map(|(_, before)| before - value)
-            .filter(|closing| *closing != 0);
+            .map(|(_, before)| before - value);
         self.loops.concrete_latch_ends.insert(
             pc,
             ConcreteLatchEnd {
                 target,
+                continues_at_its_value: match op {
+                    "!=" => value != 0,
+                    "==" => value == 0,
+                    "<" => 0 < value,
+                    "<=" => 0 <= value,
+                    ">" => 0 > value,
+                    ">=" => 0 >= value,
+                    _ => false,
+                },
                 value,
                 closing,
                 visited_at: self.instructions_run,
@@ -651,6 +660,8 @@ impl<M: Machine> Engine<M> {
             .iter()
             .find_map(|(&latch, end)| {
                 let remaining = match end.closing {
+                    _ if !end.continues_at_its_value => return None,
+                    Some(0) => return None,
                     Some(closing)
                         if end.value.signum() == closing.signum() && end.value % closing == 0 =>
                     {

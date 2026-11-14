@@ -63,6 +63,7 @@ pub struct ARMCORTEXA {
     current_line: usize,
     alignment: i64,
     flag_counter: usize,
+    saved_flags: BTreeMap<String, [Option<FlagValue>; 4]>,
     pub solver: EmptiedOnClone,
     pub lane_bounds: Box<LaneBounds>,
     pub fresh_bounds: Vec<ast::Bool>,
@@ -248,6 +249,7 @@ impl ARMCORTEXA {
             current_line: 0,
             alignment: 4,
             flag_counter: 0,
+            saved_flags: BTreeMap::new(),
             lane_bounds: Box::default(),
             fresh_bounds: Vec::new(),
             write_journal: Vec::new(),
@@ -477,7 +479,7 @@ impl ARMCORTEXA {
         }
         let _ = write!(
             out,
-            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
             self.memory,
             self.select_definitions,
             self.symbols_bounding_counter,
@@ -493,6 +495,7 @@ impl ARMCORTEXA {
             self.blind_stack_writes,
             self.symbolic_slots,
             self.pristine_read,
+            self.saved_flags,
         );
         out
     }
@@ -560,6 +563,43 @@ impl ARMCORTEXA {
         self.zero = flag("zero");
         self.carry = flag("carry");
         self.overflow = flag("overflow");
+    }
+
+    pub fn save_flags(&mut self) -> String {
+        let name = self.fresh_symbol("nzcv");
+        let flags = [
+            self.zero.clone(),
+            self.neg.clone(),
+            self.carry.clone(),
+            self.overflow.clone(),
+        ];
+        self.saved_flags.insert(name.clone(), flags);
+        name
+    }
+
+    pub fn restore_flags(&mut self, saved: &RegisterValue) {
+        let snapshot = match (&saved.kind, &saved.base) {
+            (RegisterKind::RegisterBase, Some(AbstractExpression::Abstract(name)))
+                if saved.offset == 0 =>
+            {
+                self.saved_flags.get(name).cloned()
+            }
+            (RegisterKind::Immediate, None) => {
+                let bit = |b: u32| saved.offset >> b & 1 == 1;
+                let (n, z, c, v) = (bit(31), bit(30), bit(29), bit(28));
+                Some([
+                    Some(FlagValue::Real(z)),
+                    Some(FlagValue::Real(n != v)),
+                    Some(FlagValue::Real(c)),
+                    Some(FlagValue::Real(v)),
+                ])
+            }
+            _ => None,
+        };
+        match snapshot {
+            Some(flags) => self.set_flags(flags),
+            None => self.set_unknown_flags(),
+        }
     }
 
     pub fn set_flags(&mut self, flags: [Option<FlagValue>; 4]) {

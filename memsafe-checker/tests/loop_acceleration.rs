@@ -3292,3 +3292,44 @@ fn a_counter_a_callee_saves_and_restores_still_drives_its_loop() {
 fn a_counter_a_callee_saves_and_restores_still_catches_a_short_table() {
     assert_rejected_access(counter_saved_across_a_call(256));
 }
+
+fn groups_of_four_with_a_constant_skip(read: &str) -> Vec<String> {
+    [
+        "start:",
+        "mov x2,#1",
+        "mov x13,x1",
+        "cmp x13,#4",
+        "b.lo done",
+        "b group",
+        "next_group:",
+        "sub x13,x13,#4",
+        "add x0,x0,#4",
+        "cmp x13,#3",
+        "b.ls done",
+        "group:",
+        read,
+        "cbz x2,next_group",
+        "add w8,w8,#1",
+        "b next_group",
+        "done:",
+        "ret",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+#[test]
+fn a_skip_on_a_constant_nonzero_register_does_not_bound_the_enclosing_loop() {
+    assert_eq!(
+        analyze(groups_of_four_with_a_constant_skip("ldr w8,[x0]")),
+        Ok(())
+    );
+}
+
+#[test]
+fn a_skip_on_a_constant_nonzero_register_still_catches_an_overread() {
+    assert_rejected_access(analyze(groups_of_four_with_a_constant_skip(
+        "ldr w8,[x0,#4]",
+    )));
+}

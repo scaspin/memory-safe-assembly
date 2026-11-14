@@ -12,7 +12,8 @@ members = [
   "candle-playground",
   "ffmpeg-playground",
   "openblas-playground",
-  "compression-playground"
+  "compression-playground",
+  "blake3-secp256k1-playground"
 ]
 exclude = ["scrape-asm"]
 resolver = "2"

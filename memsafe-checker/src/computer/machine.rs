@@ -198,6 +198,7 @@ impl MachineInstruction for Instruction {
             InstructionType::ControlFlow => match self.opcode.as_str() {
                 "csel" | "csinc" | "csinv" | "csneg" | "cset" | "csetm" | "cinc" | "cinv"
                 | "cneg" | "mrs" => destination(),
+                "msr" => Some(None),
                 _ if matches!(self.flow(), Flow::Jump(_) | Flow::Branch(_)) => Some(None),
                 _ => None,
             },

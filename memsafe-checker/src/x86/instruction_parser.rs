@@ -161,6 +161,7 @@ pub enum Operand {
     Memory(MemoryOperand),
     Label(String),
     Indirect(Box<Operand>),
+    Address(String, i64),
     Other(String),
 }
 
@@ -495,7 +496,10 @@ pub fn parse_operand(text: &str) -> Operand {
     if let Some(imm) = text.strip_prefix('$') {
         return match evaluate(imm) {
             Some(v) => Operand::Immediate(v),
-            None => Operand::Other(text.to_string()),
+            None => match symbol_and_offset(imm) {
+                Some((Some(symbol), offset)) => Operand::Address(symbol, offset),
+                _ => Operand::Other(text.to_string()),
+            },
         };
     }
     if text.starts_with('%') && !text.contains('(') {

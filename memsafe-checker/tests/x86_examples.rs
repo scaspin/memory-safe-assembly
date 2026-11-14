@@ -324,3 +324,170 @@ fn bytes_that_do_not_decode_at_the_start_of_a_block_are_refused() {
     );
     assert!(result.is_err(), "{result:?}");
 }
+
+fn call_through_stored_address(callee_offset: i64, after_call_offset: i64) -> Vec<String> {
+    vec![
+        "start:".to_string(),
+        "pushq %rax".into(),
+        "movq $transform, (%rsp)".into(),
+        "movq %rsp, %r8".into(),
+        "callq *(%r8)".into(),
+        format!("movb %cl, {after_call_offset}(%rdi)"),
+        "popq %rax".into(),
+        "retq".into(),
+        "transform:".into(),
+        format!("movb %cl, {callee_offset}(%rdi)"),
+        "retq".into(),
+    ]
+}
+
+fn check_lines(program: Vec<String>) -> Result<(), String> {
+    let program: Vec<&str> = program.iter().map(String::as_str).collect();
+    check(&program, &len_is_blocks_of(16))
+}
+
+#[test]
+fn a_call_through_a_stored_symbol_address_runs_the_callee() {
+    let result = check_lines(call_through_stored_address(0, 15));
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn a_bad_write_in_a_callee_reached_through_a_stored_address_is_caught() {
+    let result = check_lines(call_through_stored_address(16, 0));
+    assert!(result.is_err(), "{result:?}");
+}
+
+#[test]
+fn a_bad_write_after_an_indirect_call_returns_is_caught() {
+    let result = check_lines(call_through_stored_address(0, 16));
+    assert!(result.is_err(), "{result:?}");
+}
+
+#[test]
+fn a_call_through_a_loaded_unknown_pointer_is_refused() {
+    let result = check(&["start:", "callq *(%rsi)", "retq"], &len_is_blocks_of(16));
+    assert!(result.is_err(), "{result:?}");
+}
+
+#[test]
+fn a_jump_through_a_register_holding_a_symbol_address_is_followed() {
+    let program = |offset: i64| {
+        vec![
+            "start:".to_string(),
+            "movq $target, %rax".into(),
+            "jmpq *%rax".into(),
+            "target:".into(),
+            format!("movb %cl, {offset}(%rdi)"),
+            "retq".into(),
+        ]
+    };
+    assert!(check_lines(program(15)).is_ok());
+    assert!(check_lines(program(16)).is_err());
+}
+
+fn read_through_symbol_immediate(load_address: &str, read: &str) -> Result<(), String> {
+    check(
+        &[
+            "start:",
+            load_address,
+            read,
+            "retq",
+            "\t.section\t.rodata",
+            "table:",
+            ".long 0x01020304,0x05060708,0x090a0b0c,0x00010203",
+        ],
+        &[],
+    )
+}
+
+#[test]
+fn a_32_bit_symbol_immediate_holds_the_whole_address() {
+    assert!(read_through_symbol_immediate("movl $table, %esi", "movl 12(%rsi), %eax").is_ok());
+    assert!(read_through_symbol_immediate("movl $table, %esi", "movl 13(%rsi), %eax").is_err());
+}
+
+#[test]
+fn a_symbol_immediate_carries_its_offset() {
+    assert!(read_through_symbol_immediate("movq $table+8, %rax", "movq (%rax), %rcx").is_ok());
+    assert!(read_through_symbol_immediate("movq $table+9, %rax", "movq (%rax), %rcx").is_err());
+    assert!(read_through_symbol_immediate("movq $table-4, %rax", "movl 4(%rax), %ecx").is_ok());
+    assert!(read_through_symbol_immediate("movq $table-4, %rax", "movl (%rax), %ecx").is_err());
+}
+
+fn write_through_low_byte_over_unknown_bits(
+    low_byte: i64,
+    steps_down: usize,
+) -> Result<(), String> {
+    let set_low_byte = format!("movb ${low_byte}, %al");
+    let mut program = vec!["start:", "movq (%rsi), %rax", set_low_byte.as_str()];
+    program.extend(std::iter::repeat_n("decb %al", steps_down));
+    program.extend(["movzbl %al, %ecx", "movb %dl, (%rdi,%rcx)", "retq"]);
+    check(&program, &len_is_blocks_of(16))
+}
+
+#[test]
+fn a_byte_written_over_unknown_upper_bits_is_known() {
+    assert!(write_through_low_byte_over_unknown_bits(15, 0).is_ok());
+    assert!(write_through_low_byte_over_unknown_bits(16, 0).is_err());
+    assert!(write_through_low_byte_over_unknown_bits(17, 2).is_ok());
+    assert!(write_through_low_byte_over_unknown_bits(18, 2).is_err());
+}
+
+#[test]
+fn a_byte_countdown_over_unknown_upper_bits_runs_its_exact_trips() {
+    let program = [
+        "start:",
+        "movq (%rsi), %rax",
+        "movb $0x7, %al",
+        "movq %rdi, %r8",
+        "L_round:",
+        "movb %dl, (%r8)",
+        "incq %r8",
+        "decb %al",
+        "jne L_round",
+        "movb %dl, 8(%rdi)",
+        "retq",
+    ];
+    assert!(check(&program, &len_is_blocks_of(16)).is_ok());
+    let overrun = program.map(|line| {
+        if line == "movb $0x7, %al" {
+            "movb $0x11, %al"
+        } else {
+            line
+        }
+    });
+    assert!(check(&overrun, &len_is_blocks_of(16)).is_err());
+}
+
+fn index_reloaded_from_a_spilled_vector(scale: i64, reloaded_lane: i64) -> Result<(), String> {
+    let reload = format!("movl {}(%rsp), %eax", 0x10 + 4 * reloaded_lane);
+    let store = format!("movb %dl, (%rdi,%rax,{scale})");
+    let program = [
+        "start:",
+        "subq $0x40, %rsp",
+        "movzbl (%rsi), %r9d",
+        "andl $1, %r9d",
+        "negl %r9d",
+        "movd %r9d, %xmm0",
+        "pshufd $0x0, %xmm0, %xmm0",
+        "movdqu %xmm0, 0x10(%rsp)",
+        reload.as_str(),
+        "negl %eax",
+        store.as_str(),
+        "addq $0x40, %rsp",
+        "retq",
+    ];
+    check(&program, &len_is_blocks_of(16))
+}
+
+#[test]
+fn a_scalar_reload_of_a_spilled_vector_keeps_its_low_lane() {
+    assert!(index_reloaded_from_a_spilled_vector(8, 0).is_ok());
+    assert!(index_reloaded_from_a_spilled_vector(16, 0).is_err());
+}
+
+#[test]
+fn a_scalar_reload_past_the_low_quadword_of_a_spilled_vector_is_unknown() {
+    assert!(index_reloaded_from_a_spilled_vector(8, 2).is_err());
+}

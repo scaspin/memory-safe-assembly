@@ -631,6 +631,17 @@ pub fn generate_expression(
     a: AbstractExpression,
     b: AbstractExpression,
 ) -> AbstractExpression {
+    if let (AbstractExpression::Immediate(x), AbstractExpression::Immediate(y)) = (&a, &b) {
+        let folded = match op {
+            "%" if *y > 0 => Some(x.rem_euclid(*y)),
+            "/" if *y > 0 => Some(x.div_euclid(*y)),
+            "*" => x.checked_mul(*y),
+            _ => None,
+        };
+        if let Some(value) = folded {
+            return AbstractExpression::Immediate(value);
+        }
+    }
     if let AbstractExpression::Expression(inner, x, t) = &a {
         let undone = match (op, inner.as_str(), &b) {
             ("asr", "lsl", AbstractExpression::Immediate(k)) if (0..64).contains(k) => {
