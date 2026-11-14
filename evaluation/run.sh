@@ -5,7 +5,8 @@ root=$(dirname "$here")
 out=${OUT:-$here/results}
 slow=${SLOW:-$here/slow}
 runs=${RUNS:-3}
-jobs=${JOBS:-4}
+jobs=${JOBS:-2}
+mem_gb=${MEM_GB:-3}
 timeout=${TIMEOUT:-300}
 slow_timeout=${SLOW_TIMEOUT:-2700}
 slow_steps=${SLOW_STEPS:-20000000}
@@ -29,6 +30,9 @@ suites=(
   "ffmpeg|ffmpeg-playground|--all-features"
   "compression|compression-playground|"
   "compression-x86|compression-playground|--target $x86"
+  "blake3|blake3-secp256k1-playground|--asm-dir blake3-secp256k1-playground/asm"
+  "blake3-x86|blake3-secp256k1-playground|--target $x86 --asm-dir blake3-secp256k1-playground/asm"
+  "secsep-x86|secsep-playground|--target $x86 --asm-dir secsep-playground/asm"
 )
 for extra in ${EXTRA_SUITES:-}; do
   suites+=("$extra")
@@ -54,14 +58,14 @@ for run in $(seq 1 "$runs"); do
     skip=()
     [[ -s $skipping.main ]] && skip=(--skip-file "$skipping.main")
     echo "=== run $run $name $(date)"
-    (cd "$root" && "$check" "$crate" $flags --jobs "$jobs" --timeout "$timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.partial") | tail -1
+    (cd "$root" && "$check" "$crate" $flags --jobs "$jobs" --mem-gb "$mem_gb" --timeout "$timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.partial") | tail -1
     rm -f "$skipping.main"
     if [[ -s $slow_list ]]; then
       pattern="^($(paste -sd'|' "$slow_list"))\$"
       skip=()
       [[ -s $skipping ]] && skip=(--skip-file "$skipping")
       echo "=== run $run $name slow $(date)"
-      (cd "$root" && BUMS_MAX_STEPS=$slow_steps "$check" "$crate" $flags --filter "$pattern" --jobs "$jobs" --timeout "$slow_timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.slow") | tail -1
+      (cd "$root" && BUMS_MAX_STEPS=$slow_steps "$check" "$crate" $flags --filter "$pattern" --jobs "$jobs" --mem-gb "$mem_gb" --timeout "$slow_timeout" ${skip[@]+"${skip[@]}"} --out "$tsv.slow") | tail -1
       [[ -f $tsv.slow ]] && cat "$tsv.slow" >>"$tsv.partial"
       rm -f "$tsv.slow"
     fi

@@ -31,6 +31,16 @@ DOMAIN = {
     "candle": "math",
     "compression": "compression",
     "compression-x86": "compression",
+    "blake3": "crypto",
+    "blake3-x86": "crypto",
+    "secsep-x86": "crypto",
+}
+DISPLAY = {
+    "crypto": "AWS-LC",
+    "crypto-x86": "AWS-LC-x86",
+    "blake3": "BLAKE3/secp256k1",
+    "blake3-x86": "BLAKE3/secp256k1-x86",
+    "secsep-x86": "BoringSSL (SecSep)-x86",
 }
 AUDIO_FILES = {"src/audio.rs", "src/float_dsp.rs", "src/tx_float.rs"}
 DOMAIN_COLOR = {
@@ -41,13 +51,13 @@ DOMAIN_COLOR = {
     "audio": "#ff7f0e",
 }
 PHASES = [
-    ("parsing", "parsing and setup", "#8c564b"),
-    ("serialization", "serialization", "#c49c94"),
-    ("execution", "symbolic execution", "#8c8c8c"),
-    ("forking", "path forking", "#c7c7c7"),
-    ("loop_resolution", "loop resolution", "#ff7f0e"),
-    ("smt_execution", "SMT (execution)", "#1f77b4"),
-    ("smt_loops", "SMT (loop resolution)", "#aec7e8"),
+    ("parsing", "parsing and setup", "#3d3b38"),
+    ("execution", "symbolic execution", "#a3a09a"),
+    ("forking", "path forking", "#d3d0ca"),
+    ("loop_resolution", "loop resolution", "#6e6b66"),
+    ("serialization", "serialization", "#e46aa6"),
+    ("smt_execution", "SMT (execution)", "#5a33b0"),
+    ("smt_loops", "SMT (loop resolution)", "#b7a2e8"),
 ]
 
 
@@ -155,6 +165,7 @@ def scatter(points, path):
     axes.set_ylabel("verification time (s, median of runs)")
     figure.tight_layout()
     figure.savefig(path)
+    figure.savefig(Path(path).with_suffix(".png"), dpi=300)
 
 
 def size_comparison(points, path):
@@ -164,6 +175,7 @@ def size_comparison(points, path):
     executed.set_ylabel("verification time (s, median of runs)")
     figure.tight_layout()
     figure.savefig(path)
+    figure.savefig(Path(path).with_suffix(".png"), dpi=300)
 
 
 def breakdown(points, path):
@@ -174,14 +186,16 @@ def breakdown(points, path):
     }
     labels = [suite for _, suite in suites]
     figure, axes = plt.subplots(figsize=(7, 0.35 * len(labels) + 1.6))
+    axes.set_yticks(range(len(labels)))
     left = [0.0] * len(labels)
     for key, name, color in PHASES:
         shares = []
         for library in labels:
             whole = sum(totals[library].values()) or 1.0
             shares.append(100.0 * totals[library][key] / whole)
-        axes.barh(labels, shares, left=left, color=color, label=name)
+        axes.barh(range(len(labels)), shares, left=left, color=color, label=name, edgecolor="white", linewidth=0.6)
         left = [a + b for a, b in zip(left, shares)]
+    axes.set_yticklabels([DISPLAY.get(l, l) for l in labels])
     for row, library in enumerate(labels):
         axes.text(101, row, f"{sum(totals[library].values()):.0f}s", va="center", fontsize=7)
     axes.set_xlim(0, 112)
@@ -190,6 +204,7 @@ def breakdown(points, path):
     axes.legend(fontsize=7, ncol=3, frameon=False, loc="lower center", bbox_to_anchor=(0.5, 1.0))
     figure.tight_layout()
     figure.savefig(path)
+    figure.savefig(Path(path).with_suffix(".png"), dpi=300)
 
 
 RANKS = {
@@ -205,7 +220,7 @@ def representative_breakdown(points, path, rank):
     for _, suite in suites:
         ordered = sorted((p for p in points if p["suite"] == suite), key=lambda p: p["median"])
         chosen.append(RANKS[rank](ordered))
-    labels = [f"{p['suite']}\n{p['function']}" for p in chosen]
+    labels = [f"{DISPLAY.get(p['suite'], p['suite'])}\n{p['function']}" for p in chosen]
     figure, axes = plt.subplots(figsize=(9.5, 0.5 * len(labels) + 1.8))
     left = [0.0] * len(labels)
     for key, name, color in PHASES:
@@ -213,7 +228,7 @@ def representative_breakdown(points, path, rank):
         for p in chosen:
             whole = sum(p[phase] for phase, _, _ in PHASES) or 1.0
             shares.append(100.0 * p[key] / whole)
-        axes.barh(labels, shares, left=left, color=color, label=name)
+        axes.barh(labels, shares, left=left, color=color, label=name, edgecolor="white", linewidth=0.6)
         left = [a + b for a, b in zip(left, shares)]
     for row, p in enumerate(chosen):
         seconds = p["median"]
@@ -230,6 +245,7 @@ def representative_breakdown(points, path, rank):
     axes.legend(fontsize=7, ncol=3, frameon=False, loc="lower center", bbox_to_anchor=(0.5, 1.0))
     figure.tight_layout()
     figure.savefig(path)
+    figure.savefig(Path(path).with_suffix(".png"), dpi=300)
 
 
 def table(points, runs):

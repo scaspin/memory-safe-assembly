@@ -1,0 +1,15 @@
+candle_vec_add_f16	src/lib.rs	verified	0.117		48	2	228	515	0.018	0.012	0.007	0.030	0.006	0.004	0.034
+candle_vec_dot_f16	src/lib.rs	verified	0.227		118	3	525	620	0.022	0.037	0.010	0.035	0.014	0.004	0.061
+candle_f16_vec_reduce	src/lib.rs	verified	0.111		33	0	33	12	0.000	0.000	0.000	0.001	0.000	0.003	0.000
+candle_f16_vecops_vec_add	src/lib.rs	verified	0.220		48	2	228	515	0.017	0.011	0.007	0.029	0.006	0.003	0.034
+candle_f16_vec_dot	src/lib.rs	verified	0.221		117	3	505	572	0.021	0.036	0.010	0.032	0.013	0.004	0.059
+candle_q2k_vec_dot	src/lib.rs	verified	0.111		177	1	624	370	0.014	0.003	0.002	0.024	0.005	0.004	0.008
+candle_q4k_vec_dot	src/lib.rs	verified	0.889		166	1	616	366	0.725	0.003	0.002	0.032	0.007	0.004	0.010
+candle_q5k_vec_dot	src/lib.rs	verified	0.557		193	1	729	349	0.425	0.003	0.002	0.031	0.006	0.004	0.010
+candle_q3k_vec_dot	src/lib.rs	verified	1.888		248	1	930	358	1.778	0.004	0.002	0.029	0.007	0.004	0.011
+candle_q6k_vec_dot	src/lib.rs	verified	0.110		201	1	755	446	0.018	0.003	0.002	0.032	0.005	0.004	0.009
+candle_q8k_vec_dot	src/lib.rs	verified	0.118		93	1	347	349	0.007	0.003	0.002	0.032	0.005	0.004	0.009
+candle_q6k_vec_dot_4	src/lib.rs	verified	0.327		501	2	2419	1273	0.054	0.001	0.002	0.148	0.008	0.005	0.056
+candle_q4_0_vec_dot	src/lib.rs	verified	0.106		54	1	148	151	0.007	0.003	0.005	0.009	0.003	0.004	0.013
+candle_q8_0_vec_dot	src/lib.rs	verified	0.110		48	1	101	112	0.006	0.002	0.003	0.008	0.002	0.004	0.010
+candle_q4k_vec_dot_4	src/lib.rs	verified	12.102		307	2	2034	1657	11.693	0.012	0.003	0.227	0.020	0.004	0.112

@@ -11,3 +11,5 @@ scrape-asm/crates/
 bugs/cve-examples/
 __pycache__/
 evaluation/results/
+target-isolated/
+/s2n-bignum

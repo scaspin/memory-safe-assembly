@@ -1,0 +1,15 @@
+candle_vec_add_f16	src/lib.rs	48
+candle_vec_dot_f16	src/lib.rs	118
+candle_f16_vec_reduce	src/lib.rs	33
+candle_f16_vecops_vec_add	src/lib.rs	48
+candle_f16_vec_dot	src/lib.rs	117
+candle_q2k_vec_dot	src/lib.rs	177
+candle_q3k_vec_dot	src/lib.rs	248
+candle_q4k_vec_dot	src/lib.rs	166
+candle_q5k_vec_dot	src/lib.rs	193
+candle_q6k_vec_dot	src/lib.rs	201
+candle_q8k_vec_dot	src/lib.rs	93
+candle_q4k_vec_dot_4	src/lib.rs	307
+candle_q6k_vec_dot_4	src/lib.rs	501
+candle_q4_0_vec_dot	src/lib.rs	54
+candle_q8_0_vec_dot	src/lib.rs	48

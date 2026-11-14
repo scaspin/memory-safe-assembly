@@ -23,6 +23,10 @@ RUSTUP_TOOLCHAIN=1.93-aarch64-apple-darwin
 - **Lint:** `cargo clippy -p bums -p bums_macros --all-targets`.
 - **x86 playgrounds:** `cargo check --release --target x86_64-apple-darwin -p <crate>`
   (rav1d's x86 build needs `nasm` and `llvm-objdump`).
+- **Evaluation:** `evaluation/reproduce.sh` runs tests, the full sweep, figures, tables and the
+  SecSep figures (`--help` lists stages and knobs; a full sweep takes about a day at 2 jobs × 3 GB).
+  Redraw from the published sweep without rerunning:
+  `FROM=evaluation/published/rework-5f5018a4 STAGES="figures tables" evaluation/reproduce.sh`.
 
 ## Verifying assembly
 
