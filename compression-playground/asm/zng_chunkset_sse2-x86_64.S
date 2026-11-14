@@ -509,9 +509,7 @@ decq	%rax
 cmpq	$0x7, %rax
 ja	L_122e
 leaq	bums_jump_table_rodata_0(%rip), %rcx
-movslq	(%rcx,%rax,4), %rax
-addq	%rcx, %rax
-jmpq	*%rax
+bums.jump_table %rax, 0:L_69f, 1:L_1205, 2:L_122e, 3:L_11ff, 4:L_122e, 5:L_122e, 6:L_122e, 7:L_1218
 L_69f:
 movzbl	(%rbx), %esi
 movq	%r14, %r12

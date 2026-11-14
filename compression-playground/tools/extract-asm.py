@@ -581,7 +581,61 @@ def merged(name, text, objects, rendered):
     return text + "".join(appended)
 
 
+def rewrite_jump_tables(text):
+    """Rewrite clang's relative jump-table dispatch (`leaq TABLE(%rip), %base`,
+    `movslq (%base,%idx,4), %idx`, `addq %base, %idx`, `jmpq *%idx`) as
+    `bums.jump_table %idx, 0:L, 1:L, ...`, the entries read from TABLE's
+    `.long L - TABLE` lines, so the checker follows each target by label."""
+    lines = text.split("\n")
+    tables = {}
+    current = None
+    for line in lines:
+        label = re.fullmatch(r"([\w.$]+):", line)
+        if label:
+            current = label.group(1)
+            tables.setdefault(current, [])
+            continue
+        entry = re.fullmatch(r"\t\.long ([\w.$]+) - ([\w.$]+)", line)
+        if entry and entry.group(2) == current:
+            tables[current].append(entry.group(1))
+        elif not line.startswith("\t.size"):
+            current = None
+    tables = {name: targets for name, targets in tables.items() if targets}
+    rewritten = []
+    holding = {}
+    k = 0
+    while k < len(lines):
+        line = lines[k]
+        address = re.fullmatch(r"leaq\t([\w.$]+)\(%rip\), (%\w+)", line)
+        if address:
+            holding[address.group(2)] = address.group(1)
+        load = re.fullmatch(r"movslq\t\((%\w+),(%\w+),4\), (%\w+)", line)
+        if load and load.group(2) == load.group(3) and load.group(1) in holding:
+            base, index = load.group(1), load.group(3)
+            tail = lines[k + 1 :]
+            add = next((j for j, l in enumerate(tail[:4]) if l == f"addq\t{base}, {index}"), None)
+            jump = next((j for j, l in enumerate(tail[:4]) if l == f"jmpq\t*{index}"), None)
+            if add is not None and jump is not None and add < jump:
+                entries = ", ".join(f"{i}:{target}" for i, target in enumerate(tables[holding[base]]))
+                rewritten += [l for j, l in enumerate(tail[:jump]) if j != add]
+                rewritten.append(f"bums.jump_table {index}, {entries}")
+                k += jump + 2
+                continue
+        if re.fullmatch(r"[\w.$]+:", line) or line.startswith("\t."):
+            holding.clear()
+        rewritten.append(line)
+        k += 1
+    return "\n".join(rewritten)
+
+
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "--jump-tables":
+        for path in sys.argv[2:]:
+            with open(path) as f:
+                text = f.read()
+            with open(path, "w") as f:
+                f.write(rewrite_jump_tables(text))
+        return
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     source, output = sys.argv[1:]
@@ -599,7 +653,7 @@ def main():
             del objects[name]
     for name, text in rendered.items():
         with open(os.path.join(output, name + ".S"), "w") as f:
-            f.write(merged(name, text, objects, rendered))
+            f.write(rewrite_jump_tables(merged(name, text, objects, rendered)))
         print(f"{name}.o -> {name}.S")
 
 

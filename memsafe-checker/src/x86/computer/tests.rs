@@ -196,6 +196,26 @@ fn an_unknown_operand_against_a_possibly_negative_one_leaves_the_carry_unknown()
 }
 
 #[test]
+fn a_rotate_right_of_a_symbol_moves_its_low_bit_to_the_top() {
+    let mut c = X86_64::new();
+    c.set_abstract("rax".to_string(), abstract_of("x"));
+    run(&mut c, "rorxq $1,%rax,%rcx");
+    let rotated = expression_to_ast(c.registers[RCX].expression()).expect("translatable");
+    let x = ast::Int::new_const("x");
+    let value_at = |input: u64| {
+        c.solver.push();
+        c.solver.assert(x.eq(ast::Int::from_u64(input)));
+        assert_eq!(c.solver.check(), SatResult::Sat);
+        let model = c.solver.get_model().expect("model");
+        let value = model.eval(&rotated, true).expect("value").to_string();
+        c.solver.pop(1);
+        value
+    };
+    assert_eq!(value_at(3), ((1u128 << 63) + 1).to_string());
+    assert_eq!(value_at(4), "2");
+}
+
+#[test]
 fn rep_stos_checks_the_whole_range() {
     let mut c = X86_64::new();
     c.add_memory_region("buf".to_string(), RegionType::RW, abstract_of("len"));

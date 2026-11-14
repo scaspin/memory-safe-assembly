@@ -626,6 +626,8 @@ fn rebuild_sum(kept: Vec<(bool, AbstractExpression)>, constant: i64) -> Abstract
     }
 }
 
+const LARGEST_DROPPED_NARROWING: i64 = 1 << 16;
+
 pub fn generate_expression(
     op: &str,
     a: AbstractExpression,
@@ -663,6 +665,13 @@ pub fn generate_expression(
         && let Some(cancelled) = xor_cancelled(&a, &b)
     {
         return cancelled;
+    }
+    if op == "%"
+        && let AbstractExpression::Immediate(modulus) = b
+        && (1..=LARGEST_DROPPED_NARROWING).contains(&modulus)
+        && crate::widening::unsigned_range(&a).is_some_and(|(low, high)| low >= 0 && high < modulus)
+    {
+        return a;
     }
     if op == "%"
         && let AbstractExpression::Immediate(modulus) = b
@@ -1807,7 +1816,30 @@ fn disjoint_bits(a: &AbstractExpression, b: &AbstractExpression) -> bool {
             .zip(shift(y, &["lsl", "<<"]))
             .is_some_and(|(s1, s2)| s1 + s2 >= 64)
     };
-    shifted_apart(a, b) || shifted_apart(b, a)
+    let apart_by_masks = possible_bits(a)
+        .zip(possible_bits(b))
+        .is_some_and(|(x, y)| x & y == 0);
+    shifted_apart(a, b) || shifted_apart(b, a) || apart_by_masks
+}
+
+fn possible_bits(e: &AbstractExpression) -> Option<u64> {
+    match e {
+        AbstractExpression::Immediate(n) if *n >= 0 => Some(*n as u64),
+        AbstractExpression::Expression(op, left, right) if op == "&" => {
+            match (possible_bits(left), possible_bits(right)) {
+                (Some(x), Some(y)) => Some(x & y),
+                (Some(x), None) | (None, Some(x)) => Some(x),
+                (None, None) => None,
+            }
+        }
+        AbstractExpression::Expression(op, _, modulus) if op == "%" => match **modulus {
+            AbstractExpression::Immediate(m) if m > 0 && (m as u64).is_power_of_two() => {
+                Some(m as u64 - 1)
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 pub fn is_exactly_translatable(e: &AbstractExpression) -> bool {
@@ -2266,6 +2298,59 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_modulus_above_a_clamped_range_is_dropped_only_when_the_range_fits() {
+        let clamped = |low: i64, high: i64| {
+            generate_expression(
+                "atmost",
+                generate_expression(
+                    "atleast",
+                    AbstractExpression::Abstract("x".to_string()),
+                    AbstractExpression::Immediate(low),
+                ),
+                AbstractExpression::Immediate(high),
+            )
+        };
+        let modulo =
+            |e: AbstractExpression| generate_expression("%", e, AbstractExpression::Immediate(256));
+        assert_eq!(modulo(clamped(1, 2)), clamped(1, 2));
+        assert_ne!(modulo(clamped(0, 300)), clamped(0, 300));
+        let free = AbstractExpression::Abstract("x".to_string());
+        assert_ne!(modulo(free.clone()), free);
+    }
+
+    #[test]
+    fn an_or_with_bits_a_mask_cannot_set_is_an_addition() {
+        let masked = generate_expression(
+            "&",
+            AbstractExpression::Abstract("x".to_string()),
+            AbstractExpression::Immediate(15),
+        );
+        let or = |constant: i64| {
+            expression_to_ast(generate_expression(
+                "|",
+                masked.clone(),
+                AbstractExpression::Immediate(constant),
+            ))
+            .expect("translatable")
+        };
+        let sum = expression_to_ast(generate_expression(
+            "+",
+            masked.clone(),
+            AbstractExpression::Immediate(448),
+        ))
+        .expect("translatable");
+        let solver = Solver::new();
+        assert_eq!(
+            solver.check_assumptions(&[or(448).eq(&sum).not()]),
+            SatResult::Unsat
+        );
+        assert_ne!(
+            solver.check_assumptions(&[or(456).eq(sum.clone()).not()]),
+            SatResult::Unsat
+        );
+    }
 
     #[test]
     fn a_narrow_read_inside_a_wide_constant_is_unknown_past_its_eighth_byte() {

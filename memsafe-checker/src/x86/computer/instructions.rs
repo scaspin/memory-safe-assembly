@@ -282,10 +282,43 @@ fn shift(op: &str, value: &RegisterValue, count: i64, width: i64) -> RegisterVal
                 }
                 "shr" => shifted("lsr", value),
                 "sar" => shifted("asr", &sign_extend(value, width)),
+                "ror" | "rol" if width == 4 || width == 8 => {
+                    let bits = width * 8;
+                    let right = if op == "ror" { count } else { bits - count };
+                    rotated_right(value, right, bits)
+                }
                 _ => unknown(),
             }
         }
     }
+}
+
+fn rotated_right(value: &RegisterValue, right: i64, bits: i64) -> RegisterValue {
+    let unsigned = generate_expression(
+        "zext",
+        value.expression(),
+        AbstractExpression::Immediate(bits),
+    );
+    let low = generate_expression(
+        "%",
+        unsigned.clone(),
+        AbstractExpression::Immediate(1 << right),
+    );
+    let high = generate_expression("/", unsigned, AbstractExpression::Immediate(1 << right));
+    let raised = generate_expression(
+        "*",
+        generate_expression(
+            "*",
+            low,
+            AbstractExpression::Immediate(1 << (bits - right - 1)),
+        ),
+        AbstractExpression::Immediate(2),
+    );
+    RegisterValue::new(
+        RegisterKind::RegisterBase,
+        Some(generate_expression("+", raised, high)),
+        0,
+    )
 }
 
 fn condition_code<'a>(mnemonic: &'a str, stem: &str) -> Option<&'a str> {
@@ -553,6 +586,39 @@ impl X86_64 {
         self.bound_fresh(times_divisor.le(&top));
     }
 
+    fn bitwise_of_bits(
+        &self,
+        op: &str,
+        dst: &RegisterValue,
+        src: &RegisterValue,
+    ) -> Option<RegisterValue> {
+        let may_be_a_flag = |value: &RegisterValue| match value.kind {
+            RegisterKind::Immediate => matches!(value.offset, 0 | 1),
+            RegisterKind::RegisterBase => value
+                .expression()
+                .get_abstracts()
+                .iter()
+                .any(|symbol| symbol.starts_with("select_")),
+            RegisterKind::Number => false,
+        };
+        let bit = |value: &RegisterValue| {
+            (may_be_a_flag(value) && self.proves_within(&value.expression(), 0, 1))
+                .then(|| value.expression())
+        };
+        let (a, b) = (bit(dst)?, bit(src)?);
+        let both = generate_expression("*", a.clone(), b.clone());
+        let combined = match op {
+            "and" => both,
+            "or" => generate_expression("-", generate_expression("+", a, b), both),
+            _ => return None,
+        };
+        Some(RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(combined),
+            0,
+        ))
+    }
+
     fn proves_within(&self, expression: &AbstractExpression, low: i64, high: i64) -> bool {
         let Some(value) = expression_to_ast(expression.clone()) else {
             return false;
@@ -689,8 +755,12 @@ impl X86_64 {
                         _ => None,
                     }
                 });
+                let either_bit = (matches!(m, "or" | "and") && !same_register)
+                    .then(|| self.bitwise_of_bits(m, &dst, &src))
+                    .flatten();
                 let result = match (m, same_register) {
                     _ if absorbing.is_some() => absorbing.expect("checked by the guard"),
+                    _ if either_bit.is_some() => either_bit.expect("checked by the guard"),
                     ("sub" | "xor", true) => RegisterValue::new_imm(0),
                     ("and" | "or", true) => dst.clone(),
                     _ => {
@@ -820,7 +890,8 @@ impl X86_64 {
                 let result = if ops[0] == ops[1] {
                     dst
                 } else {
-                    combine("&", &dst, &src)
+                    self.bitwise_of_bits("and", &dst, &src)
+                        .unwrap_or_else(|| combine("&", &dst, &src))
                 };
                 self.flags_of_result(&result, width, Carry::Cleared);
             }
@@ -841,7 +912,14 @@ impl X86_64 {
                 let src = self.read(&ops[1], width)?;
                 let all_ones = src.kind == RegisterKind::Immediate
                     && (src.offset == -1 || (width == 4 && src.offset == 0xffff_ffff));
-                let result = if all_ones {
+                let low_ones = (src.kind == RegisterKind::Immediate && src.offset > 0)
+                    .then(|| src.offset.trailing_ones() as i64)
+                    .filter(|ones| (1i64 << ones) - 1 == src.offset);
+                let count_within_ones = low_ones.is_some_and(|ones| {
+                    count.kind != RegisterKind::Number
+                        && self.proves_within(&count.expression(), 0, ones)
+                });
+                let result = if all_ones || count_within_ones {
                     self.low_bits_mask(&count, width, -1)
                 } else {
                     unknown()
@@ -989,6 +1067,21 @@ impl X86_64 {
                 let low = match (&rax.kind, &src.kind) {
                     (RegisterKind::Immediate, RegisterKind::Immediate) => {
                         RegisterValue::new_imm(rax.offset.wrapping_mul(src.offset))
+                    }
+                    (RegisterKind::Immediate, RegisterKind::RegisterBase)
+                    | (RegisterKind::RegisterBase, RegisterKind::Immediate)
+                        if width <= 4 =>
+                    {
+                        let product = generate_expression("*", rax.expression(), src.expression());
+                        RegisterValue::new(
+                            RegisterKind::RegisterBase,
+                            Some(generate_expression(
+                                "%",
+                                product,
+                                AbstractExpression::Immediate(1 << (8 * width)),
+                            )),
+                            0,
+                        )
                     }
                     _ => unknown(),
                 };
@@ -1182,6 +1275,7 @@ impl X86_64 {
                         .find(|(i, _)| *i == index.offset)
                         .map(|(_, target)| ExecuteReturnType::JumpLabel(target.clone()))
                         .ok_or_else(|| format!("jump table has no entry {}", index.offset)),
+                    RegisterKind::RegisterBase => self.symbolic_jump_table(&index, &entries),
                     _ => Err(format!("jump table index of unknown value {index:?}")),
                 };
             }
@@ -1195,6 +1289,43 @@ impl X86_64 {
             _ => return self.vector_or_unsupported(instruction),
         }
         Ok(ExecuteReturnType::Next)
+    }
+
+    fn symbolic_jump_table(&self, index: &RegisterValue, entries: &[(i64, String)]) -> Step {
+        let value = index.expression();
+        let at =
+            |i: i64| AbstractComparison::new("==", value.clone(), AbstractExpression::Immediate(i));
+        let feasible = |case: &AbstractComparison| {
+            comparison_to_ast(case.clone())
+                .is_some_and(|c| check(&self.solver, &[c]) != SatResult::Unsat)
+        };
+        let Some(within) = expression_to_ast(value.clone()) else {
+            return Err(format!("jump table index {value} is not expressible"));
+        };
+        let outside: Vec<ast::Bool> = entries
+            .iter()
+            .map(|(i, _)| within.eq(ast::Int::from_i64(*i)).not())
+            .collect();
+        if check(
+            &self.solver,
+            &[ast::Bool::and(&outside.iter().collect::<Vec<_>>())],
+        ) != SatResult::Unsat
+        {
+            return Err(format!(
+                "jump table index {value} may fall outside its entries"
+            ));
+        }
+        let cases: Vec<(AbstractComparison, &String)> = entries
+            .iter()
+            .map(|(i, target)| (at(*i), target))
+            .filter(|(case, _)| feasible(case))
+            .collect();
+        match cases.as_slice() {
+            [(_, target)] => Ok(ExecuteReturnType::JumpLabel((*target).clone())),
+            _ => Ok(ExecuteReturnType::Split(
+                cases.into_iter().map(|(case, _)| case).collect(),
+            )),
+        }
     }
 
     fn lowest_set_bit_cases(

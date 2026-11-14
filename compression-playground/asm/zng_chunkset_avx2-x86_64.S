@@ -208,9 +208,7 @@ rorxq	$0x1, %rcx, %rcx
 cmpq	$0x7, %rcx
 ja	L_314
 leaq	bums_jump_table_rodata_0(%rip), %rdi
-movslq	(%rdi,%rcx,4), %rcx
-addq	%rdi, %rcx
-jmpq	*%rcx
+bums.jump_table %rcx, 0:L_28b, 1:L_299, 2:L_314, 3:L_292, 4:L_314, 5:L_314, 6:L_314, 7:L_2a0
 L_28b:
 vpbroadcastw	(%rsi), %ymm0
 jmp	L_2a5

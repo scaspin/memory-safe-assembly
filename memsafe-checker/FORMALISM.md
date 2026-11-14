@@ -271,6 +271,10 @@ $$
 
 $\mathsf{terms}$ distributes through $+$ and $-$ and pulls negative literal factors out
 of products ($a * -k \leadsto -(a * k)$). Constants fold with *saturating* arithmetic.
+$e \boxplus_{\bmod} m = e$ for $1 \le m \le 2^{16}$ when the structural range of $e$
+(`unsigned_range`) lies in $[0, m)$, so a byte or halfword narrowing of a clamped value
+adds no quotient to solver queries; word and wider moduli are kept, since word-level
+patterns are recognised by their $\bmod 2^{32}$.
 Normalisation is skipped above 256 nodes. This is syntactic, not semantic: it exists to
 make $\delta = \lfloor v' \rfloor - \lfloor v\rfloor$ come out as a literal when it
 is one, which §6.3 depends on. Linear reasoning that must not depend on spelling uses
@@ -447,7 +451,18 @@ over $[c, \neg c]$ when $c$ or a compared value mentions a declared region's bas
 label or length symbol, so each arm sets either the comparison's flags or the immediate
 NZCV; otherwise all four flags become fresh (constant-time data chains would only multiply
 paths). An x86 `cmp` with an opaque operand keeps $Z$ and $C$ over a fresh value in
-$[0, 2^{8w})$ when the other operand is proved in that range, and forgets $N$ and $V$. On x86 a 1–4 byte load from a never-written constant
+$[0, 2^{8w})$ when the other operand is proved in that range, and forgets $N$ and $V$.
+Exact x86 forms: `and`/`test`/`or` of two values proved in $\{0,1\}$ (each a literal
+0 or 1, or naming a select) are $a b$ and $a + b - a b$; `ror`/`rol`/`rorx` of a symbol
+by a constant $k$ is $(u \bmod 2^k)\,2^{w-k} + \lfloor u / 2^k\rfloor$ with
+$u = \mathsf{zext}_w(v)$; the low half of a 32-bit or narrower `mul` by a constant is
+$(c v) \bmod 2^{8w}$; `bzhi` of $2^k - 1$ with a count proved in $[0, k]$ is the low-bits
+mask of that count. In any term, $a \mathbin{|} b$ is $a + b$ when the bits $a$ and $b$
+may set are disjoint (a nonnegative literal, `& m`, or `mod` $2^k$ bound them,
+`possible_bits`). A `bums.jump_table` with a symbolic index splits over its feasible
+entries, and is an error when the index may fall outside them; the compression
+extractor writes clang's `movslq`/`addq`/`jmpq *` dispatch as that pseudo-instruction
+(`rewrite_jump_tables`). On x86 a 1–4 byte load from a never-written constant
 section at a symbolic offset $o$ (`constant_table_range`) is instead a fresh value between
 the least and greatest entry the load can reach: the entries at offsets in $[o_{lo}, o_{hi}]$
 (the proved bounds of $o$) congruent to $o_{lo}$ modulo the largest power of two
