@@ -1939,6 +1939,8 @@ impl<M: Machine> Engine<M> {
         }
 
         let lanes_now = self.computer.loop_lanes();
+        let registers_before_summary = self.computer.get_state().0;
+        let summarized_registers = summarized.0.clone();
         self.computer.set_state(summarized);
         self.computer
             .keep_loop_lanes(&cycle.previous.lanes, lanes_now);
@@ -1953,8 +1955,25 @@ impl<M: Machine> Engine<M> {
             .collect();
         self.computer.set_symbolic_slots(kept);
         let counter = LoopCounter::for_loop(id);
+        let mut cell_ties: Vec<(MemoryCell, usize)> = Vec::new();
         for (index, (cell, invariant)) in cells.iter().enumerate() {
             let stored = self.computer.cell_content(cell);
+            let holding_register = (*invariant != LoopInvariant::Fixed
+                && stored.kind == RegisterKind::RegisterBase)
+                .then(|| {
+                    registers_before_summary
+                        .iter()
+                        .position(|register| *register == stored)
+                })
+                .flatten()
+                .filter(|&i| summarized_registers[i] != stored);
+            if let Some(i) = holding_register {
+                log::info!("{id} cell {}+{} holds x{i}", cell.region, cell.offset);
+                cell_ties.push((cell.clone(), i));
+                self.computer
+                    .write_cell(cell, summarized_registers[i].clone());
+                continue;
+            }
             let generalized = match invariant {
                 LoopInvariant::Fixed => continue,
                 LoopInvariant::Linear(step) => stepped_by_the_counter(&stored, step, &counter),
@@ -2036,6 +2055,7 @@ impl<M: Machine> Engine<M> {
             ghost_checks,
             operand_checks,
             cells,
+            cell_ties,
             journal_after_summary,
             blind_writes_at_summary: self.computer.blind_stack_writes().len(),
             slots: self.computer.symbolic_slots(),
@@ -2481,6 +2501,31 @@ impl<M: Machine> Engine<M> {
             with.push(term.eq(ast::Int::from_i64(*candidate)).not());
             self.computer.solver().check_timed(&with) == SatResult::Unsat
         })
+    }
+
+    fn proves_step_between(
+        &self,
+        before: &RegisterValue,
+        after: &RegisterValue,
+        (low, high): (Option<i64>, Option<i64>),
+    ) -> bool {
+        if before.kind == RegisterKind::Number || after.kind == RegisterKind::Number {
+            return false;
+        }
+        let moved = generate_expression("-", value_of(after), value_of(before));
+        let mut assuming = self.computer.select_assumptions(&moved);
+        let Some(moved) = expression_to_ast(moved) else {
+            return false;
+        };
+        let outside: Vec<ast::Bool> = [
+            low.map(|low| moved.lt(ast::Int::from_i64(low))),
+            high.map(|high| moved.gt(ast::Int::from_i64(high))),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        assuming.push(ast::Bool::or(&outside.iter().collect::<Vec<_>>()));
+        self.within_candidate_budget(|solver| solver.check_timed(&assuming)) == SatResult::Unsat
     }
 
     fn proves_step(
@@ -4770,6 +4815,19 @@ impl<M: Machine> Engine<M> {
             {
                 observed[i] = recorded.clone();
             }
+            let recorded_range = match recorded {
+                LoopInvariant::AtMost(high) => Some((Some(0), Some(*high))),
+                LoopInvariant::Ranged(low, high) => Some((Some(*low), Some(*high))),
+                LoopInvariant::NonDecreasing => Some((Some(0), None)),
+                LoopInvariant::NonIncreasing => Some((None, Some(0))),
+                _ => None,
+            };
+            if let Some(range) = recorded_range
+                && !recorded.subsumes(&observed[i])
+                && self.proves_step_between(&before.0[i], &after.0[i], range)
+            {
+                observed[i] = recorded.clone();
+            }
             if let LoopInvariant::Derived(j, template) = recorded
                 && observed[i] != *recorded
                 && self.follows(template, &before.0[*j], &before.0[i])
@@ -5044,6 +5102,30 @@ impl<M: Machine> Engine<M> {
                 active.id
             );
             broken.extend(drifting_cells.into_iter().map(Obligation::Cell));
+        }
+        let untied: Vec<MemoryCell> = active
+            .cell_ties
+            .iter()
+            .filter(|(cell, i)| {
+                let held = self.computer.cell_content(cell);
+                let register = &current.0[*i];
+                held != *register
+                    && !(held.kind != RegisterKind::Number
+                        && register.kind != RegisterKind::Number
+                        && self.proves(AbstractComparison::new(
+                            "==",
+                            value_of(&held),
+                            value_of(register),
+                        )))
+            })
+            .map(|(cell, _)| cell.clone())
+            .collect();
+        if !untied.is_empty() {
+            log::info!(
+                "{} cells no longer hold their registers: {untied:?}",
+                active.id
+            );
+            broken.extend(untied.into_iter().map(Obligation::Cell));
         }
         let uncarried = self.while_staying(expression, active.entry_decision, |engine| {
             engine.branches_not_carried(active)

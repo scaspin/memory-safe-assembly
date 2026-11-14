@@ -1090,9 +1090,16 @@ $$
 The conjuncts:
 
 - **Registers.** The second disjunct, for $\iota_i = \mathsf{Lin}(\delta_i)$, is `proves_step`.
+  For $\iota_i \in \{\mathsf{AtMost}(k), \mathsf{Ranged}(l, h), \mathsf{NonDec},
+  \mathsf{NonInc}\}$ it is instead $\Pi \vDash \lfloor\rho_1(i)\rfloor -
+  \lfloor\rho^\sharp(i)\rfloor \in$ the recorded range (`proves_step_between`), for a step
+  too large to classify by its shape.
 - **cells.** Every cell rewritten since the summary, and every summarized cell, repeats
   its recorded step. No blind stack write since the summary may reach a tracked stack cell
-  (`stack_cells_a_blind_write_may_reach`).
+  (`stack_cells_a_blind_write_may_reach`). A changing cell that held the same value as a
+  moving register $i$ when the summary was made is not given a fresh value: it takes
+  $\rho^\sharp(i)$, and the check requires $\Pi \vDash$ the cell still equals $\rho_1(i)$
+  (`cell_ties`), so a cursor stored to memory and reloaded keeps its register's facts.
 - **slots.** Every slot present at the summary is still present (`slots_kept`).
 - **conf.** Every register summarized as a confined load still fits its width.
 - **ghosts.** $\Pi \vDash$ each ghost operand equals its $\kappa{+}1$ prediction, and each

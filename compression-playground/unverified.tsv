@@ -1,0 +1,54 @@
+function	arch	status	class	diagnosed	reason
+isal_deflate_hash_aarch64	aarch64	FAIL	real-finding	yes	top-level copy has no dict_len >= 4: an empty slice's dangling pointer (0x1) makes start + len - 4 wrap and the loop reads address 1; the dictionary_of_at_least_four_bytes copy verifies
+isal_deflate_hash_crc_01	x86_64	FAIL	real-finding	yes	top-level copy: does 64-bit arithmetic on uint32_t current_index/dict_len/hash_mask, so it relies on the caller zero-extending them, which the SysV ABI does not guarantee
+isal_deflate_hash_crc_01	x86_64	FAIL	real-finding	yes	dictionary_of_at_least_four_bytes copy: fails for the same uint32_t upper-half reason, which dict_len >= 4 does not address
+isal_update_histogram_aarch64	aarch64	FAIL	lz77-history	yes	reads start + i - dist with dist = (i - table[h]) & 0xffff from a memset-then-filled hash table; safe only because every entry is an earlier offset, which needs an element invariant bounded by the loop counter
+isal_update_histogram_01	x86_64	FAIL	lz77-history	yes	same LZ77 back-reference compare loop as the aarch64 version; the match source pointer comes from a hash-table distance
+isal_update_histogram_04	x86_64	FAIL	lz77-history	sibling	same as isal_update_histogram_01
+isal_deflate_icf_body_hash_hist_aarch64	aarch64	FAIL	lz77-history	yes	reads input + 32768 - ((pos - table[h]) & 0xffff): the distance comes from a hash table, so the 32 KB history bound needs the table-contents invariant
+isal_deflate_icf_body_hash_hist_01	x86_64	TIMEOUT	lz77-history	sibling	x86 version of the aarch64 hash-history body
+isal_deflate_icf_body_hash_hist_02	x86_64	TIMEOUT	lz77-history	sibling	x86 version of the aarch64 hash-history body
+isal_deflate_icf_body_hash_hist_04	x86_64	TIMEOUT	lz77-history	sibling	x86 version of the aarch64 hash-history body
+isal_deflate_icf_finish_hash_hist_aarch64	aarch64	TIMEOUT	lz77-history	sibling	finish variant of the hash-history body
+isal_deflate_icf_finish_hash_hist_01	x86_64	TIMEOUT	lz77-history	sibling	finish variant of the hash-history body
+set_long_icf_fg_aarch64	aarch64	FAIL	lz77-history	yes	reads input + 32768 + i - dist with dist from the match table; needs the table-contents invariant
+set_long_icf_fg_04	x86_64	FAIL	lz77-history	sibling	same match-distance lookback; the source pointer becomes opaque
+set_long_icf_fg_06	x86_64	FAIL	lz77-history	sibling	same lookback through vpgatherdq indexed by match distances whose lanes have no bound
+isal_deflate_body_aarch64	aarch64	TIMEOUT	lz77-history	sibling	deflate body with hash-chain lookback; not traced on its own
+isal_deflate_body_01	x86_64	TIMEOUT	lz77-history	sibling	deflate body with hash-chain lookback; not traced on its own
+isal_deflate_body_02	x86_64	TIMEOUT	lz77-history	sibling	deflate body with hash-chain lookback; not traced on its own
+isal_deflate_body_04	x86_64	TIMEOUT	lz77-history	sibling	deflate body with hash-chain lookback; not traced on its own
+isal_deflate_finish_aarch64	aarch64	TIMEOUT	lz77-history	sibling	deflate finish with hash-chain lookback; not traced on its own
+isal_deflate_finish_01	x86_64	TIMEOUT	lz77-history	sibling	deflate finish with hash-chain lookback; not traced on its own
+gen_icf_map_h1_aarch64	aarch64	TIMEOUT	lz77-history	sibling	builds the icf map from hash matches; not traced on its own
+decode_huffman_code_block_stateless_aarch64	aarch64	TIMEOUT	huffman-tables	yes	long-code index (short entry & 0x1ffffff) + extra bits comes from table contents and needs conditional element facts (bit 25 decides base vs packed symbols); also the bit count must stay in [0,64] across the decode loop, and the output copy from next_out - dist needs the lookback check tracked
+decode_huffman_code_block_stateless_01	x86_64	TIMEOUT	huffman-tables	sibling	x86 version of the Huffman decoder
+decode_huffman_code_block_stateless_04	x86_64	TIMEOUT	huffman-tables	sibling	x86 version of the Huffman decoder
+adler32_neon	aarch64	TIMEOUT	blocked-loop	yes	zlib-ng: the loop head is placed after n = min(len - done, NMAX) is recomputed, so the summary carries a stale n and a path with 1 byte left reaches the 64-byte loop; with len <= 2^40 the 32-bit tail counter may also genuinely wrap for inputs over 4 GiB
+adler32_fold_copy_neon	aarch64	TIMEOUT	blocked-loop	sibling	same block structure as zlib-ng adler32_neon
+adler32_sse	x86_64	FAIL	blocked-loop	yes	isa-l: r11 = min(r10, 5552); the summary samples a full block and then the final partial block, so the guessed step is wrong
+adler32_avx2_4	x86_64	FAIL	blocked-loop	sibling	same 5552-byte block structure as adler32_sse
+adler32_ssse3	x86_64	TIMEOUT	blocked-loop	sibling	zlib-ng NMAX block loop
+adler32_avx2	x86_64	TIMEOUT	blocked-loop	sibling	zlib-ng NMAX block loop
+adler32_avx512	x86_64	TIMEOUT	blocked-loop	sibling	zlib-ng NMAX block loop
+adler32_avx512_vnni	x86_64	TIMEOUT	blocked-loop	sibling	zlib-ng NMAX block loop
+adler32_fold_copy_sse42	x86_64	FAIL	blocked-loop	sibling	zlib-ng NMAX block loop; reads at loop1 * 32 + loop39 * 80 lose the block bound
+adler32_fold_copy_avx2	x86_64	FAIL	blocked-loop	sibling	zlib-ng NMAX block loop; reads at loop15 * 64 + loop88 * 160 lose the block bound
+adler32_fold_copy_avx512	x86_64	TIMEOUT	blocked-loop	sibling	zlib-ng NMAX block loop
+adler32_fold_copy_avx512_vnni	x86_64	TIMEOUT	blocked-loop	sibling	zlib-ng NMAX block loop
+encode_deflate_icf_04	x86_64	FAIL	element-facts	yes	the icf element is loaded before the loop head, so widening drops the declared field facts (icf & 1023 <= 512), and vpand/vpgatherdd lanes do not get the field facts; with both carried it times out on slow solver queries over the bit-buffer arithmetic
+encode_deflate_icf_06	x86_64	FAIL	element-facts	yes	as encode_deflate_icf_04, plus vpscatterqq (64-bit indexed scatter) is not modelled
+mem_zero_detect_avx2	x86_64	FAIL	select-counter	yes	the small-block loop exits on cmp rax,rdx; jb with rax = setne(counter != 0): the counter's bound lives in a select condition, not in an exit branch, so the loop gets no trip count
+mem_zero_detect_avx512	x86_64	FAIL	undiagnosed	no	read after the 64-byte alignment prologue (64 - (ptr & 63)) is not bounded in the summarized loop
+build_heap	x86_64	FAIL	nested-loop-relation	yes	sift-down keeps child = 2 * parent; the inner loop now keeps it, but the outer r11 loop fails its inductive check through the data-dependent inner loop and widens r11
+build_huff_tree	x86_64	FAIL	nested-loop-relation	sibling	same sift-down loops nested in the tree-building loop; hits the branch-depth limit
+gf_2vect_dot_prod_avx2_gfni	x86_64	FAIL	path-explosion	yes	the partial-chunk tail branches on each bit of len, and the inner loop over sources is re-summarized under each path (341 times) until the exploration limit; the 3- to 6-vector siblings verify
+crc32_iscsi_01	x86_64	TIMEOUT	undiagnosed	no	1600-line interleaved three-stream crc32; not traced
+crc32_chorba_sse2	x86_64	TIMEOUT	undiagnosed	no	not traced
+crc32_chorba_sse41	x86_64	TIMEOUT	undiagnosed	no	not traced
+crc32_fold_vpclmulqdq_copy	x86_64	FAIL	undiagnosed	no	read at src + (((0 - src) & 15) | 448) - 192 in the alignment prologue is not bounded; not traced
+chunkmemset_safe_sse2	x86_64	FAIL	undiagnosed	no	write into a stack pattern buffer at a dist-strided offset is not proved inside the frame; not traced
+chunkmemset_safe_avx2	x86_64	FAIL	undiagnosed	no	first 8-byte read at pos - dist and a lookup-table read indexed by dist are not bounded; not traced
+chunkmemset_safe_avx512	x86_64	TIMEOUT	undiagnosed	no	not traced
+HUF_decompress4X1_usingDTable_internal_fast_asm_loop	x86_64	TIMEOUT	undiagnosed	no	zstd four-stream Huffman decoder; not traced
+HUF_decompress4X2_usingDTable_internal_fast_asm_loop	x86_64	TIMEOUT	undiagnosed	no	zstd four-stream Huffman decoder; not traced

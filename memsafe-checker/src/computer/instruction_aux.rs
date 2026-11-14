@@ -1,7 +1,7 @@
 use crate::computer::*;
 
 const SMALL_MASK_NODES: usize = 3;
-const BYTE_INDEX_MASK: i64 = 0xff;
+const LARGEST_INDEX_MASK: i64 = 0xffff;
 
 impl ARMCORTEXA {
     pub fn arithmetic(
@@ -286,7 +286,7 @@ impl ARMCORTEXA {
             .into_iter()
             .filter_map(|value| match value.kind {
                 RegisterKind::Immediate
-                    if (0..=BYTE_INDEX_MASK).contains(&value.offset) && masks_an_unknown =>
+                    if (0..=LARGEST_INDEX_MASK).contains(&value.offset) && masks_an_unknown =>
                 {
                     Some(AbstractExpression::Immediate(value.offset))
                 }

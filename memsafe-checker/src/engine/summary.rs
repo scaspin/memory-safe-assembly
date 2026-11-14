@@ -1824,6 +1824,7 @@ pub(super) struct ActiveLoop {
     pub(super) ghost_checks: Vec<(Vec<bool>, AbstractExpression)>,
     pub(super) operand_checks: Vec<(Vec<bool>, usize)>,
     pub(super) cells: Vec<(MemoryCell, LoopInvariant)>,
+    pub(super) cell_ties: Vec<(MemoryCell, usize)>,
     pub(super) journal_after_summary: usize,
     pub(super) blind_writes_at_summary: usize,
     pub(super) slots: Vec<SymbolicSlot>,

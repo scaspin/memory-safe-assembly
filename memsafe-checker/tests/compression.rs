@@ -189,6 +189,81 @@ fn a_word_counter_that_can_step_over_zero_is_caught() {
     assert!(buffer_of_len(&word_counter_up_to_zero(setup)).is_err());
 }
 
+fn cursor_kept_in_memory(write: &str) -> Result<(), String> {
+    cursor_in_memory_program(&format!(
+        "start:
+        loop:
+        ldr x9, [x0]
+        ldr x4, [x0, #8]
+        cmp x9, x4
+        b.hi done
+        {write}
+        ldrb w5, [x1]
+        lsr w5, w5, #3
+        add x9, x9, x5
+        str x9, [x0]
+        b loop
+        done:
+        ret"
+    ))
+}
+
+#[test]
+fn a_register_that_drifts_from_the_cell_guarding_it_is_caught() {
+    let program = "start:
+        ldr x9, [x0]
+        loop:
+        ldr x10, [x0]
+        ldr x4, [x0, #8]
+        cmp x10, x4
+        b.hi done
+        str x5, [x9]
+        ldrb w6, [x1]
+        cbz w6, even
+        add x9, x9, #8
+        even:
+        add x10, x10, #8
+        add x9, x9, #8
+        str x10, [x0]
+        b loop
+        done:
+        ret";
+    assert!(cursor_in_memory_program(program).is_err());
+}
+
+fn cursor_in_memory_program(program: &str) -> Result<(), String> {
+    init();
+    let mut engine = bums::engine::ExecutionEngine::new(program.lines().map(str::trim));
+    engine.add_abstract_from(0, "state");
+    engine.add_region(RegionType::RW, "state", imm(16));
+    engine.add_abstract_from(1, "input");
+    engine.add_region(RegionType::READ, "input", imm(1));
+    engine.add_region(RegionType::RW, "out", abstract_of("len"));
+    engine.add_invariant(fact(">=", abstract_of("len"), imm(8)));
+    engine.add_invariant(fact("<=", abstract_of("len"), imm(1 << 20)));
+    engine.add_abstract_to_memory("state", 0, abstract_of("out"));
+    engine.add_abstract_to_memory(
+        "state",
+        8,
+        generate_expression(
+            "+",
+            abstract_of("out"),
+            generate_expression("-", abstract_of("len"), imm(8)),
+        ),
+    );
+    engine.start("start").map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_cursor_kept_in_memory_stays_below_its_end() {
+    assert_eq!(cursor_kept_in_memory("str x5, [x9]"), Ok(()));
+}
+
+#[test]
+fn a_cursor_kept_in_memory_writing_past_its_slack_is_caught() {
+    assert!(cursor_kept_in_memory("stp x5, x5, [x9]").is_err());
+}
+
 fn blocks_of_chunks(read: &str) -> String {
     format!(
         "start:
@@ -222,6 +297,24 @@ fn a_block_of_chunks_advances_its_pointer_by_a_constant_per_block() {
 #[test]
 fn a_block_of_chunks_reading_past_its_chunk_is_caught() {
     assert!(buffer_of_len(&blocks_of_chunks("ldr q0, [x0, #32]")).is_err());
+}
+
+const TEN_BIT_MASK_OF_AN_OPAQUE_WORD: &str = "start:
+        ldrb w2, [x1]
+        ldrb w4, [x1]
+        lsl x2, x2, x4
+        and x2, x2, #0x3ff
+        ldrb w3, [x0, x2]
+        ret";
+
+#[test]
+fn a_ten_bit_mask_bounds_an_opaque_word() {
+    assert_eq!(byte_table(1024, TEN_BIT_MASK_OF_AN_OPAQUE_WORD), Ok(()));
+}
+
+#[test]
+fn a_ten_bit_mask_one_past_the_table_is_caught() {
+    assert!(byte_table(1023, TEN_BIT_MASK_OF_AN_OPAQUE_WORD).is_err());
 }
 
 fn byte_table(length: i64, program: &str) -> Result<(), String> {
