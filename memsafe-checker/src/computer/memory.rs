@@ -1,4 +1,5 @@
 use crate::computer::*;
+use z3::ast::Ast;
 
 pub(crate) enum TableLoad {
     NotATable,
@@ -518,17 +519,40 @@ impl ARMCORTEXA {
         if region.content.is_empty() || region.kind != RegionType::READ || !region.pristine() {
             return None;
         }
+        let shift = offset + label_offset;
+        let from_symbol =
+            generate_expression("-", base.clone(), AbstractExpression::Abstract(symbol));
         let within = generate_expression(
             "+",
-            generate_expression("-", base.clone(), AbstractExpression::Abstract(symbol)),
-            AbstractExpression::Immediate(offset + label_offset),
+            from_symbol.clone(),
+            AbstractExpression::Immediate(shift),
         );
         let within = expression_to_ast(within)?;
-        let assumptions = self.select_assumptions(base);
-        self.solver.push();
-        let found = self.table_offsets(&within, &assumptions, MAX_ENTRIES);
-        self.solver.pop(1);
-        let found = found?;
+        let cached = match &self.table_offsets_this_instruction {
+            Some((cached_section, cached_base, offsets))
+                if *cached_section == section && *cached_base == from_symbol =>
+            {
+                Some(offsets.clone())
+            }
+            _ => None,
+        };
+        let from_symbol_offsets = match cached {
+            Some(offsets) => offsets,
+            None => {
+                let at_symbol = expression_to_ast(from_symbol.clone())?;
+                let assumptions = self.select_assumptions(base);
+                self.solver.push();
+                let offsets = self.table_offsets(&at_symbol, &assumptions, MAX_ENTRIES);
+                self.solver.pop(1);
+                self.table_offsets_this_instruction =
+                    Some((section.clone(), from_symbol, offsets.clone()));
+                offsets
+            }
+        };
+        let found: Vec<i64> = from_symbol_offsets?
+            .into_iter()
+            .map(|at| at.checked_add(shift))
+            .collect::<Option<Vec<i64>>>()?;
         let region = self.memory.get(&section)?;
         let mut cases = Vec::new();
         for at in &found {
@@ -1179,6 +1203,57 @@ impl ARMCORTEXA {
         model.iter().map(|decl| decl.name()).collect()
     }
 
+    fn proved_row_by_row(
+        &self,
+        access: &ast::Int,
+        base: &ast::Int,
+        offset: i64,
+        width: i64,
+        length: &ast::Int,
+        selects: &[ast::Bool],
+    ) -> bool {
+        let access_term = ast::Dynamic::from_ast(access);
+        if !has_symbolic_product(&access_term) {
+            return false;
+        }
+        let length = spelled_through_definitions(length, &self.solver.get_assertions());
+        let mut row_strides = BTreeSet::new();
+        uninterpreted_constants(&access_term, &mut row_strides);
+        row_strides.remove(&base.decl().name());
+        let zero = ast::Int::from_i64(0);
+        for stride in row_strides {
+            let (Some(rows_in), Some(rows_of)) = (
+                split_by_factor(access, &stride),
+                split_by_factor(&length, &stride),
+            ) else {
+                continue;
+            };
+            let stride_value = ast::Int::new_const(stride.as_str());
+            let within_row = ast::Int::add(&[
+                &ast::Int::sub(&[&rows_in.rest, base]),
+                &ast::Int::from_i64(offset),
+            ]);
+            let row_end = ast::Int::add(&[&within_row, &ast::Int::from_i64(width)]);
+            let last_row = ast::Int::sub(&[&rows_of.per_factor, &ast::Int::from_i64(1)]);
+            let violations = [
+                stride_value.lt(&zero),
+                rows_in.per_factor.lt(&zero),
+                within_row.lt(&zero),
+                rows_in.per_factor.gt(&last_row),
+                row_end.gt(ast::Int::add(&[&stride_value, &rows_of.rest])),
+            ];
+            if all_refuted_incrementally_within(
+                &self.solver,
+                selects,
+                &violations,
+                ROW_BY_ROW_RESOURCE_LIMIT,
+            ) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn safe_for_every_stride(&self, l: &ast::Bool, u: &ast::Bool, symbols: &[String]) -> bool {
         for symbol in symbols {
             let Some(values) = self.finite_values(symbol, 8) else {
@@ -1401,6 +1476,23 @@ impl ARMCORTEXA {
         };
 
         let selects = self.select_assumptions(&base_expr);
+        if region_name != "sp"
+            && let Some(length) = expression_to_ast(region.get_length())
+            && self.proved_row_by_row(&base_access, &base, offset, width, &length, &selects)
+        {
+            self.defer_path_check(
+                selects,
+                format!(
+                    "{ty} of {width} bytes at {}",
+                    format_address(&base_expr, offset)
+                ),
+            )?;
+            log::info!(
+                "{ty} at {} proved in bounds row by row",
+                format_address(&base_expr, offset)
+            );
+            return Ok(());
+        }
         let with = |extra: &ast::Bool| {
             let mut all = selects.clone();
             all.push(extra.clone());

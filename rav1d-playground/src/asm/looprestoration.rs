@@ -2,8 +2,8 @@
 
 use bums_macros as bums;
 
-#[bums::check_mem_safe("looprestoration.S", dst.as_mut_ptr(), stride, left.as_ptr(), lpf.as_ptr(), w, h, filter.as_ptr(), edges, bitdepth_max,
-    [dst.len() * 1 == stride * h, left.len() == 4 * h, lpf.len() * 1 == stride * 2, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 128 * 1, stride % 16 == 0])]
+#[bums::check_mem_safe("looprestoration.S", dst.as_mut_ptr().add(3), stride, left.as_ptr(), lpf.as_ptr().add(3), w, h, filter.as_ptr(), edges, bitdepth_max,
+    [dst.len() * 1 == stride * h + 3, left.len() == 4 * h, lpf.len() * 1 == stride * 8 + 3, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= w + 32, stride % 16 == 0])]
 fn wiener_filter7_8bpc_neon(
     dst: &mut [u8],
     stride: usize,
@@ -16,8 +16,8 @@ fn wiener_filter7_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("looprestoration.S", dst.as_mut_ptr(), stride, left.as_ptr(), lpf.as_ptr(), w, h, filter.as_ptr(), edges, bitdepth_max,
-    [dst.len() * 1 == stride * h, left.len() == 4 * h, lpf.len() * 1 == stride * 8, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 128 * 1, stride % 16 == 0])]
+#[bums::check_mem_safe("looprestoration.S", dst.as_mut_ptr().add(3), stride, left.as_ptr(), lpf.as_ptr().add(3), w, h, filter.as_ptr(), edges, bitdepth_max,
+    [dst.len() * 1 == stride * h + 3, left.len() == 4 * h, lpf.len() * 1 == stride * 8 + 3, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= w + 32, stride % 16 == 0])]
 fn wiener_filter5_8bpc_neon(
     dst: &mut [u8],
     stride: usize,
@@ -160,8 +160,8 @@ fn sgr_weighted2_8bpc_neon(
     wt: &[i16],
     bitdepth_max: i32,
 );
-#[bums::check_mem_safe("looprestoration16.S", dst.as_mut_ptr(), stride, left.as_ptr(), lpf.as_ptr(), w, h, filter.as_ptr(), edges, bitdepth_max,
-    [dst.len() * 2 == stride * h, left.len() == 4 * h, lpf.len() * 2 == stride * 2, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 128 * 2, stride % 16 == 0])]
+#[bums::check_mem_safe("looprestoration16.S", dst.as_mut_ptr().add(3), stride, left.as_ptr(), lpf.as_ptr().add(3), w, h, filter.as_ptr(), edges, bitdepth_max,
+    [dst.len() * 2 == stride * h + 6, left.len() == 4 * h, lpf.len() * 2 == stride * 8 + 6, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 2 * w + 64, stride % 16 == 0])]
 fn wiener_filter7_16bpc_neon(
     dst: &mut [u16],
     stride: usize,
@@ -174,8 +174,8 @@ fn wiener_filter7_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("looprestoration16.S", dst.as_mut_ptr(), stride, left.as_ptr(), lpf.as_ptr(), w, h, filter.as_ptr(), edges, bitdepth_max,
-    [dst.len() * 2 == stride * h, left.len() == 4 * h, lpf.len() * 2 == stride * 8, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 128 * 2, stride % 16 == 0])]
+#[bums::check_mem_safe("looprestoration16.S", dst.as_mut_ptr().add(3), stride, left.as_ptr(), lpf.as_ptr().add(3), w, h, filter.as_ptr(), edges, bitdepth_max,
+    [dst.len() * 2 == stride * h + 6, left.len() == 4 * h, lpf.len() * 2 == stride * 8 + 6, filter.len() == 16, w >= 4, w <= 256, h >= 1, h <= 64, stride >= 2 * w + 64, stride % 16 == 0])]
 fn wiener_filter5_16bpc_neon(
     dst: &mut [u16],
     stride: usize,

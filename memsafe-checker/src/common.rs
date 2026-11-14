@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -185,8 +185,12 @@ pub fn refuted_within(
     incremental_units: u32,
     fresh_units: u32,
 ) -> bool {
-    if refuted_incrementally_within(solver, assumption, incremental_units) {
-        return true;
+    match decided_within(solver, incremental_units, &|| {
+        solver.check_assumptions(std::slice::from_ref(assumption))
+    }) {
+        SatResult::Unsat => return true,
+        SatResult::Sat => return false,
+        SatResult::Unknown => {}
     }
     let fresh = ArithmeticEngine::Default.solver();
     for fact in solver.get_assertions() {
@@ -196,6 +200,184 @@ pub fn refuted_within(
     unsat_within(&fresh, fresh_units, &|| fresh.check())
 }
 
+pub fn all_refuted_incrementally_within(
+    solver: &Solver,
+    context: &[ast::Bool],
+    claims: &[ast::Bool],
+    units: u32,
+) -> bool {
+    claims.iter().all(|claim| {
+        let mut assumptions = context.to_vec();
+        assumptions.push(claim.clone());
+        unsat_within(solver, units, &|| solver.check_assumptions(&assumptions))
+    })
+}
+
+fn mentions_constant(term: &ast::Dynamic, name: &str) -> bool {
+    if term.is_const() {
+        return term.kind() == AstKind::App
+            && term.decl().kind() == DeclKind::Uninterpreted
+            && term.decl().name() == name;
+    }
+    term.is_app()
+        && term
+            .children()
+            .iter()
+            .any(|child| mentions_constant(child, name))
+}
+
+pub fn uninterpreted_constants(term: &ast::Dynamic, found: &mut BTreeSet<String>) {
+    if term.is_const() {
+        if term.kind() == AstKind::App && term.decl().kind() == DeclKind::Uninterpreted {
+            found.insert(term.decl().name());
+        }
+        return;
+    }
+    if term.is_app() {
+        for child in term.children() {
+            uninterpreted_constants(&child, found);
+        }
+    }
+}
+
+pub fn has_symbolic_product(term: &ast::Dynamic) -> bool {
+    if !term.is_app() || term.is_const() {
+        return false;
+    }
+    let children = term.children();
+    if term.decl().kind() == DeclKind::Mul
+        && children
+            .iter()
+            .filter(|child| child.kind() != AstKind::Numeral)
+            .count()
+            > 1
+    {
+        return true;
+    }
+    children.iter().any(has_symbolic_product)
+}
+
+pub fn spelled_through_definitions(term: &ast::Int, facts: &[ast::Bool]) -> ast::Int {
+    let mut constants = BTreeSet::new();
+    uninterpreted_constants(&ast::Dynamic::from_ast(term), &mut constants);
+    let mut definitions: Vec<(ast::Int, ast::Int)> = Vec::new();
+    for constant in constants {
+        let defined = facts.iter().find_map(|fact| {
+            if fact.kind() != AstKind::App || fact.decl().kind() != DeclKind::Eq {
+                return None;
+            }
+            let sides: Vec<ast::Int> = fact
+                .children()
+                .iter()
+                .map(|side| side.as_int())
+                .collect::<Option<_>>()?;
+            let [left, right] = sides.as_slice() else {
+                return None;
+            };
+            let is_constant = |side: &ast::Int| {
+                side.is_const()
+                    && side.kind() == AstKind::App
+                    && side.decl().kind() == DeclKind::Uninterpreted
+                    && side.decl().name() == constant
+            };
+            let free_of_constant =
+                |side: &ast::Int| !mentions_constant(&ast::Dynamic::from_ast(side), &constant);
+            if is_constant(left) && free_of_constant(right) {
+                Some((left.clone(), right.clone()))
+            } else if is_constant(right) && free_of_constant(left) {
+                Some((right.clone(), left.clone()))
+            } else {
+                None
+            }
+        });
+        definitions.extend(defined);
+    }
+    let pairs: Vec<(&ast::Int, &ast::Int)> = definitions.iter().map(|(c, e)| (c, e)).collect();
+    term.substitute(&pairs)
+}
+
+pub struct FactorSplit {
+    pub per_factor: ast::Int,
+    pub rest: ast::Int,
+}
+
+pub fn split_by_factor(term: &ast::Int, factor: &str) -> Option<FactorSplit> {
+    let (per_factor, rest) = split_term_by_factor(term, factor)?;
+    Some(FactorSplit {
+        per_factor: per_factor?,
+        rest,
+    })
+}
+
+type PartialSplit = (Option<ast::Int>, ast::Int);
+
+fn split_term_by_factor(term: &ast::Int, factor: &str) -> Option<PartialSplit> {
+    let dynamic = ast::Dynamic::from_ast(term);
+    if !mentions_constant(&dynamic, factor) {
+        return Some((None, term.clone()));
+    }
+    if term.is_const() {
+        return Some((Some(ast::Int::from_i64(1)), ast::Int::from_i64(0)));
+    }
+    let children: Vec<ast::Int> = term
+        .children()
+        .iter()
+        .map(|child| child.as_int())
+        .collect::<Option<_>>()?;
+    let parts: Vec<PartialSplit> = children
+        .iter()
+        .map(|child| split_term_by_factor(child, factor))
+        .collect::<Option<_>>()?;
+    let sum = |terms: Vec<ast::Int>| -> ast::Int {
+        match terms.len() {
+            0 => ast::Int::from_i64(0),
+            1 => terms[0].clone(),
+            _ => ast::Int::add(&terms.iter().collect::<Vec<_>>()),
+        }
+    };
+    let sum_of = |parts: &[PartialSplit]| -> PartialSplit {
+        let factors: Vec<ast::Int> = parts.iter().filter_map(|p| p.0.clone()).collect();
+        let per_factor = (!factors.is_empty()).then(|| sum(factors));
+        (per_factor, sum(parts.iter().map(|p| p.1.clone()).collect()))
+    };
+    let negated = |part: &PartialSplit| -> PartialSplit {
+        (
+            part.0.as_ref().map(|a| a.unary_minus()),
+            part.1.unary_minus(),
+        )
+    };
+    match term.decl().kind() {
+        DeclKind::Add => Some(sum_of(&parts)),
+        DeclKind::Sub => {
+            let (first, others) = parts.split_first()?;
+            let mut signed = vec![first.clone()];
+            signed.extend(others.iter().map(negated));
+            Some(sum_of(&signed))
+        }
+        DeclKind::Uminus if parts.len() == 1 => Some(negated(&parts[0])),
+        DeclKind::Mul => {
+            let mut carrying = parts.iter().enumerate().filter(|(_, p)| p.0.is_some());
+            let (index, (per_factor, rest)) = carrying.next()?;
+            if carrying.next().is_some() {
+                return None;
+            }
+            let others: Vec<&ast::Int> = children
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != index)
+                .map(|(_, child)| child)
+                .collect();
+            let times_others = |value: &ast::Int| -> ast::Int {
+                let mut factors = vec![value];
+                factors.extend(others.iter().copied());
+                ast::Int::mul(&factors)
+            };
+            Some((per_factor.as_ref().map(times_others), times_others(rest)))
+        }
+        _ => None,
+    }
+}
+
 pub fn refuted_incrementally_within(solver: &Solver, assumption: &ast::Bool, units: u32) -> bool {
     unsat_within(solver, units, &|| {
         solver.check_assumptions(std::slice::from_ref(assumption))
@@ -203,10 +385,14 @@ pub fn refuted_incrementally_within(solver: &Solver, assumption: &ast::Bool, uni
 }
 
 fn unsat_within(solver: &Solver, units: u32, run: &dyn Fn() -> SatResult) -> bool {
+    decided_within(solver, units, run) == SatResult::Unsat
+}
+
+fn decided_within(solver: &Solver, units: u32, run: &dyn Fn() -> SatResult) -> SatResult {
     set_limits(solver, units, NO_TIMEOUT_MS);
     let decided = run();
     set_limits(solver, UNLIMITED, NO_TIMEOUT_MS);
-    decided == SatResult::Unsat
+    decided
 }
 
 fn milliseconds(time: Duration) -> u32 {
@@ -423,6 +609,13 @@ impl SimdRegister {
             self.base[start + i] = bases.get(i).cloned().flatten();
             self.offset[start + i] = (value >> (8 * (width - 1 - i))) as u8;
         }
+    }
+
+    pub fn clear_to_zero(&mut self) {
+        self.kind = RegisterKind::Immediate;
+        self.base = [BASE_INIT; 16];
+        self.offset = [0; 16];
+        self.lane_range = None;
     }
 
     pub fn set_unknown(&mut self) {
@@ -1746,6 +1939,209 @@ fn fits_signed(expression: &AbstractExpression, bits: u32) -> bool {
     }
 }
 
+type SyntacticBounds = (Option<i128>, Option<i128>);
+
+#[derive(Debug, Clone, Default)]
+pub struct ParameterBounds {
+    bounds: BTreeMap<String, SyntacticBounds>,
+}
+
+impl ParameterBounds {
+    pub fn narrow(&mut self, fact: &AbstractComparison) {
+        let flipped = |op: &str| {
+            match op {
+                "<" => ">",
+                "<=" => ">=",
+                ">" => "<",
+                ">=" => "<=",
+                other => other,
+            }
+            .to_string()
+        };
+        let (name, op, constant) = match (fact.left.as_ref(), fact.right.as_ref()) {
+            (AbstractExpression::Abstract(name), AbstractExpression::Immediate(c)) => {
+                (name.clone(), fact.op.clone(), *c as i128)
+            }
+            (AbstractExpression::Immediate(c), AbstractExpression::Abstract(name)) => {
+                (name.clone(), flipped(&fact.op), *c as i128)
+            }
+            _ => return,
+        };
+        let (low, high) = self.bounds.entry(name).or_insert((None, None));
+        let raise = |bound: &mut Option<i128>, value: i128| {
+            *bound = Some(bound.map_or(value, |b| b.max(value)));
+        };
+        let lower = |bound: &mut Option<i128>, value: i128| {
+            *bound = Some(bound.map_or(value, |b| b.min(value)));
+        };
+        match op.as_str() {
+            ">=" => raise(low, constant),
+            ">" => raise(low, constant + 1),
+            "<=" => lower(high, constant),
+            "<" => lower(high, constant - 1),
+            "==" => {
+                raise(low, constant);
+                lower(high, constant);
+            }
+            _ => {}
+        }
+    }
+}
+
+thread_local! {
+    static PARAMETER_BOUNDS_IN_FORCE: RefCell<ParameterBounds> = RefCell::default();
+}
+
+pub struct ParameterBoundsInForce {
+    previous: ParameterBounds,
+}
+
+impl ParameterBoundsInForce {
+    pub fn install(bounds: &ParameterBounds) -> ParameterBoundsInForce {
+        let previous = PARAMETER_BOUNDS_IN_FORCE.with(|cell| cell.replace(bounds.clone()));
+        ParameterBoundsInForce { previous }
+    }
+}
+
+impl Drop for ParameterBoundsInForce {
+    fn drop(&mut self) {
+        let previous = std::mem::take(&mut self.previous);
+        PARAMETER_BOUNDS_IN_FORCE.with(|cell| cell.replace(previous));
+    }
+}
+
+fn parameter_bounds_of(name: &str) -> SyntacticBounds {
+    PARAMETER_BOUNDS_IN_FORCE.with(|cell| {
+        cell.borrow()
+            .bounds
+            .get(name)
+            .copied()
+            .unwrap_or((None, None))
+    })
+}
+
+fn syntactic_bounds(expression: &AbstractExpression) -> SyntacticBounds {
+    let positive = |e: &AbstractExpression| match e {
+        AbstractExpression::Immediate(n) if *n > 0 => Some(*n as i128),
+        _ => None,
+    };
+    let within = |(low, high): SyntacticBounds, modulus: i128| {
+        low.is_some_and(|low| low >= 0) && high.is_some_and(|high| high < modulus)
+    };
+    match expression {
+        AbstractExpression::Immediate(n) => (Some(*n as i128), Some(*n as i128)),
+        AbstractExpression::Abstract(name) => parameter_bounds_of(name),
+        AbstractExpression::Register(r) => match r.base.as_ref() {
+            Some(base) => {
+                let (low, high) = syntactic_bounds(base);
+                let offset = r.offset as i128;
+                (low.map(|l| l + offset), high.map(|h| h + offset))
+            }
+            None => (None, None),
+        },
+        AbstractExpression::Expression(op, left, right) => match op.as_str() {
+            "%" => match positive(right) {
+                Some(modulus) => {
+                    let inner = syntactic_bounds(left);
+                    if within(inner, modulus) {
+                        inner
+                    } else {
+                        (Some(0), Some(modulus - 1))
+                    }
+                }
+                None => (None, None),
+            },
+            "&" => match mask_modulus(right).or_else(|| mask_modulus(left)) {
+                Some(modulus) => (Some(0), Some(modulus as i128 - 1)),
+                None => (None, None),
+            },
+            "lsr" | ">>" => match right.as_ref() {
+                AbstractExpression::Immediate(shift) if (0..64).contains(shift) => {
+                    let word = (1i128 << 64) - 1;
+                    let inner = syntactic_bounds(left);
+                    let (low, high) = if within(inner, 1i128 << 64) {
+                        (inner.0.unwrap_or(0), inner.1.unwrap_or(word))
+                    } else {
+                        (0, word)
+                    };
+                    (Some(low >> shift), Some(high >> shift))
+                }
+                _ => (None, None),
+            },
+            "atleast" => {
+                let (low, high) = syntactic_bounds(left);
+                let (floor_low, floor_high) = syntactic_bounds(right);
+                let low = match (low, floor_low) {
+                    (Some(l), Some(f)) => Some(l.max(f)),
+                    (l, f) => l.or(f),
+                };
+                let high = high.zip(floor_high).map(|(h, f)| h.max(f));
+                (low, high)
+            }
+            "atmost" => {
+                let (low, high) = syntactic_bounds(left);
+                let (ceiling_low, ceiling_high) = syntactic_bounds(right);
+                let high = match (high, ceiling_high) {
+                    (Some(h), Some(c)) => Some(h.min(c)),
+                    (h, c) => h.or(c),
+                };
+                let low = low.zip(ceiling_low).map(|(l, c)| l.min(c));
+                (low, high)
+            }
+            "+" | "-" | "*" => {
+                let ((Some(a), Some(b)), (Some(c), Some(d))) =
+                    (syntactic_bounds(left), syntactic_bounds(right))
+                else {
+                    return (None, None);
+                };
+                let corners = match op.as_str() {
+                    "+" => [a.checked_add(c), b.checked_add(d), None, None],
+                    "-" => [a.checked_sub(d), b.checked_sub(c), None, None],
+                    _ => [
+                        a.checked_mul(c),
+                        a.checked_mul(d),
+                        b.checked_mul(c),
+                        b.checked_mul(d),
+                    ],
+                };
+                let used = if op == "*" { 4 } else { 2 };
+                let Some(values) = corners[..used]
+                    .iter()
+                    .copied()
+                    .collect::<Option<Vec<i128>>>()
+                else {
+                    return (None, None);
+                };
+                (values.iter().min().copied(), values.iter().max().copied())
+            }
+            "lsl" => match right.as_ref() {
+                AbstractExpression::Immediate(shift) if (0..64).contains(shift) => {
+                    let (Some(low), Some(high)) = syntactic_bounds(left) else {
+                        return (None, None);
+                    };
+                    let scale = 1i128 << shift;
+                    match (low.checked_mul(scale), high.checked_mul(scale)) {
+                        (Some(l), Some(h)) if l >= 0 && h < 1i128 << 63 => (Some(l), Some(h)),
+                        _ => (None, None),
+                    }
+                }
+                _ => (None, None),
+            },
+            _ => (None, None),
+        },
+        _ => (None, None),
+    }
+}
+
+pub fn syntactically_within(expression: &AbstractExpression, modulus: i128) -> bool {
+    syntactically_between(expression, 0, modulus - 1)
+}
+
+pub fn syntactically_between(expression: &AbstractExpression, least: i128, most: i128) -> bool {
+    let (low, high) = syntactic_bounds(expression);
+    low.is_some_and(|low| low >= least) && high.is_some_and(|high| high <= most)
+}
+
 fn single_bit(expression: &AbstractExpression) -> Option<i64> {
     match expression {
         AbstractExpression::Immediate(mask) if *mask > 0 => {
@@ -1865,6 +2261,11 @@ pub fn is_translatable_with_clamps(e: &AbstractExpression) -> bool {
         AbstractExpression::Expression(op, left, right) if op == "atleast" || op == "atmost" => {
             is_translatable_with_clamps(left) && is_translatable_with_clamps(right)
         }
+        AbstractExpression::Expression(op, left, right)
+            if op == "!&" && clears_when_negative(left, right) =>
+        {
+            is_translatable_with_clamps(left)
+        }
         AbstractExpression::Expression(op, left, right) => {
             matches!(
                 op.as_str(),
@@ -1877,6 +2278,16 @@ pub fn is_translatable_with_clamps(e: &AbstractExpression) -> bool {
         }
         _ => true,
     }
+}
+
+fn clears_when_negative(value: &AbstractExpression, mask: &AbstractExpression) -> bool {
+    matches!(
+        mask,
+        AbstractExpression::Expression(op, shifted, amount)
+            if op == "asr"
+                && shifted.as_ref() == value
+                && **amount == AbstractExpression::Immediate(63)
+    )
 }
 
 pub fn is_translatable(e: &AbstractExpression) -> bool {
@@ -2067,12 +2478,7 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
             }
         }
         AbstractExpression::Expression(op, old1, old2) => {
-            if op == "!&"
-                && let AbstractExpression::Expression(inner, shifted, amount) = old2.as_ref()
-                && inner == "asr"
-                && shifted.as_ref() == old1.as_ref()
-                && **amount == AbstractExpression::Immediate(63)
-            {
+            if op == "!&" && clears_when_negative(&old1, &old2) {
                 let value = signed_word(&expression_to_ast(*old1.clone())?, &old1);
                 let zero = ast::Int::from_i64(0);
                 return Some(value.ge(&zero).ite(&value, &zero));
@@ -2126,6 +2532,9 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     let modulus = ast::Int::from_str(&(1u128 << 64).to_string()).expect("modulus");
                     let divisor =
                         ast::Int::from_str(&(1u128 << shift).to_string()).expect("divisor");
+                    if syntactically_within(&old1, 1i128 << 64) {
+                        return Some(new1.div(&divisor));
+                    }
                     Some(new1.modulo(&modulus).div(&divisor))
                 }
                 "clz" if matches!(constant_shift, Some(32 | 64)) => {
@@ -2190,6 +2599,12 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                     Some(new1.div(&divisor))
                 }
                 "%" => {
+                    if let Some(modulus) = constant_shift
+                        && modulus > 0
+                        && syntactically_within(&old1, modulus as i128)
+                    {
+                        return Some(new1);
+                    }
                     if let AbstractExpression::Expression(inner_op, dividend, divisor) =
                         old1.as_ref()
                         && inner_op == "/"
@@ -2209,6 +2624,9 @@ pub fn expression_to_ast(expression: AbstractExpression) -> Option<ast::Int> {
                 }
                 "&" => {
                     if let Some(modulus) = mask_modulus(&old2) {
+                        if syntactically_within(&old1, modulus as i128) {
+                            return Some(new1);
+                        }
                         Some(new1.modulo(ast::Int::from_i64(modulus)))
                     } else if let Some(modulus) = mask_modulus(&old1) {
                         Some(new2.modulo(ast::Int::from_i64(modulus)))

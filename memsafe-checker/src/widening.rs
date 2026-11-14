@@ -671,6 +671,7 @@ pub enum LoopInvariant {
     NonDecreasing,
     NonIncreasing,
     Geometric(i64),
+    OneOf(Vec<usize>),
     Unknown,
 }
 
@@ -710,6 +711,7 @@ impl LoopInvariant {
             (LoopInvariant::Within(bound), LoopInvariant::Within(seen)) => seen <= bound,
             (LoopInvariant::Within(_), LoopInvariant::Fixed) => true,
             (LoopInvariant::Fixed, _) => other.reach() == Some(0),
+            (LoopInvariant::OneOf(_), LoopInvariant::Fixed) => true,
             (LoopInvariant::AtMost(bound), _) => other
                 .reach()
                 .is_some_and(|step| (0..=*bound).contains(&step)),
@@ -1047,6 +1049,42 @@ pub fn drift_of_registers(prev: &[RegisterValue], cur: &[RegisterValue]) -> Vec<
             other => other,
         })
         .collect()
+}
+
+pub fn values_kept_within_a_group(
+    prev: &[RegisterValue],
+    cur: &[RegisterValue],
+    candidates: &[usize],
+) -> Option<Vec<usize>> {
+    let copies_another = |i: usize| {
+        cur[i] != prev[i]
+            && cur[i].base.is_some()
+            && candidates
+                .iter()
+                .any(|&j| j != i && prev.get(j) == Some(&cur[i]))
+    };
+    let mut group: Vec<usize> = candidates
+        .iter()
+        .copied()
+        .filter(|&i| i < cur.len() && i < prev.len() && copies_another(i))
+        .collect();
+    loop {
+        let sources: Vec<&RegisterValue> = group.iter().map(|&j| &prev[j]).collect();
+        let kept: Vec<usize> = group
+            .iter()
+            .copied()
+            .filter(|&i| sources.contains(&&cur[i]))
+            .collect();
+        if kept.len() == group.len() {
+            break;
+        }
+        group = kept;
+    }
+    let base = cur.get(*group.first()?)?.base.clone();
+    let shares_base = group
+        .iter()
+        .all(|&i| cur[i].base == base && prev[i].base == base && cur[i].kind == cur[group[0]].kind);
+    (group.len() >= 2 && shares_base).then_some(group)
 }
 
 pub fn invariant_of_registers(prev: &[RegisterValue], cur: &[RegisterValue]) -> Vec<LoopInvariant> {

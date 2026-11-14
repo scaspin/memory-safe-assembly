@@ -606,20 +606,33 @@ impl ARMCORTEXA {
         };
 
         let shifted_reg = match (op, reg3, reg2) {
+            ("lsr", Operand::Immediate(k), Operand::Register(RePrefix::X, _)) if *k > 0 => {
+                let source = self.get_register(reg2);
+                match self.undone_left_shift(&source, *k, false) {
+                    Some(unshifted) => unshifted,
+                    None => self.field_of_unknown(shifted_reg, 64 - k, false),
+                }
+            }
             ("lsr", Operand::Immediate(k), Operand::Register(prefix, _)) if *k > 0 => {
                 let bits = if *prefix == RePrefix::W { 32 } else { 64 };
                 self.field_of_unknown(shifted_reg, bits - k, false)
             }
             ("asr", Operand::Immediate(k), Operand::Register(RePrefix::X, _)) => {
                 let source = self.get_register(reg2);
-                self.undone_left_shift(&source, *k).unwrap_or(shifted_reg)
+                self.undone_left_shift(&source, *k, true)
+                    .unwrap_or(shifted_reg)
             }
             _ => shifted_reg,
         };
         self.set_register(reg1, shifted_reg.kind, shifted_reg.base, shifted_reg.offset);
     }
 
-    fn undone_left_shift(&self, shifted: &RegisterValue, k: i64) -> Option<RegisterValue> {
+    fn undone_left_shift(
+        &self,
+        shifted: &RegisterValue,
+        k: i64,
+        signed: bool,
+    ) -> Option<RegisterValue> {
         if !(1..63).contains(&k) || shifted.kind == RegisterKind::Number {
             return None;
         }
@@ -629,8 +642,13 @@ impl ARMCORTEXA {
         if op != "lsl" || *amount != AbstractExpression::Immediate(k) {
             return None;
         }
-        let half = 1i64 << (63 - k);
-        if !self.provably_between(&unshifted, -half, half - 1) {
+        let (least, most) = if signed {
+            let half = 1i64 << (63 - k);
+            (-half, half - 1)
+        } else {
+            (0, ((1i128 << (64 - k)) - 1).min(i64::MAX as i128) as i64)
+        };
+        if !self.provably_between(&unshifted, least, most) {
             return None;
         }
         let (base, offset) = match *unshifted {

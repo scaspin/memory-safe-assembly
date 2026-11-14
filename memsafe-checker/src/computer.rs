@@ -24,6 +24,7 @@ pub(crate) use simd::{
 pub const RETURN_TO: &str = "return_to";
 pub const MAX_EXPRESSION_NODES: usize = 150;
 const WORD_FIT_RESOURCE_LIMIT: u32 = 5_000_000;
+const ROW_BY_ROW_RESOURCE_LIMIT: u32 = 2_000_000;
 
 #[derive(Clone, Default)]
 pub(crate) struct PendingPathChecks {
@@ -62,6 +63,7 @@ pub struct ARMCORTEXA {
     pending_path_checks: RefCell<PendingPathChecks>,
     register_spills: BTreeMap<(String, i64), (i64, RegisterValue)>,
     current_line: usize,
+    table_offsets_this_instruction: Option<(String, AbstractExpression, Option<Vec<i64>>)>,
     alignment: i64,
     flag_counter: usize,
     saved_flags: BTreeMap<String, [Option<FlagValue>; 4]>,
@@ -251,6 +253,7 @@ impl ARMCORTEXA {
             pending_path_checks: RefCell::default(),
             register_spills: BTreeMap::new(),
             current_line: 0,
+            table_offsets_this_instruction: None,
             alignment: 4,
             flag_counter: 0,
             saved_flags: BTreeMap::new(),
@@ -321,6 +324,9 @@ impl ARMCORTEXA {
         };
         if !is_translatable(&whole) {
             return false;
+        }
+        if syntactically_within(&whole, MODULUS as i128) {
+            return true;
         }
         let Some(value) = expression_to_ast(whole) else {
             return false;
@@ -722,6 +728,9 @@ impl ARMCORTEXA {
                 );
             }
             Operand::Vector(_, num, arr) => {
+                if arr.lanes() == 1 {
+                    self.simd_registers[*num].clear_to_zero();
+                }
                 self.simd_registers[*num].set_from_register(
                     arr.clone(),
                     0,

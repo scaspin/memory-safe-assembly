@@ -87,6 +87,20 @@ fn scalar_vector_registers_move_their_own_width() {
 }
 
 #[test]
+fn a_lane_insert_keeps_the_other_lanes() {
+    assert!(!accepts(
+        &[
+            "movi v0.16b, #200",
+            "ld1 {v0.b}[0], [x1]",
+            "umov w2, v0.b[1]",
+            "ldrb w3, [x1, x2]",
+        ],
+        1,
+        &[],
+    ));
+}
+
+#[test]
 fn structure_accesses_cover_every_register() {
     assert!(accepts(&["ld1 { v0.2d, v1.2d }, [x1]"], 32, &[]));
     assert!(!accepts(&["ld1 { v0.2d, v1.2d, v2.2d }, [x1]"], 32, &[]));
@@ -355,4 +369,51 @@ fn nested_floating_point_diamonds_keep_the_index_either_arm_chose() {
     assert!(!accepts(&body, 8, &[]));
     assert!(!accepts(&body, 15, &[]));
     assert!(accepts(&body, 16, &[]));
+}
+
+#[test]
+fn writing_a_scalar_vector_register_clears_its_other_bytes() {
+    use bums::instruction_parser::{Arrangement, Operand, RePrefix};
+    let mut machine = bums::computer::ARMCORTEXA::new();
+    machine.set_register(
+        &Operand::Vector(RePrefix::V, 0, Arrangement::B16),
+        RegisterKind::RegisterBase,
+        Some(abs("old")),
+        0,
+    );
+    machine.set_register(
+        &Operand::Vector(RePrefix::V, 0, Arrangement::B),
+        RegisterKind::RegisterBase,
+        Some(abs("new")),
+        0,
+    );
+    let vector = &machine.simd_registers[0];
+    assert_eq!(vector.base[0], Some(abs("new")));
+    assert!(vector.base[1..].iter().all(Option::is_none));
+    assert!(vector.offset[1..].iter().all(|byte| *byte == 0));
+}
+
+#[test]
+fn inserting_a_lane_keeps_the_other_bytes() {
+    use bums::instruction_parser::{Arrangement, Operand, RePrefix};
+    let mut machine = bums::computer::ARMCORTEXA::new();
+    machine.set_register(
+        &Operand::Vector(RePrefix::V, 0, Arrangement::B16),
+        RegisterKind::RegisterBase,
+        Some(abs("old")),
+        0,
+    );
+    machine.set_register(
+        &Operand::VectorAccess(RePrefix::V, 0, Arrangement::B, 0),
+        RegisterKind::RegisterBase,
+        Some(abs("new")),
+        0,
+    );
+    let vector = &machine.simd_registers[0];
+    assert_eq!(vector.base[0], Some(abs("new")));
+    assert!(
+        vector.base[1..]
+            .iter()
+            .all(|byte| *byte == Some(abs("old")))
+    );
 }

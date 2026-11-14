@@ -132,11 +132,14 @@ impl<L> Cycle<L> {
     }
 }
 
+type SelectSettlements = BTreeMap<String, Option<AbstractExpression>>;
+
 struct Observation {
     entry: MachineState,
     current: MachineState,
     invariants: Vec<LoopInvariant>,
     guard: AbstractComparison,
+    previous_guard: AbstractComparison,
     staying: AbstractComparison,
 }
 
@@ -233,6 +236,31 @@ struct LoopBudget {
     summary_tries: usize,
     refutations: usize,
     cell_retries: usize,
+}
+
+const MAX_CANCELLED_STEP_PIECES: usize = 8;
+const MAX_CANCELLED_GROUP: usize = 3;
+const MAX_CANCELLATION_PROOFS: usize = 32;
+
+fn index_groups(count: usize, size: usize) -> Vec<Vec<usize>> {
+    if size == 0 {
+        return vec![Vec::new()];
+    }
+    (0..count)
+        .rev()
+        .filter(|&last| last + 1 >= size)
+        .flat_map(|last| {
+            index_groups(last, size - 1)
+                .into_iter()
+                .map(move |mut group| {
+                    group.push(last);
+                    group
+                })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect()
 }
 
 const LOOP_BUDGET: LoopBudget = LoopBudget {
@@ -733,20 +761,25 @@ impl<M: Machine> Engine<M> {
 
     fn invariants_while_staying(
         &self,
-        condition: &AbstractComparison,
+        (condition, previous_condition): (&AbstractComparison, &AbstractComparison),
         continues_when: bool,
         tested: &[AbstractComparison],
         entry_state: &mut MachineState,
         current_state: &mut MachineState,
-    ) -> (Vec<LoopInvariant>, AbstractComparison) {
+    ) -> (Vec<LoopInvariant>, AbstractComparison, AbstractComparison) {
         self.while_staying(condition, continues_when, |engine| {
-            engine.resolve_selects(entry_state);
-            engine.resolve_selects(current_state);
-            let resolved_guard = AbstractComparison::new(
-                &condition.op,
-                engine.resolved_leaves(&condition.left),
-                engine.resolved_leaves(&condition.right),
-            );
+            let mut settlements = SelectSettlements::new();
+            engine.resolve_selects(entry_state, &mut settlements);
+            engine.resolve_selects(current_state, &mut settlements);
+            let mut resolved = |guard: &AbstractComparison| {
+                AbstractComparison::new(
+                    &guard.op,
+                    engine.resolved_leaves(&guard.left, &mut settlements),
+                    engine.resolved_leaves(&guard.right, &mut settlements),
+                )
+            };
+            let resolved_guard = resolved(condition);
+            let resolved_previous_guard = resolved(previous_condition);
             let mut observed = invariant_of_registers(&entry_state.0, &current_state.0);
             engine.pin_unknown_steps(
                 &mut observed,
@@ -755,7 +788,7 @@ impl<M: Machine> Engine<M> {
                 condition,
                 tested,
             );
-            (observed, resolved_guard)
+            (observed, resolved_guard, resolved_previous_guard)
         })
     }
 
@@ -827,12 +860,13 @@ impl<M: Machine> Engine<M> {
                 continue;
             }
             let step = generate_expression("-", cur.expression(), prev.expression());
-            if !is_translatable(&step) || step.size() > MAX_EXPRESSION_NODES {
-                continue;
-            }
-            if let Some(value) = self.pinned_value(&step) {
+            let pinnable = is_translatable(&step) && step.size() <= MAX_EXPRESSION_NODES;
+            if let Some(value) = pinnable.then(|| self.pinned_value(&step)).flatten() {
                 log::info!("x{i} step pinned to {value} by the path");
                 *invariant = LoopInvariant::Linear(AbstractExpression::Immediate(value));
+            } else if let Some(kept) = self.step_without_cancelling_terms(prev, cur) {
+                log::info!("x{i} step reduced to {kept} by terms the path cancels");
+                *invariant = LoopInvariant::Linear(kept);
             }
         }
         let registers = observed.len().min(entry.len()).min(current.len());
@@ -1156,8 +1190,8 @@ impl<M: Machine> Engine<M> {
             .iter()
             .map(|record| record.point.condition.clone())
             .collect();
-        let (invariants, guard) = self.invariants_while_staying(
-            expression,
+        let (invariants, guard, previous_guard) = self.invariants_while_staying(
+            (expression, &cycle.previous.condition),
             cycle.continues,
             &tested,
             &mut entry,
@@ -1171,7 +1205,17 @@ impl<M: Machine> Engine<M> {
             .collect();
         let mut invariants = invariants;
         self.step_past_inner_loops(&mut invariants, &entry, &current, &visits);
-        let invariants = self.demote_varying_steps(invariants, &entry.0);
+        let mut invariants = self.demote_varying_steps(invariants, &entry.0);
+        let read_by_guard = registers_in(expression);
+        let candidates: Vec<usize> = (0..current.0.len())
+            .filter(|&i| !read_by_guard.contains(&current.0[i]))
+            .collect();
+        if let Some(group) = values_kept_within_a_group(&entry.0, &current.0, &candidates) {
+            log::info!("line {pc}: registers {group:?} only exchange their values each round");
+            for &i in &group {
+                invariants[i] = LoopInvariant::OneOf(group.clone());
+            }
+        }
         let staying = if cycle.continues {
             expression.clone()
         } else {
@@ -1189,6 +1233,7 @@ impl<M: Machine> Engine<M> {
             current,
             invariants,
             guard,
+            previous_guard,
             staying,
         })
     }
@@ -1299,7 +1344,7 @@ impl<M: Machine> Engine<M> {
         }
         if let Some((i, _)) = attempt.invariants.iter().enumerate().find(|(i, inv)| {
             matches!(inv, LoopInvariant::Unknown)
-                && self.computer.carries_region(&observation.current.0[*i])
+                && self.computer.points_into_region(&observation.current.0[*i])
                 && confined.iter().all(|kept| kept.register != *i)
         }) {
             return Err(Decline::WidensRegion(
@@ -1419,10 +1464,10 @@ impl<M: Machine> Engine<M> {
         );
         self.simplify_anchors(&attempt.invariants, &mut observation.current);
         let (entry_state, current_state) = (&observation.entry, &observation.current);
-        let (previous, branch_decision) = (&cycle.previous, cycle.continues);
+        let (previous_guard, branch_decision) = (&observation.previous_guard, cycle.continues);
         let id = attempt.id;
         let ghosts = ghost_operands(
-            &previous.condition,
+            previous_guard,
             expression,
             &entry_state.0,
             &current_state.0,
@@ -1439,12 +1484,7 @@ impl<M: Machine> Engine<M> {
             (
                 expression,
                 &ghosts,
-                &guard_operands(
-                    &previous.condition,
-                    expression,
-                    &entry_state.0,
-                    &current_state.0,
-                ),
+                &guard_operands(previous_guard, expression, &entry_state.0, &current_state.0),
             ),
             branch_decision,
             self.bound_values(
@@ -2146,6 +2186,69 @@ impl<M: Machine> Engine<M> {
                 ));
             }
         }
+    }
+
+    fn step_without_cancelling_terms(
+        &self,
+        prev: &RegisterValue,
+        cur: &RegisterValue,
+    ) -> Option<AbstractExpression> {
+        let step = Affine::of_register(cur)?.combine(&Affine::of_register(prev)?, -1)?;
+        let mut pieces: Vec<Affine> = step
+            .terms
+            .iter()
+            .map(|term| Affine {
+                constant: 0,
+                terms: vec![term.clone()],
+            })
+            .collect();
+        if step.constant != 0 {
+            pieces.push(Affine {
+                constant: step.constant,
+                terms: Vec::new(),
+            });
+        }
+        if pieces.len() < 2 || pieces.len() > MAX_CANCELLED_STEP_PIECES {
+            return None;
+        }
+        let mut proofs = 0;
+        for size in 1..=MAX_CANCELLED_GROUP.min(pieces.len() - 1) {
+            for group in index_groups(pieces.len(), size) {
+                let dropped = group.iter().try_fold(
+                    Affine {
+                        constant: 0,
+                        terms: Vec::new(),
+                    },
+                    |sum, &k| sum.combine(&pieces[k], 1),
+                )?;
+                let kept = (0..pieces.len()).filter(|k| !group.contains(k)).try_fold(
+                    Affine {
+                        constant: 0,
+                        terms: Vec::new(),
+                    },
+                    |sum, k| sum.combine(&pieces[k], 1),
+                )?;
+                if kept.terms.is_empty() || kept.mentions_a_loop_counter() {
+                    continue;
+                }
+                let cancelled = dropped.to_expression();
+                if cancelled.size() > MAX_EXPRESSION_NODES {
+                    continue;
+                }
+                if proofs == MAX_CANCELLATION_PROOFS {
+                    return None;
+                }
+                proofs += 1;
+                if self.proves_with_selects(AbstractComparison::new(
+                    "==",
+                    cancelled,
+                    AbstractExpression::Immediate(0),
+                )) {
+                    return Some(kept.to_expression());
+                }
+            }
+        }
+        None
     }
 
     fn pinned_value(&self, e: &AbstractExpression) -> Option<i64> {
@@ -3761,23 +3864,29 @@ impl<M: Machine> Engine<M> {
         exits
     }
 
-    fn resolved_leaves(&self, e: &AbstractExpression) -> AbstractExpression {
+    fn resolved_leaves(
+        &self,
+        e: &AbstractExpression,
+        settlements: &mut SelectSettlements,
+    ) -> AbstractExpression {
         match e {
             AbstractExpression::Register(register) => match &register.base {
                 Some(base) => AbstractExpression::Register(Box::new(RegisterValue {
-                    base: Some(self.resolved_selects(base)),
+                    base: Some(self.resolved_selects(base, settlements)),
                     ..(**register).clone()
                 })),
                 None => e.clone(),
             },
-            AbstractExpression::Expression(op, left, right) => {
-                generate_expression(op, self.resolved_leaves(left), self.resolved_leaves(right))
-            }
-            other => self.resolved_selects(other),
+            AbstractExpression::Expression(op, left, right) => generate_expression(
+                op,
+                self.resolved_leaves(left, settlements),
+                self.resolved_leaves(right, settlements),
+            ),
+            other => self.resolved_selects(other, settlements),
         }
     }
 
-    fn resolve_selects(&self, state: &mut MachineState) {
+    fn resolve_selects(&self, state: &mut MachineState, settlements: &mut SelectSettlements) {
         if self.computer.select_definitions().is_empty() {
             return;
         }
@@ -3785,38 +3894,45 @@ impl<M: Machine> Engine<M> {
             let Some(base) = register.base.clone() else {
                 continue;
             };
-            register.base = Some(self.resolved_selects(&base));
+            register.base = Some(self.resolved_selects(&base, settlements));
         }
     }
 
-    fn resolved_selects(&self, base: &AbstractExpression) -> AbstractExpression {
+    fn settled_select(&self, name: &str) -> Option<AbstractExpression> {
+        let (condition, taken, skipped) = self.computer.select_definitions().get(name)?;
+        let holds = comparison_to_ast(condition.clone())?;
+        let settled = if self
+            .computer
+            .solver()
+            .check_timed(std::slice::from_ref(&holds))
+            == SatResult::Unsat
+        {
+            skipped
+        } else if self.computer.solver().check_timed(&[holds.not()]) == SatResult::Unsat {
+            taken
+        } else {
+            return None;
+        };
+        Some(match self.pinned_value(settled) {
+            Some(value) => AbstractExpression::Immediate(value),
+            None => settled.clone(),
+        })
+    }
+
+    fn resolved_selects(
+        &self,
+        base: &AbstractExpression,
+        settlements: &mut SelectSettlements,
+    ) -> AbstractExpression {
         {
             let mut resolved = base.clone();
             for name in resolved.get_abstracts() {
-                let Some((condition, taken, skipped)) =
-                    self.computer.select_definitions().get(&name)
-                else {
+                let settled = settlements
+                    .entry(name.clone())
+                    .or_insert_with(|| self.settled_select(&name))
+                    .clone();
+                let Some(settled) = settled else {
                     continue;
-                };
-                let Some(holds) = comparison_to_ast(condition.clone()) else {
-                    continue;
-                };
-                let settled = if self
-                    .computer
-                    .solver()
-                    .check_timed(std::slice::from_ref(&holds))
-                    == SatResult::Unsat
-                {
-                    skipped
-                } else if self.computer.solver().check_timed(&[holds.not()]) == SatResult::Unsat {
-                    taken
-                } else {
-                    continue;
-                };
-                let settled = settled.clone();
-                let settled = match self.pinned_value(&settled) {
-                    Some(value) => AbstractExpression::Immediate(value),
-                    None => settled,
                 };
                 resolved = substitute(&resolved, &name, &settled);
             }
@@ -4796,8 +4912,9 @@ impl<M: Machine> Engine<M> {
         let current = self.computer.get_state();
         let (mut before, mut after) = (active.state.clone(), current.clone());
         self.while_staying(&expression, active.entry_decision, |engine| {
-            engine.resolve_selects(&mut before);
-            engine.resolve_selects(&mut after);
+            let mut settlements = SelectSettlements::new();
+            engine.resolve_selects(&mut before, &mut settlements);
+            engine.resolve_selects(&mut after, &mut settlements);
         });
         let mut observed = self.pin_steps(&invariant_of_registers(&before.0, &after.0));
         let tested: Vec<AbstractComparison> = self.jump_history[since..]
@@ -4809,6 +4926,12 @@ impl<M: Machine> Engine<M> {
         });
         let mut observed = self.bound_values(active.pc, &observed, &before.0, &after.0);
         for (i, recorded) in active.invariants.iter().enumerate() {
+            if let LoopInvariant::OneOf(group) = recorded
+                && observed[i] != *recorded
+                && group.iter().any(|&j| before.0.get(j) == after.0.get(i))
+            {
+                observed[i] = recorded.clone();
+            }
             if let LoopInvariant::Linear(step) = recorded
                 && !recorded.subsumes(&observed[i])
                 && self.proves_step(&before.0[i], &after.0[i], step)

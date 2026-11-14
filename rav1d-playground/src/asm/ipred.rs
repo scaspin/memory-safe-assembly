@@ -280,7 +280,7 @@ fn ipred_z1_fill2_8bpc_neon(
 );
 
 #[bums::check_mem_safe("ipred.S", dst.as_mut_ptr(), stride, topleft.as_ptr(), width, height, dxy, max_base_xy,
-    [dst.len() == stride * height, topleft.len() == 2 * width + 1, max_base_xy + 8 <= topleft.len(), width >= 4, height >= 4, width <= 64, height <= 64, 64 % height == 0, stride >= width])]
+    [dst.len() == stride * height, topleft.len() == 64 + 64 + (64 + 15) * 2, max_base_xy + 1 <= width + height, max_base_xy + 1 >= height, width >= 4, height >= 4, width <= 64, height <= 64, width <= 4 * height, height <= 4 * width, 64 % height == 0, 64 % width == 0, stride >= width, dxy >= 1, dxy <= 1023])]
 fn ipred_z3_fill1_8bpc_neon(
     dst: &mut [u8],
     stride: usize,
@@ -304,7 +304,7 @@ fn ipred_z3_fill2_8bpc_neon(
 );
 
 #[bums::check_mem_safe("ipred.S", dst.as_mut_ptr(), stride, top.as_ptr().add(65), left.as_ptr().add(130), width, height, dx, dy,
-    [dst.len() == stride * height, top.len() == 195, left.len() == 195, width >= 4, height >= 4, width <= 64, height <= 64, 64 % height == 0, 64 % width == 0, stride >= width, dx >= 0, dx <= 102, dy >= 0, dy <= 102])]
+    [dst.len() == stride * height, top.len() == 195, left.len() == 195, width >= 4, height >= 4, width <= 64, height <= 64, 64 % height == 0, 64 % width == 0, stride >= width, dx >= 1, dx <= 1023, dy >= 1, dy <= 1023])]
 fn ipred_z2_fill1_8bpc_neon(
     dst: &mut [u8],
     stride: usize,
@@ -638,7 +638,7 @@ fn ipred_z1_fill2_16bpc_neon(
 );
 
 #[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), stride, topleft.as_ptr(), width, height, dxy, max_base_xy,
-    [dst.len() == stride * height, topleft.len() == 2 * width + 1, max_base_xy + 8 <= topleft.len(), width >= 4, height >= 4, width <= 64, height <= 64, 64 % height == 0, stride >= width])]
+    [dst.len() == stride * height, topleft.len() == 64 + 64 + (64 + 15) * 2, max_base_xy + 1 <= width + height, max_base_xy + 1 >= height, width >= 4, height >= 4, width <= 64, height <= 64, width <= 4 * height, height <= 4 * width, 64 % height == 0, 64 % width == 0, stride >= width, dxy >= 1, dxy <= 1023])]
 fn ipred_z3_fill1_16bpc_neon(
     dst: &mut [u16],
     stride: usize,
@@ -662,7 +662,7 @@ fn ipred_z3_fill2_16bpc_neon(
 );
 
 #[bums::check_mem_safe("ipred16.S", dst.as_mut_ptr(), stride, top.as_ptr().add(65), left.as_ptr().add(130), width, height, dx, dy,
-    [dst.len() == stride * height, top.len() == 195, left.len() == 195, width >= 4, height >= 4, width <= 64, height <= 64, 64 % height == 0, 64 % width == 0, stride >= width, dx >= 0, dx <= 102, dy >= 0, dy <= 102])]
+    [dst.len() == stride * height, top.len() == 195, left.len() == 195, width >= 4, height >= 4, width <= 64, height <= 64, 64 % height == 0, 64 % width == 0, stride >= width, dx >= 1, dx <= 1023, dy >= 1, dy <= 1023])]
 fn ipred_z2_fill1_16bpc_neon(
     dst: &mut [u16],
     stride: usize,

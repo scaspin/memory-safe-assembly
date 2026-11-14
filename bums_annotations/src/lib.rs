@@ -1626,7 +1626,12 @@ fn unary_to_abstract_expression(input: &ExprUnary) -> AbstractExpression {
     let expr = syn_expr_to_abstract_expression(&input.expr);
     match input.op {
         UnOp::Not(_) => generate_expression("!", expr, AbstractExpression::Empty),
-        UnOp::Neg(_) => generate_expression("-", expr, AbstractExpression::Empty),
+        UnOp::Neg(_) => match expr {
+            AbstractExpression::Immediate(value) => AbstractExpression::Immediate(
+                value.checked_neg().expect("negated integer out of range"),
+            ),
+            other => generate_expression("-", AbstractExpression::Immediate(0), other),
+        },
         _ => todo!("unary conversion"),
     }
 }
@@ -3655,6 +3660,35 @@ mod tests {
         annotation
             .check(&width_dispatch())
             .map(|verdict| verdict.failures)
+    }
+
+    fn signed_offset_verdict(lowest: TokenStream) -> std::result::Result<Vec<String>, String> {
+        let attr = quote! { "f.S", dst.as_mut_ptr(), x, [dst.len() == 18, x >= #lowest, x <= 9] };
+        let item = quote! { fn f(dst: &mut [u8], x: isize); };
+        let annotation = parse_annotation(attr, item).expect("annotation parses");
+        assert_eq!(annotation.diagnostics, Vec::<String>::new());
+        let program: Vec<String> = ["f:", "add x8, x0, x1", "strb wzr, [x8, #8]", "ret"]
+            .iter()
+            .map(|line| line.to_string())
+            .collect();
+        annotation.check(&program).map(|verdict| verdict.failures)
+    }
+
+    #[test]
+    fn a_negative_literal_bound_keeps_its_sign() {
+        assert_eq!(signed_offset_verdict(quote! { -8 }), Ok(Vec::new()));
+        assert_eq!(signed_offset_verdict(quote! { -(4 + 4) }), Ok(Vec::new()));
+    }
+
+    #[test]
+    fn a_negative_bound_one_too_low_is_rejected() {
+        for lowest in [quote! { -9 }, quote! { -(4 + 5) }] {
+            let failures = signed_offset_verdict(lowest.clone()).expect("the check runs");
+            assert!(
+                !failures.is_empty(),
+                "x >= {lowest} let a write before dst pass"
+            );
+        }
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use bums_macros as bums;
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_regular_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -17,7 +17,7 @@ fn put_8tap_regular_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_regular_smooth_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -31,7 +31,7 @@ fn put_8tap_regular_smooth_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_regular_sharp_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -45,7 +45,7 @@ fn put_8tap_regular_sharp_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_smooth_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -59,7 +59,7 @@ fn put_8tap_smooth_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_smooth_regular_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -73,7 +73,7 @@ fn put_8tap_smooth_regular_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_smooth_sharp_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -87,7 +87,7 @@ fn put_8tap_smooth_sharp_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_sharp_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -101,7 +101,7 @@ fn put_8tap_sharp_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_sharp_regular_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -115,7 +115,7 @@ fn put_8tap_sharp_regular_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_sharp_smooth_8bpc_neon(
     dst: &mut [u8],
     dst_stride: usize,
@@ -143,7 +143,7 @@ fn put_bilin_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_regular_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -156,7 +156,7 @@ fn prep_8tap_regular_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_regular_smooth_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -169,7 +169,7 @@ fn prep_8tap_regular_smooth_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_regular_sharp_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -182,7 +182,7 @@ fn prep_8tap_regular_sharp_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_smooth_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -195,7 +195,7 @@ fn prep_8tap_smooth_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_smooth_regular_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -208,7 +208,7 @@ fn prep_8tap_smooth_regular_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_smooth_sharp_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -221,7 +221,7 @@ fn prep_8tap_smooth_sharp_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_sharp_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -234,7 +234,7 @@ fn prep_8tap_sharp_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_sharp_regular_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -247,7 +247,7 @@ fn prep_8tap_sharp_regular_8bpc_neon(
 );
 
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_sharp_smooth_8bpc_neon(
     tmp: &mut [i16],
     src: &[u8],
@@ -703,7 +703,7 @@ fn put_8tap_regular_smooth_8bpc_neon_dotprod(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_regular_sharp_8bpc_neon_dotprod(
     dst: &mut [u8],
     dst_stride: usize,
@@ -745,7 +745,7 @@ fn put_8tap_smooth_regular_8bpc_neon_dotprod(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_smooth_sharp_8bpc_neon_dotprod(
     dst: &mut [u8],
     dst_stride: usize,
@@ -759,7 +759,7 @@ fn put_8tap_smooth_sharp_8bpc_neon_dotprod(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_sharp_8bpc_neon_dotprod(
     dst: &mut [u8],
     dst_stride: usize,
@@ -827,7 +827,7 @@ fn prep_8tap_regular_smooth_8bpc_neon_dotprod(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_regular_sharp_8bpc_neon_dotprod(
     tmp: &mut [i16],
     src: &[u8],
@@ -866,7 +866,7 @@ fn prep_8tap_smooth_regular_8bpc_neon_dotprod(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_smooth_sharp_8bpc_neon_dotprod(
     tmp: &mut [i16],
     src: &[u8],
@@ -879,7 +879,7 @@ fn prep_8tap_smooth_sharp_8bpc_neon_dotprod(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_sharp_8bpc_neon_dotprod(
     tmp: &mut [i16],
     src: &[u8],
@@ -946,7 +946,7 @@ fn put_8tap_regular_smooth_8bpc_neon_i8mm(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_regular_sharp_8bpc_neon_i8mm(
     dst: &mut [u8],
     dst_stride: usize,
@@ -988,7 +988,7 @@ fn put_8tap_smooth_regular_8bpc_neon_i8mm(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_smooth_sharp_8bpc_neon_i8mm(
     dst: &mut [u8],
     dst_stride: usize,
@@ -1002,7 +1002,7 @@ fn put_8tap_smooth_sharp_8bpc_neon_i8mm(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_sharp_8bpc_neon_i8mm(
     dst: &mut [u8],
     dst_stride: usize,
@@ -1070,7 +1070,7 @@ fn prep_8tap_regular_smooth_8bpc_neon_i8mm(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_regular_sharp_8bpc_neon_i8mm(
     tmp: &mut [i16],
     src: &[u8],
@@ -1109,7 +1109,7 @@ fn prep_8tap_smooth_regular_8bpc_neon_i8mm(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_smooth_sharp_8bpc_neon_i8mm(
     tmp: &mut [i16],
     src: &[u8],
@@ -1122,7 +1122,7 @@ fn prep_8tap_smooth_sharp_8bpc_neon_i8mm(
 );
 
 #[bums::check_mem_safe("mc_dotprod.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_sharp_8bpc_neon_i8mm(
     tmp: &mut [i16],
     src: &[u8],

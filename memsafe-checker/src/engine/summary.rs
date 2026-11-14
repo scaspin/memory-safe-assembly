@@ -857,6 +857,73 @@ fn sign_extended_word(e: &AbstractExpression) -> Option<(&AbstractExpression, i6
     }
 }
 
+fn compared_words(
+    comparison: &AbstractComparison,
+) -> Option<(&AbstractExpression, &AbstractExpression)> {
+    let (left, right) = match comparison.right.as_ref() {
+        AbstractExpression::Immediate(0) => match comparison.left.as_ref() {
+            AbstractExpression::Expression(op, left, right) if op == "-" => (left, right),
+            _ => return None,
+        },
+        _ => (&comparison.left, &comparison.right),
+    };
+    match (sign_extended_word(left)?, sign_extended_word(right)?) {
+        ((left, 0), (right, 0)) => Some((left, right)),
+        _ => None,
+    }
+}
+
+fn unit_word_walk_fact<F>(
+    condition: &AbstractComparison,
+    continuing_at_summary: &AbstractComparison,
+    continues_when: bool,
+    counter: &AbstractExpression,
+    register_step: &F,
+) -> Option<AbstractComparison>
+where
+    F: Fn(&RegisterValue) -> AbstractExpression,
+{
+    let continuing = if continues_when {
+        condition.clone()
+    } else {
+        condition.not()
+    };
+    if continuing.op != continuing_at_summary.op {
+        return None;
+    }
+    let (left, right) = compared_words(&continuing)?;
+    let (left_now, right_now) = compared_words(continuing_at_summary)?;
+    let step_of = |e: &AbstractExpression| match expression_step(e, register_step)? {
+        AbstractExpression::Immediate(step) => Some(step),
+        _ => None,
+    };
+    let (walker, step) = match (continuing.op.as_str(), step_of(left)?, step_of(right)?) {
+        ("<", 1, 0) | (">", -1, 0) => (left_now, step_of(left)?),
+        ("<", 0, -1) | (">", 0, 1) => (right_now, step_of(right)?),
+        _ => return None,
+    };
+    let AbstractExpression::Abstract(name) = counter else {
+        return None;
+    };
+    let base = AbstractExpression::Immediate(SUMMARY_ITERATION);
+    let signed = |word: AbstractExpression| {
+        generate_expression("sext", word, AbstractExpression::Immediate(32))
+    };
+    Some(AbstractComparison::new(
+        "==",
+        signed(walker.clone()),
+        generate_expression(
+            "+",
+            signed(with_counter_at(walker, name, &base)),
+            generate_expression(
+                "*",
+                generate_expression("-", counter.clone(), base),
+                AbstractExpression::Immediate(step),
+            ),
+        ),
+    ))
+}
+
 pub(super) fn iterations_before_leaving(op: &str, step: i64, bound: i64) -> Option<i64> {
     const HALF: i64 = 1 << 31;
     if !(-HALF..HALF).contains(&bound) {
@@ -1343,6 +1410,52 @@ pub(super) fn summarize<L>(
                     },
                 ));
             }
+            LoopInvariant::OneOf(group) => {
+                let shares_base = group.iter().all(|&j| {
+                    current
+                        .0
+                        .get(j)
+                        .is_some_and(|other| other.base == cur.base && other.kind == cur.kind)
+                });
+                let offsets: Vec<i64> = group
+                    .iter()
+                    .filter_map(|&j| current.0.get(j).map(|other| other.offset))
+                    .collect();
+                let (true, Some(&low), Some(&high)) =
+                    (shares_base, offsets.iter().min(), offsets.iter().max())
+                else {
+                    updates.push((
+                        i,
+                        RegisterValue::new_empty(&counter.symbol(LoopRole::Widened(i)).to_string()),
+                    ));
+                    continue;
+                };
+                let symbol = counter.symbol(LoopRole::Within(i)).to_string();
+                let chosen = AbstractExpression::Abstract(symbol.clone());
+                progress_facts.push(AbstractComparison::new(
+                    ">=",
+                    chosen.clone(),
+                    AbstractExpression::Immediate(0),
+                ));
+                progress_facts.push(AbstractComparison::new(
+                    "<=",
+                    chosen.clone(),
+                    AbstractExpression::Immediate(high - low),
+                ));
+                ranges.push((symbol, high - low));
+                let base = match &cur.base {
+                    Some(base) => generate_expression("+", base.clone(), chosen),
+                    None => chosen,
+                };
+                updates.push((
+                    i,
+                    RegisterValue {
+                        kind: cur.kind.clone(),
+                        base: Some(base),
+                        offset: low,
+                    },
+                ));
+            }
             LoopInvariant::Tracks(..) | LoopInvariant::Derived(..) => {}
             LoopInvariant::NonDecreasing | LoopInvariant::NonIncreasing => {
                 let progress = counter.symbol(LoopRole::Progress(i)).expression();
@@ -1572,6 +1685,13 @@ pub(super) fn summarize<L>(
             AbstractExpression::Immediate(most + SUMMARY_ITERATION),
         ));
     }
+    facts.extend(unit_word_walk_fact(
+        condition,
+        &continuing,
+        continues_when,
+        &counter.expression(),
+        &register_step,
+    ));
     facts.push(continuing.clone());
     let ghost_checks = ghosts
         .iter()

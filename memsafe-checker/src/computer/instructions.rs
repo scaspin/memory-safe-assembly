@@ -295,6 +295,7 @@ impl ARMCORTEXA {
         instruction: &Instruction,
     ) -> Result<ExecuteReturnType, String> {
         self.set_current_line(pc);
+        self.table_offsets_this_instruction = None;
         self.note_pc_for_exact_lanes(pc);
         if super::sve::is_scalable(instruction) {
             return self.scalable(instruction);

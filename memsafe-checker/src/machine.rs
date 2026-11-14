@@ -16,6 +16,7 @@ pub type MachineState = (
 );
 
 const FINITE_VALUES_RESOURCE_LIMIT: u32 = 5_000_000;
+const WORD_WRAP_RESOURCE_LIMIT: u32 = 2_000_000;
 pub(crate) const BIT_WIDTH_RESOURCE_LIMIT: u32 = 50_000;
 
 pub type SelectDefinitions =
@@ -349,6 +350,57 @@ pub trait Machine: Clone {
                 .iter()
                 .any(|symbol| self.names_region(symbol))
         })
+    }
+
+    fn points_into_region(&self, register: &RegisterValue) -> bool {
+        self.carries_region(register)
+            && register.base.as_ref().is_none_or(|base| {
+                self.region_coefficients(base)
+                    .is_none_or(|coefficients| !coefficients.is_empty())
+            })
+    }
+
+    fn region_coefficients(&self, e: &AbstractExpression) -> Option<BTreeMap<String, i64>> {
+        let combined = |left: BTreeMap<String, i64>, right: BTreeMap<String, i64>, sign: i64| {
+            let mut sum = left;
+            for (region, weight) in right {
+                *sum.entry(region).or_insert(0) += sign * weight;
+            }
+            sum.retain(|_, weight| *weight != 0);
+            sum
+        };
+        let scaled = |map: BTreeMap<String, i64>, factor: i64| -> Option<BTreeMap<String, i64>> {
+            map.into_iter()
+                .map(|(region, weight)| Some((region, weight.checked_mul(factor)?)))
+                .filter(|entry| entry.as_ref().is_none_or(|(_, weight)| *weight != 0))
+                .collect()
+        };
+        match e {
+            AbstractExpression::Empty | AbstractExpression::Immediate(_) => Some(BTreeMap::new()),
+            AbstractExpression::Abstract(symbol) if self.names_region(symbol) => {
+                Some(BTreeMap::from([(symbol.clone(), 1)]))
+            }
+            AbstractExpression::Abstract(_) => Some(BTreeMap::new()),
+            AbstractExpression::Register(r) => match &r.base {
+                Some(base) => self.region_coefficients(base),
+                None => Some(BTreeMap::new()),
+            },
+            AbstractExpression::Expression(op, left, right) => {
+                let l = self.region_coefficients(left)?;
+                let r = self.region_coefficients(right)?;
+                match (op.as_str(), &**left, &**right) {
+                    ("+", ..) => Some(combined(l, r, 1)),
+                    ("-", ..) => Some(combined(l, r, -1)),
+                    ("*", _, AbstractExpression::Immediate(k)) => scaled(l, *k),
+                    ("*", AbstractExpression::Immediate(k), _) => scaled(r, *k),
+                    ("lsl" | "<<", _, AbstractExpression::Immediate(k)) if (0..62).contains(k) => {
+                        scaled(l, 1 << k)
+                    }
+                    _ if l.is_empty() && r.is_empty() => Some(BTreeMap::new()),
+                    _ => None,
+                }
+            }
+        }
     }
 
     fn carries_code_address(&self, register: &RegisterValue) -> bool {
@@ -735,6 +787,7 @@ pub trait Machine: Clone {
             let kept = self.indexed_facts_apart(&name, within, width);
             let aligned = named.contains(&name)
                 && width > 0
+                && !self.element_ranges_of(&name).is_empty()
                 && start.as_ref().is_some_and(|start| {
                     let within = ast::Int::sub(&[start, &ast::Int::new_const(name.clone())]);
                     let misaligned = within
@@ -893,6 +946,93 @@ pub trait Machine: Clone {
             comparison_to_ast(fact)
                 .is_some_and(|c| self.solver().check_timed(&[c.not()]) == SatResult::Unsat)
         })
+    }
+
+    fn proves_within(&self, value: &AbstractExpression, least: i64, most: i64) -> bool {
+        if !is_translatable(value) {
+            return false;
+        }
+        if syntactically_between(value, least as i128, most as i128) {
+            return true;
+        }
+        let Some(value) = expression_to_ast(value.clone()) else {
+            return false;
+        };
+        let refuted = |outside: ast::Bool| {
+            let solver = self.solver();
+            let mut bounded = Params::new();
+            bounded.set_u32("rlimit", WORD_WRAP_RESOURCE_LIMIT);
+            solver.set_params(&bounded);
+            let result = solver.check_timed(&[outside]);
+            let mut unbounded = Params::new();
+            unbounded.set_u32("rlimit", 0);
+            solver.set_params(&unbounded);
+            result == SatResult::Unsat
+        };
+        refuted(value.lt(ast::Int::from_i64(least))) && refuted(value.gt(ast::Int::from_i64(most)))
+    }
+
+    fn without_fitting_word_wraps(&self, e: &AbstractExpression) -> AbstractExpression {
+        const WORD: i64 = 1 << 32;
+        let word_wrapped = |e: &AbstractExpression| -> Option<AbstractExpression> {
+            let wrapped = match e {
+                AbstractExpression::Register(r)
+                    if r.kind == RegisterKind::RegisterBase && r.offset == 0 =>
+                {
+                    r.base.as_ref()?
+                }
+                other => other,
+            };
+            match wrapped {
+                AbstractExpression::Expression(op, inner, modulus)
+                    if op == "%" && **modulus == AbstractExpression::Immediate(WORD) =>
+                {
+                    Some((**inner).clone())
+                }
+                _ => None,
+            }
+        };
+        match e {
+            AbstractExpression::Expression(op, inner, width)
+                if op == "sext" && **width == AbstractExpression::Immediate(32) =>
+            {
+                if let Some(unwrapped) = word_wrapped(inner)
+                    && self.proves_within(&unwrapped, 0, (1 << 31) - 1)
+                {
+                    return self.without_fitting_word_wraps(&unwrapped);
+                }
+                generate_expression(
+                    op,
+                    self.without_fitting_word_wraps(inner),
+                    (**width).clone(),
+                )
+            }
+            AbstractExpression::Expression(op, inner, modulus)
+                if op == "%" && **modulus == AbstractExpression::Immediate(WORD) =>
+            {
+                if self.proves_within(inner, 0, WORD - 1) {
+                    return self.without_fitting_word_wraps(inner);
+                }
+                generate_expression(
+                    op,
+                    self.without_fitting_word_wraps(inner),
+                    (**modulus).clone(),
+                )
+            }
+            AbstractExpression::Expression(op, left, right) => generate_expression(
+                op,
+                self.without_fitting_word_wraps(left),
+                self.without_fitting_word_wraps(right),
+            ),
+            AbstractExpression::Register(r) => match &r.base {
+                Some(base) => AbstractExpression::Register(Box::new(RegisterValue {
+                    base: Some(self.without_fitting_word_wraps(base)),
+                    ..(**r).clone()
+                })),
+                None => e.clone(),
+            },
+            other => other.clone(),
+        }
     }
 }
 

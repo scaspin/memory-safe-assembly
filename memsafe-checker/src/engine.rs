@@ -55,6 +55,39 @@ enum Step {
     Return,
 }
 
+const MAX_DIVIDEND_ENUMERATED: i64 = 4096;
+
+fn divisor_membership(constraint: &AbstractComparison) -> Option<ast::Bool> {
+    if constraint.op != "==" {
+        return None;
+    }
+    let remainder = match (&*constraint.left, &*constraint.right) {
+        (AbstractExpression::Immediate(0), other) | (other, AbstractExpression::Immediate(0)) => {
+            other
+        }
+        _ => return None,
+    };
+    let AbstractExpression::Expression(op, dividend, divisor) = remainder else {
+        return None;
+    };
+    let (AbstractExpression::Immediate(dividend), AbstractExpression::Abstract(divisor)) =
+        (&**dividend, &**divisor)
+    else {
+        return None;
+    };
+    if op != "%" || *dividend <= 0 || *dividend > MAX_DIVIDEND_ENUMERATED {
+        return None;
+    }
+    let symbol = ast::Int::new_const(divisor.as_str());
+    let choices: Vec<ast::Bool> = (1..=*dividend)
+        .filter(|d| dividend % d == 0)
+        .flat_map(|d| [d, -d])
+        .chain([0])
+        .map(|d| symbol.eq(ast::Int::from_i64(d)))
+        .collect();
+    Some(ast::Bool::or(&choices))
+}
+
 fn runs_past_the_end(pc: usize) -> Error {
     Error::other(format!(
         "line {pc}: execution runs past the end of the code"
@@ -65,6 +98,7 @@ const LARGEST_OBJECT_BYTES: i64 = i64::MAX;
 const LOWEST_MAPPED_ADDRESS: i64 = 4096;
 
 const MAX_EXPLORED_KEY_BYTES: usize = 256 << 20;
+const MAX_FACT_TEXT_BYTES: usize = 64 << 20;
 
 fn symbols_of(fact: &str) -> impl Iterator<Item = &str> {
     const KEYWORDS: [&str; 20] = [
@@ -126,6 +160,8 @@ type DeadRegistersByContext = BTreeMap<(usize, bool), Rc<Vec<usize>>>;
 struct Explored {
     finished: BTreeMap<String, bool>,
     bytes: usize,
+    fact_texts: std::collections::HashMap<ast::Bool, Rc<str>>,
+    fact_text_bytes: usize,
 }
 
 fn join_arms(
@@ -273,6 +309,7 @@ pub struct Engine<M: Machine> {
     return_conditions: Rc<Vec<ReturnCondition>>,
     argument_shift: usize,
     callee_saved_at_entry: Rc<Vec<(usize, AbstractExpression)>>,
+    parameter_bounds: Rc<RefCell<ParameterBounds>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -405,6 +442,7 @@ impl<M: Machine> Engine<M> {
             next_loop_id: Rc::new(Cell::new(0)),
             steps_left: Rc::new(Cell::new(limit_from_env("BUMS_MAX_STEPS", steps))),
             explored: Rc::default(),
+            parameter_bounds: Rc::default(),
             scopes: Vec::new(),
             next_scope_id: 0,
             path_ends: false,
@@ -723,6 +761,7 @@ impl<M: Machine> Engine<M> {
                 .map(|&index| (index, self.computer.register_at(index).expression()))
                 .collect(),
         );
+        let _bounds = ParameterBoundsInForce::install(&self.parameter_bounds.borrow());
         let res = self.run(pc, 0);
         debug_assert!(self.scopes.is_empty(), "solver scopes left open");
         res
@@ -1054,13 +1093,28 @@ impl<M: Machine> Engine<M> {
             .solver()
             .get_assertions()
             .iter()
-            .map(|fact| fact.to_string())
+            .map(|fact| self.fact_text(fact))
             .collect();
         for fact in facts_about_live_symbols(facts, &state) {
             state.push('|');
             state.push_str(&fact);
         }
         Some(state)
+    }
+
+    fn fact_text(&self, fact: &ast::Bool) -> String {
+        let mut explored = self.explored.borrow_mut();
+        if let Some(text) = explored.fact_texts.get(fact) {
+            return text.to_string();
+        }
+        let text = fact.to_string();
+        if explored.fact_text_bytes + text.len() <= MAX_FACT_TEXT_BYTES {
+            explored.fact_text_bytes += text.len();
+            explored
+                .fact_texts
+                .insert(fact.clone(), Rc::from(text.as_str()));
+        }
+        text
     }
 
     fn already_explored(&self, pc: usize, reached: &mut Vec<String>) -> bool {
@@ -1473,10 +1527,21 @@ impl<M: Machine> Engine<M> {
                 condition.clone().not()
             ))
         })?;
-        match (
-            check_branch(self.computer.solver(), &[take]),
-            check_branch(self.computer.solver(), &[skip]),
-        ) {
+        let pure_data = !self.computer.carries_code_address(&option1)
+            && !self.computer.carries_code_address(&option2)
+            && !self.computer.carries_region(&option1)
+            && !self.computer.carries_region(&option2)
+            && option1.kind != RegisterKind::Number
+            && option2.kind != RegisterKind::Number;
+        let decisions = if pure_data {
+            (SatResult::Sat, SatResult::Sat)
+        } else {
+            (
+                check_branch(self.computer.solver(), &[take]),
+                check_branch(self.computer.solver(), &[skip]),
+            )
+        };
+        match decisions {
             (SatResult::Sat, SatResult::Unsat) => {
                 self.add_constraint(condition, true);
                 self.computer
@@ -1821,7 +1886,12 @@ impl<M: Machine> Engine<M> {
         for defined in self.select_definitions_in(&constraint) {
             self.assert_in_scope(defined);
         }
-        let Some(c) = comparison_to_ast(constraint) else {
+        let asserted = AbstractComparison::new(
+            &constraint.op,
+            self.computer.without_fitting_word_wraps(&constraint.left),
+            self.computer.without_fitting_word_wraps(&constraint.right),
+        );
+        let Some(c) = comparison_to_ast(asserted) else {
             log::info!("branch condition not expressible, left unconstrained: {shown}");
             return;
         };
@@ -1991,6 +2061,11 @@ impl<M: Machine> Engine<M> {
     }
 
     pub fn add_invariant(&self, constraint: AbstractComparison) {
+        self.parameter_bounds.borrow_mut().narrow(&constraint);
+        if let Some(membership) = divisor_membership(&constraint) {
+            self.computer.solver().assert(&membership);
+            return;
+        }
         let shown = constraint.clone();
         let Some(c) = comparison_to_ast(constraint) else {
             log::info!("invariant not expressible, dropped: {shown}");
