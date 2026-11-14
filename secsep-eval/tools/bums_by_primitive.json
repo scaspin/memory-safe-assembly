@@ -1,0 +1,49 @@
+{
+ "bignum": {
+  "functions": 64,
+  "clauses": 224,
+  "tokens": 3130,
+  "playgrounds": [
+   "bignum",
+   "crypto",
+   "graviola"
+  ]
+ },
+ "aes / aes-gcm": {
+  "functions": 48,
+  "clauses": 341,
+  "tokens": 3989,
+  "playgrounds": [
+   "bignum",
+   "corecrypto",
+   "crypto"
+  ]
+ },
+ "curve25519": {
+  "functions": 25,
+  "clauses": 69,
+  "tokens": 1122,
+  "playgrounds": [
+   "bignum",
+   "corecrypto",
+   "graviola"
+  ]
+ },
+ "sha-256": {
+  "functions": 4,
+  "clauses": 16,
+  "tokens": 200,
+  "playgrounds": [
+   "corecrypto",
+   "crypto"
+  ]
+ },
+ "poly1305": {
+  "functions": 2,
+  "clauses": 14,
+  "tokens": 188,
+  "playgrounds": [
+   "crypto"
+  ]
+ }
+}

@@ -1,0 +1,58 @@
+dropped (no memory access): nopw %cs:(%rax,%rax)
+dropped (no memory access): nop
+dropped (no memory access): prefetcht0 0x580(%rcx)
+dropped (no memory access): prefetcht0 0x580(%rsi)
+dropped (no memory access): prefetcht0 0x5c0(%rcx)
+dropped (no memory access): prefetcht0 0x5c0(%rsi)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopw (%rax,%rax)
+dropped (no memory access): nopl (%rax)
+same-width memory move: movhps -0x80(%rsi), %xmm0
+dropped (no memory access): nopw %cs:(%rax,%rax)
+dropped (no memory access): prefetcht0 0x580(%rcx)
+dropped (no memory access): prefetcht0 0x580(%rsi)
+dropped (no memory access): prefetcht0 0x5c0(%rcx)
+dropped (no memory access): prefetcht0 0x5c0(%rsi)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopw (%rax,%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopw (%rax,%rax)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+same-width memory move: movhps (%rsi), %xmm0
+same-width memory move: movhps (%rsi), %xmm1
+same-width memory move: movhps (%rsi), %xmm2
+same-width memory move: movhps (%rsi), %xmm3
+same-width memory move: movlps %xmm0, (%rcx)
+same-width memory move: movhps %xmm0, (%rcx)
+same-width memory move: movlps %xmm1, (%rcx)
+same-width memory move: movhps %xmm1, (%rcx)
+same-width memory move: movlps %xmm2, (%rcx)
+same-width memory move: movhps %xmm2, (%rcx)
+same-width memory move: movlps %xmm3, (%rcx)
+same-width memory move: movhps %xmm3, (%rcx)
+dropped (no memory access): nopl (%rax)
+dropped (no memory access): nopl (%rax)
+same-width memory move: movlps %xmm0, (%rcx)
+dropped (no memory access): nopw (%rax,%rax)
+flags: compare sarq result with 0 before jle
+flags: test with a positive mask, jle as je
+flags: test with a positive mask, jle as je
+flags: test with a positive mask, jle as je
+flags: test with a positive mask, jle as je
+flags: compare sarq result with 0 before jle
+flags: test with a positive mask, jle as je
+flags: test with a positive mask, jle as je
+flags: test with a positive mask, jle as je
+flags: test with a positive mask, jle as je
+flags: compare sarq result with 0 before jle
+flags: compare andq result with 0 before jle

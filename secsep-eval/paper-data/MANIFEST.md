@@ -39,6 +39,7 @@ parameter its own region; all comparisons use the same 21 functions, annotated i
 | `fig_annotation_burden` | Annotation clauses summed over each benchmark's functions, both tools annotating the same functions. Clauses: SecSep @tags + @secsep_in/out; BUMS argument bindings + bracketed preconditions. |
 | `fig_annotation_vs_time_clauses` / `_tokens` | Annotation size vs time per function. Tokens include the BUMS Rust signature. |
 | `fig_mutation` | Twelve single-instruction out-of-bounds mutants (two per benchmark). Filled: rejected at the faulting instruction; open circle: type checker rejects the function; triangle: inference raised an exception with no location. |
+| `fig_mutation_tools` | The same mutants under all four tools. Valgrind and ASan run with exact-size heap tests over 23 input lengths and with SecSep's own driver. Diamond: crash, timeout or heap corruption noticed later, without a bounds report. |
 | `fig_parser_coverage` | Share of instructions Octal's parser rejects or does not support, on SecSep's own compiled benchmarks vs BoringSSL's hand-written x86 (linux). |
 | `fig_secsep_phase_share` | Where SecSep's time goes: phase shares of inference + check CPU time and the share spent inside SMT calls. |
 
@@ -66,6 +67,34 @@ parameter its own region; all comparisons use the same 21 functions, annotated i
 | `transform_check.csv` | BUMS on SecSep's transformed assembly, raw and with the 8 MB secret-stack offset folded back | `tf-check/` (`tools/fold_secret_stack.py`) |
 | `octal_parser_coverage.csv` | per file: instructions, unsupported or unparsed, share, most common failures | `octal-parse-coverage.tsv` (parser probe in `secsep/octal/probe`) |
 | `bums_progression.csv` | per function: BUMS baseline vs final status and the engine change responsible | as per_function |
+
+## Related work (counted) and dynamic tools
+
+Regenerate with `python3 tools/s2n_bignum_effort.py`, `tools/vale_effort.py`, `tools/build_dynamic.py`, then
+`tools/build_related_work.py` (and `make_figures.py` for `fig_mutation_tools`).
+
+| File | Contents |
+|---|---|
+| `related_work.md`, `tables/related_work.tex`, `data/related_work.csv` | the big table: BUMS, SecSep/Octal, s2n-bignum, Vale/EverCrypt, Islaris, Binsec/angr, ASan, Valgrind; input, ISA, property, automation, measured effort and evidence |
+| `data/s2n_bignum_vs_bums.csv`, `tables/s2n_bignum_effort.tex` | the 71 s2n-bignum functions BUMS annotates (bignum-playground, AArch64): BUMS clauses/tokens and verdict vs s2n-bignum's HOL Light proof: main specification lines, all statement lines, tactic lines (comments and the embedded machine-code listing excluded; shared `needs` libraries not counted, so tactic lines are a lower bound). BUMS verdicts from the rework-branch sweep of 2026-11-05 (300 s timeout). |
+| `data/s2n_bignum_safety_effort.csv` | every s2n-bignum proof file with a `_SUBROUTINE_SAFE` theorem (88 AArch64, 66 x86; all 71 BUMS-annotated functions are among them): correctness lines vs safety-section lines (split at the "Constant-time and memory safety proof" header; statement vs proof lines), whether the safety spec is generated from the `_CORRECT` theorem (at check time or offline), whether a safety proof uses `_CORRECT` as a lemma (never), top-level correctness definitions reused, and proof style (automatic `PROVE_SAFETY_SPEC_TAC` vs hand-scaffolded loops/branches). `tools/s2n_safety_effort.py`. The `_SAFE` theorem covers constant time and memory safety together, so its lines cannot be split between the two. |
+| `data/vale_effort.csv`, `data/vale_vs_bums_primitive.csv`, `tables/vale_vs_bums_primitive.tex` | Vale (HACL* commit f557259, x64 only) per primitive: procedures, spec lines (requires/ensures/modifies/reads), code+proof lines, F* lemma lines; next to BUMS annotations for the same primitive across all playgrounds. Same algorithm, different code. |
+| `data/dynamic_tools.csv`, `data/dynamic_tools_summary.csv`, `figures/fig_mutation_tools` | the 12 mutants (and the 6 originals) under Valgrind memcheck 3.22 and AddressSanitizer (clang 18), on an emulated x86-64 Ubuntu 24.04 (colima/QEMU) |
+
+Headline counts: on the same 71 functions, BUMS 208 clauses vs s2n-bignum 3,780 specification lines plus
+84,283 tactic lines (machine-checked functional correctness, a stronger property). Mutants: Valgrind 12/12 with
+exact-size tests but 3/12 with SecSep's own driver; ASan 2/12 (both at intercepted memset/memcpy calls; 4 more
+show only as a crash or later heap corruption); no false positives on the originals.
+
+Dynamic-tool method: two test settings per variant. "Exact-size tests" is a C harness per benchmark
+(`dynamic/harness/`) calling each annotated function and the public API over 23 lengths (0 to 1000) with every
+buffer `malloc`'d at exactly its contract size. "SecSep driver" is the benchmark's own `main`, already in each
+`.s` (global and stack buffers). Assembly is identical to what BUMS and Octal checked (only `main` renamed and two
+internal functions exported for the harness: `dynamic/prepare.py`). A detection is a Valgrind "Invalid read/write"
+or an ASan bounds report (`*-buffer-overflow`, `negative-size-param`); an ASan SEGV, stack overflow or bad free is
+recorded as "crash, timeout or later heap corruption", not as a detection. Valgrind sees every instruction but only
+heap bounds; ASan instruments only compiled C, so it cannot see accesses made by assembly except through its
+memset/memcpy interceptors.
 
 ## Methodology
 

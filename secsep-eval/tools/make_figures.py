@@ -165,6 +165,68 @@ def mutation_matrix():
     save(fig, "fig_mutation")
 
 
+def mutation_matrix_tools():
+    dyn = rows("dynamic_tools.csv")
+    columns = [("bums", "BUMS"), ("secsep", "SecSep"), ("valgrind_harness", "Valgrind\n(exact-size\ntests)"),
+               ("valgrind_shipped", "Valgrind\n(SecSep\ndriver)"), ("asan_harness", "ASan\n(exact-size\ntests)"),
+               ("asan_shipped", "ASan\n(SecSep\ndriver)")]
+    def kind(value):
+        if value in ("rejected, localized", "detected"):
+            return "detected"
+        if value == "type checker rejects (function-level)":
+            return "function"
+        if value == "inference exception (no location)":
+            return "exception"
+        if value in ("side effect or crash", "crashed", "timeout"):
+            return "symptom"
+        return "missed"
+    style = {
+        "detected": dict(marker="o", face=INK, edge=INK),
+        "function": dict(marker="o", face="none", edge=INK),
+        "exception": dict(marker="^", face="none", edge=INK_3),
+        "symptom": dict(marker="D", face="none", edge=INK_3),
+        "missed": dict(marker="x", face=INK, edge=INK),
+    }
+    fig, ax = plt.subplots(figsize=(DOUBLE * 0.72, 3.4))
+    used = set()
+    for i, r in enumerate(dyn):
+        for j, (key, _) in enumerate(columns):
+            k = kind(r[key])
+            used.add(k)
+            st = style[k]
+            if st["marker"] == "x":
+                ax.scatter(j, i, marker="x", s=30, linewidths=1.2, color=INK, zorder=3)
+            else:
+                ax.scatter(j, i, marker=st["marker"], s=30, linewidths=1.0, facecolor=st["face"], edgecolor=st["edge"], zorder=3)
+    ax.set_xticks(range(len(columns)))
+    ax.set_xticklabels([c for _, c in columns], fontsize=6.5)
+    ax.xaxis.tick_top()
+    ax.set_yticks(range(len(dyn)))
+    ax.set_yticklabels([f"{r['mutant']}: {r['fault']}" for r in dyn], fontsize=6)
+    ax.invert_yaxis()
+    ax.set_xlim(-0.5, len(columns) - 0.5)
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(length=0)
+    for x in (1.5, 3.5):
+        ax.axvline(x, color=GRID, linewidth=0.8)
+    labels = [("detected", "reported at the faulting access"), ("function", "type checker rejects the function"),
+              ("exception", "inference exception, no location"), ("symptom", "crash, timeout or later heap corruption"),
+              ("missed", "missed")]
+    handles = []
+    for k, label in labels:
+        if k not in used:
+            continue
+        st = style[k]
+        if st["marker"] == "x":
+            handles.append(Line2D([], [], marker="x", ls="", color=INK, markersize=5, label=label))
+        else:
+            handles.append(Line2D([], [], marker=st["marker"], ls="", markerfacecolor=st["face"], markeredgecolor=st["edge"], markersize=5, label=label))
+    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.3, -0.02), ncol=2, fontsize=6)
+    save(fig, "fig_mutation_tools")
+
+
 def parser_coverage():
     pc = [r for r in rows("octal_parser_coverage.csv") if r["group"] in ("SecSep benchmark (clang 16 compiled)", "BoringSSL hand-written (linux)")]
     pc.sort(key=lambda r: (r["group"] != "SecSep benchmark (clang 16 compiled)", float(r["unsupported_share"])))
@@ -224,5 +286,6 @@ if __name__ == "__main__":
     benchmark_time()
     annotation_burden()
     mutation_matrix()
+    mutation_matrix_tools()
     parser_coverage()
     secsep_phase_share()

@@ -9,6 +9,7 @@
 !/bums-run1.tsv
 !/bums-run9.tsv
 !/bums-run10.tsv
+!/bums-bignum-2026-11-05.tsv
 !/mutation/
 /mutation/*
 !/mutation/results.tsv
@@ -18,3 +19,11 @@
 /tf-check/*
 !/tf-check/*-v2.tsv
 __pycache__/
+!/dynamic/
+/dynamic/*
+!/dynamic/harness/
+!/dynamic/prepare.py
+!/dynamic/run_in_vm.sh
+!/dynamic/results/
+/dynamic/results/*
+!/dynamic/results/summary.tsv

@@ -1,0 +1,145 @@
+variant	bench	mode	tool	exit	verdict	first_report
+salsa20-original	salsa20	harness	valgrind	0	clean	
+salsa20-original	salsa20	harness	asan	0	clean	
+salsa20-original	salsa20	shipped	valgrind	0	clean	
+salsa20-original	salsa20	shipped	asan	0	clean	
+sha512-original	sha512	harness	valgrind	0	clean	
+sha512-original	sha512	harness	asan	0	clean	
+sha512-original	sha512	shipped	valgrind	0	clean	
+sha512-original	sha512	shipped	asan	0	clean	
+chacha20-original	chacha20	harness	valgrind	0	clean	
+chacha20-original	chacha20	harness	asan	0	clean	
+chacha20-original	chacha20	shipped	valgrind	0	clean	
+chacha20-original	chacha20	shipped	asan	0	clean	
+poly1305-original	poly1305	harness	valgrind	0	clean	
+poly1305-original	poly1305	harness	asan	0	clean	
+poly1305-original	poly1305	shipped	valgrind	0	clean	
+poly1305-original	poly1305	shipped	asan	0	clean	
+x25519-original	x25519	harness	valgrind	0	clean	
+x25519-original	x25519	harness	asan	0	clean	
+x25519-original	x25519	shipped	valgrind	0	clean	
+x25519-original	x25519	shipped	asan	0	clean	
+ed25519_sign-original	ed25519_sign	harness	valgrind	0	clean	
+ed25519_sign-original	ed25519_sign	harness	asan	0	clean	
+ed25519_sign-original	ed25519_sign	shipped	valgrind	0	clean	
+ed25519_sign-original	ed25519_sign	shipped	asan	0	clean	
+salsa20-A	salsa20	harness	valgrind	99	detected	Invalid read of size 4 @ salsa20_words
+salsa20-A	salsa20	harness	asan	0	clean	
+salsa20-A	salsa20	shipped	valgrind	0	clean	
+salsa20-A	salsa20	shipped	asan	0	clean	
+salsa20-B	salsa20	harness	valgrind	99	detected	Invalid read of size 1 @ salsa20
+salsa20-B	salsa20	harness	asan	1	detected	==4650==ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed: 0x5030000002b0 in thread T0 @ free
+salsa20-B	salsa20	shipped	valgrind	0	clean	
+salsa20-B	salsa20	shipped	asan	0	clean	
+sha512-A	sha512	harness	valgrind	139	detected	Invalid write of size 8 @ memset
+sha512-A	sha512	harness	asan	1	detected	==4739==ERROR: AddressSanitizer: negative-size-param: (size=-1) @ memset
+sha512-A	sha512	shipped	valgrind	139	detected	Invalid write of size 8 @ memset
+sha512-A	sha512	shipped	asan	1	detected	==4773==ERROR: AddressSanitizer: negative-size-param: (size=-128) @ memset
+sha512-B	sha512	harness	valgrind	99	detected	Invalid read of size 8 @ sha512_block_data_order
+sha512-B	sha512	harness	asan	0	clean	
+sha512-B	sha512	shipped	valgrind	0	clean	
+sha512-B	sha512	shipped	asan	0	clean	
+chacha20-A	chacha20	harness	valgrind	99	detected	Invalid read of size 16 @ CRYPTO_chacha_20
+chacha20-A	chacha20	harness	asan	0	clean	
+chacha20-A	chacha20	shipped	valgrind	0	clean	
+chacha20-A	chacha20	shipped	asan	0	clean	
+chacha20-B	chacha20	harness	valgrind	139	detected	Invalid read of size 16 @ CRYPTO_chacha_20
+chacha20-B	chacha20	harness	asan	1	detected	
+chacha20-B	chacha20	shipped	valgrind	139	detected	Invalid write of size 8 @ CRYPTO_chacha_20
+chacha20-B	chacha20	shipped	asan	124	timeout	
+poly1305-A	poly1305	harness	valgrind	99	detected	Invalid read of size 1 @ poly1305_update
+poly1305-A	poly1305	harness	asan	0	clean	
+poly1305-A	poly1305	shipped	valgrind	0	clean	
+poly1305-A	poly1305	shipped	asan	0	clean	
+poly1305-B	poly1305	harness	valgrind	139	detected	Invalid read of size 1 @ poly1305_update
+poly1305-B	poly1305	harness	asan	1	detected	==5186==ERROR: AddressSanitizer: stack-overflow on address 0x7ffe6722a000 (pc 0x5991d725dd65 bp 0x7ffe672283b0 sp 0x7ffe67228320 T0) @ poly1305_update
+poly1305-B	poly1305	shipped	valgrind	139	detected	Invalid read of size 1 @ poly1305_update
+poly1305-B	poly1305	shipped	asan	141	detected	==5219==ERROR: AddressSanitizer: stack-overflow on address 0x7ffebd37c000 (pc 0x5623c5c83aec bp 0x7ffebd37a100 sp 0x7ffebd379f60 T0) @ external
+x25519-A	x25519	harness	valgrind	99	detected	Invalid read of size 4 @ X25519
+x25519-A	x25519	harness	asan	0	clean	
+x25519-A	x25519	shipped	valgrind	0	clean	
+x25519-A	x25519	shipped	asan	0	clean	
+x25519-B	x25519	harness	valgrind	99	detected	Invalid write of size 1 @ fe_tobytes
+x25519-B	x25519	harness	asan	1	detected	==5358==ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed: 0x503000000070 in thread T0 @ free
+x25519-B	x25519	shipped	valgrind	0	clean	
+x25519-B	x25519	shipped	asan	0	clean	
+ed25519_sign-A	ed25519_sign	harness	valgrind	99	detected	Invalid read of size 4 @ x25519_sc_reduce
+ed25519_sign-A	ed25519_sign	harness	asan	0	clean	
+ed25519_sign-A	ed25519_sign	shipped	valgrind	0	clean	
+ed25519_sign-A	ed25519_sign	shipped	asan	0	clean	
+ed25519_sign-B	ed25519_sign	harness	valgrind	99	detected	Invalid read of size 2 @ memmove
+ed25519_sign-B	ed25519_sign	harness	asan	1	detected	==5534==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x502000000031 at pc 0x575f21e6c2df bp 0x7ffda07745a0 sp 0x7ffda0773d58
+ed25519_sign-B	ed25519_sign	shipped	valgrind	0	clean	
+ed25519_sign-B	ed25519_sign	shipped	asan	0	clean	
+salsa20-C	salsa20	harness	valgrind	99	detected	Invalid read of size 16 @ salsa20
+salsa20-C	salsa20	harness	asan	0	clean	
+salsa20-C	salsa20	shipped	valgrind	0	clean	
+salsa20-C	salsa20	shipped	asan	0	clean	
+salsa20-D	salsa20	harness	valgrind	0	clean	
+salsa20-D	salsa20	harness	asan	0	clean	
+salsa20-D	salsa20	shipped	valgrind	0	clean	
+salsa20-D	salsa20	shipped	asan	0	clean	
+salsa20-S	salsa20	harness	valgrind	0	clean	
+salsa20-S	salsa20	harness	asan	0	clean	
+salsa20-S	salsa20	shipped	valgrind	0	clean	
+salsa20-S	salsa20	shipped	asan	0	clean	
+sha512-C	sha512	harness	valgrind	0	clean	
+sha512-C	sha512	harness	asan	0	clean	
+sha512-C	sha512	shipped	valgrind	0	clean	
+sha512-C	sha512	shipped	asan	0	clean	
+sha512-D	sha512	harness	valgrind	99	detected	Invalid write of size 8 @ SHA512
+sha512-D	sha512	harness	asan	0	clean	
+sha512-D	sha512	shipped	valgrind	0	clean	
+sha512-D	sha512	shipped	asan	0	clean	
+sha512-S	sha512	harness	valgrind	0	clean	
+sha512-S	sha512	harness	asan	0	clean	
+sha512-S	sha512	shipped	valgrind	0	clean	
+sha512-S	sha512	shipped	asan	0	clean	
+chacha20-C	chacha20	harness	valgrind	99	detected	Invalid read of size 4 @ CRYPTO_chacha_20
+chacha20-C	chacha20	harness	asan	0	clean	
+chacha20-C	chacha20	shipped	valgrind	0	clean	
+chacha20-C	chacha20	shipped	asan	0	clean	
+chacha20-D	chacha20	harness	valgrind	99	detected	Invalid write of size 1 @ CRYPTO_chacha_20
+chacha20-D	chacha20	harness	asan	0	clean	
+chacha20-D	chacha20	shipped	valgrind	0	clean	
+chacha20-D	chacha20	shipped	asan	0	clean	
+chacha20-S	chacha20	harness	valgrind	0	clean	
+chacha20-S	chacha20	harness	asan	0	clean	
+chacha20-S	chacha20	shipped	valgrind	0	clean	
+chacha20-S	chacha20	shipped	asan	0	clean	
+poly1305-C	poly1305	harness	valgrind	99	detected	Invalid write of size 4 @ CRYPTO_poly1305_finish
+poly1305-C	poly1305	harness	asan	0	clean	
+poly1305-C	poly1305	shipped	valgrind	0	clean	
+poly1305-C	poly1305	shipped	asan	0	clean	
+poly1305-D	poly1305	harness	valgrind	99	detected	Invalid read of size 4 @ poly1305_update
+poly1305-D	poly1305	harness	asan	0	clean	
+poly1305-D	poly1305	shipped	valgrind	0	clean	
+poly1305-D	poly1305	shipped	asan	0	clean	
+poly1305-E	poly1305	harness	valgrind	99	detected	Invalid read of size 16 @ CRYPTO_poly1305_init
+poly1305-E	poly1305	harness	asan	0	clean	
+poly1305-E	poly1305	shipped	valgrind	0	clean	
+poly1305-E	poly1305	shipped	asan	0	clean	
+poly1305-S	poly1305	harness	valgrind	0	clean	
+poly1305-S	poly1305	harness	asan	0	clean	
+poly1305-S	poly1305	shipped	valgrind	0	clean	
+poly1305-S	poly1305	shipped	asan	0	clean	
+x25519-C	x25519	harness	valgrind	0	clean	
+x25519-C	x25519	harness	asan	0	clean	
+x25519-C	x25519	shipped	valgrind	0	clean	
+x25519-C	x25519	shipped	asan	0	clean	
+x25519-S	x25519	harness	valgrind	0	clean	
+x25519-S	x25519	harness	asan	0	clean	
+x25519-S	x25519	shipped	valgrind	0	clean	
+x25519-S	x25519	shipped	asan	0	clean	
+ed25519_sign-C	ed25519_sign	harness	valgrind	139	detected	Invalid read of size 16 @ table_select
+ed25519_sign-C	ed25519_sign	harness	asan	0	clean	
+ed25519_sign-C	ed25519_sign	shipped	valgrind	139	detected	Invalid read of size 16 @ table_select
+ed25519_sign-C	ed25519_sign	shipped	asan	0	clean	
+ed25519_sign-D	ed25519_sign	harness	valgrind	0	clean	
+ed25519_sign-D	ed25519_sign	harness	asan	0	clean	
+ed25519_sign-D	ed25519_sign	shipped	valgrind	0	clean	
+ed25519_sign-D	ed25519_sign	shipped	asan	0	clean	
+ed25519_sign-S	ed25519_sign	harness	valgrind	0	clean	
+ed25519_sign-S	ed25519_sign	harness	asan	0	clean	
+ed25519_sign-S	ed25519_sign	shipped	valgrind	0	clean	
+ed25519_sign-S	ed25519_sign	shipped	asan	0	clean	

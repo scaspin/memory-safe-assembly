@@ -1,0 +1,13 @@
+\begin{tabular}{lrrrrrr}
+\toprule
+Primitive & \multicolumn{4}{c}{Vale (x64)} & \multicolumn{2}{c}{BUMS}\\
+ & Proc. & Spec & Code+proof & F* lemmas & Fns & Clauses\\
+\midrule
+aes / aes-gcm & 150 & 3881 & 6744 & 8032 & 48 & 341\\
+sha-256 & 44 & 704 & 1555 & 2080 & 4 & 16\\
+poly1305 & 9 & 172 & 491 & 1730 & 2 & 14\\
+curve25519 & 55 & 1222 & 2727 & 1184 & 25 & 69\\
+bignum & 4 & 64 & 229 & 360 & 64 & 224\\
+\bottomrule
+\end{tabular}
+% Same algorithm, different code: Vale verifies its own implementations; BUMS verifies existing aws-lc/s2n-bignum/graviola/corecrypto assembly.
