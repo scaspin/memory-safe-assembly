@@ -10,7 +10,8 @@ audio	ff_ac3_sum_square_butterfly_int32_neon	verified	0
 audio	ff_ac3_sum_square_butterfly_float_neon	verified	0	
 audio	ff_lfe_x96_fixed_neon	verified	0	
 audio	ff_aac_quant_bands_neon	verified	1	
-audio	ff_opus_postfilter_neon	FAIL	0	line 27 (ld1): read of 16 bytes at gains_as_ptr + 0 not provably within region of length gains_len * 4
+audio	ff_opus_postfilter_neon	rejected	0	line 27 (ld1): read of 16 bytes at gains_as_ptr + 0 not provably within region of length gains_len * 4
+audio	ff_opus_postfilter_neon_padded	verified	0	
 audio	ff_lfe_fir1_float_neon	verified	1	
 audio	ff_ps_hybrid_analysis_neon	verified	1	
 audio	ff_opus_deemphasis_neon	verified	0	
@@ -27,20 +28,25 @@ audio	ff_sbr_neg_odd_64_neon	verified	0
 audio	ff_sbr_qmf_post_shuffle_neon	verified	0	
 audio	ff_sbr_qmf_deint_bfly_neon	verified	1	
 audio	ff_sbr_hf_g_filt_neon	verified	1	
-audio	ff_sbr_hf_apply_noise_0_neon	FAIL	0	line 315 (ld1): read of 16 bytes at row_as_mut_ptr + 2 * kx * 4 + 0 not provably within region of length row_len * 4
+audio	ff_sbr_hf_apply_noise_0_neon	rejected	0	line 315 (ld1): read of 16 bytes at row_as_mut_ptr + kx * 8 + 0 not provably within region of length row_len * 4
+audio	ff_sbr_hf_apply_noise_0_neon_padded	verified	0	
 audio	ff_sbr_autocorrelate_neon	verified	2	
 audio	ff_sbr_hf_gen_neon	verified	1	
-audio	ff_sbr_hf_apply_noise_1_neon	FAIL	0	line 347 (ld1): read of 16 bytes at row_as_mut_ptr + 2 * kx * 4 + 0 not provably within region of length row_len * 4
+audio	ff_sbr_hf_apply_noise_1_neon	rejected	0	line 347 (ld1): read of 16 bytes at row_as_mut_ptr + kx * 8 + 0 not provably within region of length row_len * 4
+audio	ff_sbr_hf_apply_noise_1_neon_padded	verified	0	
 float_dsp	ff_vector_fmul_neon	verified	0	
 float_dsp	ff_vector_fmac_scalar_neon	verified	0	
-float_dsp	ff_vector_dmul_scalar_neon	FAIL	0	line 79 (ld1): read of 16 bytes at src_as_ptr + 64 not provably within region of length src_len * 8
+float_dsp	ff_vector_dmul_scalar_neon	rejected	0	line 79 (ld1): read of 16 bytes at src_as_ptr + 64 not provably within region of length src_len * 8
+float_dsp	ff_vector_dmul_scalar_neon_padded	verified	0	
 float_dsp	ff_vector_fmul_scalar_neon	verified	1	
 float_dsp	ff_vector_fmul_window_neon	verified	1	
 float_dsp	ff_vector_fmul_add_neon	verified	0	
 float_dsp	ff_vector_fmul_reverse_neon	verified	0	
 float_dsp	ff_butterflies_float_neon	verified	2	
-audio	ff_sbr_hf_apply_noise_3_neon	FAIL	0	line 407 (ld1): read of 16 bytes at row_as_mut_ptr + 2 * kx * 4 + 0 not provably within region of length row_len * 4
-audio	ff_sbr_hf_apply_noise_2_neon	FAIL	0	line 375 (ld1): read of 16 bytes at row_as_mut_ptr + 2 * kx * 4 + 0 not provably within region of length row_len * 4
+audio	ff_sbr_hf_apply_noise_3_neon	rejected	0	line 407 (ld1): read of 16 bytes at row_as_mut_ptr + kx * 8 + 0 not provably within region of length row_len * 4
+audio	ff_sbr_hf_apply_noise_3_neon_padded	verified	0	
+audio	ff_sbr_hf_apply_noise_2_neon	rejected	0	line 375 (ld1): read of 16 bytes at row_as_mut_ptr + kx * 8 + 0 not provably within region of length row_len * 4
+audio	ff_sbr_hf_apply_noise_2_neon_padded	verified	0	
 h264	ff_put_h264_chroma_mc8_neon	verified	3	
 float_dsp	ff_scalarproduct_float_neon	verified	3	
 h264	ff_put_h264_chroma_mc2_neon	verified	1	
@@ -286,7 +292,7 @@ hevc	ff_hevc_sao_edge_filter_8x8_12_neon	verified	2
 hevc	ff_vvc_sao_edge_filter_8x8_12_neon	verified	2	
 hevc	ff_hevc_sao_edge_filter_16x16_12_neon	verified	26	
 hevc	ff_h26x_sao_band_filter_8x8_8_neon	verified	0	
-h264dsp	ff_h264_idct_add8_neon	TIMEOUT	120	killed after 120s
+h264dsp	ff_h264_idct_add8_neon	TIMEOUT	600	killed after 600s
 hevc	ff_hevc_transform_luma_4x4_neon_8	verified	0	
 hevc	ff_hevc_pred_dc_4x4_8_neon	verified	1	
 hevc	ff_hevc_pred_planar_4x4_8_neon	verified	0	
@@ -338,8 +344,8 @@ hevc_mc	ff_hevc_put_hevc_epel_bi_h48_8_neon	verified	0
 hevc_mc	ff_hevc_put_hevc_epel_bi_h64_8_neon	verified	0	
 hevc_mc	ff_hevc_put_hevc_epel_bi_h6_8_neon	verified	0	
 hevc_mc	ff_hevc_put_hevc_epel_bi_v4_8_neon	verified	1	
-h264dsp	ff_h264_idct_add16_neon	TIMEOUT	120	killed after 120s
-h264dsp	ff_h264_idct_add16intra_neon	TIMEOUT	120	killed after 120s
+h264dsp	ff_h264_idct_add16_neon	TIMEOUT	600	killed after 600s
+h264dsp	ff_h264_idct_add16intra_neon	TIMEOUT	600	killed after 600s
 hevc_mc	ff_hevc_put_hevc_pel_bi_w_pixels32_8_neon	verified	37	
 hevc_mc	ff_hevc_put_hevc_epel_bi_v8_8_neon	verified	1	
 hevc_mc	ff_hevc_put_hevc_epel_bi_v6_8_neon	verified	1	
@@ -399,7 +405,7 @@ hevc_mc	ff_hevc_put_hevc_epel_h48_8_neon_i8mm	verified	0
 hevc_mc	ff_hevc_put_hevc_epel_h64_8_neon_i8mm	verified	0	
 hevc_mc	ff_hevc_put_hevc_epel_uni_v64_8_neon	verified	1	
 hevc_mc	ff_hevc_put_hevc_epel_bi_v48_8_neon	verified	3	
-hevc_mc	ff_hevc_put_hevc_epel_uni_w_h32_8_neon	MEMCAP	11	killed at 4.0 GB resident; verified in 84 s with --mem-gb 10
+hevc_mc	ff_hevc_put_hevc_epel_uni_w_h32_8_neon	verified	1	
 hevc_mc	ff_hevc_put_hevc_epel_hv6_8_neon	verified	1	
 hevc_mc	ff_hevc_put_hevc_epel_hv12_8_neon	verified	1	
 hevc_mc	ff_hevc_put_hevc_epel_hv16_8_neon	verified	1	
@@ -504,7 +510,7 @@ hevc_mc	ff_hevc_put_hevc_qpel_bi_h6_8_neon	verified	2
 hevc_mc	ff_hevc_put_hevc_epel_bi_hv48_8_neon_i8mm	verified	7	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_h8_8_neon	verified	2	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_h12_8_neon	verified	36	
-hevc_mc	ff_hevc_put_hevc_qpel_bi_h24_8_neon	FAIL	1	line 926 (ld1): read of 16 bytes at src2_as_ptr + loop0_? * 464 - 464 not provably within region of length src2_len * 2
+hevc_mc	ff_hevc_put_hevc_qpel_bi_h24_8_neon	FAIL	0	line 926 (ld1): read of 16 bytes at src2_as_ptr + loop2_? * 464 + 0 not provably within region of length src2_len * 2
 hevc_mc	ff_hevc_put_hevc_epel_uni_w_v64_8_neon	verified	1	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_h16_8_neon	verified	4	
 hevc_mc	ff_hevc_put_hevc_epel_bi_hv64_8_neon_i8mm	verified	8	
@@ -569,7 +575,7 @@ hevc_mc	ff_hevc_put_hevc_qpel_uni_hv12_8_neon	verified	3
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_v24_8_neon	verified	32	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_hv32_8_neon	verified	4	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_hv48_8_neon	verified	6	
-hevc_mc	ff_hevc_put_hevc_qpel_uni_w_v64_8_neon	TIMEOUT	120	killed after 120s
+hevc_mc	ff_hevc_put_hevc_qpel_uni_w_v64_8_neon	verified	144	
 hevc_mc	ff_hevc_put_hevc_qpel_h4_8_neon_i8mm	verified	1	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_v32_8_neon	verified	29	
 hevc_mc	ff_hevc_put_hevc_qpel_h6_8_neon_i8mm	verified	2	
@@ -605,7 +611,7 @@ hevc_mc	ff_hevc_put_hevc_qpel_uni_w_h64_8_neon_i8mm	verified	0
 hevc_mc	ff_hevc_put_hevc_qpel_h24_8_neon_i8mm	verified	1	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_hv48_8_neon_i8mm	verified	26	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_hv64_8_neon_i8mm	verified	37	
-hevc_mc	ff_hevc_put_hevc_qpel_uni_w_h32_8_neon	MEMCAP	31	killed at 4.7 GB resident; verified in 89 s with --mem-gb 10
+hevc_mc	ff_hevc_put_hevc_qpel_uni_w_h32_8_neon	verified	1	
 hevc_mc	ff_hevc_put_hevc_qpel_hv4_8_neon	verified	6	
 hevc_mc	ff_hevc_put_hevc_qpel_hv6_8_neon	verified	7	
 hevc_mc	ff_hevc_put_hevc_qpel_hv12_8_neon	verified	4	
@@ -628,7 +634,7 @@ hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv8_8_neon	verified	5
 hevc_mc	ff_hevc_put_hevc_qpel_hv48_8_neon	verified	108	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv12_8_neon	verified	4	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv16_8_neon	verified	3	
-hevc_mc	ff_hevc_put_hevc_qpel_hv64_8_neon_i8mm	TIMEOUT	120	killed after 120s
+hevc_mc	ff_hevc_put_hevc_qpel_hv64_8_neon_i8mm	verified	435	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv24_8_neon	verified	24	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv4_8_neon	verified	3	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv32_8_neon	verified	28	
@@ -637,11 +643,11 @@ hevc_mc	ff_hevc_put_hevc_qpel_bi_hv8_8_neon	verified	3
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv16_8_neon	verified	2	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv48_8_neon	verified	65	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv32_8_neon	verified	4	
-hevc_mc	ff_hevc_put_hevc_qpel_hv24_8_neon_i8mm	TIMEOUT	120	killed after 120s
-hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv64_8_neon	TIMEOUT	120	killed after 120s
+hevc_mc	ff_hevc_put_hevc_qpel_hv24_8_neon_i8mm	verified	115	
+hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv64_8_neon	verified	143	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv48_8_neon	verified	6	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv64_8_neon	verified	9	
-hevc_mc	ff_hevc_put_hevc_qpel_hv48_8_neon_i8mm	TIMEOUT	120	killed after 120s
+hevc_mc	ff_hevc_put_hevc_qpel_hv48_8_neon_i8mm	verified	600	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv24_8_neon	verified	9	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv4_8_neon_i8mm	verified	13	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv12_8_neon	verified	17	
@@ -649,14 +655,14 @@ hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv6_8_neon_i8mm	verified	13
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv8_8_neon_i8mm	verified	15	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv12_8_neon_i8mm	verified	14	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv16_8_neon_i8mm	verified	12	
-hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv64_8_neon_i8mm	TIMEOUT	120	killed after 120s
+hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv64_8_neon_i8mm	verified	230	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv4_8_neon_i8mm	verified	19	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv8_8_neon_i8mm	verified	14	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv24_8_neon_i8mm	verified	51	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv16_8_neon_i8mm	verified	7	
 hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv32_8_neon_i8mm	verified	69	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv6_8_neon_i8mm	verified	16	
-hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv48_8_neon_i8mm	TIMEOUT	120	killed after 120s
+hevc_mc	ff_hevc_put_hevc_qpel_uni_w_hv48_8_neon_i8mm	verified	122	
 libavutil	ff_crc32_aarch64	verified	12	
 libavutil	ff_crc_neon_pmull	verified	9	
 libavutil	ff_crc_le_neon_pmull	verified	9	
@@ -680,20 +686,24 @@ misc	ff_resample_common_apply_filter_x4_s16_neon	verified	0
 misc	ff_resample_common_apply_filter_x8_s16_neon	verified	0	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv48_8_neon_i8mm	verified	26	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv64_8_neon_i8mm	verified	33	
-misc	ff_detect_alpha_full_neon	TIMEOUT	120	killed after 120s
-hevc_mc	ff_hevc_put_hevc_qpel_bi_hv12_8_neon_i8mm	TIMEOUT	120	killed after 120s
-misc	ff_detect_alpha_limited_neon	TIMEOUT	120	killed after 120s
+misc	ff_detect_alpha_full_neon	rejected	3	line 148 (ldr): read of 16 bytes at color_as_ptr + 0 not provably within region of length color_len * 1; line 148 (ldr): read of 16 bytes at color_as_ptr + loop19_? * 16 + 0 not provably within region of length color_len * 1; line 148 (ldr): read of 16 bytes at color_as_ptr + 32 not provably within 
+misc	ff_detect_alpha_full_neon_padded	verified	11	
+hevc_mc	ff_hevc_put_hevc_qpel_bi_hv12_8_neon_i8mm	verified	122	
+misc	ff_detect_alpha_limited_neon	rejected	3	line 274 (ldr): read of 16 bytes at color_as_ptr + 0 not provably within region of length color_len * 1; line 274 (ldr): read of 16 bytes at color_as_ptr + loop19_? * 16 + 0 not provably within region of length color_len * 1; line 274 (ldr): read of 16 bytes at color_as_ptr + 32 not provably within 
+misc	ff_detect_alpha_limited_neon_padded	verified	12	
 hevc_mc	ff_hevc_put_hevc_qpel_bi_hv24_8_neon_i8mm	verified	72	
 misc	ff_bwdif_filter_line_neon	verified	2	
 misc	ff_bwdif_filter_edge_neon	verified	3	
 misc	ff_bwdif_filter_intra_neon	verified	1	
-misc	ff_detect_alpha16_full_neon	FAIL	28	line 196 (ldr): read of 16 bytes at color_as_ptr + loop0_? * 16 + cstride - ((width & -8) lsl 1) + loop1_? * 16 + cstride - ((width & -8) lsl 1) - 3 * (cstride - ((width & -8) lsl 1) + ((width & -8) - 1) / 8 * 16 + 16) + 16 + loop2_? * (cstride - ((width & -8) lsl 1) + ((width & -8) - 1) / 8 * 16 + 16) + 0 not provably within region of length color_len * 1; line 196 (ldr): read of 16 bytes at color_as_ptr + loop0_? * 16 + cstride - ((width & -8) lsl 1) + cstride - ((width & -8) lsl 1) - 3 * (cstride - ((width & -8) lsl 1) + 48) + 48 + loop3_? * (cstride - ((width & -8) lsl 1) + 48) + 0 not provably within region of length color_len * 1; line 192: branch depth exceeded 32; line 224: branch depth exceeded 32; line 230: branch depth exceeded 32; line 223: branch depth exceeded 32; line 232: branch depth exceeded 32; line 228: branch depth exceeded 32; line 207 (ldr): read of 16 bytes at color_as_ptr + 0 not provably within region of length color_len * 1; line 207 (ldr): read of 16 bytes at color_as_ptr + loop61_? * 16 + 0 not provably within region of length color_len * 1; line 207 (ldr): read of 16 bytes at color_as_ptr + 32 not provably within region of length color_len * 1; line 207 (ldr): read of 16 bytes at color_as_ptr + 16 not provably within region of length color_len * 1
-misc	ff_nv24_to_yuv420p_chroma_neon	FAIL	0	line 9 (ld2): read of 16 bytes at src_as_ptr + 0 not provably within region of length src_len * 1
+misc	ff_detect_alpha16_full_neon	rejected	6	line 207 (ldr): read of 16 bytes at color_as_ptr + 0 not provably within region of length color_len * 1; line 207 (ldr): read of 16 bytes at color_as_ptr + ((width & -8) + 7) / 8 * 16 + 0 not provably within region of length color_len * 1; line 207 (ldr): read of 16 bytes at color_as_ptr + 32 not pr
+misc	ff_detect_alpha16_full_neon_padded	verified	15	
+misc	ff_nv24_to_yuv420p_chroma_neon	verified	672	
 misc	ff_compute_weights_line_neon	verified	2	
 misc	ff_bwdif_filter_line3_neon	verified	4	
 misc_video	ff_vc1_inv_trans_8x8_neon	verified	0	
 misc_video	ff_vc1_inv_trans_8x4_neon	verified	0	
-misc	ff_detect_alpha16_limited_neon	FAIL	29	line 331 (ldr): read of 16 bytes at color_as_ptr + loop0_? * 16 + cstride - ((width & -8) lsl 1) + loop1_? * 16 + cstride - ((width & -8) lsl 1) - 3 * (cstride - ((width & -8) lsl 1) + ((width & -8) - 1) / 8 * 16 + 16) + 16 + loop2_? * (cstride - ((width & -8) lsl 1) + ((width & -8) - 1) / 8 * 16 + 16) + 0 not provably within region of length color_len * 1; line 331 (ldr): read of 16 bytes at color_as_ptr + loop0_? * 16 + cstride - ((width & -8) lsl 1) + cstride - ((width & -8) lsl 1) - 3 * (cstride - ((width & -8) lsl 1) + 48) + 48 + loop3_? * (cstride - ((width & -8) lsl 1) + 48) + 0 not provably within region of length color_len * 1; line 327: branch depth exceeded 32; line 374: branch depth exceeded 32; line 380: branch depth exceeded 32; line 373: branch depth exceeded 32; line 382: branch depth exceeded 32; line 378: branch depth exceeded 32; line 349 (ldr): read of 16 bytes at color_as_ptr + 0 not provably within region of length color_len * 1; line 349 (ldr): read of 16 bytes at color_as_ptr + loop61_? * 16 + 0 not provably within region of length color_len * 1; line 349 (ldr): read of 16 bytes at color_as_ptr + 32 not provably within region of length color_len * 1; line 349 (ldr): read of 16 bytes at color_as_ptr + 16 not provably within region of length color_len * 1
+misc	ff_detect_alpha16_limited_neon	rejected	4	line 349 (ldr): read of 16 bytes at color_as_ptr + 0 not provably within region of length color_len * 1; line 349 (ldr): read of 16 bytes at color_as_ptr + ((width & -8) + 7) / 8 * 16 + 0 not provably within region of length color_len * 1; line 349 (ldr): read of 16 bytes at color_as_ptr + 32 not pr
+misc	ff_detect_alpha16_limited_neon_padded	verified	12	
 misc_video	ff_vc1_inv_trans_8x4_dc_neon	verified	0	
 misc_video	ff_vc1_inv_trans_4x8_neon	verified	0	
 misc_video	ff_vc1_inv_trans_4x4_neon	verified	0	
@@ -706,7 +716,7 @@ misc_video	ff_vc1_v_loop_filter8_neon	verified	0
 misc_video	ff_vc1_h_loop_filter8_neon	verified	1	
 misc_video	ff_vc1_v_loop_filter16_neon	verified	0	
 misc_video	ff_vc1_h_loop_filter16_neon	verified	3	
-misc_video	ff_vc1_unescape_buffer_helper_neon	FAIL	1	line 1293 (ld1): read of 16 bytes at src_as_ptr + 0 not provably within region of length src_len * 1; line 1263 (ld1): read of 16 bytes at src_as_ptr + 16 not provably within region of length src_len * 1
+misc_video	ff_vc1_unescape_buffer_helper_neon	verified	0	
 misc_video	ff_pix_abs16_neon	verified	1	
 misc_video	ff_pix_abs16_x2_neon	verified	1	
 misc_video	ff_pix_abs16_xy2_neon	verified	1	
@@ -766,16 +776,16 @@ pixel	ff_add_int16_neon	verified	10
 pixel	ff_put_pixels_clamped_neon	verified	0	
 pixel	ff_put_signed_pixels_clamped_neon	verified	0	
 pixel	ff_add_pixels_clamped_neon	verified	0	
-pixel	ff_simple_idct_neon	TIMEOUT	120	killed after 120s
-pixel	ff_simple_idct_put_neon	TIMEOUT	120	killed after 120s
+pixel	ff_simple_idct_neon	verified	15	
+pixel	ff_simple_idct_put_neon	verified	21	
 pixel	ff_fdct_neon	verified	0	
 pixel	ff_pix_sum16_neon	verified	0	
 pixel	ff_pix_norm1_neon	verified	0	
 pixel	ff_pix_norm1_neon_dotprod	verified	0	
 pixel	ff_png_add_bytes_l2_neon	verified	14	
-misc	ff_crc32_pmull_eor3_aarch64	TIMEOUT	120	killed after 120s
+misc	ff_crc32_pmull_eor3_aarch64	TIMEOUT	2700	killed after 2700s
 pixel	ff_prefetch_aarch64	verified	0	
-pixel	ff_simple_idct_add_neon	TIMEOUT	120	killed after 120s
+pixel	ff_simple_idct_add_neon	verified	18	
 swscale	ff_abgr32ToUV_half_neon	verified	3	
 swscale	ff_abgr32ToY_neon	verified	3	
 swscale	ff_abgr32ToUV_neon	verified	3	
@@ -791,23 +801,25 @@ swscale	ff_bgra32ToY_neon_dotprod	verified	3
 swscale	ff_bgra32ToY_neon	verified	3	
 swscale	ff_chrRangeFromJpeg16_neon	verified	0	
 swscale	ff_chrRangeFromJpeg8_neon	verified	0	
-misc	ff_detect_range_neon	TIMEOUT	120	killed after 120s
+misc	ff_detect_range_neon	rejected	6	line 38 (ldr): read of 16 bytes at data_as_ptr + 0 not provably within region of length data_len * 1; line 38 (ldr): read of 16 bytes at data_as_ptr + 16 not provably within region of length data_len * 1; line 38 (ldr): read of 16 bytes at data_as_ptr + loop42_? * 32 + 0 not provably within region o
+misc	ff_detect_range_neon_padded	verified	141	
 swscale	ff_chrRangeToJpeg8_neon	verified	0	
 swscale	ff_chrRangeToJpeg16_neon	verified	0	
-swscale	ff_hscale16to15_X4_neon_asm	FAIL	0	line 717 (ldr): read of 16 bytes at src_as_ptr + (filter_pos_as_ptr[0:4] atleast 0 atmost 4294967295 % 4294967296 atmost (src_w - filter_size) atleast 0 % 4294967296 lsl 1) + 0 not provably within region of length src_len * 2
-misc	ff_detect_range16_neon	TIMEOUT	120	killed after 120s
+swscale	ff_hscale16to15_X4_neon_asm	verified	143	
+misc	ff_detect_range16_neon	rejected	5	line 97 (ldr): read of 16 bytes at data_as_ptr + 0 not provably within region of length data_len * 1; line 97 (ldr): read of 16 bytes at data_as_ptr + 16 not provably within region of length data_len * 1; line 97 (ldr): read of 16 bytes at data_as_ptr + loop42_? * 32 + 0 not provably within region o
+misc	ff_detect_range16_neon_padded	verified	13	
 swscale	ff_hscale16to15_4_neon_asm	verified	3	
-swscale	ff_hscale16to19_X4_neon_asm	FAIL	0	line 1042 (ldr): read of 16 bytes at src_as_ptr + (filter_pos_as_ptr[0:4] atleast 0 atmost 4294967295 % 4294967296 atmost (src_w - filter_size) atleast 0 % 4294967296 lsl 1) + 0 not provably within region of length src_len * 2
+swscale	ff_hscale16to19_X4_neon_asm	verified	183	
 swscale	ff_hscale16to19_4_neon_asm	verified	3	
 swscale	ff_hscale8to15_4_neon	verified	3	
-swscale	ff_hscale8to15_X4_neon	FAIL	0	line 72 (ldr): read of 8 bytes at src_as_ptr + filter_pos_as_ptr[0:4] atleast 0 atmost 4294967295 % 4294967296 atmost (src_w - filter_size) atleast 0 % 4294967296 + 0 not provably within region of length src_len * 1
-misc	ff_compute_safe_ssd_integral_image_neon	FAIL	113	line 76 (reached at line 70: loop at L_28) not summarized after 20 revisits
+swscale	ff_hscale8to15_X4_neon	verified	207	
+misc	ff_compute_safe_ssd_integral_image_neon	verified	36	
 swscale	ff_hscale8to19_4_neon	verified	3	
-swscale	ff_hscale8to19_X4_neon	FAIL	0	line 408 (ldr): read of 8 bytes at src_as_ptr + filter_pos_as_ptr[0:4] atleast 0 atmost 4294967295 % 4294967296 atmost (src_w - filter_size) atleast 0 % 4294967296 + 0 not provably within region of length src_len * 1
-pixel	ff_png_add_paeth_prediction_neon	FAIL	2	line 54 (ldr): read of 8 bytes at dst_as_mut_ptr + 3 * 1 + -3 % 4294967296 sext 32 + 0 not provably within region of length dst_len * 1; line 54 (ldr): read of 8 bytes at dst_as_mut_ptr + 4 * 1 + -4 % 4294967296 sext 32 + 0 not provably within region of length dst_len * 1; line 54 (ldr): read of 8 bytes at dst_as_mut_ptr + 6 * 1 + -6 % 4294967296 sext 32 + 0 not provably within region of length dst_len * 1; line 609 (ld1): read of 16 bytes at top_as_ptr + 8 * 1 - 8 + 0 not provably within region of length top_len * 1
-swscale	ff_deinterleave_bytes_neon	MEMCAP	116	killed at 4.6 GB resident
+swscale	ff_hscale8to19_X4_neon	verified	145	
+pixel	ff_png_add_paeth_prediction_neon	verified	12	
+swscale	ff_deinterleave_bytes_neon	TIMEOUT	2700	killed after 2700s
 swscale	ff_lumRangeFromJpeg16_neon	verified	0	
-swscale	ff_hscale16to15_X8_neon_asm	TIMEOUT	120	killed after 120s
+swscale	ff_hscale16to15_X8_neon_asm	verified	133	
 swscale	ff_lumRangeToJpeg16_neon	verified	0	
 swscale	ff_lumRangeFromJpeg8_neon	verified	0	
 swscale	ff_lumRangeToJpeg8_neon	verified	0	
@@ -825,20 +837,20 @@ swscale	ff_shuffle_bytes_0321_neon	verified	3
 swscale	ff_shuffle_bytes_1203_neon	verified	3	
 swscale	ff_shuffle_bytes_1230_neon	verified	3	
 swscale	ff_shuffle_bytes_2013_neon	verified	3	
-swscale	ff_hscale16to19_X8_neon_asm	TIMEOUT	120	killed after 120s
+swscale	ff_hscale16to19_X8_neon_asm	verified	101	
 swscale	ff_shuffle_bytes_2103_neon	verified	3	
 swscale	ff_shuffle_bytes_2130_neon	verified	3	
 swscale	ff_shuffle_bytes_3012_neon	verified	3	
 swscale	ff_shuffle_bytes_3102_neon	verified	3	
 swscale	ff_shuffle_bytes_3210_neon	verified	3	
-swscale	ff_hscale8to15_X8_neon	TIMEOUT	120	killed after 120s
-swscale	ff_yuv2plane1_8_neon	FAIL	0	line 292 (st1): write of 8 bytes at dest_as_mut_ptr + 0 not provably within region of length dest_len * 1
-swscale	ff_hscale8to19_X8_neon	TIMEOUT	120	killed after 120s
-swscale	ff_interleave_bytes_neon	TIMEOUT	120	killed after 120s
-swscale	ff_yuv2planeX_8_neon	FAIL	3	line 232 (st1): write of 8 bytes at dest_as_mut_ptr + 0 not provably within region of length dest_len * 1; line 257 (st1): write of 8 bytes at dest_as_mut_ptr + 0 not provably within region of length dest_len * 1; line 276 (st1): write of 8 bytes at dest_as_mut_ptr + 0 not provably within region of length dest_len * 1; line 190 (st1): write of 8 bytes at dest_as_mut_ptr + 0 not provably within region of length dest_len * 1; line 167 (st1): write of 8 bytes at dest_as_mut_ptr + 0 not provably within region of length dest_len * 1
-swscale	ff_rgb24toyv12_neon	TIMEOUT	120	killed after 120s
-swscale	ff_uyvytoyuv420_neon	TIMEOUT	120	killed after 120s
-swscale	ff_uyvytoyuv422_neon	TIMEOUT	120	killed after 120s
+swscale	ff_hscale8to15_X8_neon	verified	241	
+swscale	ff_yuv2plane1_8_neon	verified	0	
+swscale	ff_hscale8to19_X8_neon	verified	93	
+swscale	ff_interleave_bytes_neon	TIMEOUT	2700	killed after 2700s
+swscale	ff_yuv2planeX_8_neon	verified	2	
+swscale	ff_rgb24toyv12_neon	verified	392	
+swscale	ff_uyvytoyuv420_neon	verified	837	
+swscale	ff_uyvytoyuv422_neon	verified	292	
 tx_float	ff_tx_fft2_float_neon	verified	0	
 tx_float	ff_tx_fft4_fwd_float_neon	verified	0	
 tx_float	ff_tx_fft4_inv_float_neon	verified	0	
@@ -850,8 +862,8 @@ tx_float	ff_tx_fft32_float_neon	verified	0
 tx_float	ff_tx_fft32_ns_float_neon	verified	0	
 tx_float	ff_tx_fft15_float_neon	verified	0	
 tx_float	ff_tx_fft15_ns_float_neon	verified	0	
-swscale	ff_yuyvtoyuv420_neon	TIMEOUT	120	killed after 120s
-swscale	ff_yuyvtoyuv422_neon	TIMEOUT	120	killed after 120s
+swscale	ff_yuyvtoyuv420_neon	verified	999	
+swscale	ff_yuyvtoyuv422_neon	verified	221	
 vp8	ff_vp8_v_loop_filter16_neon	verified	0	
 vp8	ff_vp8_v_loop_filter16_inner_neon	verified	0	
 vp8	ff_vp8_v_loop_filter16_simple_neon	verified	0	
@@ -881,7 +893,8 @@ vp8	ff_put_vp8_epel4_h6v6_neon	verified	1
 vp8	ff_put_vp8_epel4_h4v6_neon	verified	1	
 vp8	ff_put_vp8_epel4_h6v4_neon	verified	1	
 vp8	ff_put_vp8_epel4_h4_neon	verified	1	
-tx_float	ff_tx_fft_sr_ns_float_neon	verified	25	
+tx_float	ff_tx_fft_sr_ns_float_neon	rejected	46	line 7818: stack pointer not restored on return: sp is sp - 96, not sp
+tx_float	ff_tx_fft_sr_ns_float_neon_from_64	verified	48	
 vp8	ff_put_vp8_epel4_v4_neon	verified	1	
 vp8	ff_put_vp8_epel4_h4v4_neon	verified	1	
 vp8	ff_put_vp8_bilin16_h_neon	verified	1	
@@ -902,7 +915,7 @@ vp9	ff_vp9_avg16_neon	verified	0
 vp9	ff_vp9_avg32_16_neon	verified	50	
 vp9	ff_vp9_avg32_neon	verified	1	
 vp9	ff_vp9_avg4_16_neon	verified	12	
-swscale	ff_yuv2planeX_10_neon	FAIL	10	line 70 (ldp): read of 8 bytes at src_as_ptr + 8 not provably within region of length src_len * 8; line 27 (ldp): read of 8 bytes at src_as_ptr + 8 not provably within region of length src_len * 8
+swscale	ff_yuv2planeX_10_neon	verified	219	
 vp9	ff_vp9_avg4_neon	verified	1	
 vp9	ff_vp9_avg64_neon	verified	1	
 vp9	ff_vp9_avg8_16_neon	verified	49	
@@ -919,9 +932,11 @@ vp9	ff_vp9_avg_regular32_h_10_neon	verified	6
 vp9	ff_vp9_avg_regular32_h_neon	verified	2	
 vp9	ff_vp9_avg_regular32_h_12_neon	verified	5	
 vp9	ff_vp9_avg_regular16_v_neon	verified	13	
-vp9	ff_vp9_avg_regular4_h_10_neon	FAIL	2	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-swscale	ff_xyz12Torgb48le_neon_asm	TIMEOUT	120	killed after 120s
-vp9	ff_vp9_avg_regular4_h_12_neon	FAIL	2	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_avg_regular4_h_10_neon	rejected	1	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; 
+vp9	ff_vp9_avg_regular4_h_10_neon_padded	verified	1	
+swscale	ff_xyz12Torgb48le_neon_asm	TIMEOUT	2700	killed after 2700s
+vp9	ff_vp9_avg_regular4_h_12_neon	rejected	1	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; 
+vp9	ff_vp9_avg_regular4_h_12_neon_padded	verified	1	
 vp9	ff_vp9_avg_regular4_h_neon	verified	4	
 vp9	ff_vp9_avg_regular4_v_10_neon	verified	2	
 vp9	ff_vp9_avg_regular4_v_12_neon	verified	1	
@@ -929,7 +944,8 @@ vp9	ff_vp9_avg_regular4_v_neon	verified	2
 vp9	ff_vp9_avg_regular64_h_10_neon	verified	6	
 vp9	ff_vp9_avg_regular64_h_12_neon	verified	6	
 vp9	ff_vp9_avg_regular64_h_neon	verified	3	
-tx_float	ff_tx_fft_sr_float_neon	TIMEOUT	120	killed after 120s
+tx_float	ff_tx_fft_sr_float_neon	rejected	444	line 2185: stack pointer not restored on return: sp is sp - 96, not sp
+tx_float	ff_tx_fft_sr_float_neon_from_64	verified	449	
 vp9	ff_vp9_avg_regular32_v_10_neon	verified	56	
 vp9	ff_vp9_avg_regular32_v_12_neon	verified	57	
 vp9	ff_vp9_avg_regular32_v_neon	verified	89	
@@ -942,17 +958,19 @@ vp9	ff_vp9_avg_regular8_v_neon	verified	5
 vp9	ff_vp9_avg_sharp16_h_neon	verified	2	
 vp9	ff_vp9_avg_sharp16_h_10_neon	verified	3	
 vp9	ff_vp9_avg_sharp16_h_12_neon	verified	3	
-vp9	ff_vp9_avg_regular64_v_10_neon	TIMEOUT	120	killed after 120s
-vp9	ff_vp9_avg_regular64_v_12_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_avg_regular64_v_10_neon	verified	81	
+vp9	ff_vp9_avg_regular64_v_12_neon	verified	80	
 vp9	ff_vp9_avg_sharp16_v_10_neon	verified	9	
 vp9	ff_vp9_avg_sharp32_h_10_neon	verified	5	
 vp9	ff_vp9_avg_sharp16_v_12_neon	verified	9	
 vp9	ff_vp9_avg_sharp32_h_neon	verified	3	
 vp9	ff_vp9_avg_sharp32_h_12_neon	verified	5	
-vp9	ff_vp9_avg_regular64_v_neon	TIMEOUT	120	killed after 120s
-vp9	ff_vp9_avg_sharp4_h_10_neon	FAIL	2	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_avg_regular64_v_neon	verified	95	
+vp9	ff_vp9_avg_sharp4_h_10_neon	rejected	1	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; 
+vp9	ff_vp9_avg_sharp4_h_10_neon_padded	verified	1	
 vp9	ff_vp9_avg_sharp16_v_neon	verified	14	
-vp9	ff_vp9_avg_sharp4_h_12_neon	FAIL	2	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_avg_sharp4_h_12_neon	rejected	1	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; 
+vp9	ff_vp9_avg_sharp4_h_12_neon_padded	verified	1	
 vp9	ff_vp9_avg_sharp4_h_neon	verified	4	
 vp9	ff_vp9_avg_sharp4_v_10_neon	verified	1	
 vp9	ff_vp9_avg_sharp4_v_12_neon	verified	1	
@@ -970,18 +988,20 @@ vp9	ff_vp9_avg_sharp8_v_neon	verified	5
 vp9	ff_vp9_avg_sharp8_v_10_neon	verified	4	
 vp9	ff_vp9_avg_sharp8_v_12_neon	verified	3	
 vp9	ff_vp9_avg_smooth16_h_neon	verified	2	
-vp9	ff_vp9_avg_sharp64_v_10_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_avg_sharp64_v_10_neon	verified	65	
 vp9	ff_vp9_avg_smooth16_h_10_neon	verified	3	
 vp9	ff_vp9_avg_smooth16_h_12_neon	verified	3	
-vp9	ff_vp9_avg_sharp64_v_12_neon	TIMEOUT	120	killed after 120s
-vp9	ff_vp9_avg_sharp64_v_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_avg_sharp64_v_12_neon	verified	63	
+vp9	ff_vp9_avg_sharp64_v_neon	verified	99	
 vp9	ff_vp9_avg_smooth16_v_10_neon	verified	9	
 vp9	ff_vp9_avg_smooth32_h_10_neon	verified	5	
 vp9	ff_vp9_avg_smooth32_h_neon	verified	2	
 vp9	ff_vp9_avg_smooth32_h_12_neon	verified	5	
 vp9	ff_vp9_avg_smooth16_v_12_neon	verified	9	
-vp9	ff_vp9_avg_smooth4_h_10_neon	FAIL	2	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-vp9	ff_vp9_avg_smooth4_h_12_neon	FAIL	2	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_avg_smooth4_h_10_neon	rejected	1	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; 
+vp9	ff_vp9_avg_smooth4_h_10_neon_padded	verified	1	
+vp9	ff_vp9_avg_smooth4_h_12_neon	rejected	1	line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 144 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; 
+vp9	ff_vp9_avg_smooth4_h_12_neon_padded	verified	1	
 vp9	ff_vp9_avg_smooth16_v_neon	verified	13	
 vp9	ff_vp9_avg_smooth4_v_10_neon	verified	1	
 vp9	ff_vp9_avg_smooth4_h_neon	verified	3	
@@ -1017,7 +1037,7 @@ vp9	ff_vp9_iadst_iadst_8x8_add_12_neon	verified	0
 vp9	ff_vp9_iadst_idct_16x16_add_neon	verified	0	
 vp9	ff_vp9_iadst_idct_16x16_add_10_neon	verified	0	
 vp9	ff_vp9_iadst_idct_16x16_add_12_neon	verified	0	
-vp9	ff_vp9_avg_smooth64_v_10_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_avg_smooth64_v_10_neon	verified	72	
 vp9	ff_vp9_iadst_idct_4x4_add_10_neon	verified	0	
 vp9	ff_vp9_iadst_idct_4x4_add_neon	verified	0	
 vp9	ff_vp9_iadst_idct_4x4_add_12_neon	verified	0	
@@ -1032,12 +1052,12 @@ vp9	ff_vp9_idct_iadst_4x4_add_neon	verified	0
 vp9	ff_vp9_idct_iadst_4x4_add_12_neon	verified	0	
 vp9	ff_vp9_idct_iadst_8x8_add_10_neon	verified	0	
 vp9	ff_vp9_idct_iadst_8x8_add_12_neon	verified	0	
-vp9	ff_vp9_avg_smooth64_v_12_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_avg_smooth64_v_12_neon	verified	65	
 vp9	ff_vp9_idct_iadst_8x8_add_neon	verified	0	
 vp9	ff_vp9_idct_idct_16x16_add_neon	verified	1	
 vp9	ff_vp9_idct_idct_16x16_add_10_neon	verified	2	
 vp9	ff_vp9_idct_idct_16x16_add_12_neon	verified	2	
-vp9	ff_vp9_avg_smooth64_v_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_avg_smooth64_v_neon	verified	95	
 vp9	ff_vp9_idct_idct_4x4_add_10_neon	verified	0	
 vp9	ff_vp9_idct_idct_4x4_add_12_neon	verified	0	
 vp9	ff_vp9_idct_idct_4x4_add_neon	verified	0	
@@ -1106,9 +1126,11 @@ vp9	ff_vp9_put_regular32_h_neon	verified	2
 vp9	ff_vp9_idct_idct_32x32_add_10_neon	verified	6	
 vp9	ff_vp9_idct_idct_32x32_add_12_neon	verified	6	
 vp9	ff_vp9_put_regular32_h_12_neon	verified	3	
-vp9	ff_vp9_put_regular4_h_10_neon	FAIL	2	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_put_regular4_h_10_neon	rejected	1	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; li
+vp9	ff_vp9_put_regular4_h_10_neon_padded	verified	2	
 vp9	ff_vp9_put_regular16_v_neon	verified	13	
-vp9	ff_vp9_put_regular4_h_12_neon	FAIL	2	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_put_regular4_h_12_neon	rejected	1	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; li
+vp9	ff_vp9_put_regular4_h_12_neon_padded	verified	1	
 vp9	ff_vp9_put_regular4_h_neon	verified	4	
 vp9	ff_vp9_put_regular4_v_10_neon	verified	1	
 vp9	ff_vp9_put_regular4_v_12_neon	verified	2	
@@ -1128,17 +1150,19 @@ vp9	ff_vp9_put_regular8_v_neon	verified	5
 vp9	ff_vp9_put_sharp16_h_neon	verified	2	
 vp9	ff_vp9_put_sharp16_h_10_neon	verified	3	
 vp9	ff_vp9_put_sharp16_h_12_neon	verified	3	
-vp9	ff_vp9_put_regular64_v_10_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_put_regular64_v_10_neon	verified	69	
 vp9	ff_vp9_put_sharp16_v_10_neon	verified	8	
-vp9	ff_vp9_put_regular64_v_12_neon	TIMEOUT	120	killed after 120s
-vp9	ff_vp9_put_regular64_v_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_put_regular64_v_12_neon	verified	62	
+vp9	ff_vp9_put_regular64_v_neon	verified	90	
 vp9	ff_vp9_put_sharp32_h_10_neon	verified	4	
 vp9	ff_vp9_put_sharp16_v_12_neon	verified	8	
 vp9	ff_vp9_put_sharp32_h_neon	verified	3	
 vp9	ff_vp9_put_sharp16_v_neon	verified	13	
-vp9	ff_vp9_put_sharp4_h_10_neon	FAIL	2	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_put_sharp4_h_10_neon	rejected	1	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; li
+vp9	ff_vp9_put_sharp4_h_10_neon_padded	verified	1	
 vp9	ff_vp9_put_sharp32_h_12_neon	verified	4	
-vp9	ff_vp9_put_sharp4_h_12_neon	FAIL	2	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_put_sharp4_h_12_neon	rejected	1	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; li
+vp9	ff_vp9_put_sharp4_h_12_neon_padded	verified	1	
 vp9	ff_vp9_put_sharp4_h_neon	verified	3	
 vp9	ff_vp9_put_sharp4_v_10_neon	verified	1	
 vp9	ff_vp9_put_sharp4_v_12_neon	verified	1	
@@ -1152,12 +1176,12 @@ vp9	ff_vp9_put_sharp32_v_neon	verified	82
 vp9	ff_vp9_put_sharp8_h_neon	verified	1	
 vp9	ff_vp9_put_sharp8_h_10_neon	verified	1	
 vp9	ff_vp9_put_sharp8_h_12_neon	verified	1	
-vp9	ff_vp9_put_sharp64_v_10_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_put_sharp64_v_10_neon	verified	64	
 vp9	ff_vp9_put_sharp8_v_10_neon	verified	3	
 vp9	ff_vp9_put_sharp8_v_neon	verified	5	
 vp9	ff_vp9_put_sharp8_v_12_neon	verified	3	
-vp9	ff_vp9_put_sharp64_v_12_neon	TIMEOUT	120	killed after 120s
-vp9	ff_vp9_put_sharp64_v_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_put_sharp64_v_12_neon	verified	62	
+vp9	ff_vp9_put_sharp64_v_neon	verified	88	
 vp9	ff_vp9_put_smooth16_h_neon	verified	2	
 vp9	ff_vp9_put_smooth16_h_10_neon	verified	3	
 vp9	ff_vp9_put_smooth16_h_12_neon	verified	3	
@@ -1166,8 +1190,10 @@ vp9	ff_vp9_put_smooth16_v_10_neon	verified	9
 vp9	ff_vp9_put_smooth32_h_12_neon	verified	3	
 vp9	ff_vp9_put_smooth16_v_12_neon	verified	9	
 vp9	ff_vp9_put_smooth32_h_10_neon	verified	3	
-vp9	ff_vp9_put_smooth4_h_10_neon	FAIL	2	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-vp9	ff_vp9_put_smooth4_h_12_neon	FAIL	2	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
+vp9	ff_vp9_put_smooth4_h_10_neon	rejected	1	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; li
+vp9	ff_vp9_put_smooth4_h_10_neon_padded	verified	1	
+vp9	ff_vp9_put_smooth4_h_12_neon	rejected	1	line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 3 + 10 not provably within region of length src_len * 2; line 90 (ld1): read of 16 bytes at src_as_ptr + (0 * src_stride / 2 + 3) * 2 + src_stride * 7 + 10 not provably within region of length src_len * 2; li
+vp9	ff_vp9_put_smooth4_h_12_neon_padded	verified	1	
 vp9	ff_vp9_put_smooth16_v_neon	verified	14	
 vp9	ff_vp9_put_smooth4_v_10_neon	verified	1	
 vp9	ff_vp9_put_smooth4_h_neon	verified	3	
@@ -1198,17 +1224,17 @@ vvc	ff_vvc_put_chroma_hv8_12_neon	verified	1
 vvc	ff_vvc_put_chroma_v16_10_neon	verified	1	
 vvc	ff_vvc_put_chroma_v16_12_neon	verified	1	
 vvc	ff_vvc_put_chroma_v4_10_neon	verified	1	
-vp9	ff_vp9_put_smooth64_v_10_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_put_smooth64_v_10_neon	verified	60	
 vvc	ff_vvc_put_chroma_v4_12_neon	verified	1	
 vvc	ff_vvc_put_chroma_v8_10_neon	verified	1	
 vvc	ff_vvc_put_chroma_v8_12_neon	verified	1	
-vp9	ff_vp9_put_smooth64_v_12_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_put_smooth64_v_12_neon	verified	64	
 vvc	ff_vvc_put_epel_h128_8_neon_i8mm	verified	0	
 vvc	ff_vvc_put_chroma_v_x16_10_neon	verified	5	
 vvc	ff_vvc_put_epel_h16_8_neon	verified	0	
 vvc	ff_vvc_put_chroma_v_x16_12_neon	verified	4	
 vvc	ff_vvc_put_epel_h16_8_neon_i8mm	verified	0	
-vp9	ff_vp9_put_smooth64_v_neon	TIMEOUT	120	killed after 120s
+vp9	ff_vp9_put_smooth64_v_neon	verified	158	
 vvc	ff_vvc_put_epel_h32_8_neon_i8mm	verified	0	
 vvc	ff_vvc_put_epel_h4_8_neon	verified	0	
 vvc	ff_vvc_put_epel_h4_8_neon_i8mm	verified	0	
@@ -1216,36 +1242,36 @@ vvc	ff_vvc_put_epel_h32_8_neon	verified	1
 vvc	ff_vvc_put_epel_h8_8_neon	verified	0	
 vvc	ff_vvc_put_epel_h64_8_neon_i8mm	verified	0	
 vvc	ff_vvc_put_epel_h8_8_neon_i8mm	verified	0	
-vvc	ff_vvc_put_epel_hv128_8_neon	FAIL	0	line 5196 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv128_8_neon_i8mm	FAIL	0	line 5196 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv16_8_neon	FAIL	0	line 5196 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv16_8_neon_i8mm	FAIL	0	line 5196 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv32_8_neon	FAIL	0	line 5196 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv4_8_neon	FAIL	0	line 4892 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv32_8_neon_i8mm	FAIL	0	line 5196 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv4_8_neon_i8mm	FAIL	0	line 4892 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv64_8_neon	FAIL	0	line 5196 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv64_8_neon_i8mm	FAIL	0	line 5196 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv8_8_neon	FAIL	0	line 5024 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
-vvc	ff_vvc_put_epel_hv8_8_neon_i8mm	FAIL	0	line 5024 (ld1): read of 8 bytes at vf_as_ptr + 0 not provably within region of length vf_len * 1
+vvc	ff_vvc_put_epel_hv128_8_neon	verified	1051	
+vvc	ff_vvc_put_epel_hv128_8_neon_i8mm	verified	898	
+vvc	ff_vvc_put_epel_hv16_8_neon	verified	0	
+vvc	ff_vvc_put_epel_hv16_8_neon_i8mm	verified	0	
+vvc	ff_vvc_put_epel_hv32_8_neon	verified	11	
+vvc	ff_vvc_put_epel_hv4_8_neon	verified	0	
+vvc	ff_vvc_put_epel_hv32_8_neon_i8mm	verified	12	
+vvc	ff_vvc_put_epel_hv4_8_neon_i8mm	verified	0	
+vvc	ff_vvc_put_epel_hv64_8_neon	verified	210	
+vvc	ff_vvc_put_epel_hv64_8_neon_i8mm	verified	167	
+vvc	ff_vvc_put_epel_hv8_8_neon	verified	1	
+vvc	ff_vvc_put_epel_hv8_8_neon_i8mm	verified	1	
 vvc	ff_vvc_put_luma_h16_10_neon	verified	1	
 vvc	ff_vvc_put_luma_h16_12_neon	verified	1	
 vvc	ff_vvc_put_luma_h8_10_neon	verified	1	
 vvc	ff_vvc_put_luma_h8_12_neon	verified	1	
-vvc	ff_vvc_put_luma_hv16_12_neon	FAIL	0	line 6161 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-vvc	ff_vvc_put_luma_hv16_10_neon	FAIL	0	line 5411 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-vvc	ff_vvc_put_luma_hv8_10_neon	FAIL	0	line 4331 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-vvc	ff_vvc_put_luma_hv8_12_neon	FAIL	0	line 4717 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-vvc	ff_vvc_put_luma_hv_x16_10_neon	FAIL	1	assuming (== width 32): line 6916 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; assuming (== width 64): line 6916 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; assuming (== width 128): line 6916 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-vvc	ff_vvc_put_luma_hv_x16_12_neon	FAIL	1	assuming (== width 32): line 7675 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; assuming (== width 64): line 7675 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2; assuming (== width 128): line 7675 (ld1): read of 16 bytes at src_as_ptr + (3 * src_stride / 2 + 3) * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 10 not provably within region of length src_len * 2
-vvc	ff_vvc_put_luma_v16_10_neon	FAIL	0	line 2971 (ld1): read of 16 bytes at src_as_ptr + 3 * src_stride / 2 * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 16 not provably within region of length src_len * 2
-vvc	ff_vvc_put_luma_v16_12_neon	FAIL	0	line 3165 (ld1): read of 16 bytes at src_as_ptr + 3 * src_stride / 2 * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 16 not provably within region of length src_len * 2
+vvc	ff_vvc_put_luma_hv16_12_neon	verified	3	
+vvc	ff_vvc_put_luma_hv16_10_neon	verified	3	
+vvc	ff_vvc_put_luma_hv8_10_neon	verified	1	
+vvc	ff_vvc_put_luma_hv8_12_neon	verified	1	
+vvc	ff_vvc_put_luma_hv_x16_10_neon	verified	201	
+vvc	ff_vvc_put_luma_hv_x16_12_neon	verified	199	
+vvc	ff_vvc_put_luma_v16_10_neon	verified	3	
+vvc	ff_vvc_put_luma_v16_12_neon	verified	2	
 vvc	ff_vvc_put_luma_h_x16_12_neon	verified	4	
 vvc	ff_vvc_put_luma_h_x16_10_neon	verified	4	
 vvc	ff_vvc_put_luma_v4_10_neon	verified	1	
 vvc	ff_vvc_put_luma_v4_12_neon	verified	1	
-vvc	ff_vvc_put_luma_v_x16_10_neon	FAIL	1	assuming (== width 32): line 3365 (ld1): read of 16 bytes at src_as_ptr + 3 * src_stride / 2 * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 16 not provably within region of length src_len * 2; assuming (== width 64): line 3365 (ld1): read of 16 bytes at src_as_ptr + 3 * src_stride / 2 * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 16 not provably within region of length src_len * 2; assuming (== width 128): line 3365 (ld1): read of 16 bytes at src_as_ptr + 3 * src_stride / 2 * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 16 not provably within region of length src_len * 2
-vvc	ff_vvc_put_luma_v_x16_12_neon	FAIL	1	assuming (== width 32): line 3548 (ld1): read of 16 bytes at src_as_ptr + 3 * src_stride / 2 * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 16 not provably within region of length src_len * 2; assuming (== width 64): line 3548 (ld1): read of 16 bytes at src_as_ptr + 3 * src_stride / 2 * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 16 not provably within region of length src_len * 2; assuming (== width 128): line 3548 (ld1): read of 16 bytes at src_as_ptr + 3 * src_stride / 2 * 2 - (src_stride lsl 1) + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + src_stride + 16 not provably within region of length src_len * 2
+vvc	ff_vvc_put_luma_v_x16_10_neon	verified	91	
+vvc	ff_vvc_put_luma_v_x16_12_neon	verified	132	
 vvc	ff_vvc_put_pel_pixels128_8_neon	verified	0	
 vvc	ff_vvc_put_pel_pixels32_8_neon	verified	0	
 vvc	ff_vvc_put_pel_pixels16_8_neon	verified	0	
@@ -1281,7 +1307,7 @@ vvc	ff_vvc_put_chroma_hv_x16_10_neon	verified	22
 vvc	ff_vvc_put_qpel_hv32_8_neon	verified	4	
 vvc	ff_vvc_put_qpel_hv32_8_neon_i8mm	verified	5	
 vvc	ff_vvc_put_qpel_hv16_8_neon_i8mm	verified	4	
-vvc	ff_vvc_put_qpel_hv128_8_neon	FAIL	99	line 14026 (ld1): no region declared for read at loop11_?_widened_8 + 0; line 14026 (ld1): no region declared for read at loop13_?_widened_8 + 0; line 14026 (ld1): no region declared for read at loop17_?_widened_8 + 0; line 14026 (ld1): no region declared for read at loop33_?_widened_8 + 0; line 14026 (ld1): no region declared for read at loop35_?_widened_8 + 0; line 14026 (ld1): no region declared for read at loop39_?_widened_8 + 0; line 14064 (st1): write of 16 bytes at dst_as_mut_ptr + 1 * loop52_? + 2208 not provably within region of length dst_len * 2; line 14064 (st1): write of 16 bytes at dst_as_mut_ptr + 1 * loop54_? + 2208 not provably within region of length dst_len * 2
+vvc	ff_vvc_put_qpel_hv128_8_neon	verified	269	
 vvc	ff_vvc_put_qpel_hv16_8_neon	verified	4	
 vvc	ff_vvc_put_qpel_hv64_8_neon	verified	16	
 vvc	ff_vvc_put_qpel_hv4_8_neon_i8mm	verified	4	
@@ -1296,97 +1322,100 @@ vvc	ff_vvc_w_avg_8_neon	verified	7
 vvc	ff_vvc_dmvr_8_neon	verified	8	
 vvc	ff_vvc_dmvr_h_8_neon	verified	4	
 vvc	ff_vvc_dmvr_v_8_neon	verified	4	
-vvc	ff_vvc_dmvr_hv_8_neon	FAIL	26	line 877 (str): write of 16 bytes at sp - 512 ^ sp - 256 ^ sp - 256 uses an operation the engine does not model; line 860 (stp): write of 16 bytes at sp - 512 ^ sp - 256 ^ sp - 256 uses an operation the engine does not model
-vvc	ff_vvc_put_qpel_hv128_8_neon_i8mm	TIMEOUT	120	killed after 120s
+vvc	ff_vvc_dmvr_hv_8_neon	verified	206	
+vvc	ff_vvc_put_qpel_hv128_8_neon_i8mm	verified	581	
 vvc	ff_vvc_apply_bdof_8_neon	verified	17	
 vvc	ff_vvc_w_avg_10_neon	verified	7	
 vvc	ff_vvc_dmvr_h_10_neon	verified	4	
 vvc	ff_vvc_avg_8_neon	verified	7	
 vvc	ff_vvc_apply_bdof_10_neon	verified	18	
-vvc	ff_vvc_put_qpel_v8_8_neon	TIMEOUT	120	killed after 120s
+vvc	ff_vvc_put_qpel_v8_8_neon	verified	573	
 vvc	ff_vvc_w_avg_12_neon	verified	10	
 vvc	ff_vvc_put_qpel_hv64_8_neon_i8mm	verified	78	
 vvc	ff_vvc_dmvr_h_12_neon	verified	6	
 vvc	ff_vvc_dmvr_12_neon	verified	10	
 vvc	ff_vvc_apply_bdof_12_neon	verified	18	
 vvc	ff_vvc_sad_neon	verified	2	
-vvc	ff_vvc_prof_grad_filter_8x_neon	TIMEOUT	120	killed after 120s
+vvc	ff_vvc_prof_grad_filter_8x_neon	verified	4	
 vvc_alf	ff_alf_filter_luma_kernel_8_neon	verified	0	
-vvc_alf	ff_alf_filter_chroma_kernel_8_neon	FAIL	0	line 603 (ldr): read of 16 bytes at clip_as_ptr + 0 not provably within region of length clip_len * 2
+vvc_alf	ff_alf_filter_chroma_kernel_8_neon	rejected	0	line 603 (ldr): read of 16 bytes at clip_as_ptr + 0 not provably within region of length clip_len * 2
+vvc_alf	ff_alf_filter_chroma_kernel_8_neon_padded	verified	0	
 vvc_alf	ff_alf_filter_luma_kernel_10_neon	verified	1	
-vvc_alf	ff_alf_filter_chroma_kernel_10_neon	FAIL	0	line 731 (ldr): read of 16 bytes at clip_as_ptr + 0 not provably within region of length clip_len * 2
+vvc_alf	ff_alf_filter_chroma_kernel_10_neon	rejected	0	line 731 (ldr): read of 16 bytes at clip_as_ptr + 0 not provably within region of length clip_len * 2
+vvc_alf	ff_alf_filter_chroma_kernel_10_neon_padded	verified	0	
 vvc_alf	ff_alf_filter_luma_kernel_12_neon	verified	1	
-vvc_alf	ff_alf_filter_chroma_kernel_12_neon	FAIL	0	line 731 (ldr): read of 16 bytes at clip_as_ptr + 0 not provably within region of length clip_len * 2
+vvc_alf	ff_alf_filter_chroma_kernel_12_neon	rejected	0	line 731 (ldr): read of 16 bytes at clip_as_ptr + 0 not provably within region of length clip_len * 2
+vvc_alf	ff_alf_filter_chroma_kernel_12_neon_padded	verified	0	
 vvc_alf	ff_alf_classify_sum_neon	verified	1	
-vvc	ff_vvc_dmvr_hv_10_neon	TIMEOUT	120	killed after 120s
+vvc	ff_vvc_dmvr_hv_10_neon	TIMEOUT	2700	killed after 2700s
 vvc	ff_vvc_put_qpel_uni_h32_8_neon	verified	12	
-vvc	ff_vvc_dmvr_hv_12_neon	TIMEOUT	120	killed after 120s
+vvc	ff_vvc_dmvr_hv_12_neon	TIMEOUT	2700	killed after 2700s
 vvc	ff_vvc_avg_10_neon	verified	7	
 vvc	ff_vvc_avg_12_neon	verified	7	
-vvc_alf	ff_alf_classify_grad_8_neon	TIMEOUT	120	killed after 120s
-vvc_alf	ff_alf_classify_grad_10_neon	TIMEOUT	120	killed after 120s
-vvc_alf	ff_alf_classify_grad_12_neon	TIMEOUT	120	killed after 120s
-yuv2rgb	ff_nv12_to_argb_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_rgba_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_abgr_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_bgra_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_rgb24_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_bgr24_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_gbrp_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_argb_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_rgba_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_abgr_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_bgra_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_rgb24_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_bgr24_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_gbrp_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_argb_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_rgba_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_abgr_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_bgra_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_rgb24_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_bgr24_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_gbrp_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_argb_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_rgba_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_abgr_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_bgra_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_gbrp_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_rgb24_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_bgr24_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_rgb565le_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_bgr565le_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_rgb555le_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_bgr555le_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_rgb565be_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_bgr565be_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_rgb555be_neon	TIMEOUT	120	
-yuv2rgb	ff_nv12_to_bgr555be_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_rgb565le_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_bgr565le_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_rgb555le_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_bgr555le_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_rgb565be_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_bgr565be_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_rgb555be_neon	TIMEOUT	120	
-yuv2rgb	ff_nv21_to_bgr555be_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_rgb565le_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_bgr565le_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_rgb555le_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_bgr555le_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_rgb565be_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_bgr565be_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_rgb555be_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv420p_to_bgr555be_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_rgb565le_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_bgr565le_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_rgb555le_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_bgr555le_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_rgb565be_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_bgr565be_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_rgb555be_neon	TIMEOUT	120	
-yuv2rgb	ff_yuv422p_to_bgr555be_neon	TIMEOUT	136	
-yuv2rgb	ff_yuva420p_to_argb_neon	TIMEOUT	136	
-yuv2rgb	ff_yuva420p_to_rgba_neon	TIMEOUT	136	
-yuv2rgb	ff_yuva420p_to_abgr_neon	TIMEOUT	136	
-yuv2rgb	ff_yuva420p_to_bgra_neon	TIMEOUT	136	
+vvc_alf	ff_alf_classify_grad_8_neon	verified	288	
+vvc_alf	ff_alf_classify_grad_10_neon	verified	318	
+vvc_alf	ff_alf_classify_grad_12_neon	verified	311	
+yuv2rgb	ff_nv12_to_argb_neon	verified	252	
+yuv2rgb	ff_nv12_to_rgba_neon	verified	253	
+yuv2rgb	ff_nv12_to_abgr_neon	verified	250	
+yuv2rgb	ff_nv12_to_bgra_neon	verified	252	
+yuv2rgb	ff_nv12_to_rgb24_neon	verified	280	
+yuv2rgb	ff_nv12_to_bgr24_neon	verified	266	
+yuv2rgb	ff_nv12_to_gbrp_neon	verified	501	
+yuv2rgb	ff_nv21_to_argb_neon	verified	279	
+yuv2rgb	ff_nv21_to_rgba_neon	verified	274	
+yuv2rgb	ff_nv21_to_abgr_neon	verified	369	
+yuv2rgb	ff_nv21_to_bgra_neon	verified	320	
+yuv2rgb	ff_nv21_to_rgb24_neon	verified	255	
+yuv2rgb	ff_nv21_to_bgr24_neon	verified	367	
+yuv2rgb	ff_nv21_to_gbrp_neon	verified	400	
+yuv2rgb	ff_yuv420p_to_argb_neon	verified	349	
+yuv2rgb	ff_yuv420p_to_rgba_neon	verified	390	
+yuv2rgb	ff_yuv420p_to_abgr_neon	verified	386	
+yuv2rgb	ff_yuv420p_to_bgra_neon	verified	342	
+yuv2rgb	ff_yuv420p_to_rgb24_neon	verified	219	
+yuv2rgb	ff_yuv420p_to_bgr24_neon	verified	323	
+yuv2rgb	ff_yuv420p_to_gbrp_neon	verified	552	
+yuv2rgb	ff_yuv422p_to_argb_neon	verified	507	
+yuv2rgb	ff_yuv422p_to_rgba_neon	verified	565	
+yuv2rgb	ff_yuv422p_to_abgr_neon	verified	528	
+yuv2rgb	ff_yuv422p_to_bgra_neon	verified	528	
+yuv2rgb	ff_yuv422p_to_gbrp_neon	verified	219	
+yuv2rgb	ff_yuv422p_to_rgb24_neon	verified	354	
+yuv2rgb	ff_yuv422p_to_bgr24_neon	verified	285	
+yuv2rgb	ff_nv12_to_rgb565le_neon	verified	377	
+yuv2rgb	ff_nv12_to_bgr565le_neon	verified	89	
+yuv2rgb	ff_nv12_to_rgb555le_neon	verified	216	
+yuv2rgb	ff_nv12_to_bgr555le_neon	verified	93	
+yuv2rgb	ff_nv12_to_rgb565be_neon	verified	325	
+yuv2rgb	ff_nv12_to_bgr565be_neon	verified	358	
+yuv2rgb	ff_nv12_to_rgb555be_neon	verified	237	
+yuv2rgb	ff_nv12_to_bgr555be_neon	verified	418	
+yuv2rgb	ff_nv21_to_rgb565le_neon	verified	265	
+yuv2rgb	ff_nv21_to_bgr565le_neon	verified	160	
+yuv2rgb	ff_nv21_to_rgb555le_neon	verified	176	
+yuv2rgb	ff_nv21_to_bgr555le_neon	verified	237	
+yuv2rgb	ff_nv21_to_rgb565be_neon	verified	174	
+yuv2rgb	ff_nv21_to_bgr565be_neon	verified	366	
+yuv2rgb	ff_nv21_to_rgb555be_neon	verified	349	
+yuv2rgb	ff_nv21_to_bgr555be_neon	verified	67	
+yuv2rgb	ff_yuv420p_to_rgb565le_neon	verified	209	
+yuv2rgb	ff_yuv420p_to_bgr565le_neon	verified	210	
+yuv2rgb	ff_yuv420p_to_rgb555le_neon	verified	291	
+yuv2rgb	ff_yuv420p_to_bgr555le_neon	verified	332	
+yuv2rgb	ff_yuv420p_to_rgb565be_neon	verified	341	
+yuv2rgb	ff_yuv420p_to_bgr565be_neon	verified	274	
+yuv2rgb	ff_yuv420p_to_rgb555be_neon	verified	239	
+yuv2rgb	ff_yuv420p_to_bgr555be_neon	verified	212	
+yuv2rgb	ff_yuv422p_to_rgb565le_neon	verified	129	
+yuv2rgb	ff_yuv422p_to_bgr565le_neon	verified	131	
+yuv2rgb	ff_yuv422p_to_rgb555le_neon	verified	191	
+yuv2rgb	ff_yuv422p_to_bgr555le_neon	verified	134	
+yuv2rgb	ff_yuv422p_to_rgb565be_neon	verified	184	
+yuv2rgb	ff_yuv422p_to_bgr565be_neon	verified	186	
+yuv2rgb	ff_yuv422p_to_rgb555be_neon	verified	194	
+yuv2rgb	ff_yuv422p_to_bgr555be_neon	verified	135	
+yuv2rgb	ff_yuva420p_to_argb_neon	verified	378	
+yuv2rgb	ff_yuva420p_to_rgba_neon	verified	403	
+yuv2rgb	ff_yuva420p_to_abgr_neon	verified	351	
+yuv2rgb	ff_yuva420p_to_bgra_neon	verified	392	

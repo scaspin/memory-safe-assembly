@@ -75,6 +75,181 @@ pub fn linear_form(e: &AbstractExpression) -> Option<LinearForm> {
     }
 }
 
+#[derive(Debug, Clone)]
+struct RationalForm {
+    constant: i128,
+    terms: BTreeMap<String, i128>,
+    atoms: BTreeMap<String, AbstractExpression>,
+    denominator: i128,
+}
+
+impl RationalForm {
+    fn constant(value: i128) -> Self {
+        Self {
+            constant: value,
+            terms: BTreeMap::new(),
+            atoms: BTreeMap::new(),
+            denominator: 1,
+        }
+    }
+
+    fn atom(e: &AbstractExpression) -> Self {
+        let key = match e {
+            AbstractExpression::Abstract(name) => name.clone(),
+            other => format!("({other})"),
+        };
+        Self {
+            constant: 0,
+            terms: BTreeMap::from([(key.clone(), 1)]),
+            atoms: BTreeMap::from([(key, e.clone())]),
+            denominator: 1,
+        }
+    }
+
+    fn integral_constant(&self) -> Option<i128> {
+        (self.terms.is_empty() && self.denominator == 1).then_some(self.constant)
+    }
+
+    fn scaled(&self, factor: i128) -> Option<Self> {
+        let mut terms = BTreeMap::new();
+        for (name, coefficient) in &self.terms {
+            let scaled = coefficient.checked_mul(factor)?;
+            if scaled != 0 {
+                terms.insert(name.clone(), scaled);
+            }
+        }
+        Some(Self {
+            constant: self.constant.checked_mul(factor)?,
+            terms,
+            atoms: self.atoms.clone(),
+            denominator: self.denominator,
+        })
+    }
+
+    fn combine(&self, other: &Self, sign: i128) -> Option<Self> {
+        let left = self.scaled(other.denominator)?;
+        let right = other.scaled(self.denominator.checked_mul(sign)?)?;
+        let mut terms = left.terms;
+        for (name, coefficient) in right.terms {
+            let entry = terms.entry(name).or_insert(0);
+            *entry = entry.checked_add(coefficient)?;
+        }
+        terms.retain(|_, c| *c != 0);
+        let mut atoms = left.atoms;
+        atoms.extend(right.atoms);
+        Some(Self {
+            constant: left.constant.checked_add(right.constant)?,
+            terms,
+            atoms,
+            denominator: self.denominator.checked_mul(other.denominator)?,
+        })
+    }
+
+    fn quotient_assuming_exact(&self, divisor: i128) -> Option<Self> {
+        if divisor <= 0 || self.denominator != 1 {
+            return None;
+        }
+        let whole = self.constant.div_euclid(divisor);
+        let symbolic = Self {
+            constant: 0,
+            terms: self.terms.clone(),
+            atoms: self.atoms.clone(),
+            denominator: divisor,
+        };
+        symbolic.combine(&Self::constant(whole), 1)
+    }
+
+    fn to_integral_expression(&self) -> Option<AbstractExpression> {
+        let exact = |n: i128| {
+            (n % self.denominator == 0)
+                .then(|| i64::try_from(n / self.denominator).ok())
+                .flatten()
+        };
+        let mut sum: Option<AbstractExpression> = None;
+        for (key, coefficient) in &self.terms {
+            let coefficient = exact(*coefficient)?;
+            let atom = self.atoms.get(key)?.clone();
+            let term = match coefficient {
+                1 => atom,
+                _ => generate_expression("*", atom, AbstractExpression::Immediate(coefficient)),
+            };
+            sum = Some(match sum {
+                None => term,
+                Some(sum) => generate_expression("+", sum, term),
+            });
+        }
+        let constant = AbstractExpression::Immediate(exact(self.constant)?);
+        Some(match sum {
+            None => constant,
+            Some(sum) => generate_expression("+", sum, constant),
+        })
+    }
+}
+
+fn rational_form(e: &AbstractExpression) -> Option<RationalForm> {
+    match e {
+        AbstractExpression::Immediate(value) => Some(RationalForm::constant(*value as i128)),
+        AbstractExpression::Register(register) => match &register.base {
+            None if register.kind == RegisterKind::Number => None,
+            None => Some(RationalForm::constant(register.offset as i128)),
+            Some(base) => {
+                rational_form(base)?.combine(&RationalForm::constant(register.offset as i128), 1)
+            }
+        },
+        AbstractExpression::Expression(op, a, b) => {
+            let (left, right) = (rational_form(a)?, rational_form(b)?);
+            let shift = right
+                .integral_constant()
+                .filter(|k| (0..62).contains(k))
+                .map(|k| 1i128 << k);
+            let positive = right.integral_constant().filter(|d| *d > 0);
+            let decomposed = match op.as_str() {
+                "+" => left.combine(&right, 1),
+                "-" => left.combine(&right, -1),
+                "*" => match (left.integral_constant(), right.integral_constant()) {
+                    (_, Some(factor)) => left.scaled(factor),
+                    (Some(factor), _) => right.scaled(factor),
+                    _ => None,
+                },
+                "lsl" => shift.and_then(|s| left.scaled(s)),
+                "lsr" | ">>" => shift.and_then(|s| left.quotient_assuming_exact(s)),
+                "/" => positive.and_then(|d| left.quotient_assuming_exact(d)),
+                "%" if positive.is_some() => Some(left),
+                "sext" | "zext" if positive.is_some() => Some(left),
+                _ => None,
+            };
+            Some(decomposed.unwrap_or_else(|| RationalForm::atom(e)))
+        }
+        other => Some(RationalForm::atom(other)),
+    }
+}
+
+pub fn greatest_common_divisor(a: u64, b: u64) -> u64 {
+    if b == 0 {
+        a
+    } else {
+        greatest_common_divisor(b, a % b)
+    }
+}
+
+pub fn mentions_a_quotient(e: &AbstractExpression) -> bool {
+    match e {
+        AbstractExpression::Expression(op, a, b) => {
+            matches!(op.as_str(), "/" | "lsr" | ">>" | "%")
+                || mentions_a_quotient(a)
+                || mentions_a_quotient(b)
+        }
+        AbstractExpression::Register(register) => {
+            register.base.as_ref().is_some_and(mentions_a_quotient)
+        }
+        _ => false,
+    }
+}
+
+pub fn exact_arithmetic_candidate(e: &AbstractExpression) -> Option<AbstractExpression> {
+    rational_form(e)?.to_integral_expression()
+}
+
 fn register_form(register: &RegisterValue) -> Option<LinearForm> {
     match &register.base {
         None if register.kind == RegisterKind::Number => None,
@@ -115,10 +290,36 @@ impl Affine {
                     "-" => left.combine(&right, -1),
                     "*" if right.terms.is_empty() => left.scaled(right.constant),
                     "*" if left.terms.is_empty() => right.scaled(left.constant),
+                    "/" if right.terms.is_empty() && right.constant > 0 => Some(
+                        Affine::quotient_with_whole_part_outside(&left, right.constant),
+                    ),
                     _ => Some(Affine::atom(e)),
                 }
             }
             other => Some(Affine::atom(other)),
+        }
+    }
+
+    fn quotient_with_whole_part_outside(dividend: &Affine, divisor: i64) -> Affine {
+        let whole = dividend.constant.div_euclid(divisor);
+        let remainder = dividend.constant.rem_euclid(divisor);
+        if dividend.terms.is_empty() {
+            return Affine::number(whole);
+        }
+        let reduced = Affine {
+            constant: remainder,
+            terms: dividend.terms.clone(),
+        };
+        Affine {
+            constant: whole,
+            terms: vec![(
+                generate_expression(
+                    "/",
+                    reduced.to_expression(),
+                    AbstractExpression::Immediate(divisor),
+                ),
+                1,
+            )],
         }
     }
 
@@ -891,6 +1092,89 @@ mod tests {
 
     fn counter() -> LoopCounter {
         LoopCounter::for_loop(LoopId::new(0))
+    }
+
+    fn symbol(name: &str) -> AbstractExpression {
+        AbstractExpression::Abstract(name.to_string())
+    }
+
+    fn number(value: i64) -> AbstractExpression {
+        AbstractExpression::Immediate(value)
+    }
+
+    #[test]
+    fn quotients_by_a_constant_share_one_atom_whatever_their_offset() {
+        let quarter = |offset: i64| {
+            generate_expression(
+                "/",
+                generate_expression("+", symbol("w"), number(offset)),
+                number(4),
+            )
+        };
+        let w_over_4 = Affine::of(&quarter(0)).expect("affine");
+        let eight_less = Affine::of(&quarter(-8)).expect("affine");
+        assert_eq!(eight_less.terms, w_over_4.terms);
+        assert_eq!(eight_less.constant, -2);
+        let one_less = Affine::of(&quarter(-1)).expect("affine");
+        let three_more = Affine::of(&quarter(3)).expect("affine");
+        assert_eq!(one_less.terms, three_more.terms);
+        assert_eq!(one_less.constant, -1);
+        assert_eq!(three_more.constant, 0);
+        assert_eq!(
+            Affine::of(&generate_expression("/", number(-9), number(4)))
+                .expect("affine")
+                .constant,
+            -3
+        );
+    }
+
+    #[test]
+    fn exact_arithmetic_folds_a_row_step_back_to_its_stride() {
+        let wrapped_stride = generate_expression(
+            "%",
+            generate_expression("+", symbol("stride"), number(1 << 31)),
+            number(1 << 32),
+        );
+        let columns_walked = generate_expression(
+            "*",
+            generate_expression(
+                "/",
+                generate_expression("+", symbol("w"), number(-1)),
+                number(16),
+            ),
+            number(64),
+        );
+        let step = generate_expression(
+            "+",
+            generate_expression(
+                "-",
+                generate_expression(
+                    "+",
+                    generate_expression("-", wrapped_stride, number(1 << 31)),
+                    columns_walked,
+                ),
+                generate_expression("lsl", symbol("w"), number(2)),
+            ),
+            number(64),
+        );
+        let candidate = exact_arithmetic_candidate(&step).expect("integral");
+        assert_eq!(linear_form(&candidate), linear_form(&symbol("stride")));
+    }
+
+    #[test]
+    fn exact_arithmetic_declines_a_fractional_quotient() {
+        let half = generate_expression("lsr", symbol("w"), number(1));
+        assert_eq!(exact_arithmetic_candidate(&half), None);
+        let quarter_of_odd = generate_expression(
+            "/",
+            generate_expression("+", symbol("w"), number(3)),
+            number(4),
+        );
+        let scaled = generate_expression("*", quarter_of_odd, number(4));
+        assert_eq!(
+            linear_form(&exact_arithmetic_candidate(&scaled).expect("integral")),
+            linear_form(&symbol("w"))
+        );
     }
 
     #[test]

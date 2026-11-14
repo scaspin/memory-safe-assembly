@@ -75,6 +75,7 @@ pub struct ARMCORTEXA {
     pristine_read: Option<String>,
     indexed_read: Option<IndexedRead>,
     last_executed: Option<usize>,
+    table_splits_allowed: bool,
     pristine_read_byte: i64,
 }
 
@@ -259,6 +260,7 @@ impl ARMCORTEXA {
             element_ranges: BTreeMap::new(),
             pristine_read: None,
             indexed_read: None,
+            table_splits_allowed: true,
             pristine_read_byte: 0,
             last_executed: None,
             solver: EmptiedOnClone::new(solver),

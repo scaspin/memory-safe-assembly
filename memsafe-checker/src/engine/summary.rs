@@ -225,6 +225,32 @@ pub(super) fn at_summary(
     }
 }
 
+fn value_one_step_back(
+    operand: &RegisterValue,
+    previous: &MachineState,
+    current: &MachineState,
+    invariants: &[LoopInvariant],
+    updates: &[(usize, RegisterValue)],
+) -> Option<AbstractExpression> {
+    if operand.base.is_none() || current.0.contains(operand) {
+        return None;
+    }
+    let mut matching = previous
+        .0
+        .iter()
+        .enumerate()
+        .filter(|(_, earlier)| *earlier == operand)
+        .map(|(i, _)| i);
+    let (Some(i), None) = (matching.next(), matching.next()) else {
+        return None;
+    };
+    let LoopInvariant::Linear(step) = invariants.get(i)? else {
+        return None;
+    };
+    let (_, summarized) = updates.iter().find(|(j, _)| *j == i)?;
+    Some(generate_expression("-", value_of(summarized), step.clone()))
+}
+
 pub(super) fn flag_at_summary(
     e: &AbstractExpression,
     current: &[RegisterValue],
@@ -1382,6 +1408,7 @@ pub(super) fn summarize<L>(
             .iter()
             .find(|ghost| ghost.value == *r && !current.0.contains(r))
             .map(|ghost| ghost_at_summary(ghost, &counter, 0))
+            .or_else(|| value_one_step_back(r, previous, current, &invariants, &updates))
     };
     let flag = |k: usize, prev: &Option<FlagValue>, cur: &Option<FlagValue>| match cur {
         Some(FlagValue::Abstract(c)) if prev != cur => match (

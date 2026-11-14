@@ -60,9 +60,13 @@ fn ff_lfe_fir1_float_neon(pcm: &mut [f32], lfe: &[i32], filter: &[f32], npcmbloc
     [dst.len() == 2 * len, src.len() == len, hist.len() == 1, len % 4 == 0, len >= 4, len <= 1048576])]
 fn ff_lfe_x96_fixed_neon(dst: &mut [i32], src: &[i32], hist: &mut [i32], len: usize);
 
-#[bums::check_mem_safe("opusdsp_neon.S", data.as_mut_ptr().add(period + 2), period, gains.as_ptr(), len,
+#[bums::check_mem_safe("opusdsp_neon.S", rejects, data.as_mut_ptr().add(period + 2), period, gains.as_ptr(), len,
     [data.len() == period + 2 + len, gains.len() == 3, period >= 15, period <= 1024, len % 4 == 0, len >= 4, len <= 1048576])]
 fn ff_opus_postfilter_neon(data: &mut [f32], period: usize, gains: &[f32], len: usize);
+
+#[bums::check_mem_safe("opusdsp_neon.S", symbol = "ff_opus_postfilter_neon", data.as_mut_ptr().add(period + 2), period, gains.as_ptr(), len,
+    [data.len() == period + 2 + len, gains.len() == 4, period >= 15, period <= 1024, len % 4 == 0, len >= 4, len <= 1048576])]
+fn ff_opus_postfilter_neon_padded(data: &mut [f32], period: usize, gains: &[f32], len: usize);
 
 #[bums::check_mem_safe("opusdsp_neon.S", out.as_mut_ptr(), input.as_ptr(), weights.as_ptr(), len,
     [out.len() == len, input.len() == len, weights.len() == 16, len % 8 == 0, len >= 8, len <= 1048576])]
@@ -114,18 +118,34 @@ fn ff_sbr_hf_g_filt_neon(y: &mut [f32], x_high: &[f32], g_filt: &[f32], m_max: u
 #[bums::check_mem_safe("sbrdsp_neon.S", x.as_ptr(), phi.as_mut_ptr(), [x.len() == 80, phi.len() == 12])]
 fn ff_sbr_autocorrelate_neon(x: &[f32], phi: &mut [f32]);
 
-#[bums::check_mem_safe("sbrdsp_neon.S", row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
+#[bums::check_mem_safe("sbrdsp_neon.S", rejects, row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
     [row.len() == 128, s_m.len() == 48, q_filt.len() == 48, noise <= 511, kx + m_max <= 64, m_max >= 1, m_max <= 48])]
 fn ff_sbr_hf_apply_noise_0_neon(row: &mut [f32], s_m: &[f32], q_filt: &[f32], noise: usize, kx: usize, m_max: usize);
 
-#[bums::check_mem_safe("sbrdsp_neon.S", row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
+#[bums::check_mem_safe("sbrdsp_neon.S", symbol = "ff_sbr_hf_apply_noise_0_neon", row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
+    [row.len() == 130, s_m.len() == 48, q_filt.len() == 48, noise <= 511, kx + m_max <= 64, m_max >= 1, m_max <= 48])]
+fn ff_sbr_hf_apply_noise_0_neon_padded(row: &mut [f32], s_m: &[f32], q_filt: &[f32], noise: usize, kx: usize, m_max: usize);
+
+#[bums::check_mem_safe("sbrdsp_neon.S", rejects, row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
     [row.len() == 128, s_m.len() == 48, q_filt.len() == 48, noise <= 511, kx + m_max <= 64, m_max >= 1, m_max <= 48])]
 fn ff_sbr_hf_apply_noise_1_neon(row: &mut [f32], s_m: &[f32], q_filt: &[f32], noise: usize, kx: usize, m_max: usize);
 
-#[bums::check_mem_safe("sbrdsp_neon.S", row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
+#[bums::check_mem_safe("sbrdsp_neon.S", symbol = "ff_sbr_hf_apply_noise_1_neon", row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
+    [row.len() == 130, s_m.len() == 48, q_filt.len() == 48, noise <= 511, kx + m_max <= 64, m_max >= 1, m_max <= 48])]
+fn ff_sbr_hf_apply_noise_1_neon_padded(row: &mut [f32], s_m: &[f32], q_filt: &[f32], noise: usize, kx: usize, m_max: usize);
+
+#[bums::check_mem_safe("sbrdsp_neon.S", rejects, row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
     [row.len() == 128, s_m.len() == 48, q_filt.len() == 48, noise <= 511, kx + m_max <= 64, m_max >= 1, m_max <= 48])]
 fn ff_sbr_hf_apply_noise_2_neon(row: &mut [f32], s_m: &[f32], q_filt: &[f32], noise: usize, kx: usize, m_max: usize);
 
-#[bums::check_mem_safe("sbrdsp_neon.S", row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
+#[bums::check_mem_safe("sbrdsp_neon.S", symbol = "ff_sbr_hf_apply_noise_2_neon", row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
+    [row.len() == 130, s_m.len() == 48, q_filt.len() == 48, noise <= 511, kx + m_max <= 64, m_max >= 1, m_max <= 48])]
+fn ff_sbr_hf_apply_noise_2_neon_padded(row: &mut [f32], s_m: &[f32], q_filt: &[f32], noise: usize, kx: usize, m_max: usize);
+
+#[bums::check_mem_safe("sbrdsp_neon.S", rejects, row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
     [row.len() == 128, s_m.len() == 48, q_filt.len() == 48, noise <= 511, kx + m_max <= 64, m_max >= 1, m_max <= 48])]
 fn ff_sbr_hf_apply_noise_3_neon(row: &mut [f32], s_m: &[f32], q_filt: &[f32], noise: usize, kx: usize, m_max: usize);
+
+#[bums::check_mem_safe("sbrdsp_neon.S", symbol = "ff_sbr_hf_apply_noise_3_neon", row.as_mut_ptr().add(2 * kx), s_m.as_ptr(), q_filt.as_ptr(), noise, kx, m_max,
+    [row.len() == 130, s_m.len() == 48, q_filt.len() == 48, noise <= 511, kx + m_max <= 64, m_max >= 1, m_max <= 48])]
+fn ff_sbr_hf_apply_noise_3_neon_padded(row: &mut [f32], s_m: &[f32], q_filt: &[f32], noise: usize, kx: usize, m_max: usize);

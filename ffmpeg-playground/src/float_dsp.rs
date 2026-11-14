@@ -12,9 +12,13 @@ fn ff_vector_fmac_scalar_neon(dst: &mut [f32], src: &[f32], len: usize);
     [dst.len() == len, src.len() == len, len % 16 == 0, len >= 16, len <= 1048576])]
 fn ff_vector_fmul_scalar_neon(dst: &mut [f32], src: &[f32], len: usize);
 
-#[bums::check_mem_safe("float_dsp_neon.S", dst.as_mut_ptr(), src.as_ptr(), len,
+#[bums::check_mem_safe("float_dsp_neon.S", rejects, dst.as_mut_ptr(), src.as_ptr(), len,
     [dst.len() == len, src.len() == len, len % 8 == 0, len >= 8, len <= 1048576])]
 fn ff_vector_dmul_scalar_neon(dst: &mut [f64], src: &[f64], len: usize);
+
+#[bums::check_mem_safe("float_dsp_neon.S", symbol = "ff_vector_dmul_scalar_neon", dst.as_mut_ptr(), src.as_ptr(), len,
+    [dst.len() == len, src.len() == len + 4, len % 8 == 0, len >= 8, len <= 1048576])]
+fn ff_vector_dmul_scalar_neon_padded(dst: &mut [f64], src: &[f64], len: usize);
 
 #[bums::check_mem_safe("float_dsp_neon.S", dst.as_mut_ptr(), src0.as_ptr(), src1.as_ptr(), win.as_ptr(), len,
     [dst.len() == 2 * len, src0.len() == len, src1.len() == len, win.len() == 2 * len, len % 4 == 0, len >= 4, len <= 1048576])]

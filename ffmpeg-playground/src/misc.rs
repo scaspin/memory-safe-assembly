@@ -37,33 +37,61 @@ fn ff_resample_common_apply_filter_x4_s16_neon(acc: &mut [i32], src: &[i16], fil
     [acc.len() == 1, src.len() == length, filter.len() == length, length % 8 == 0, length >= 8, length <= 65536])]
 fn ff_resample_common_apply_filter_x8_s16_neon(acc: &mut [i32], src: &[i16], filter: &[i16], length: usize);
 
-#[bums::check_mem_safe("vf_colordetect_neon.S", data.as_ptr(), stride, width, height, mpeg_min, mpeg_max,
+#[bums::check_mem_safe("vf_colordetect_neon.S", rejects, data.as_ptr(), stride, width, height, mpeg_min, mpeg_max,
     [data.len() == (height - 1) * stride + width, stride >= width, stride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
 fn ff_detect_range_neon(data: &[u8], stride: usize, width: usize, height: usize, mpeg_min: i32, mpeg_max: i32);
 
-#[bums::check_mem_safe("vf_colordetect_neon.S", data.as_ptr(), stride, width, height, mpeg_min, mpeg_max,
+#[bums::check_mem_safe("vf_colordetect_neon.S", symbol = "ff_detect_range_neon", data.as_ptr(), stride, width, height, mpeg_min, mpeg_max,
+    [data.len() == (height - 1) * stride + width + 15, stride >= width, stride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
+fn ff_detect_range_neon_padded(data: &[u8], stride: usize, width: usize, height: usize, mpeg_min: i32, mpeg_max: i32);
+
+#[bums::check_mem_safe("vf_colordetect_neon.S", rejects, data.as_ptr(), stride, width, height, mpeg_min, mpeg_max,
     [data.len() == (height - 1) * stride + 2 * width, stride >= 2 * width, stride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
 fn ff_detect_range16_neon(data: &[u8], stride: usize, width: usize, height: usize, mpeg_min: i32, mpeg_max: i32);
 
-#[bums::check_mem_safe("vf_colordetect_neon.S", color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
+#[bums::check_mem_safe("vf_colordetect_neon.S", symbol = "ff_detect_range16_neon", data.as_ptr(), stride, width, height, mpeg_min, mpeg_max,
+    [data.len() == (height - 1) * stride + 2 * width + 14, stride >= 2 * width, stride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
+fn ff_detect_range16_neon_padded(data: &[u8], stride: usize, width: usize, height: usize, mpeg_min: i32, mpeg_max: i32);
+
+#[bums::check_mem_safe("vf_colordetect_neon.S", rejects, color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
     [color.len() == (height - 1) * cstride + 1 * width, alpha.len() == (height - 1) * astride + 1 * width, cstride >= 1 * width, astride >= 1 * width,
      cstride <= 1073741824, astride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
 fn ff_detect_alpha_full_neon(color: &[u8], cstride: usize, alpha: &[u8], astride: usize, width: usize, height: usize, alpha_max: i32, mpeg_range: i32, offset: i32);
 
-#[bums::check_mem_safe("vf_colordetect_neon.S", color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
+#[bums::check_mem_safe("vf_colordetect_neon.S", symbol = "ff_detect_alpha_full_neon", color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
+    [color.len() == (height - 1) * cstride + 1 * width + 15, alpha.len() == (height - 1) * astride + 1 * width + 15, cstride >= 1 * width, astride >= 1 * width,
+     cstride <= 1073741824, astride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
+fn ff_detect_alpha_full_neon_padded(color: &[u8], cstride: usize, alpha: &[u8], astride: usize, width: usize, height: usize, alpha_max: i32, mpeg_range: i32, offset: i32);
+
+#[bums::check_mem_safe("vf_colordetect_neon.S", rejects, color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
     [color.len() == (height - 1) * cstride + 1 * width, alpha.len() == (height - 1) * astride + 1 * width, cstride >= 1 * width, astride >= 1 * width,
      cstride <= 1073741824, astride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
 fn ff_detect_alpha_limited_neon(color: &[u8], cstride: usize, alpha: &[u8], astride: usize, width: usize, height: usize, alpha_max: i32, mpeg_range: i32, offset: i32);
 
-#[bums::check_mem_safe("vf_colordetect_neon.S", color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
+#[bums::check_mem_safe("vf_colordetect_neon.S", symbol = "ff_detect_alpha_limited_neon", color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
+    [color.len() == (height - 1) * cstride + 1 * width + 15, alpha.len() == (height - 1) * astride + 1 * width + 15, cstride >= 1 * width, astride >= 1 * width,
+     cstride <= 1073741824, astride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
+fn ff_detect_alpha_limited_neon_padded(color: &[u8], cstride: usize, alpha: &[u8], astride: usize, width: usize, height: usize, alpha_max: i32, mpeg_range: i32, offset: i32);
+
+#[bums::check_mem_safe("vf_colordetect_neon.S", rejects, color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
     [color.len() == (height - 1) * cstride + 2 * width, alpha.len() == (height - 1) * astride + 2 * width, cstride >= 2 * width, astride >= 2 * width,
      cstride <= 1073741824, astride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
 fn ff_detect_alpha16_full_neon(color: &[u8], cstride: usize, alpha: &[u8], astride: usize, width: usize, height: usize, alpha_max: i32, mpeg_range: i32, offset: i32);
 
-#[bums::check_mem_safe("vf_colordetect_neon.S", color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
+#[bums::check_mem_safe("vf_colordetect_neon.S", symbol = "ff_detect_alpha16_full_neon", color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
+    [color.len() == (height - 1) * cstride + 2 * width + 14, alpha.len() == (height - 1) * astride + 2 * width + 14, cstride >= 2 * width, astride >= 2 * width,
+     cstride <= 1073741824, astride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
+fn ff_detect_alpha16_full_neon_padded(color: &[u8], cstride: usize, alpha: &[u8], astride: usize, width: usize, height: usize, alpha_max: i32, mpeg_range: i32, offset: i32);
+
+#[bums::check_mem_safe("vf_colordetect_neon.S", rejects, color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
     [color.len() == (height - 1) * cstride + 2 * width, alpha.len() == (height - 1) * astride + 2 * width, cstride >= 2 * width, astride >= 2 * width,
      cstride <= 1073741824, astride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
 fn ff_detect_alpha16_limited_neon(color: &[u8], cstride: usize, alpha: &[u8], astride: usize, width: usize, height: usize, alpha_max: i32, mpeg_range: i32, offset: i32);
+
+#[bums::check_mem_safe("vf_colordetect_neon.S", symbol = "ff_detect_alpha16_limited_neon", color.as_ptr(), cstride, alpha.as_ptr(), astride, width, height, alpha_max, mpeg_range, offset,
+    [color.len() == (height - 1) * cstride + 2 * width + 14, alpha.len() == (height - 1) * astride + 2 * width + 14, cstride >= 2 * width, astride >= 2 * width,
+     cstride <= 1073741824, astride <= 1073741824, width >= 1, width <= 16384, height >= 1, height <= 16384])]
+fn ff_detect_alpha16_limited_neon_padded(color: &[u8], cstride: usize, alpha: &[u8], astride: usize, width: usize, height: usize, alpha_max: i32, mpeg_range: i32, offset: i32);
 
 #[bums::check_mem_safe("vf_bwdif_neon.S", dst.as_mut_ptr(), prev.as_ptr().add(4 * s), cur.as_ptr().add(4 * s), next.as_ptr().add(4 * s), w,
     prefs, mrefs, prefs2, mrefs2, prefs3, mrefs3, prefs4, mrefs4, parity, clip_max,

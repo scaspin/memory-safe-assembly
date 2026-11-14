@@ -66,10 +66,13 @@ with 32-bit arguments each: rav1d 40/40, ffmpeg 40/40 (epel_uni_w_h32_8 with --m
 - [ ] ffmpeg hevc epel/qpel_uni_w_h32_8 pass the 4 GB cap of bums-check (verified with --mem-gb 10); qpel_hv24_8_i8mm, curve25519_x25519_byte_alt and rav1d fguv_32x32_422_8bpc / wiener_filter5 sit at the timeout
 - [ ] chunks_counted_by_a_clamped_length_are_bounded_by_the_clamp: no relational invariant for a pointer stepped by a fresh `min`
 - [ ] sha1_block_data_order_avx2: a loop with two back edges
-- [ ] yuv2rgb (64) and the remaining ffmpeg FAILs (59) are untriaged
+- [x] yuv2rgb (64) and the remaining ffmpeg FAILs (59) are untriaged (2026-11-13: every FAIL is a real over-read or dead-code bug, recorded as `rejects` + `_padded`/`_from_64` pairs; see README "Bugs found")
+- [ ] ffmpeg h264 `idct_add8/add16/add16intra`: 3^8 paths (skip / dc_add / add call per sub-block); needs a post-call state join at the loop head
 
 ## Findings to report upstream
 
 - [ ] FFmpeg libswresample `conv_fltp_to_s16_nch_neon`: the C wrapper passes an uninitialised `channels`
-- [ ] FFmpeg SBR `hf_apply_noise`: one entry past the row when `kx + m_max == 64` and `m_max` is odd (needs a reproducer)
+- [ ] FFmpeg SBR `hf_apply_noise`: odd `m_max` reads and rewrites one complex entry past the row end (confirmed in the asm, 2026-11-13; benign because the cell is a low-band bin)
+- [ ] FFmpeg `ff_hevc_put_hevc_qpel_bi_h24_8_neon`: src2 advances 464 bytes per row pair instead of 256 (dead code: width 24 dispatches to h12)
+- [ ] FFmpeg `ff_tx_fft_sr{,_ns}_float_neon`: length 32 returns through a bare `ret` without the epilogue (dead: registered for 64..131072)
 - [ ] dav1d `save_tmvs_neon`: 8-byte load of the 7-byte `mfmv_sign`

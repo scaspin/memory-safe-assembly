@@ -88,13 +88,21 @@ fn ff_vp9_avg_regular32_v_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16
     [dst.len() == (h - 1) * dst_stride + 32, src.len() == (h - 1 + 7) * src_stride + 32, dst_stride >= 32, src_stride >= 32, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 72, mx <= 15, my <= 15])]
 fn ff_vp9_avg_regular32_v_neon(dst: &mut [u8], dst_stride: usize, src: &[u8], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_avg_regular4_h_10_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_avg_regular4_h_10_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_avg_regular4_h_10_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_avg_regular4_h_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_avg_regular4_h_12_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_avg_regular4_h_12_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
 #[bums::check_mem_safe("vp9mc_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride + 4, src.len() == (h - 1 + 0) * src_stride + 12, dst_stride >= 4, src_stride >= 11, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15])]
@@ -208,13 +216,21 @@ fn ff_vp9_avg_sharp32_v_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16],
     [dst.len() == (h - 1) * dst_stride + 32, src.len() == (h - 1 + 7) * src_stride + 32, dst_stride >= 32, src_stride >= 32, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 72, mx <= 15, my <= 15])]
 fn ff_vp9_avg_sharp32_v_neon(dst: &mut [u8], dst_stride: usize, src: &[u8], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_avg_sharp4_h_10_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_avg_sharp4_h_10_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_avg_sharp4_h_10_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_avg_sharp4_h_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_avg_sharp4_h_12_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_avg_sharp4_h_12_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
 #[bums::check_mem_safe("vp9mc_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride + 4, src.len() == (h - 1 + 0) * src_stride + 12, dst_stride >= 4, src_stride >= 11, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15])]
@@ -328,13 +344,21 @@ fn ff_vp9_avg_smooth32_v_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16]
     [dst.len() == (h - 1) * dst_stride + 32, src.len() == (h - 1 + 7) * src_stride + 32, dst_stride >= 32, src_stride >= 32, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 72, mx <= 15, my <= 15])]
 fn ff_vp9_avg_smooth32_v_neon(dst: &mut [u8], dst_stride: usize, src: &[u8], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_avg_smooth4_h_10_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_avg_smooth4_h_10_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_avg_smooth4_h_10_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_avg_smooth4_h_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_avg_smooth4_h_12_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_avg_smooth4_h_12_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
 #[bums::check_mem_safe("vp9mc_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride + 4, src.len() == (h - 1 + 0) * src_stride + 12, dst_stride >= 4, src_stride >= 11, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15])]
@@ -832,13 +856,21 @@ fn ff_vp9_put_regular32_v_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16
     [dst.len() == (h - 1) * dst_stride + 32, src.len() == (h - 1 + 7) * src_stride + 32, dst_stride >= 32, src_stride >= 32, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 72, mx <= 15, my <= 15])]
 fn ff_vp9_put_regular32_v_neon(dst: &mut [u8], dst_stride: usize, src: &[u8], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_put_regular4_h_10_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_put_regular4_h_10_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_put_regular4_h_10_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_put_regular4_h_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_put_regular4_h_12_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_put_regular4_h_12_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
 #[bums::check_mem_safe("vp9mc_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride + 4, src.len() == (h - 1 + 0) * src_stride + 12, dst_stride >= 4, src_stride >= 11, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15])]
@@ -952,13 +984,21 @@ fn ff_vp9_put_sharp32_v_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16],
     [dst.len() == (h - 1) * dst_stride + 32, src.len() == (h - 1 + 7) * src_stride + 32, dst_stride >= 32, src_stride >= 32, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 72, mx <= 15, my <= 15])]
 fn ff_vp9_put_sharp32_v_neon(dst: &mut [u8], dst_stride: usize, src: &[u8], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_put_sharp4_h_10_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_put_sharp4_h_10_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_put_sharp4_h_10_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_put_sharp4_h_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_put_sharp4_h_12_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_put_sharp4_h_12_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
 #[bums::check_mem_safe("vp9mc_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride + 4, src.len() == (h - 1 + 0) * src_stride + 12, dst_stride >= 4, src_stride >= 11, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15])]
@@ -1072,13 +1112,21 @@ fn ff_vp9_put_smooth32_v_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16]
     [dst.len() == (h - 1) * dst_stride + 32, src.len() == (h - 1 + 7) * src_stride + 32, dst_stride >= 32, src_stride >= 32, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 72, mx <= 15, my <= 15])]
 fn ff_vp9_put_smooth32_v_neon(dst: &mut [u8], dst_stride: usize, src: &[u8], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_put_smooth4_h_10_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
-#[bums::check_mem_safe("vp9mc_16bpp_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_put_smooth4_h_10_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_put_smooth4_h_10_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", rejects, dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 12, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn ff_vp9_put_smooth4_h_12_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
+
+#[bums::check_mem_safe("vp9mc_16bpp_neon.S", symbol = "ff_vp9_put_smooth4_h_12_neon", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride / 2 + 3), src_stride, h, mx, my,
+    [dst.len() == (h - 1) * dst_stride / 2 + 4, src.len() == (h - 1 + 0) * src_stride / 2 + 16, dst_stride >= 8, src_stride >= 22, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
+fn ff_vp9_put_smooth4_h_12_neon_padded(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, h: usize, mx: usize, my: usize);
 
 #[bums::check_mem_safe("vp9mc_neon.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(0 * src_stride + 3), src_stride, h, mx, my,
     [dst.len() == (h - 1) * dst_stride + 4, src.len() == (h - 1 + 0) * src_stride + 12, dst_stride >= 4, src_stride >= 11, dst_stride <= 1073741824, src_stride <= 1073741824, h % 4 == 0, h >= 4, h <= 16, mx <= 15, my <= 15])]

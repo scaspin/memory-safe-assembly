@@ -134,6 +134,14 @@ pub trait MachineInstruction: Clone + Debug {
         true
     }
 
+    fn loaded_register(&self) -> Option<usize> {
+        None
+    }
+
+    fn fills_lanes_from(&self, _register: usize) -> bool {
+        false
+    }
+
     fn zero_test(&self) -> Option<(&'static str, &Self::Operand, &str)> {
         None
     }
@@ -199,6 +207,7 @@ pub trait Machine: Clone {
     fn set_unknown_flags(&mut self);
     fn fresh_index(&mut self) -> usize;
     fn substitute_symbol(&mut self, symbol: &str, value: &AbstractExpression);
+    fn allow_table_splits(&mut self, _allowed: bool) {}
     fn stack_pointer_at_return(&self) -> (RegisterValue, i64);
 
     fn check_stack_pointer_restored(&self, pc: usize) -> Result<(), String> {

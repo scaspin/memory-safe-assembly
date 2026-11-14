@@ -230,6 +230,31 @@ impl MachineInstruction for Instruction {
                 .any(|operand| operand_mentions(operand, register))
     }
 
+    fn loaded_register(&self) -> Option<usize> {
+        if self.ty != InstructionType::Memory || self.overwritten_operands() != 1 {
+            return None;
+        }
+        match self.operands.first() {
+            Some(Operand::Register(prefix, number)) => general_register_index(prefix, *number),
+            _ => None,
+        }
+    }
+
+    fn fills_lanes_from(&self, register: usize) -> bool {
+        let lane_fill = self.ty == InstructionType::SIMDManagement
+            && matches!(self.opcode.as_str(), "dup" | "ins" | "mov");
+        match self.operands.split_first() {
+            Some((destination, sources)) if lane_fill => {
+                vector_index(destination).is_some()
+                    && !operand_mentions(destination, register)
+                    && sources
+                        .iter()
+                        .any(|source| operand_mentions(source, register))
+            }
+            _ => false,
+        }
+    }
+
     fn zero_test(&self) -> Option<(&'static str, &Operand, &str)> {
         let op = match self.opcode.as_str() {
             "cbz" => "==",
@@ -470,6 +495,10 @@ impl Machine for ARMCORTEXA {
 
     fn substitute_symbol(&mut self, symbol: &str, value: &AbstractExpression) {
         ARMCORTEXA::substitute_symbol(self, symbol, value)
+    }
+
+    fn allow_table_splits(&mut self, allowed: bool) {
+        self.table_splits_allowed = allowed;
     }
 
     fn stack_pointer_at_return(&self) -> (RegisterValue, i64) {

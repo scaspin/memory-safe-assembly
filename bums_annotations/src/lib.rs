@@ -27,9 +27,54 @@ impl Parse for CallColon {
 struct AttributeList {
     filename: LitStr,
     _separator: Option<Token![,]>,
-    red_zone: Option<LitInt>,
-    abi: Option<LitStr>,
+    options: AttributeOptions,
     argument_list: Punctuated<Expr, Token![,]>,
+}
+
+#[derive(Debug, Default)]
+struct AttributeOptions {
+    red_zone: Option<LitInt>,
+    symbol: Option<LitStr>,
+    abi: Option<LitStr>,
+    rejects: bool,
+}
+
+const REJECTS_BUT_VERIFIED: &str = "is marked rejects, so the checker must fail it, but it verified: \
+     either the assembly no longer reads past what the annotation grants, or the checker lost the over-read";
+
+fn parse_options(input: ParseStream) -> Result<AttributeOptions> {
+    let mut options = AttributeOptions::default();
+    loop {
+        let Ok(name) = input.fork().parse::<Ident>() else {
+            return Ok(options);
+        };
+        let assigned = input.peek2(Token![=]) && !input.peek2(Token![==]);
+        let flag_alone = input.peek2(Token![,]);
+        let label = name.to_string();
+        match label.as_str() {
+            "red_zone" | "symbol" | "abi" if assigned => {
+                input.parse::<Ident>()?;
+                input.parse::<Token![=]>()?;
+                let repeated = match label.as_str() {
+                    "red_zone" => options.red_zone.replace(input.parse()?).is_some(),
+                    "symbol" => options.symbol.replace(input.parse()?).is_some(),
+                    _ => options.abi.replace(input.parse()?).is_some(),
+                };
+                if repeated {
+                    return Err(syn::Error::new_spanned(
+                        name,
+                        format!("{label} is given twice"),
+                    ));
+                }
+            }
+            "rejects" if flag_alone => {
+                input.parse::<Ident>()?;
+                options.rejects = true;
+            }
+            _ => return Ok(options),
+        }
+        input.parse::<Option<Token![,]>>()?;
+    }
 }
 
 const APPLE_ARM64_RED_ZONE: i64 = 128;
@@ -37,33 +82,12 @@ const RED_ZONE_NEEDS_APPLE: &str =
     "red_zone relies on the Apple arm64 ABI and is accepted only for an Apple target";
 const RUST_ABI_NEEDS_APPLE: &str = "abi = \"Rust\" models the unstable Rust ABI as the pinned rustc 1.93 lowers it, which was confirmed only for Apple targets";
 
-fn named_option(input: ParseStream) -> Option<String> {
-    let name = input.fork().parse::<Ident>().ok()?.to_string();
-    (matches!(name.as_str(), "red_zone" | "abi") && input.peek2(Token![=])).then_some(name)
-}
-
 impl Parse for AttributeList {
     fn parse(input: ParseStream) -> Result<Self> {
         let filename = input.parse()?;
         let _separator = input.parse()?;
-        let mut red_zone = None;
-        let mut abi: Option<LitStr> = None;
-        while let Some(name) = named_option(input) {
-            let ident: Ident = input.parse()?;
-            input.parse::<Token![=]>()?;
-            let repeated = match name.as_str() {
-                "red_zone" => red_zone.replace(input.parse()?).is_some(),
-                _ => abi.replace(input.parse()?).is_some(),
-            };
-            if repeated {
-                return Err(syn::Error::new_spanned(
-                    ident,
-                    format!("{name} is given twice"),
-                ));
-            }
-            input.parse::<Option<Token![,]>>()?;
-        }
-        if let Some(abi) = &abi
+        let options = parse_options(input)?;
+        if let Some(abi) = &options.abi
             && !matches!(abi.value().as_str(), "C" | "Rust")
         {
             return Err(syn::Error::new_spanned(
@@ -74,8 +98,7 @@ impl Parse for AttributeList {
         Ok(Self {
             filename,
             _separator,
-            red_zone,
-            abi,
+            options,
             argument_list: punctuated::Punctuated::<Expr, Token![,]>::parse_terminated(input)?,
         })
     }
@@ -1716,6 +1739,8 @@ fn spelled(tokens: TokenStream) -> String {
 
 pub struct Annotation {
     pub label: String,
+    pub symbol: String,
+    pub rejects: bool,
     pub asm_file: String,
     pub diagnostics: Vec<String>,
     pub expansion: TokenStream,
@@ -1745,6 +1770,7 @@ pub struct Annotation {
 
 pub struct Verdict {
     pub failures: Vec<String>,
+    pub rejected: Vec<String>,
     pub findings: Vec<String>,
     pub diagnostics: Vec<String>,
 }
@@ -1851,7 +1877,7 @@ pub fn read_program(path: &std::path::Path) -> std::io::Result<Vec<String>> {
 pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotation> {
     let vars: CallColon = syn::parse2(item)?;
     let mut attributes: AttributeList = syn::parse2(attr)?;
-    let convention = match attributes.abi.as_ref().map(LitStr::value).as_deref() {
+    let convention = match attributes.options.abi.as_ref().map(LitStr::value).as_deref() {
         Some("Rust") => CallingConvention::Rust,
         _ => CallingConvention::C,
     };
@@ -1860,7 +1886,14 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
             return Err(syn::Error::new_spanned(&vars.item_fn.output, problem));
         }
     }
+    let symbol = attributes
+        .options
+        .symbol
+        .as_ref()
+        .map_or_else(|| vars.item_fn.ident.to_string(), LitStr::value);
+    let rejects = attributes.options.rejects;
     let red_zone = attributes
+        .options
         .red_zone
         .as_ref()
         .map(|bytes| {
@@ -2551,7 +2584,8 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         })
         .collect();
     let mut original_fn_call = vars.item_fn.clone();
-    if !unchecked_rows.is_empty()
+    if rejects
+        || !unchecked_rows.is_empty()
         || !unchecked_pointer_fields.is_empty()
         || !register_preconditions.is_empty()
     {
@@ -2576,6 +2610,7 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
         }
         _ => (quote! {}, quote! { #output }, quote! { #invocation }),
     };
+    let link_name = (vars.item_fn.ident != symbol).then(|| quote! { #[link_name = #symbol] });
     let unsafe_block: Stmt = parse_quote! {
         #original_fn_call {
 
@@ -2586,6 +2621,7 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
             #returned_array_declaration
 
             unsafe extern #extern_abi {
+                #link_name
                 #extern_fn #extern_output;
             }
             unsafe {
@@ -2612,6 +2648,8 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
     }
     Ok(Annotation {
         label: vars.item_fn.ident.to_string(),
+        symbol,
+        rejects,
         asm_file: attributes.filename.value(),
         diagnostics,
         expansion: quote! {
@@ -3330,7 +3368,7 @@ impl Annotation {
             }
             log::info!(target: "bums_macros", "checking {label}");
             let started = std::time::Instant::now();
-            let res = engine.start(label.clone());
+            let res = engine.start(self.symbol.clone());
             log::info!(target: "bums_macros", "{label}: {:.1}s, {}", started.elapsed().as_secs_f64(), if res.is_ok() { "verified" } else { "failed" });
             let res = res.and_then(|ok| {
                 let unread = engine.unread_element_facts();
@@ -3382,8 +3420,14 @@ impl Annotation {
                 distinct_diagnostics.push(diagnostic);
             }
         }
+        let (failures, rejected) = match (self.rejects, failures.is_empty()) {
+            (false, _) => (failures, Vec::new()),
+            (true, true) => (vec![format!("{label} {REJECTS_BUT_VERIFIED}")], Vec::new()),
+            (true, false) => (Vec::new(), failures),
+        };
         Ok(Verdict {
             failures,
+            rejected,
             findings,
             diagnostics: distinct_diagnostics,
         })
@@ -3498,6 +3542,55 @@ mod tests {
         let expansion = without_spaces(&annotation.expansion.to_string());
         assert!(
             expansion.contains("#[cfg(not(target_vendor=\"apple\"))]compile_error!"),
+            "{expansion}"
+        );
+    }
+
+    #[test]
+    fn a_rejecting_annotation_must_fail_and_names_its_symbol() {
+        let program: Vec<String> = ["over_read:", "ldr q0, [x0]", "ret"]
+            .iter()
+            .map(|line| line.to_string())
+            .collect();
+        let verdict_for = |attr: TokenStream, item: TokenStream| {
+            let annotation = parse_annotation(attr, item).expect("annotation parses");
+            assert_eq!(annotation.symbol, "over_read");
+            annotation.check(&program).expect("checks")
+        };
+
+        let short = verdict_for(
+            quote! { "f.S", symbol = "over_read", rejects, x.as_ptr() },
+            quote! { fn over_read_unpadded(x: &[u8; 12]); },
+        );
+        assert!(short.failures.is_empty(), "{:?}", short.failures);
+        assert!(!short.rejected.is_empty());
+
+        let padded = verdict_for(
+            quote! { "f.S", symbol = "over_read", rejects, x.as_ptr() },
+            quote! { fn over_read_padded(x: &[u8; 16]); },
+        );
+        assert!(padded.rejected.is_empty());
+        assert!(padded.failures[0].contains("is marked rejects"));
+
+        let rejecting = parse_annotation(
+            quote! { "f.S", symbol = "over_read", rejects, x.as_ptr() },
+            quote! { fn over_read_unpadded(x: &[u8; 12]); },
+        )
+        .expect("annotation parses");
+        let wrapper = without_spaces(&rejecting.expansion.to_string());
+        assert!(
+            wrapper.starts_with("unsafefnover_read_unpadded"),
+            "{wrapper}"
+        );
+
+        let annotation = parse_annotation(
+            quote! { "f.S", symbol = "over_read", x.as_ptr() },
+            quote! { fn over_read_padded(x: &[u8; 16]); },
+        )
+        .expect("annotation parses");
+        let expansion = without_spaces(&annotation.expansion.to_string());
+        assert!(
+            expansion.contains("#[link_name=\"over_read\"]"),
             "{expansion}"
         );
     }

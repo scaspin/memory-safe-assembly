@@ -21,11 +21,16 @@ out = ['''//! libavcodec/aarch64 vp9mc*, vp9itxfm*, vp9lpf* (8, 10 and 12 bit).
 //! h filters a vertical edge (samples left and right), v a horizontal one.
 use bums_macros as bums;
 ''']
-def emit(name, args, pre, sig):
-    out.append(f'''#[bums::check_mem_safe("{ex[name]}", {", ".join(args)},
+def emit(name, args, pre, sig, options=(), rust_name=None):
+    head = ", ".join([f'"{ex[name]}"', *options, *args])
+    out.append(f'''#[bums::check_mem_safe({head},
     [{", ".join(pre)}])]
-fn {name}({sig});
+fn {rust_name or name}({sig});
 ''')
+def emit_padding_pair(name, args, exact, padded, sig):
+    emit(name, args, exact, sig, options=["rejects"])
+    emit(name, args, padded, sig, options=[f'symbol = "{name}"'], rust_name=f"{name}_padded")
+HIGH_DEPTH_4_H_EXTRA_READ = 4
 for name in sorted(ex):
     m = re.match(r"ff_vp9_(copy|avg)(\d+)(_16)?_(neon|aarch64)$", name)
     if m:
@@ -48,12 +53,17 @@ for name in sorted(ex):
         bv, av = (3, 4) if d == "v" else (0, 0)
         hmax = 2 * sz + 8 if sz < 64 else 72
         src = f"src.as_ptr().add({bv} * {row('src_stride')} + {bh})"
-        emit(name, ["dst.as_mut_ptr()", "dst_stride", src, "src_stride", "h", "mx", "my"],
-             [f"dst.len() == (h - 1) * {row('dst_stride')} + {sz}",
-              f"src.len() == (h - 1 + {bv + av}) * {row('src_stride')} + {sz + bh + ah + (1 if d == 'h' else 0)}",
+        last_row = sz + bh + ah + (1 if d == 'h' else 0)
+        args = ["dst.as_mut_ptr()", "dst_stride", src, "src_stride", "h", "mx", "my"]
+        sig = f"dst: &mut [{ty}], dst_stride: usize, src: &[{ty}], src_stride: usize, h: usize, mx: usize, my: usize"
+        pre = lambda tail: [f"dst.len() == (h - 1) * {row('dst_stride')} + {sz}",
+              f"src.len() == (h - 1 + {bv + av}) * {row('src_stride')} + {tail}",
               f"dst_stride >= {sz * el}", f"src_stride >= {(sz + bh + ah) * el}", "dst_stride <= 1073741824", "src_stride <= 1073741824",
-              "h % 4 == 0", "h >= 4", f"h <= {hmax}", "mx <= 15", "my <= 15"] + (["dst_stride % 2 == 0", "src_stride % 2 == 0"] if el == 2 else []),
-             f"dst: &mut [{ty}], dst_stride: usize, src: &[{ty}], src_stride: usize, h: usize, mx: usize, my: usize")
+              "h % 4 == 0", "h >= 4", f"h <= {hmax}", "mx <= 15", "my <= 15"] + (["dst_stride % 2 == 0", "src_stride % 2 == 0"] if el == 2 else [])
+        if bd and sz == 4 and d == "h":
+            emit_padding_pair(name, args, pre(last_row), pre(last_row + HIGH_DEPTH_4_H_EXTRA_READ), sig)
+        else:
+            emit(name, args, pre(last_row), sig)
         continue
     m = re.match(r"ff_vp9_(\w+?)_(\w+?)_(\d+)x\d+_add(?:_(\d+))?_neon$", name)
     if m:

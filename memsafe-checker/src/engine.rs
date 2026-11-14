@@ -326,6 +326,7 @@ impl ReturnCondition {
 struct SuspendedCall {
     resume: usize,
     loops: Vec<ActiveLoop>,
+    rounds: BTreeMap<usize, RoundEntry>,
     history_len: usize,
 }
 
@@ -1221,6 +1222,18 @@ impl<M: Machine> Engine<M> {
                         Ok(Step::Continue(dest))
                     }
                     ExecuteReturnType::Split(cases) => {
+                        if self.loaded_value_only_fills_lanes(pc) {
+                            self.computer.allow_table_splits(false);
+                            let unsplit = self.computer.execute(pc, &instruction);
+                            self.computer.allow_table_splits(true);
+                            if let Ok(ExecuteReturnType::Next) = unsplit {
+                                log::info!(
+                                    "line {pc} loads a table entry that only fills vector lanes; not splitting its {} cases",
+                                    cases.len()
+                                );
+                                return Ok(Step::Continue(pc + 1));
+                            }
+                        }
                         self.split_cases(pc, cases, depth)?;
                         Ok(Step::Stop)
                     }

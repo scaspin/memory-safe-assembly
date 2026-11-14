@@ -16,6 +16,7 @@ const TARGET_VENDOR_VARIABLE: &str = "BUMS_CHECK_TARGET_VENDOR";
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Status {
     Verified,
+    Rejected,
     Fail,
     Timeout,
     Memcap,
@@ -26,6 +27,7 @@ impl Status {
     fn name(self) -> &'static str {
         match self {
             Status::Verified => "verified",
+            Status::Rejected => "rejected",
             Status::Fail => "FAIL",
             Status::Timeout => "TIMEOUT",
             Status::Memcap => "MEMCAP",
@@ -34,9 +36,14 @@ impl Status {
     }
 
     fn from_name(name: &str) -> Option<Status> {
-        [Status::Verified, Status::Fail, Status::Error]
-            .into_iter()
-            .find(|status| status.name() == name)
+        [
+            Status::Verified,
+            Status::Rejected,
+            Status::Fail,
+            Status::Error,
+        ]
+        .into_iter()
+        .find(|status| status.name() == name)
     }
 }
 
@@ -136,6 +143,9 @@ fn evaluate(asm_file: &Path, attr: &str, item: &str) -> (Status, String) {
     if !verdict.failures.is_empty() {
         return (Status::Fail, verdict.failures.join("; "));
     }
+    if !verdict.rejected.is_empty() {
+        return (Status::Rejected, verdict.rejected.join("; "));
+    }
     (Status::Verified, String::new())
 }
 
@@ -144,7 +154,7 @@ fn static_size(annotation: &Found, asm_dir: &Path) -> Option<usize> {
         bums_annotations::parse_annotation(annotation.attr.clone(), annotation.item.clone())
             .ok()?;
     let program = bums_annotations::read_program(&asm_dir.join(&annotation.asm_file)).ok()?;
-    bums::engine::AnyEngine::new(program).static_size(&parsed.label)
+    bums::engine::AnyEngine::new(program).static_size(&parsed.symbol)
 }
 
 fn host_triple() -> Result<String, String> {

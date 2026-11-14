@@ -42,8 +42,10 @@ target/release/bums-check ffmpeg-playground --features vp9 --filter '^ff_vp9_' -
 Options: `--all-features`, `--no-default-features`, `--asm-dir DIR` (skip the build script),
 `--jobs N` (default cores/2), `--timeout SECS` (300), `--mem-gb G` (4, resident per child),
 `--skip-file FILE` (function names, e.g. known timeouts), `--list`. Statuses are `verified`,
-`FAIL`, `TIMEOUT`, `MEMCAP`, `ERROR` (panic, bad annotation, missing asm); the exit code is
-nonzero on any FAIL or ERROR. `RUST_LOG=bums=info` goes into the per-function logs.
+`rejected` (a `rejects` annotation that failed as it must), `FAIL`, `TIMEOUT`, `MEMCAP`, `ERROR`
+(panic, bad annotation, missing asm); the exit code is nonzero on any FAIL or ERROR. An
+over-read that relies on caller padding gets a `rejects` annotation with the exact contract plus
+a `<name>_padded` twin using `symbol = "<name>"`; never relax the exact one in place. `RUST_LOG=bums=info` goes into the per-function logs.
 
 Verdicts from a real build only appear with `--release`; debug builds turn them into
 proc-macro warnings that stable Rust drops. rav1d-playground/asm-status.tsv and

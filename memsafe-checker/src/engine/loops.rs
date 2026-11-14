@@ -1417,6 +1417,7 @@ impl<M: Machine> Engine<M> {
             &cycle.history,
             &mut observation.current,
         );
+        self.simplify_anchors(&attempt.invariants, &mut observation.current);
         let (entry_state, current_state) = (&observation.entry, &observation.current);
         let (previous, branch_decision) = (&cycle.previous, cycle.continues);
         let id = attempt.id;
@@ -1763,6 +1764,9 @@ impl<M: Machine> Engine<M> {
         }
         for fact in summary.facts.iter().filter_map(summary_fact_to_ast) {
             self.computer.solver().assert(fact);
+        }
+        for lemma in self.counter_stride_products(&summary) {
+            self.computer.solver().assert(&lemma);
         }
         for fact in self
             .select_definitions_in(&observation.staying)
@@ -2391,6 +2395,10 @@ impl<M: Machine> Engine<M> {
                 {
                     if let Some(value) = self.pinned_value(step) {
                         LoopInvariant::Linear(AbstractExpression::Immediate(value))
+                    } else if let simpler = self.simplified_step(step.clone())
+                        && simpler != *step
+                    {
+                        LoopInvariant::Linear(simpler)
                     } else {
                         self.bounded_step(step)
                             .map_or_else(|| invariant.clone(), LoopInvariant::AtMost)
@@ -2568,6 +2576,7 @@ impl<M: Machine> Engine<M> {
                     &settled_after,
                     &inner_exit_symbols,
                 ) {
+                    let step = self.simplified_step(step);
                     log::info!("x{i} steps by {step} once inner loop counters are settled");
                     *invariant = LoopInvariant::Linear(step);
                     break;
@@ -2702,7 +2711,6 @@ impl<M: Machine> Engine<M> {
         closed: &[String],
     ) -> Option<RegisterValue> {
         let first = visits.first()?;
-        let cleaned = Affine::of_register(first)?.without_terms_tied_to(closed);
         let with_kind_of_first = |affine: &Affine| {
             let mut register = affine.to_register();
             if register.base.is_some() {
@@ -2710,10 +2718,21 @@ impl<M: Machine> Engine<M> {
             }
             register
         };
-        let anchor = with_kind_of_first(&cleaned);
-        if !self.proves_step(&anchor, first, &AbstractExpression::Immediate(0)) {
-            return None;
-        }
+        let equals_first = |candidate: &Affine| {
+            self.proves_step(
+                &with_kind_of_first(candidate),
+                first,
+                &AbstractExpression::Immediate(0),
+            )
+        };
+        let cleaned = self
+            .with_inner_counters_settled_exactly(first)
+            .filter(|settled| equals_first(settled))
+            .or_else(|| {
+                Affine::of_register(first)
+                    .map(|affine| affine.without_terms_tied_to(closed))
+                    .filter(|dropped| equals_first(dropped))
+            })?;
         if !visits
             .windows(2)
             .all(|pair| self.proves_step(&pair[0], &pair[1], step))
@@ -2726,6 +2745,24 @@ impl<M: Machine> Engine<M> {
             step.clone(),
         ))?;
         Some(with_kind_of_first(&cleaned.combine(&travelled, 1)?))
+    }
+
+    fn with_inner_counters_settled_exactly(&self, register: &RegisterValue) -> Option<Affine> {
+        let mut settled = value_of(register);
+        let mut changed = false;
+        for (counter, values) in &self.loops.closed_counters {
+            if let (AbstractExpression::Abstract(name), [value]) = (counter, values.as_slice())
+                && settled.contains(name)
+            {
+                settled = with_counter_at(&settled, name, value);
+                changed = true;
+            }
+        }
+        if !changed {
+            return None;
+        }
+        let affine = Affine::of(&exact_arithmetic_candidate(&settled)?)?;
+        (!affine.mentions_a_loop_counter()).then_some(affine)
     }
 
     fn proven_settled_step(
@@ -3349,6 +3386,31 @@ impl<M: Machine> Engine<M> {
         true
     }
 
+    pub(super) fn loaded_value_only_fills_lanes(&self, pc: usize) -> bool {
+        let code = &self.program.code;
+        let Some(register) = code.get(pc).and_then(|load| load.loaded_register()) else {
+            return false;
+        };
+        let mut next = pc + 1;
+        while let Some(instruction) = code.get(next) {
+            if !instruction.is_straight_line() {
+                break;
+            }
+            if instruction.fills_lanes_from(register) {
+                next += 1;
+                continue;
+            }
+            if instruction.overwrites_without_reading(register) {
+                return true;
+            }
+            if instruction.mentions(register) {
+                return false;
+            }
+            next += 1;
+        }
+        self.is_overwritten_along(vec![next], register, self.returning_ends_the_function())
+    }
+
     fn returning_ends_the_function(&self) -> bool {
         let has_calls = self
             .program
@@ -3779,9 +3841,11 @@ impl<M: Machine> Engine<M> {
             "suspended {} loop(s) across the call at line {pc}",
             loops.len()
         );
+        let rounds = std::mem::take(&mut self.loops.rounds);
         self.suspended.push(SuspendedCall {
             resume: pc + 1,
             loops,
+            rounds,
             history_len: self.jump_history.len(),
         });
     }
@@ -3798,6 +3862,7 @@ impl<M: Machine> Engine<M> {
             .truncate(call.history_len.min(self.jump_history.len()));
         log::info!("resumed {} loop(s) after the call", call.loops.len());
         self.loops.active = call.loops;
+        self.loops.rounds = call.rounds;
     }
 
     fn plausible(
@@ -4030,6 +4095,224 @@ impl<M: Machine> Engine<M> {
             .is_some_and(|c| self.computer.solver().check_timed(&[c.not()]) == SatResult::Unsat)
     }
 
+    fn simplified_step(&self, step: AbstractExpression) -> AbstractExpression {
+        if matches!(
+            step,
+            AbstractExpression::Immediate(_) | AbstractExpression::Abstract(_)
+        ) {
+            return step;
+        }
+        let lone_symbols: BTreeSet<String> = step
+            .get_abstracts()
+            .into_iter()
+            .filter(|name| !LoopSymbol::names_any(name))
+            .collect();
+        let mut candidates: Vec<AbstractExpression> = lone_symbols
+            .into_iter()
+            .map(AbstractExpression::Abstract)
+            .collect();
+        let exact = exact_arithmetic_candidate(&step);
+        candidates.extend(exact.clone());
+        candidates.dedup();
+        let simpler = candidates
+            .into_iter()
+            .find(|candidate| {
+                *candidate != step
+                    && self.proves_within_budget(AbstractComparison::new(
+                        "==",
+                        step.clone(),
+                        candidate.clone(),
+                    ))
+            })
+            .or_else(|| {
+                let exact = exact?;
+                let offset =
+                    self.pinned_value(&generate_expression("-", step.clone(), exact.clone()))?;
+                let pinned_offset = Affine {
+                    constant: offset,
+                    terms: Vec::new(),
+                };
+                let corrected = Affine::of(&exact)?.combine(&pinned_offset, 1)?;
+                Some(corrected.to_expression())
+            });
+        let candidate = simpler.unwrap_or_else(|| step.clone());
+        let candidate = self.with_pinned_atoms(candidate);
+        if candidate != step {
+            log::info!("step {step} is exactly {candidate}");
+        }
+        candidate
+    }
+
+    fn with_pinned_atoms(&self, e: AbstractExpression) -> AbstractExpression {
+        let Some(affine) = Affine::of(&e) else {
+            return e;
+        };
+        if affine.terms.len() < 2 {
+            return e;
+        }
+        let mut pinned_any = false;
+        let mut constant = affine.constant;
+        let mut kept = Vec::new();
+        for (atom, coefficient) in affine.terms {
+            let fixed = (!atom
+                .get_abstracts()
+                .iter()
+                .any(|s| LoopSymbol::names_any(s)))
+            .then(|| self.pinned_value(&atom))
+            .flatten()
+            .and_then(|value| value.checked_mul(coefficient))
+            .and_then(|scaled| constant.checked_add(scaled));
+            match fixed {
+                Some(total) => {
+                    constant = total;
+                    pinned_any = true;
+                }
+                None => kept.push((atom, coefficient)),
+            }
+        }
+        if !pinned_any {
+            return e;
+        }
+        Affine {
+            constant,
+            terms: kept,
+        }
+        .to_expression()
+    }
+
+    fn counter_stride_products(&self, summary: &Summary) -> Vec<ast::Bool> {
+        let AbstractExpression::Abstract(counter) = summary.counter.expression() else {
+            return Vec::new();
+        };
+        let mut strides: Vec<AbstractExpression> = Vec::new();
+        for invariant in &summary.invariants {
+            if let LoopInvariant::Linear(step) = invariant
+                && !matches!(step, AbstractExpression::Immediate(_))
+                && !step
+                    .get_abstracts()
+                    .iter()
+                    .any(|s| LoopSymbol::names_any(s))
+                && !strides.contains(step)
+            {
+                strides.push(step.clone());
+            }
+        }
+        if strides.is_empty() {
+            return Vec::new();
+        }
+        let zero = AbstractExpression::Immediate(0);
+        let mut lemmas = Vec::new();
+        for fact in &summary.facts {
+            let slack = match fact.op.as_str() {
+                ">" | ">=" => generate_expression("-", *fact.left.clone(), *fact.right.clone()),
+                "<" | "<=" => generate_expression("-", *fact.right.clone(), *fact.left.clone()),
+                _ => continue,
+            };
+            let Some(unwrapped) = exact_arithmetic_candidate(&slack) else {
+                continue;
+            };
+            if !unwrapped.get_abstracts().contains(&counter)
+                || !self.proves_within_budget(AbstractComparison::new(
+                    "==",
+                    slack.clone(),
+                    unwrapped.clone(),
+                ))
+            {
+                continue;
+            }
+            let Some(slack_holds) = comparison_to_ast(AbstractComparison::new(
+                ">=",
+                unwrapped.clone(),
+                zero.clone(),
+            )) else {
+                continue;
+            };
+            for stride in &strides {
+                let product = generate_expression("*", unwrapped.clone(), stride.clone());
+                let (Some(stride_holds), Some(product_holds)) = (
+                    comparison_to_ast(AbstractComparison::new(">=", stride.clone(), zero.clone())),
+                    comparison_to_ast(AbstractComparison::new(">=", product, zero.clone())),
+                ) else {
+                    continue;
+                };
+                log::info!("{} slack {unwrapped} scales by stride {stride}", summary.id);
+                lemmas.push(ast::Bool::and(&[&slack_holds, &stride_holds]).implies(&product_holds));
+            }
+        }
+        lemmas
+    }
+
+    fn simplify_anchors(&self, invariants: &[LoopInvariant], current: &mut MachineState) {
+        for (i, invariant) in invariants.iter().enumerate() {
+            if !matches!(invariant, LoopInvariant::Linear(_)) {
+                continue;
+            }
+            let value = value_of(&current.0[i]);
+            let exact = mentions_a_quotient(&value)
+                .then(|| exact_arithmetic_candidate(&value))
+                .flatten()
+                .filter(|candidate| {
+                    *candidate != value
+                        && self.proves_within_budget(AbstractComparison::new(
+                            "==",
+                            value.clone(),
+                            candidate.clone(),
+                        ))
+                });
+            let simpler = exact.unwrap_or_else(|| value.clone());
+            let Some(affine) = Affine::of(&simpler) else {
+                continue;
+            };
+            let affine = self.with_parameter_residual_pinned(affine);
+            let candidate = affine.to_expression();
+            if candidate == value {
+                continue;
+            }
+            let mut anchored = affine.to_register();
+            if anchored.base.is_some() {
+                anchored.kind = current.0[i].kind.clone();
+            }
+            log::info!("x{i} anchored at {candidate}, exactly {value}");
+            current.0[i] = anchored;
+        }
+    }
+
+    fn with_parameter_residual_pinned(&self, affine: Affine) -> Affine {
+        let stays_symbolic = |atom: &AbstractExpression| {
+            atom.get_abstracts()
+                .iter()
+                .any(|s| LoopSymbol::names_any(s))
+                || self.computer.carries_region(&RegisterValue::new(
+                    RegisterKind::RegisterBase,
+                    Some(atom.clone()),
+                    0,
+                ))
+        };
+        let (kept, residual): (Vec<_>, Vec<_>) = affine
+            .terms
+            .iter()
+            .cloned()
+            .partition(|(atom, _)| stays_symbolic(atom));
+        if residual.is_empty() {
+            return affine;
+        }
+        let residual_expression = Affine {
+            constant: 0,
+            terms: residual,
+        }
+        .to_expression();
+        match self.pinned_value(&residual_expression) {
+            Some(pinned) => match affine.constant.checked_add(pinned) {
+                Some(constant) => Affine {
+                    constant,
+                    terms: kept,
+                },
+                None => affine,
+            },
+            None => affine,
+        }
+    }
+
     fn proves_within_budget(&self, fact: AbstractComparison) -> bool {
         comparison_to_ast(fact).is_some_and(|c| {
             refuted_within(
@@ -4112,14 +4395,42 @@ impl<M: Machine> Engine<M> {
         expression: &mut AbstractComparison,
     ) -> Option<(MachineState, Generalization)> {
         let invariants = self.pin_steps(&drift_of_registers(&previous.0, &current.0));
-        let mut unit =
-            invariants
-                .iter()
-                .zip(current.0.iter())
-                .find_map(|(invariant, register)| match invariant {
-                    LoopInvariant::Linear(step) if register.base.is_some() => Some(step.clone()),
-                    _ => None,
-                })?;
+        let (stack_pointer, _) = self.computer.stack_pointer_at_return();
+        let stack_moved = invariants
+            .iter()
+            .zip(current.0.iter())
+            .any(|(invariant, register)| {
+                *register == stack_pointer && *invariant != LoopInvariant::Fixed
+            });
+        if stack_moved {
+            log::info!("round declined: the stack pointer moved between visits");
+            return None;
+        }
+        let pointer_steps: Vec<&AbstractExpression> = invariants
+            .iter()
+            .zip(current.0.iter())
+            .filter_map(|(invariant, register)| match invariant {
+                LoopInvariant::Linear(step) if register.base.is_some() => Some(step),
+                _ => None,
+            })
+            .collect();
+        let first_step = (*pointer_steps.first()?).clone();
+        let common_divisor = pointer_steps
+            .iter()
+            .map(|step| match step {
+                AbstractExpression::Immediate(v) if *v != 0 => Some(v.unsigned_abs()),
+                _ => None,
+            })
+            .collect::<Option<Vec<u64>>>()
+            .and_then(|magnitudes| magnitudes.into_iter().reduce(greatest_common_divisor));
+        let mut unit = match (common_divisor, &first_step) {
+            (Some(divisor), AbstractExpression::Immediate(first))
+                if divisor != first.unsigned_abs() =>
+            {
+                AbstractExpression::Immediate(i64::try_from(divisor).ok()?)
+            }
+            _ => first_step,
+        };
         let zero = AbstractExpression::Immediate(0);
         if !self.proves(AbstractComparison::new(">=", unit.clone(), zero.clone())) {
             if !self.proves(AbstractComparison::new("<=", unit.clone(), zero.clone())) {
@@ -4139,7 +4450,15 @@ impl<M: Machine> Engine<M> {
             }
             let sign = match (invariant, &register.base) {
                 (LoopInvariant::Linear(step), Some(base)) if !is_narrowed(base) => {
-                    [1, -1].into_iter().find(|sign| {
+                    let multiple = match (step, &unit) {
+                        (AbstractExpression::Immediate(s), AbstractExpression::Immediate(u))
+                            if *u != 0 && *s != 0 && s % u == 0 && s / u != 1 && s / u != -1 =>
+                        {
+                            Some(s / u)
+                        }
+                        _ => None,
+                    };
+                    [1, -1].into_iter().chain(multiple).find(|sign| {
                         self.proves(AbstractComparison::new(
                             "==",
                             step.clone(),
@@ -4186,6 +4505,10 @@ impl<M: Machine> Engine<M> {
         if steps.is_empty() {
             return None;
         }
+        log::info!(
+            "{} round unit {unit}: multiples {steps:?}, free {free_registers:?}",
+            counter.name()
+        );
         let rewritten = |c: &AbstractComparison| -> Option<AbstractComparison> {
             Some(AbstractComparison::new(
                 &c.op,
@@ -4267,7 +4590,18 @@ impl<M: Machine> Engine<M> {
         };
         let moved =
             |i: usize| generate_expression("-", value_of(&next.0[i]), value_of(&generalized.0[i]));
-        let shift = generate_expression("*", AbstractExpression::Immediate(sign), moved(first));
+        let shift = match sign {
+            1 | -1 => generate_expression("*", AbstractExpression::Immediate(sign), moved(first)),
+            multiple => generate_expression(
+                "/",
+                generate_expression(
+                    "*",
+                    AbstractExpression::Immediate(multiple.signum()),
+                    moved(first),
+                ),
+                AbstractExpression::Immediate(multiple.abs()),
+            ),
+        };
         if !self.proves(AbstractComparison::new(
             ">=",
             shift.clone(),

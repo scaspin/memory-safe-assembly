@@ -1092,9 +1092,10 @@ impl ARMCORTEXA {
 
                             let width = access_width(&instruction.opcode, dst);
                             match self.table_load(&address, width) {
-                                memory::TableLoad::Split(cases) => {
+                                memory::TableLoad::Split(cases) if self.table_splits_allowed => {
                                     return Ok(ExecuteReturnType::Split(cases));
                                 }
+                                memory::TableLoad::Split(_) => (),
                                 memory::TableLoad::Concrete(entry) => address = entry,
                                 memory::TableLoad::NotATable => (),
                             }
