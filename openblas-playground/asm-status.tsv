@@ -1,0 +1,27 @@
+function	arch	status	seconds	note
+dsum_k	aarch64	verified	0.325	
+dasum_k	aarch64	verified	0.325	
+dmax_k	aarch64	verified	18.130	
+damax_k	aarch64	verified	18.245	
+dnrm2_k	aarch64	verified	0.315	
+zasum_k	aarch64	verified	0.318	
+ddot_k	aarch64	verified	0.430	
+sdot_k	aarch64	verified	0.426	
+zdotu_k	aarch64	verified	0.521	
+dcopy_k	aarch64	verified	0.563	
+drot_k	aarch64	verified	0.637	
+daxpy_k	aarch64	verified	0.535	
+saxpy_k	aarch64	verified	0.535	
+zaxpy_k	aarch64	verified	1.082	
+dswap_k	aarch64	verified	0.642	
+dscal_k	aarch64	verified	0.642	
+zscal_k	aarch64	verified	0.750	
+idamax_k	aarch64	verified	16.018	
+dasum_k	x86_64	verified	20.085	
+damax_k	x86_64	verified	124.495	slow pass
+dmax_k	x86_64	verified	133.562	slow pass
+dnrm2_k	x86_64	verified	0.425	
+zasum_k	x86_64	verified	2.010	
+zaxpy_k	x86_64	verified	46.891	
+dscal_k	x86_64	verified	30.592	
+idamax_k	x86_64	verified	377.137	slow pass
