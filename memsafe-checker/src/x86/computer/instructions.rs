@@ -648,6 +648,9 @@ impl X86_64 {
     }
 
     fn proves_within(&self, expression: &AbstractExpression, low: i64, high: i64) -> bool {
+        if syntactically_between(expression, low as i128, high as i128) {
+            return true;
+        }
         let Some(value) = expression_to_ast(expression.clone()) else {
             return false;
         };
@@ -810,12 +813,14 @@ impl X86_64 {
                                     v.offset & ((1i64 << (width * 8)) - 1)
                                 }
                             });
-                        let register_mask = [&src, &dst]
-                            .into_iter()
-                            .find(|v| {
-                                v.kind == RegisterKind::RegisterBase
-                                    && self.proves_within(&v.expression(), 0, i64::MAX)
+                        let register_mask = (m == "and")
+                            .then(|| {
+                                [&src, &dst].into_iter().find(|v| {
+                                    v.kind == RegisterKind::RegisterBase
+                                        && self.proves_within(&v.expression(), 0, i64::MAX)
+                                })
                             })
+                            .flatten()
                             .map(|v| v.expression());
                         let r = match (mask, register_mask) {
                             (Some(mask), _) if m == "and" => self.unknown_within(r, mask),

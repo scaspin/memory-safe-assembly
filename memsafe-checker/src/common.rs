@@ -2055,6 +2055,15 @@ fn syntactic_bounds(expression: &AbstractExpression) -> SyntacticBounds {
                 Some(modulus) => (Some(0), Some(modulus as i128 - 1)),
                 None => (None, None),
             },
+            "/" => match positive(right) {
+                Some(divisor) => match syntactic_bounds(left) {
+                    (Some(low), Some(high)) if low >= 0 => {
+                        (Some(low / divisor), Some(high / divisor))
+                    }
+                    _ => (None, None),
+                },
+                None => (None, None),
+            },
             "lsr" | ">>" => match right.as_ref() {
                 AbstractExpression::Immediate(shift) if (0..64).contains(shift) => {
                     let word = (1i128 << 64) - 1;

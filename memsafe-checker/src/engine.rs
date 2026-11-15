@@ -96,6 +96,7 @@ fn runs_past_the_end(pc: usize) -> Error {
 
 const LARGEST_OBJECT_BYTES: i64 = i64::MAX;
 const LOWEST_MAPPED_ADDRESS: i64 = 4096;
+const SOLVER_REFRESH_INSTRUCTIONS: usize = 250;
 
 const MAX_EXPLORED_KEY_BYTES: usize = 256 << 20;
 const MAX_FACT_TEXT_BYTES: usize = 64 << 20;
@@ -943,6 +944,11 @@ impl<M: Machine> Engine<M> {
     fn fork(&self) -> Engine<M> {
         let _forking = profile::enter(Phase::Forking);
         let mut forked = self.clone();
+        forked.computer.set_solver(self.rebuilt_solver());
+        forked
+    }
+
+    fn rebuilt_solver(&self) -> Solver {
         let assertions = self.computer.solver().get_assertions();
         let solver = Solver::new();
         let mut next = 0;
@@ -957,8 +963,14 @@ impl<M: Machine> Engine<M> {
         for assertion in &assertions[next..] {
             solver.assert(assertion);
         }
-        forked.computer.set_solver(solver);
-        forked
+        solver
+    }
+
+    fn shed_solver_state(&mut self) {
+        if self.instructions_run.is_multiple_of(SOLVER_REFRESH_INSTRUCTIONS) {
+            let solver = self.rebuilt_solver();
+            self.computer.set_solver(solver);
+        }
     }
 
     fn pop_scope(&mut self, id: usize) {
@@ -1149,6 +1161,7 @@ impl<M: Machine> Engine<M> {
         };
         self.steps_left.set(steps_left);
         self.instructions_run += 1;
+        self.shed_solver_state();
         if let Some(&end) = self.program.loop_ends.get(&pc)
             && let Some((written, exits)) = self.memory_free_loop(pc, end)
         {

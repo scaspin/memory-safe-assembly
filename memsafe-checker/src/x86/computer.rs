@@ -321,6 +321,9 @@ impl X86_64 {
         if narrowed.kind == RegisterKind::Immediate {
             return narrowed;
         }
+        if syntactically_within(&value.expression(), 1i128 << (width * 8)) {
+            return value.clone();
+        }
         let Some(v) = expression_to_ast(value.expression()) else {
             return narrow(value, width, false);
         };
