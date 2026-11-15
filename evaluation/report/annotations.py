@@ -69,8 +69,6 @@ def annotations(crate, arch):
 
 def verified(results, suite):
     path = results / f"{suite}.tsv"
-    if not path.exists():
-        path = results / f"{suite}.tsv.partial"
     rows = {}
     if path.exists():
         for line in path.read_text().splitlines():
