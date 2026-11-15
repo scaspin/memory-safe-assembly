@@ -157,11 +157,11 @@ fn ossl_aes_gcm_setiv_avx512(key: &([u32; 60], u32), ctx: &mut [u64; 56], iv: &[
 #[bums_macros::check_mem_safe("aes-gcm-avx512.S", ctx.as_mut_ptr(), aad.as_ptr(), aad.len())]
 fn ossl_aes_gcm_update_aad_avx512(ctx: &mut [u64; 56], aad: &[u8]);
 
-#[bums_macros::check_mem_safe("aes-gcm-avx512.S", key as *const _, ctx.as_mut_ptr(), blocklen as *mut _, input.as_ptr(), input.len(), output.as_mut_ptr(), [key.1 == 9 || key.1 == 11 || key.1 == 13, input.len() == output.len(), blocklen.0 < 16])]
-fn ossl_aes_gcm_encrypt_avx512(key: &([u32; 60], u32), ctx: &mut [u64; 56], blocklen: &mut (u32,), input: &[u8], output: &mut [u8]);
+#[bums_macros::check_mem_safe("aes-gcm-avx512.S", key as *const _, ctx.as_mut_ptr(), blocklen as *mut _, input.as_ptr(), input.len(), output.as_mut_ptr(), [key.1 == 9 || key.1 == 11 || key.1 == 13, input.len() == output.len(), blocklen.0 < 16, blocklen.1 == 0])]
+fn ossl_aes_gcm_encrypt_avx512(key: &([u32; 60], u32), ctx: &mut [u64; 56], blocklen: &mut (u32, u32), input: &[u8], output: &mut [u8]);
 
-#[bums_macros::check_mem_safe("aes-gcm-avx512.S", key as *const _, ctx.as_mut_ptr(), blocklen as *mut _, input.as_ptr(), input.len(), output.as_mut_ptr(), [key.1 == 9 || key.1 == 11 || key.1 == 13, input.len() == output.len(), blocklen.0 < 16])]
-fn ossl_aes_gcm_decrypt_avx512(key: &([u32; 60], u32), ctx: &mut [u64; 56], blocklen: &mut (u32,), input: &[u8], output: &mut [u8]);
+#[bums_macros::check_mem_safe("aes-gcm-avx512.S", key as *const _, ctx.as_mut_ptr(), blocklen as *mut _, input.as_ptr(), input.len(), output.as_mut_ptr(), [key.1 == 9 || key.1 == 11 || key.1 == 13, input.len() == output.len(), blocklen.0 < 16, blocklen.1 == 0])]
+fn ossl_aes_gcm_decrypt_avx512(key: &([u32; 60], u32), ctx: &mut [u64; 56], blocklen: &mut (u32, u32), input: &[u8], output: &mut [u8]);
 
 #[bums_macros::check_mem_safe("aes-gcm-avx512.S", ctx.as_mut_ptr(), blocklen, [blocklen < 16])]
 fn ossl_aes_gcm_finalize_avx512(ctx: &mut [u64; 56], blocklen: u32);

@@ -3333,3 +3333,30 @@ fn a_skip_on_a_constant_nonzero_register_still_catches_an_overread() {
         "ldr w8,[x0,#4]",
     )));
 }
+
+fn word_loop_guarded_by_mask(mask: i64) -> Vec<String> {
+    [
+        "start:",
+        "cmp x1,#8",
+        "b.lo done",
+        "loop:",
+        "ldr x4,[x0],#8",
+        "sub x1,x1,#8",
+        &format!("tst x1,#{mask}"),
+        "b.ne loop",
+        "done:",
+        "ret",
+    ]
+    .map(str::to_string)
+    .to_vec()
+}
+
+#[test]
+fn a_high_bit_mask_guard_bounds_a_word_loop() {
+    assert_eq!(analyze(word_loop_guarded_by_mask(-8)), Ok(()));
+}
+
+#[test]
+fn a_high_bit_mask_guard_too_loose_for_the_word_is_caught() {
+    assert!(analyze(word_loop_guarded_by_mask(-4)).is_err());
+}

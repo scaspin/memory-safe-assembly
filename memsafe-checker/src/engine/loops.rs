@@ -1,6 +1,7 @@
 use crate::computer::MAX_EXPRESSION_NODES;
 use std::fmt;
 
+const WIDENED_FLOORS: [i64; 7] = [1, 2, 4, 8, 16, 32, 64];
 const STACK_REGION: &str = "sp";
 const CONFINEMENT_RESOURCE_LIMIT: u32 = 60_000_000;
 const STEP_BOUND_RESOURCE_LIMIT: u32 = 2_000_000;
@@ -4174,6 +4175,15 @@ impl<M: Machine> Engine<M> {
                 })
             })
             .collect();
+        bounds.extend(limited.iter().flat_map(|&(register, _)| {
+            WIDENED_FLOORS.map(|floor| Bound {
+                register,
+                op: ">=",
+                other: None,
+                offset: 0,
+                anchor: Some(AbstractExpression::Immediate(floor)),
+            })
+        }));
         let guarded: Vec<usize> = registers_in(guard)
             .iter()
             .filter_map(|r| current.iter().position(|c| c == r || word_view(c) == *r))

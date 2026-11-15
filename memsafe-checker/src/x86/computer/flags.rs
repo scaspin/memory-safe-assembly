@@ -129,7 +129,11 @@ impl X86_64 {
         }
     }
 
-    fn unsigned_view(&mut self, value: &RegisterValue, width: i64) -> Option<AbstractExpression> {
+    pub(crate) fn unsigned_view(
+        &mut self,
+        value: &RegisterValue,
+        width: i64,
+    ) -> Option<AbstractExpression> {
         let largest = ast::Int::from_u64(mask(width));
         match value.kind {
             RegisterKind::Number => {

@@ -1912,6 +1912,17 @@ pub fn get_register_name_string(r: String) -> String {
         .to_string()
 }
 
+pub fn clear_low_bits_width(mask: i64, bits: u32) -> Option<u32> {
+    let word = if bits == 32 {
+        u32::MAX as u64
+    } else {
+        u64::MAX
+    };
+    let mask = mask as u64 & word;
+    let low = (!mask & word).count_ones();
+    (low > 0 && low < bits && mask == word & !((1u64 << low) - 1)).then_some(low)
+}
+
 fn mask_modulus(expression: &AbstractExpression) -> Option<i64> {
     match expression {
         AbstractExpression::Immediate(mask) if *mask > 0 && *mask < i64::MAX => {

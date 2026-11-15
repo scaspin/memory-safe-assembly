@@ -936,11 +936,25 @@ impl ARMCORTEXA {
             } else {
                 AbstractComparison::new("<", result.clone(), AbstractExpression::Immediate(0))
             }));
-            self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
-                "==",
-                result,
-                AbstractExpression::Immediate(0),
-            )));
+            let below_mask = match (&r1, &r2) {
+                (value, mask) | (mask, value)
+                    if mask.kind == RegisterKind::Immediate
+                        && mask.base.is_none()
+                        && value.kind != RegisterKind::Immediate =>
+                {
+                    clear_low_bits_width(mask.offset, bits)
+                        .map(|low| (AbstractExpression::Register(Box::new(value.clone())), low))
+                }
+                _ => None,
+            };
+            self.zero = Some(FlagValue::Abstract(match below_mask {
+                Some((value, low)) => AbstractComparison::new(
+                    "<",
+                    generate_expression("zext", value, AbstractExpression::Immediate(bits as i64)),
+                    AbstractExpression::Immediate(1i64 << low),
+                ),
+                None => AbstractComparison::new("==", result, AbstractExpression::Immediate(0)),
+            }));
         }
 
         self.carry = Some(FlagValue::Real(false));

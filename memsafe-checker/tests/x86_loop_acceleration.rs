@@ -854,3 +854,29 @@ fn a_short_block_that_keeps_the_loop_going_is_still_checked() {
     ]);
     assert_rejected_access(analyze_with(program, at_least(0)));
 }
+
+fn quadword_loop_guarded_by_mask(mask: i64) -> Vec<String> {
+    lines(&[
+        "start:",
+        "cmpq $8, %rsi",
+        "jb done",
+        "loop:",
+        "movq (%rdi), %rax",
+        "leaq 8(%rdi), %rdi",
+        "subq $8, %rsi",
+        &format!("testq ${mask}, %rsi"),
+        "jnz loop",
+        "done:",
+        "retq",
+    ])
+}
+
+#[test]
+fn a_high_bit_test_mask_bounds_a_quadword_loop() {
+    assert_eq!(analyze(quadword_loop_guarded_by_mask(-8)), Ok(()));
+}
+
+#[test]
+fn a_high_bit_test_mask_too_loose_for_the_quadword_is_caught() {
+    assert!(analyze(quadword_loop_guarded_by_mask(-4)).is_err());
+}

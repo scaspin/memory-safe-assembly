@@ -921,12 +921,32 @@ impl X86_64 {
                 let src = self.read(&ops[0], width)?;
                 let dst = self.read(&ops[1], width)?;
                 let result = if ops[0] == ops[1] {
-                    dst
+                    dst.clone()
                 } else {
                     self.bitwise_of_bits("and", &dst, &src)
                         .unwrap_or_else(|| combine("&", &dst, &src))
                 };
                 self.flags_of_result(&result, width, Carry::Cleared);
+                let below_mask = match (&src, &dst) {
+                    (mask, value)
+                        if mask.kind == RegisterKind::Immediate
+                            && mask.base.is_none()
+                            && value.kind == RegisterKind::RegisterBase =>
+                    {
+                        clear_low_bits_width(mask.offset, (width * 8) as u32)
+                            .map(|low| (value.clone(), low))
+                    }
+                    _ => None,
+                };
+                if let Some((value, low)) = below_mask
+                    && let Some(unsigned) = self.unsigned_view(&value, width)
+                {
+                    self.zero = Some(FlagValue::Abstract(AbstractComparison::new(
+                        "<",
+                        unsigned,
+                        AbstractExpression::Immediate(1i64 << low),
+                    )));
+                }
             }
             "bt" | "bts" | "btr" | "btc" => {
                 let bit = self.read(&ops[0], width)?;
