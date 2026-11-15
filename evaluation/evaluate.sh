@@ -109,12 +109,12 @@ check_suite() {
   local skip=()
   [[ -s $skip_file ]] && skip=(--skip-file "$skip_file")
   (cd "$root" && "$check" "$crate" $flags --jobs "$jobs" --mem-gb "$mem_gb" --timeout "$timeout" \
-    ${skip[@]+"${skip[@]}"} --out "$tsv.partial") | tail -1
+    ${skip[@]+"${skip[@]}"} --out "$tsv.partial") | tail -1 || true
   if [[ -s $slow_list ]]; then
     local pattern="^($(paste -sd'|' "$slow_list"))\$"
     echo "    slow pass: $(wc -l <"$slow_list" | tr -d ' ') functions, up to ${slow_timeout}s each"
     (cd "$root" && BUMS_MAX_STEPS=$slow_steps "$check" "$crate" $flags --filter "$pattern" --jobs "$jobs" \
-      --mem-gb "$mem_gb" --timeout "$slow_timeout" --out "$tsv.slow") | tail -1
+      --mem-gb "$mem_gb" --timeout "$slow_timeout" --out "$tsv.slow") | tail -1 || true
     [[ -f $tsv.slow ]] && cat "$tsv.slow" >>"$tsv.partial"
     rm -f "$tsv.slow"
   fi
