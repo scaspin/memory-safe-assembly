@@ -97,8 +97,11 @@ fn asm_aescbc_sha256_hmac(csrc: &[u8], cdst: &mut [u8], dsrc: &[u8], ddst: &mut 
 #[bums_macros::check_mem_safe("aes-sha256-armv8.S", csrc.as_ptr(), cdst.as_mut_ptr(), csrc.len(), dsrc.as_ptr(), ddst.as_mut_ptr(), dsrc.len(), arg as *const _, [arg.1 == 10 || arg.1 == 12 || arg.1 == 14, csrc.len() >= 16, csrc.len() % 16 == 0, csrc.len() == cdst.len(), dsrc.len() == csrc.len(), ddst.len() == 32])]
 fn asm_sha256_hmac_aescbc_dec(csrc: &[u8], cdst: &mut [u8], dsrc: &[u8], ddst: &mut [u8], arg: &(*const [u32; 60], u8, *const [u8; 16], *const [u32; 8], *const [u32; 8]));
 
-#[bums_macros::check_mem_safe("aes-sha512-armv8.S", csrc.as_ptr(), cdst.as_mut_ptr(), csrc.len(), dsrc.as_ptr(), ddst.as_mut_ptr(), dsrc.len(), arg as *const _, [arg.1 == 10 || arg.1 == 12 || arg.1 == 14, csrc.len() >= 16, csrc.len() % 16 == 0, csrc.len() == cdst.len(), dsrc.len() == csrc.len(), ddst.len() == 64])]
+#[bums_macros::check_mem_safe("aes-sha512-armv8.S", rejects, csrc.as_ptr(), cdst.as_mut_ptr(), csrc.len(), dsrc.as_ptr(), ddst.as_mut_ptr(), dsrc.len(), arg as *const _, [arg.1 == 10 || arg.1 == 12 || arg.1 == 14, csrc.len() >= 16, csrc.len() % 16 == 0, csrc.len() == cdst.len(), dsrc.len() == csrc.len(), ddst.len() == 64])]
 fn asm_aescbc_sha512_hmac(csrc: &[u8], cdst: &mut [u8], dsrc: &[u8], ddst: &mut [u8], arg: &(*const [u32; 60], u8, *const [u8; 16], *const [u64; 8], *const [u64; 8]));
+
+#[bums_macros::check_mem_safe("aes-sha512-armv8.S", symbol = "asm_aescbc_sha512_hmac", csrc.as_ptr(), cdst.as_mut_ptr(), cdst.len(), dsrc.as_ptr(), ddst.as_mut_ptr(), dsrc.len(), arg as *const _, [arg.1 == 10 || arg.1 == 12 || arg.1 == 14, cdst.len() >= 16, cdst.len() % 16 == 0, csrc.len() == cdst.len() + 16, dsrc.len() == cdst.len(), ddst.len() == 64])]
+fn asm_aescbc_sha512_hmac_padded(csrc: &[u8], cdst: &mut [u8], dsrc: &[u8], ddst: &mut [u8], arg: &(*const [u32; 60], u8, *const [u8; 16], *const [u64; 8], *const [u64; 8]));
 
 #[bums_macros::check_mem_safe("aes-sha512-armv8.S", csrc.as_ptr(), cdst.as_mut_ptr(), csrc.len(), dsrc.as_ptr(), ddst.as_mut_ptr(), dsrc.len(), arg as *const _, [arg.1 == 10 || arg.1 == 12 || arg.1 == 14, csrc.len() >= 16, csrc.len() % 16 == 0, csrc.len() == cdst.len(), dsrc.len() == csrc.len(), ddst.len() == 64])]
 fn asm_sha512_hmac_aescbc_dec(csrc: &[u8], cdst: &mut [u8], dsrc: &[u8], ddst: &mut [u8], arg: &(*const [u32; 60], u8, *const [u8; 16], *const [u64; 8], *const [u64; 8]));
@@ -190,17 +193,29 @@ fn ecp_nistz256_ord_mul_mont(res: &mut [u64; 4], a: &[u64; 4], b: &[u64; 4]);
 #[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", res.as_mut_ptr(), a.as_ptr(), rep, [rep >= 1, rep <= 256])]
 fn ecp_nistz256_ord_sqr_mont(res: &mut [u64; 4], a: &[u64; 4], rep: u64);
 
-#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", table.as_mut_ptr(), point.as_ptr(), idx, [idx >= 1, idx <= 16])]
+#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", rejects, table.as_mut_ptr(), point.as_ptr(), idx, [idx >= 1, idx <= 16])]
 fn ecp_nistz256_scatter_w5(table: &mut [u64; 192], point: &[u64; 12], idx: i32);
 
-#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", point.as_mut_ptr(), table.as_ptr(), idx, [idx >= 0, idx <= 16])]
+#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", symbol = "ecp_nistz256_scatter_w5", table.as_mut_ptr(), point.as_ptr(), idx, [idx >= 1, idx <= 16])]
+fn ecp_nistz256_scatter_w5_zero_extended(table: &mut [u64; 192], point: &[u64; 12], idx: usize);
+
+#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", rejects, point.as_mut_ptr(), table.as_ptr(), idx, [idx >= 0, idx <= 16])]
 fn ecp_nistz256_gather_w5(point: &mut [u64; 12], table: &[u64; 192], idx: i32);
 
-#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", table.as_mut_ptr(), point.as_ptr(), idx, [idx >= 0, idx <= 63])]
+#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", symbol = "ecp_nistz256_gather_w5", point.as_mut_ptr(), table.as_ptr(), idx, [idx >= 0, idx <= 16])]
+fn ecp_nistz256_gather_w5_zero_extended(point: &mut [u64; 12], table: &[u64; 192], idx: usize);
+
+#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", rejects, table.as_mut_ptr(), point.as_ptr(), idx, [idx >= 0, idx <= 63])]
 fn ecp_nistz256_scatter_w7(table: &mut [u64; 512], point: &[u64; 8], idx: i32);
 
-#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", point.as_mut_ptr(), table.as_ptr(), idx, [idx >= 0, idx <= 64])]
+#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", symbol = "ecp_nistz256_scatter_w7", table.as_mut_ptr(), point.as_ptr(), idx, [idx >= 0, idx <= 63])]
+fn ecp_nistz256_scatter_w7_zero_extended(table: &mut [u64; 512], point: &[u64; 8], idx: usize);
+
+#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", rejects, point.as_mut_ptr(), table.as_ptr(), idx, [idx >= 0, idx <= 64])]
 fn ecp_nistz256_gather_w7(point: &mut [u64; 8], table: &[u64; 512], idx: i32);
+
+#[bums_macros::check_mem_safe("ecp_nistz256-armv8.S", symbol = "ecp_nistz256_gather_w7", point.as_mut_ptr(), table.as_ptr(), idx, [idx >= 0, idx <= 64])]
+fn ecp_nistz256_gather_w7_zero_extended(point: &mut [u64; 8], table: &[u64; 512], idx: usize);
 
 #[bums_macros::check_mem_safe("ecp_sm2p256-armv8.S", a.as_mut_ptr())]
 fn bn_rshift1(a: &mut [u64; 4]);

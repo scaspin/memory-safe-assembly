@@ -1242,6 +1242,7 @@ ret
 L_12c0:
 b	poly1305_blocks
 	.section .rodata
+	.p2align 5
 bums_rodata:
 	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0

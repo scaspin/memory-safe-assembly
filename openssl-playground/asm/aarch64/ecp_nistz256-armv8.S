@@ -2386,7 +2386,9 @@ ecp_nistz256_precomputed:
 .quad 0xf3b9cac2fc632551,0xbce6faada7179e84,0xffffffffffffffff,0xffffffff00000000
 .LordK:
 .quad 0xccd1c8aaee00bc4f
+.pushsection .rodata
 .byte 69,67,80,95,78,73,83,84,90,50,53,54,32,102,111,114,32,65,82,77,118,56,44,32,67,82,89,80,84,79,71,65,77,83,32,98,121,32,60,104,116,116,112,115,58,47,47,103,105,116,104,117,98,46,99,111,109,47,100,111,116,45,97,115,109,62,0
+.popsection
 .align 2
 .text
 .globl ecp_nistz256_to_mont

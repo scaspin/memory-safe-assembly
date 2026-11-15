@@ -208,5 +208,6 @@ vmovdqu	%xmm7, 0x10(%rdi)
 popq	%rbp
 rep	retq
 	.section .data
+	.p2align 4
 SHUFF_MASK:
 	.byte 3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12

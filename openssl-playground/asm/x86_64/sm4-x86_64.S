@@ -91,6 +91,7 @@ vpxor	%xmm1, %xmm1, %xmm1
 popq	%rbp
 rep	retq
 	.section .rodata
+	.p2align 4
 SM4_FK:
 	.byte 198,186,177,163,80,51,170,86,151,145,125,103,220,34,112,178
 SM4_CK:

@@ -143,6 +143,12 @@ def read_arch(obj):
     return "x86_64" if "x86-64" in header else "aarch64"
 
 
+def read_function_names(obj):
+    """Names the symbol table types as functions (flag F)."""
+    pattern = re.compile(r"^[0-9a-f]+ (.{7}) \S+\s+[0-9a-f]+ (?:\.(?:hidden|internal|protected) )?(\S+)$")
+    return {m.group(2) for m in map(pattern.match, objdump("-t", obj).splitlines()) if m and m.group(1)[6] == "F"}
+
+
 def read_symbols(obj):
     """(section, address, size, name) for every named symbol."""
     symbols = []
@@ -181,6 +187,20 @@ def read_relocations(obj):
             addend = int(addend or "0", 16) * (-1 if sign == "-" else 1)
             current[int(offset, 16)] = (kind, target, addend)
     return relocations
+
+
+def read_section_alignments(obj):
+    """Each section's sh_addralign, which the extracted listing must keep."""
+    readelf = re.sub(r"objdump$", "readelf", OBJDUMP)
+    listing = subprocess.run(
+        [readelf, "-S", "--wide", obj], check=True, capture_output=True, text=True
+    ).stdout
+    alignments = {}
+    for line in listing.splitlines():
+        m = re.match(r"^\s*\[\s*\d+\]\s+(\S+)\s+\S+\s+[0-9a-f]+\s+[0-9a-f]+\s+[0-9a-f]+\s+[0-9a-f]+\s+\S*\s+\d+\s+\d+\s+(\d+)$", line)
+        if m:
+            alignments[m.group(1)] = int(m.group(2))
+    return alignments
 
 
 def read_section_names(obj):
@@ -225,6 +245,8 @@ class Object:
     def __init__(self, obj):
         self.arch = read_arch(obj)
         self.symbols = read_symbols(obj)
+        self.function_names = read_function_names(obj)
+        self.text_size = len(read_section_bytes(obj, ".text"))
         self.relocations = read_relocations(obj)
         self.instructions = read_instructions(obj, self.arch)
         sections = read_section_names(obj)
@@ -239,6 +261,7 @@ class Object:
             }
         )
         self.data = {s: read_section_bytes(obj, s) for s in self.data_sections}
+        self.section_alignments = read_section_alignments(obj)
         self.name_unnamed_jump_tables()
 
         self.names = {}
@@ -274,18 +297,23 @@ class Object:
             m = re.search(r"(-?0x[0-9a-f]+|-?\d+)?\(%rip\)", operands)
             if not m or following is None or any(address < p < following[0] for p in relocated):
                 continue
-            targets.add(following[0] + int(m.group(1) or "0", 0))
+            target = following[0] + int(m.group(1) or "0", 0)
+            if 0 <= target < self.text_size:
+                targets.add(target)
         if not targets:
             return
         labels = sorted({a for s, a, _, _ in self.symbols if s == ".text"})
         text = read_section_bytes(obj, ".text")
         spans = {}
+        functions = {a for s, a, _, n in self.symbols if s == ".text" and n in self.function_names}
         for target in targets:
             start = max((a for a in labels if a <= target), default=None)
             if start is None:
                 raise ValueError(f"rip-relative target {target:#x} precedes every label")
+            if start in functions:
+                start = target
             end = min((a for a in labels if a > start), default=len(text))
-            spans[start] = end
+            spans[start] = max(spans.get(start, end), end)
         contents = bytearray()
         for start, end in sorted(spans.items()):
             for s, a, size, name in list(self.symbols):
@@ -404,6 +432,8 @@ class Object:
         if rip:
             after = self.next_address.get(address)
             target = after + int(rip.group(1) or "0", 0)
+            if not 0 <= target < self.text_size:
+                return operands
             return operands.replace(rip.group(0), f"{self.text_data_reference(target)}(%rip)")
 
         def label(m):
@@ -470,6 +500,9 @@ class Object:
 
         for section in self.data_sections:
             lines.append(f"\t.section {section}")
+            alignment = self.section_alignments.get(section, 1)
+            if alignment > 1:
+                lines.append(f"\t.p2align {alignment.bit_length() - 1}")
             starts = {}
             sizes = {}
             for s, a, size, n in self.symbols:

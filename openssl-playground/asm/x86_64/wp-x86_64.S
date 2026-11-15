@@ -577,6 +577,7 @@ movq	-0x8(%rsi), %rbx
 leaq	(%rsi), %rsp
 rep	retq
 	.section .rodata
+	.p2align 6
 bums_rodata:
 	.byte 24,24,96,24,192,120,48,216,24,24,96,24,192,120,48,216
 	.byte 35,35,140,35,5,175,70,38,35,35,140,35,5,175,70,38

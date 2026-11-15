@@ -1307,6 +1307,7 @@ vmovdqu	%ymm7, 0x1e0(%rdi)
 vzeroupper
 rep	retq
 	.section .rodata
+	.p2align 5
 bums_rodata:
 	.byte 255,255,255,255,255,255,15,0,255,255,255,255,255,255,15,0
 	.byte 255,255,255,255,255,255,15,0,255,255,255,255,255,255,15,0

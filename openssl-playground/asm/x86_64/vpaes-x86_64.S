@@ -469,6 +469,7 @@ movdqa	0x50(%r10), %xmm15
 movdqa	0x60(%r10), %xmm14
 rep	retq
 	.section .rodata
+	.p2align 6
 _vpaes_consts:
 	.size _vpaes_consts, 832
 	.byte 128,1,8,13,15,6,5,14,2,12,11,10,9,3,7,4

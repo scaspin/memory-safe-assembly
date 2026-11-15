@@ -1759,6 +1759,7 @@ ldp	d8, d9, [sp], #0xc0
 L_1b1c:
 ret
 	.section .rodata
+	.p2align 5
 _chacha_sve_consts:
 	.size _chacha_sve_consts, 32
 	.byte 101,120,112,97,110,100,32,51,50,45,98,121,116,101,32,107

@@ -340,8 +340,11 @@ fn rsaz_512_mul_scatter4(ret: &mut [u64; 8], a: &[u64; 8], n: &[u64; 8], k: u64,
 #[bums_macros::check_mem_safe("rsaz-x86_64.S", ret.as_mut_ptr(), a.as_ptr(), n.as_ptr(), k)]
 fn rsaz_512_mul_by_one(ret: &mut [u64; 8], a: &[u64; 8], n: &[u64; 8], k: u64);
 
-#[bums_macros::check_mem_safe("rsaz-x86_64.S", table.as_mut_ptr(), val.as_ptr(), power, [power >= 0, power < 16])]
+#[bums_macros::check_mem_safe("rsaz-x86_64.S", rejects, table.as_mut_ptr(), val.as_ptr(), power, [power >= 0, power < 16])]
 fn rsaz_512_scatter4(table: &mut [u64; 128], val: &[u64; 8], power: i32);
+
+#[bums_macros::check_mem_safe("rsaz-x86_64.S", symbol = "rsaz_512_scatter4", table.as_mut_ptr(), val.as_ptr(), power, [power >= 0, power < 16])]
+fn rsaz_512_scatter4_zero_extended(table: &mut [u64; 128], val: &[u64; 8], power: usize);
 
 #[bums_macros::check_mem_safe("rsaz-x86_64.S", val.as_mut_ptr(), table.as_ptr(), power, [power >= 0, power < 16])]
 fn rsaz_512_gather4(val: &mut [u64; 8], table: &[u64; 128], power: i32);

@@ -160,3 +160,40 @@ states the padding it needs.
 In FFmpeg these are benign: `av_malloc` buffers carry `AV_INPUT_BUFFER_PADDING_SIZE`, frame
 lines are padded and aligned, VP9 reads through its emulated-edge buffer, and Opus `gains` and
 ALF `filter`/`clip` sit inside larger structs.
+
+### OpenSSL (AArch64 and x86-64, release 4.1.0, November 2026)
+
+[openssl-playground](openssl-playground) checks every exported function of OpenSSL 4.1.0's
+`linux-aarch64` and `linux-x86_64` perlasm: 116 of 131 AArch64 and 134 of 180 x86-64 functions
+verify on their exact contracts, including the SVE ChaCha20 kernel for every vector length, and
+the six below that BUMS rejects verify once given the padding or zero extension they rely on.
+
+**`asm_aescbc_sha512_hmac` reads 16 bytes past its input.** In
+`crypto/aes/asm/aes-sha512-armv8.pl` (the AES-CBC + HMAC-SHA512 encrypt-then-MAC stitch), the
+main loop encrypts eight blocks an iteration and exits with `cmp x11, #8; b.ge .Lenc_main_loop`.
+The epilogue after it unconditionally runs `ld1 {v0.16b}, [x0], #16 /* load plaintext */` and only
+then branches to `.Lenc_less_than_8_block`, whose `cbz x11` discards the block when none is left.
+When `clen` is a multiple of 128 and at least 256, no block is left, so the load reads
+`csrc[clen..clen + 16)`. BUMS rejects it: `read of 16 bytes at csrc_as_ptr + 256 not provably
+within region of length csrc_len` (with `clen = 256`). The value is never used, but the load faults
+if `csrc` ends at a page boundary. `cipher_aes_cbc_hmac_sha512_etm_hw.c` passes the caller's
+`in` buffer straight through with only `len % AES_BLOCK_SIZE == 0` checked. The SHA-1 and SHA-256
+stitches (`aes-sha1-armv8.pl`, `aes-sha256-armv8.pl`) verify. It has a `rejects` annotation and a
+`_padded` twin with `csrc.len() == clen + 16`, which verifies.
+
+**`int` arguments used as 64-bit indices.** The AArch64 `ecp_nistz256_{gather,scatter}_w{5,7}`
+index their tables with the full `x2` (`add x1, x1, x2, lsl #2`) and x86-64 `rsaz_512_scatter4`
+with the full `%rdx` (`leaq (%rdi,%rdx,8), %rdi`), but the C prototypes pass `int`, whose upper 32
+bits AAPCS64 and the SysV ABI leave unspecified. Every caller computes the index in a 32-bit
+register, which zeroes the upper half, so it is latent. Each has a `rejects` annotation and a
+`_zero_extended` twin taking `usize`, which verifies.
+
+**Contract mismatches that are safe in OpenSSL.** These touch memory their C prototypes do not
+grant; the annotations state what the assembly needs.
+
+| function | what the assembly does | why it is safe in OpenSSL |
+|---|---|---|
+| `ossl_aes_gcm_{en,de}crypt_avx512` | reads, adds to and stores 8 bytes through `unsigned int *pblocklen` | the caller passes `&gcm->mres`, followed by `ares`, which it zeroes just before |
+| `vpsm4{,_ex}_xts_encrypt{,_gb}` | stores the last tweak into the `const` `ivec` as scratch | the caller passes the writable `ctx->base.iv`; the C fallback leaves it unchanged |
+| `ossl_aes_cfb128_vaes_{enc,dec}` | updates the `const` `ivec` | CFB chains the IV; the caller passes the writable `ctx->iv` |
+| `ChaCha20_ctr32_sve` | writes the advanced block counter to the `const` `counter` | the NEON tail resumes from it; the caller rewrites `counter[0]` afterwards |

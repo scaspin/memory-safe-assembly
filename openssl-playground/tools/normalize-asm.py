@@ -64,6 +64,47 @@ def section_label_offsets(lines):
     return offsets
 
 
+def banner_text(line):
+    directive, _, rest = line.strip().partition("\t")
+    if directive != ".byte":
+        directive, _, rest = line.strip().partition(" ")
+    if directive != ".byte":
+        return None
+    try:
+        values = [int(item.strip(), 0) for item in rest.split(",")]
+    except ValueError:
+        return None
+    if len(values) < 16 or values[-1] != 0 or not all(32 <= v < 127 for v in values[:-1]):
+        return None
+    return bytes(values[:-1]).decode()
+
+
+def move_banners_out_of_text(lines):
+    moved = []
+    for line in lines:
+        text = banner_text(line)
+        if text is not None and " " in text:
+            moved += [".pushsection .rodata", line, ".popsection"]
+        else:
+            moved.append(line)
+    return moved
+
+
+def drop_constructor_calls(lines):
+    kept = []
+    skipping = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith(".section") and stripped.split()[1:2] == [".init"]:
+            skipping = True
+            continue
+        if skipping and stripped.startswith("call"):
+            continue
+        skipping = False
+        kept.append(line)
+    return kept
+
+
 def drop_hash_before_relocation_operators(lines):
     return [re.sub(r"#(:(?:lo12|pg_hi21|pg_hi21_nc):)", r"\1", line) for line in lines]
 
@@ -84,4 +125,4 @@ for path in sys.argv[1:]:
     with open(path) as source:
         lines = source.read().split("\n")
     with open(path, "w") as target:
-        target.write("\n".join(drop_hash_before_relocation_operators(fold_label_differences(split_labels(expand_argumentless_macros(lines))))))
+        target.write("\n".join(drop_constructor_calls(move_banners_out_of_text(drop_hash_before_relocation_operators(fold_label_differences(split_labels(expand_argumentless_macros(lines))))))))
