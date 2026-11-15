@@ -67,7 +67,7 @@ fn an_access_away_from_the_predicate_start_is_caught() {
 
 #[test]
 fn an_unmodelled_scalable_store_is_an_error() {
-    for store in ["st1w { z1.s }, p0, [x2]", "str z1, [x2]"] {
+    for store in ["str z1, [x2]", "st1w { z1.s }, p0, [x2, #1, mul vl]"] {
         let program = format!(
             "start:
             mov x5, #0
@@ -93,4 +93,74 @@ fn a_predicate_the_loop_never_recomputes_is_caught() {
         done:
         ret";
     assert!(copy_between_buffers(program).is_err());
+}
+
+fn guarded_by_vector_lengths(guard: &str, access: &str) -> Result<(), String> {
+    copy_between_buffers(&format!(
+        "start:
+        {guard}
+        cmp x0, x6
+        b.lo done
+        {access}
+        done:
+        ret"
+    ))
+}
+
+#[test]
+fn an_all_true_load_a_whole_vector_in_stays_inside_two_vectors() {
+    let access = "ptrue p0.b\nld1b { z1.b }, p0/z, [x1, #1, mul vl]";
+    assert_eq!(guarded_by_vector_lengths("rdvl x6, #2", access), Ok(()));
+    assert!(guarded_by_vector_lengths("rdvl x6, #1", access).is_err());
+}
+
+#[test]
+fn an_all_true_store_two_vectors_in_is_caught() {
+    let access = "ptrue p0.s\nst1w { z1.s }, p0, [x2, #2, mul vl]";
+    assert!(guarded_by_vector_lengths("rdvl x6, #2", access).is_err());
+    assert_eq!(guarded_by_vector_lengths("rdvl x6, #3", access), Ok(()));
+}
+
+#[test]
+fn a_four_register_structure_load_spans_four_vectors() {
+    let access = "ptrue p0.s\nld4w { z1.s - z4.s }, p0/z, [x1]";
+    assert_eq!(guarded_by_vector_lengths("rdvl x6, #4", access), Ok(()));
+    assert!(guarded_by_vector_lengths("rdvl x6, #3", access).is_err());
+}
+
+#[test]
+fn element_counts_scale_to_bytes() {
+    let access = "ptrue p0.s\nld1w { z1.s }, p0/z, [x1]";
+    assert_eq!(
+        guarded_by_vector_lengths("cntw x6\nlsl x6, x6, #2", access),
+        Ok(())
+    );
+    assert!(guarded_by_vector_lengths("cntw x6\nlsl x6, x6, #1", access).is_err());
+    assert_eq!(
+        guarded_by_vector_lengths("mov x6, #0\nincd x6\nlsl x6, x6, #3", access),
+        Ok(())
+    );
+}
+
+#[test]
+fn addvl_advances_the_pointer_by_whole_vectors() {
+    let access = "ptrue p0.b\naddvl x1, x1, #1\nld1b { z1.b }, p0/z, [x1]";
+    assert_eq!(guarded_by_vector_lengths("rdvl x6, #2", access), Ok(()));
+    assert!(guarded_by_vector_lengths("rdvl x6, #1", access).is_err());
+}
+
+#[test]
+fn a_whilelo_from_zero_covers_at_most_one_vector() {
+    let access = "cbz x6, done\nwhilelo p0.s, xzr, x6\nld1w { z1.s }, p0/z, [x1]";
+    assert_eq!(
+        guarded_by_vector_lengths("mov x6, #0\nlsr x6, x0, #2", access),
+        Ok(())
+    );
+    assert!(guarded_by_vector_lengths("mov x6, #0\nlsr x6, x0, #1", access).is_err());
+}
+
+#[test]
+fn a_predicate_rewritten_with_a_pattern_is_forgotten() {
+    let access = "ptrue p0.b, vl16\nld1b { z1.b }, p0/z, [x1]";
+    assert!(guarded_by_vector_lengths("rdvl x6, #1", access).is_err());
 }

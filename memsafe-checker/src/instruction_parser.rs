@@ -135,6 +135,8 @@ pub enum Operand {
     Address(String, i64),
     Other,
 }
+pub const SCALED_BY_VECTOR_LENGTH: &str = "mul vl";
+
 pub fn register_to_tuple(r: &Operand) -> (RePrefix, usize) {
     match r.clone() {
         Operand::Register(prefix, index) => (prefix, index),
@@ -171,6 +173,9 @@ pub fn operand_from_string(a: String) -> Operand {
         }
     }
 
+    if let Some(relocation) = a.strip_prefix("#").filter(|rest| rest.starts_with(':')) {
+        return operand_from_string(relocation.to_string());
+    }
     if a.starts_with("#") {
         if let Ok(n) = a.trim_start_matches("#").parse::<i64>() {
             return Operand::Immediate(n);
@@ -298,6 +303,10 @@ pub fn operand_from_string(a: String) -> Operand {
         }
     }
 
+    if a.trim_start_matches('[').starts_with('z') {
+        return Operand::Label(a);
+    }
+
     if a.contains("[") || a.contains("]") {
         let mut parts = a.split(',').peekable();
         let mut base: String = String::new();
@@ -325,10 +334,21 @@ pub fn operand_from_string(a: String) -> Operand {
                     }
                     None => register,
                 }));
+            } else if o.trim_start_matches('#').starts_with(":lo12:") {
+                offset = Some(0);
+                if let Some(unparsed) = parts.next() {
+                    panic!("memory operand {a} has an unparsed tail {unparsed}");
+                }
             } else {
                 offset = Some(string_to_int(o.trim_matches(['[', ']', ',', '#', '!'])));
                 if let Some(unparsed) = parts.next() {
-                    panic!("memory operand {a} has an unparsed tail {unparsed}");
+                    let scaled = parts.next().map(|rest| rest.trim_matches([']', ' ']));
+                    if unparsed.trim() != "mul" || scaled != Some("vl") {
+                        panic!("memory operand {a} has an unparsed tail {unparsed}");
+                    }
+                    register_offset = Some(Box::new(Operand::Label(
+                        SCALED_BY_VECTOR_LENGTH.to_string(),
+                    )));
                 }
             }
         }
@@ -591,15 +611,18 @@ fn split_operands(input: &str) -> Vec<String> {
     parts
 }
 
-fn split_vector_name(name: &str) -> (usize, String) {
+fn split_vector_name(name: &str) -> (char, usize, String) {
     let (register, arrangement) = name
         .split_once('.')
         .expect("vector range endpoint needs an arrangement");
-    let number = register
-        .trim_start_matches(['v', 'V'])
+    let bank = match register.chars().next() {
+        Some('z' | 'Z') => 'z',
+        _ => 'v',
+    };
+    let number = register[1..]
         .parse::<usize>()
         .expect("vector range endpoint needs a register number");
-    (number, arrangement.to_string())
+    (bank, number, arrangement.to_string())
 }
 
 fn expand_vector_ranges(input: &str) -> String {
@@ -617,8 +640,8 @@ fn expand_vector_ranges(input: &str) -> String {
     let mut ends = group.split('-');
     let first = ends.next().expect("vector range start").trim();
     let last = ends.next().expect("vector range end").trim();
-    let (first_num, arrangement) = split_vector_name(first);
-    let (last_num, _) = split_vector_name(last);
+    let (bank, first_num, arrangement) = split_vector_name(first);
+    let (_, last_num, _) = split_vector_name(last);
 
     let count = if last_num >= first_num {
         last_num - first_num
@@ -626,7 +649,7 @@ fn expand_vector_ranges(input: &str) -> String {
         last_num + 32 - first_num
     };
     let expanded = (0..=count)
-        .map(|i| format!("v{}.{}", (first_num + i) % 32, arrangement))
+        .map(|i| format!("{bank}{}.{}", (first_num + i) % 32, arrangement))
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -774,7 +797,7 @@ fn constant_expression(s: &str) -> Option<i64> {
     parser.rest.trim().is_empty().then_some(value)
 }
 
-const VECTOR_ONLY_ENCODINGS: [(u32, u32, &str); 18] = [
+const VECTOR_ONLY_ENCODINGS: [(u32, u32, &str); 27] = [
     (0xffe0_8000, 0xce00_0000, "eor3"),
     (0xffe0_8000, 0xce20_0000, "bcax"),
     (0xffe0_fc00, 0xce60_8000, "sha512h"),
@@ -793,6 +816,15 @@ const VECTOR_ONLY_ENCODINGS: [(u32, u32, &str); 18] = [
     (0xffff_fc00, 0x5e28_0800, "sha1h"),
     (0xffff_fc00, 0x5e28_1800, "sha1su1"),
     (0xffff_fc00, 0x5e28_2800, "sha256su0"),
+    (0xffe0_8000, 0xce40_0000, "sm3ss1"),
+    (0xffe0_cc00, 0xce40_8000, "sm3tt1a"),
+    (0xffe0_cc00, 0xce40_8400, "sm3tt1b"),
+    (0xffe0_cc00, 0xce40_8800, "sm3tt2a"),
+    (0xffe0_cc00, 0xce40_8c00, "sm3tt2b"),
+    (0xffe0_fc00, 0xce60_c000, "sm3partw1"),
+    (0xffe0_fc00, 0xce60_c400, "sm3partw2"),
+    (0xffe0_fc00, 0xce60_c800, "sm4ekey"),
+    (0xffff_fc00, 0xcec0_8400, "sm4e"),
 ];
 
 pub fn decode_vector_only_word(word: u32) -> Option<String> {
@@ -802,14 +834,14 @@ pub fn decode_vector_only_word(word: u32) -> Option<String> {
     let field = |shift: u32| (word >> shift) & 31;
     let vector = |shift: u32| format!("v{}.16b", field(shift));
     let operands = match *opcode {
-        "eor3" | "bcax" => vec![vector(0), vector(5), vector(16), vector(10)],
+        "eor3" | "bcax" | "sm3ss1" => vec![vector(0), vector(5), vector(16), vector(10)],
         "xar" => vec![
             vector(0),
             vector(5),
             vector(16),
             format!("#{}", (word >> 10) & 63),
         ],
-        "sha512su0" | "sha1h" | "sha1su1" | "sha256su0" => vec![vector(0), vector(5)],
+        "sha512su0" | "sha1h" | "sha1su1" | "sha256su0" | "sm4e" => vec![vector(0), vector(5)],
         _ => vec![vector(0), vector(5), vector(16)],
     };
     Some(format!("{opcode} {}", operands.join(", ")))

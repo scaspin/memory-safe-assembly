@@ -2337,6 +2337,7 @@ pub fn parse_annotation(attr: TokenStream, item: TokenStream) -> Result<Annotati
 
     let mut extern_fn = vars.item_fn.clone();
     extern_fn.ident = fn_name.clone();
+    extern_fn.output = ReturnType::Default;
     let mut pointer_offsets: BTreeMap<usize, (bool, Expr)> = BTreeMap::new();
     if !attributes.argument_list.is_empty() {
         let mut new_args: Punctuated<FnArg, Token![,]> = Punctuated::new();

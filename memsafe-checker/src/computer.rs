@@ -23,6 +23,8 @@ pub(crate) use simd::{
 
 pub const RETURN_TO: &str = "return_to";
 pub const MAX_EXPRESSION_NODES: usize = 150;
+const EXTERNAL_REGIONS: [(&str, i64); 2] =
+    [("OPENSSL_armcap_P", 4), ("OPENSSL_armv8_rsa_neonized", 4)];
 const WORD_FIT_RESOURCE_LIMIT: u32 = 5_000_000;
 const ROW_BY_ROW_RESOURCE_LIMIT: u32 = 2_000_000;
 
@@ -230,6 +232,14 @@ impl ARMCORTEXA {
                 RegionType::RW,
             ),
         );
+        let mut memory_labels = BTreeMap::new();
+        for (name, length) in EXTERNAL_REGIONS {
+            memory.insert(
+                name.to_string(),
+                MemorySafeRegion::new(AbstractExpression::Immediate(length), RegionType::READ),
+            );
+            memory_labels.insert(name.to_string(), (name.to_string(), 0));
+        }
 
         ARMCORTEXA {
             registers,
@@ -240,7 +250,7 @@ impl ARMCORTEXA {
             carry: None,
             overflow: None,
             memory,
-            memory_labels: BTreeMap::new(),
+            memory_labels,
             data_symbol_sizes: BTreeMap::new(),
             code_labels: Rc::default(),
             select_definitions: BTreeMap::new(),

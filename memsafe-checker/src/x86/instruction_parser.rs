@@ -202,9 +202,9 @@ impl fmt::Display for Instruction {
     }
 }
 
-const PREFIXES: [&str; 17] = [
+const PREFIXES: [&str; 20] = [
     "rep", "repe", "repz", "repne", "repnz", "lock", "notrack", "bnd", "data16", "data32",
-    "addr32", "cs", "ds", "ss", "es", "fs", "gs",
+    "addr32", "cs", "ds", "ss", "es", "fs", "gs", "{vex}", "{vex3}", "{evex}",
 ];
 
 pub const CONDITION_CODES: [&str; 30] = [
@@ -924,6 +924,9 @@ mod tests {
         let i = Instruction::new("rep stosq".to_string());
         assert_eq!(i.prefixes, vec!["rep".to_string()]);
         assert_eq!(i.mnemonic, "stos");
+        let v = Instruction::new("{vex}\tvpmadd52luq\t(%rsi), %ymm1, %ymm3".to_string());
+        assert_eq!(v.mnemonic, "vpmadd52luq");
+        assert_eq!(v.operands.len(), 3);
         let j = Instruction::new("jmp *%rax".to_string());
         assert_eq!(
             j.operands[0],

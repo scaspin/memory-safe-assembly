@@ -92,6 +92,7 @@ struct TextRun {
     directives: Vec<(String, String)>,
 }
 
+#[derive(Clone, Copy, PartialEq)]
 enum Section {
     Text,
     Data(usize),
@@ -241,6 +242,8 @@ impl<I: MachineInstruction> Listing<I> {
     pub fn parse<S: Into<String>>(lines: impl IntoIterator<Item = S>) -> Listing<I> {
         let mut listing = Listing::default();
         let mut section = Section::Text;
+        let mut previous = Section::Text;
+        let mut pushed: Vec<Section> = Vec::new();
         let mut pending: Vec<(usize, usize, String)> = Vec::new();
         let mut sizes: Vec<(String, i64)> = Vec::new();
         let mut waiting: Vec<String> = Vec::new();
@@ -261,15 +264,32 @@ impl<I: MachineInstruction> Listing<I> {
                 match directive {
                     ".text" => {
                         listing.commit(run.take(), &mut pending);
+                        previous = section;
                         section = Section::Text;
                     }
-                    ".data" | ".bss" | ".rodata" | ".const" | ".const_data" | ".section" => {
+                    ".previous" => {
                         listing.commit(run.take(), &mut pending);
-                        let name = if directive == ".section" {
+                        std::mem::swap(&mut section, &mut previous);
+                    }
+                    ".popsection" => {
+                        listing.commit(run.take(), &mut pending);
+                        if let Some(restored) = pushed.pop() {
+                            previous = section;
+                            section = restored;
+                        }
+                    }
+                    ".data" | ".bss" | ".rodata" | ".const" | ".const_data" | ".section"
+                    | ".pushsection" => {
+                        listing.commit(run.take(), &mut pending);
+                        if directive == ".pushsection" {
+                            pushed.push(section);
+                        }
+                        let name = if matches!(directive, ".section" | ".pushsection") {
                             section_name(rest)
                         } else {
                             directive.to_string()
                         };
+                        previous = section;
                         section = if is_text_section(&name) {
                             Section::Text
                         } else {
@@ -686,6 +706,27 @@ mod tests {
         let opcodes: Vec<&str> = l.code[1..6].iter().map(|i| i.opcode.as_str()).collect();
         assert_eq!(opcodes, ["eor3", "sha1h", "rax1", "sha1su1", "eor3"]);
         assert_eq!(l.code[1].operands.len(), 4);
+    }
+
+    #[test]
+    fn encoded_sm3_and_sm4_instructions_are_decoded() {
+        let l = listing(&[
+            "f:",
+            ".inst 0xce5f1cd0",
+            ".inst 0xce5f8a3c",
+            ".inst 0xce66c4e0",
+            ".inst 0xce60c800",
+            ".inst 0xcec08400",
+            "ret",
+        ]);
+        assert_eq!(unsupported_encodings(&l), 0);
+        let opcodes: Vec<&str> = l.code[1..6].iter().map(|i| i.opcode.as_str()).collect();
+        assert_eq!(
+            opcodes,
+            ["sm3ss1", "sm3tt2a", "sm3partw2", "sm4ekey", "sm4e"]
+        );
+        assert_eq!(l.code[1].operands.len(), 4);
+        assert_eq!(l.code[5].operands.len(), 2);
     }
 
     #[test]

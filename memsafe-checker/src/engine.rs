@@ -967,7 +967,10 @@ impl<M: Machine> Engine<M> {
     }
 
     fn shed_solver_state(&mut self) {
-        if self.instructions_run.is_multiple_of(SOLVER_REFRESH_INSTRUCTIONS) {
+        if self
+            .instructions_run
+            .is_multiple_of(SOLVER_REFRESH_INSTRUCTIONS)
+        {
             let solver = self.rebuilt_solver();
             self.computer.set_solver(solver);
         }
@@ -1537,6 +1540,23 @@ impl<M: Machine> Engine<M> {
         depth: usize,
     ) -> std::io::Result<BranchOutcome> {
         let condition = self.resolve_boolean_mask_xors_in(&condition);
+        let modeled = comparison_to_ast(condition.clone()).is_some()
+            && comparison_to_ast(condition.clone().not()).is_some();
+        if !modeled
+            && !self.computer.carries_code_address(&option1)
+            && !self.computer.carries_code_address(&option2)
+            && !self.computer.carries_region(&option1)
+            && !self.computer.carries_region(&option2)
+        {
+            let unknown = format!("unmodeled_select_{}", self.computer.fresh_index());
+            self.computer.set_register(
+                &register,
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(unknown)),
+                0,
+            );
+            return Ok(BranchOutcome::Next(pc + 1));
+        }
         let take = comparison_to_ast(condition.clone()).ok_or_else(|| {
             Error::other(format!(
                 "select condition uses an operation the engine does not model: {condition}"
