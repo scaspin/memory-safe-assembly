@@ -178,6 +178,7 @@ popq	%r13
 popq	%r12
 retq
 	.section .data
+	.p2align 6
 dist_start:
 	.byte 1,0,2,0,3,0,4,0,5,0,7,0,9,0,13,0
 	.byte 17,0,25,0,33,0,49,0,65,0,97,0,129,0,193,0

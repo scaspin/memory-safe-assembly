@@ -119,6 +119,7 @@ eor	v5.16b, v3.16b, v5.16b
 mov	x0, v5.d[1]
 b	.crc_tab_pre
 	.section .rodata
+	.p2align 4
 .lanchor_crc_tab:
 crc64_tab:
 	.size crc64_tab, 2048

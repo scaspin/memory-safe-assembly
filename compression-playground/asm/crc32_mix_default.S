@@ -703,6 +703,7 @@ crc32b	w10, w10, w12
 mvn	w0, w10
 ret
 	.section .rodata
+	.p2align 4
 lanchor_crc32:
 k1k2:
 	.size k1k2, 16

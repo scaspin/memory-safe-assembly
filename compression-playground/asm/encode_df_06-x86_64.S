@@ -499,6 +499,7 @@ movq	0x10(%rsp), %r12
 addq	$0xd8, %rsp
 retq
 	.section .data
+	.p2align 6
 rot_perm:
 	.byte 7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.byte 1,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0

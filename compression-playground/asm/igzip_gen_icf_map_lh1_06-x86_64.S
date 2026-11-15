@@ -260,6 +260,7 @@ popq	%r12
 popq	%rbp
 retq
 	.section .data
+	.p2align 6
 datas_perm:
 	.byte 0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0
 	.byte 0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0

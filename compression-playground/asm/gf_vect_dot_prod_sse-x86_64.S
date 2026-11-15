@@ -42,5 +42,6 @@ gf_vect_dot_prod_sse.return_fail:
 movl	$0x1, %eax
 retq
 	.section .data
+	.p2align 4
 mask0f:
 	.byte 15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15

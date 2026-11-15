@@ -123,6 +123,7 @@ eor	v4.8b, v4.8b, v3.8b
 mov	w0, v4.s[0]
 b	.crc_tab_pre
 	.section .rodata
+	.p2align 4
 .lanchor_crc_tab:
 crc32_table_ieee_norm:
 	.size crc32_table_ieee_norm, 1024
@@ -191,5 +192,6 @@ crc32_table_ieee_norm:
 	.byte 177,16,176,175,6,13,113,171,223,43,50,166,104,54,243,162
 	.byte 109,102,180,188,218,123,117,184,3,93,54,181,180,64,247,177
 	.section .rodata.cst16
+	.p2align 4
 .shuffle_data:
 	.byte 15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0

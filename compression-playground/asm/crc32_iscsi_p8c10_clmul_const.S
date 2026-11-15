@@ -1,5 +1,6 @@
 	.text
 	.section .rodata
+	.p2align 4
 crc32_iscsi_p8c10_clmul_const:
 	.size crc32_iscsi_p8c10_clmul_const, 50440
 	.byte 157,128,25,198,162,241,112,210,86,46,216,97,244,57,127,206

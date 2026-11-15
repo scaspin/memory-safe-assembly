@@ -1756,6 +1756,7 @@ jne	L_167f
 addq	%rdx, %rax
 jmp	L_15de
 	.section .rodata
+	.p2align 2
 bums_jump_table_rodata_0:
 	.size bums_jump_table_rodata_0, 32
 	.long L_69f - bums_jump_table_rodata_0

@@ -112,6 +112,7 @@ eor	v4.8b, v4.8b, v3.8b
 mov	w0, v4.s[1]
 b	.crc_tab_pre
 	.section .rodata
+	.p2align 4
 .lanchor_crc_tab:
 crc32_table_gzip_refl:
 	.size crc32_table_gzip_refl, 1024

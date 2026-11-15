@@ -203,5 +203,6 @@ popq	%rsi
 popq	%rbx
 retq
 	.section .data
+	.p2align 2
 c258:
 	.byte 2,1,0,0,0,0,0,0

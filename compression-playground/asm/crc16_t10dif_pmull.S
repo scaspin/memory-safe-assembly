@@ -141,6 +141,7 @@ fold_constant:
 	.word 0x371d0000
 	.word 0x00000000
 	.section .rodata
+	.p2align 4
 .shuffle_mask_lanchor:
 shuffle_mask:
 	.size shuffle_mask, 16

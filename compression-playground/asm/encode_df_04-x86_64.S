@@ -340,6 +340,7 @@ movq	0x10(%rsp), %r12
 addq	$0xd8, %rsp
 retq
 	.section .data
+	.p2align 5
 max_write_d:
 	.byte 28,0,0,0,29,0,0,0,31,0,0,0,32,0,0,0
 	.byte 28,0,0,0,29,0,0,0,31,0,0,0,32,0,0,0

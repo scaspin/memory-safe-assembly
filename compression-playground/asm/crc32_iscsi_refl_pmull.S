@@ -125,6 +125,7 @@ mvn	w0, w0
 ldp	x29, x30, [sp], #0x20
 ret
 	.section .rodata
+	.p2align 4
 .lanchor_crc_tab:
 crc32_table_iscsi_refl:
 	.size crc32_table_iscsi_refl, 1024

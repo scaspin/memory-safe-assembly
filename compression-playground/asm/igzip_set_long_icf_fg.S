@@ -103,6 +103,7 @@ ldr	x23, [sp, #0x30]
 ldp	x29, x30, [sp], #0xc0
 ret
 	.section .rodata
+	.p2align 3
 .data_dist_start:
 .real_data_dist_start:
 	.byte 1,0,0,0,2,0,0,0,3,0,0,0,4,0,0,0

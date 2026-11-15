@@ -166,6 +166,7 @@ ret
 .done:
 ret
 	.section .rodata
+	.p2align 4
 .len_to_code_tab_lanchor:
 len_to_code_tab:
 	.size len_to_code_tab, 1056

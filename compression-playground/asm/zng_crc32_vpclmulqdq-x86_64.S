@@ -817,6 +817,7 @@ L_fb2:
 addq	$0x48, %rsp
 retq
 	.section .rodata
+	.p2align 5
 pshufb_shf_table:
 	.size pshufb_shf_table, 240
 	.byte 129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,0
@@ -901,6 +902,7 @@ crc_table:
 	.byte 46,122,102,179,184,74,97,196,2,27,104,93,148,43,111,42
 	.byte 55,190,11,180,161,142,12,195,27,223,5,90,141,239,2,45
 	.section .rodata.cst4
+	.p2align 2
 .LCPI0_1:
 	.byte 135,36,180,157
 .LCPI1_5:
@@ -910,6 +912,7 @@ crc_table:
 .LCPI4_4:
 	.byte 135,36,180,157
 	.section .rodata.cst8
+	.p2align 3
 .LCPI1_0:
 	.byte 212,43,68,84,1,0,0,0
 .LCPI1_2:

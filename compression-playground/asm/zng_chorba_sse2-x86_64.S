@@ -828,6 +828,7 @@ popq	%r14
 popq	%r15
 retq
 	.section .rodata
+	.p2align 4
 crc_table:
 	.size crc_table, 1024
 	.byte 0,0,0,0,150,48,7,119,44,97,14,238,186,81,9,153
@@ -1492,6 +1493,7 @@ notl	%eax
 popq	%rcx
 retq
 	.section .rodata
+	.p2align 4
 crc32_braid_c__crc_table:
 	.size crc32_braid_c__crc_table, 1024
 	.byte 0,0,0,0,150,48,7,119,44,97,14,238,186,81,9,153
@@ -4767,6 +4769,7 @@ Lcrc32_chorba_c__305b:
 callq	crc32_chorba_small_nondestructive
 jmp	Lcrc32_chorba_c__303d
 	.section .rodata
+	.p2align 4
 crc32_chorba_c__crc_table:
 	.size crc32_chorba_c__crc_table, 1024
 	.byte 0,0,0,0,150,48,7,119,44,97,14,238,186,81,9,153

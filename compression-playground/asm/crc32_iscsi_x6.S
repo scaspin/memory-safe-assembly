@@ -343,6 +343,7 @@ sub	x1, x1, #0x4
 crc32cw	w2, w2, w8
 b	.align_finish
 	.section .rodata
+	.p2align 4
 bums_rodata:
 	.byte 191,193,65,167,0,0,0,0,138,243,23,228,0,0,0,0
 	.byte 12,59,126,221,0,0,0,0,20,128,21,143,0,0,0,0

@@ -426,6 +426,7 @@ incq	(%rdx,%rax,8)
 leaq	0x1(%r10), %r13
 jmp	len_dist_lit_huffman
 	.section .data
+	.p2align 3
 D_vector:
 	.byte 255,127,255,127,255,127,255,127,255,127,255,127,255,127,255,127
 	.byte 255,127,255,127,255,127,255,127,255,127,255,127,255,127,255,127
@@ -433,6 +434,7 @@ D_vector:
 	.text
 	.text
 	.section .data
+	.p2align 3
 len_to_code:
 rfc1951_lookup_table:
 	.byte 0,0,0,1,2,3,4,5,6,7,8,9,9,10,10,11

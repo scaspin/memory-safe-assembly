@@ -1770,6 +1770,7 @@ mov	x20, x19
 str	x9, [x0, #0x30]
 b	L_17e0
 	.section .rodata
+	.p2align 5
 perm_idx_lut:
 	.size perm_idx_lut, 52
 	.byte 0,0,1,0,0,0,0,0,32,0,1,0,64,0,4,0

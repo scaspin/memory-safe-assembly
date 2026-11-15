@@ -690,6 +690,7 @@ add	x9, x9, x13
 add	w17, w17, w13
 b	L_8b4
 	.section .rodata
+	.p2align 6
 taps:
 	.size taps, 128
 	.byte 64,0,63,0,62,0,61,0,60,0,59,0,58,0,57,0

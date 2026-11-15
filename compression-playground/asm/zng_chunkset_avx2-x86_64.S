@@ -1894,6 +1894,7 @@ leaq	.L.str(%rip), %rax
 movq	0x20(%rsp), %r15
 jmp	L_1937
 	.section .rodata
+	.p2align 5
 bums_jump_table_rodata_0:
 	.size bums_jump_table_rodata_0, 32
 	.long L_28b - bums_jump_table_rodata_0
@@ -1969,9 +1970,11 @@ permute_table:
 	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.section .rodata.cst16
+	.p2align 4
 .LCPI1_0:
 	.byte 15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15
 	.section .rodata.cst32
+	.p2align 5
 .LCPI1_1:
 	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	.byte 16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16

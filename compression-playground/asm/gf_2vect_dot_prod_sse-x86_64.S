@@ -56,5 +56,6 @@ movl	$0x1, %eax
 popq	%r12
 retq
 	.section .data
+	.p2align 4
 mask0f:
 	.byte 15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15

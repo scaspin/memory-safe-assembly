@@ -2322,6 +2322,7 @@ movl	$0x3f51, 0x8(%r11)
 leaq	.L.str(%rip), %rax
 jmp	L_1e89
 	.section .rodata
+	.p2align 5
 bums_jump_table_rodata_0:
 	.size bums_jump_table_rodata_0, 32
 	.long L_6bf - bums_jump_table_rodata_0

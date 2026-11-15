@@ -129,6 +129,7 @@ eor	v3.8b, v3.8b, v5.8b
 mov	x0, v3.d[0]
 b	.crc_tab_pre
 	.section .rodata
+	.p2align 4
 .lanchor_crc_tab:
 crc64_tab:
 	.size crc64_tab, 2048
@@ -261,5 +262,6 @@ crc64_tab:
 	.byte 178,238,187,52,26,196,237,93,33,216,81,157,241,37,29,31
 	.byte 148,131,111,103,205,7,12,216,7,181,133,206,38,230,252,154
 	.section .rodata.cst16
+	.p2align 4
 .shuffle_data:
 	.byte 15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0

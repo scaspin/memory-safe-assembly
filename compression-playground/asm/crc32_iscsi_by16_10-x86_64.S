@@ -331,6 +331,7 @@ jmp	crc32_iscsi_by16_10.cleanup
 	.text
 	.text
 	.section .rodata
+	.p2align 4
 crc32_gzip_refl_const:
 	.byte 113,18,92,233,0,0,0,0,203,113,51,206,0,0,0,0
 	.byte 158,0,170,204,0,0,0,0,208,151,25,117,1,0,0,0

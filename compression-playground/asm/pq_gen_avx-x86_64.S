@@ -100,5 +100,6 @@ return_fail:
 movl	$0x1, %eax
 retq
 	.section .data
+	.p2align 4
 poly:
 	.byte 29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29

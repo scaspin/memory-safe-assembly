@@ -214,6 +214,7 @@ shll	$0x10, %eax
 orl	%r9d, %eax
 retq
 	.section .rodata.cst16
+	.p2align 4
 .LCPI0_0:
 	.byte 32,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17
 .LCPI0_1:

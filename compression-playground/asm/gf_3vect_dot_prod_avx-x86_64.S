@@ -67,5 +67,6 @@ popq	%r13
 popq	%r12
 retq
 	.section .data
+	.p2align 4
 mask0f:
 	.byte 15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15
