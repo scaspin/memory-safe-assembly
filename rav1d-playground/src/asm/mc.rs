@@ -2,7 +2,7 @@
 
 use bums_macros as bums;
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_regular_8bpc_neon(
     dst: &mut [u8],
@@ -16,7 +16,7 @@ fn put_8tap_regular_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_regular_smooth_8bpc_neon(
     dst: &mut [u8],
@@ -30,7 +30,7 @@ fn put_8tap_regular_smooth_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_regular_sharp_8bpc_neon(
     dst: &mut [u8],
@@ -44,7 +44,7 @@ fn put_8tap_regular_sharp_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_smooth_8bpc_neon(
     dst: &mut [u8],
@@ -58,7 +58,7 @@ fn put_8tap_smooth_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_smooth_regular_8bpc_neon(
     dst: &mut [u8],
@@ -72,7 +72,7 @@ fn put_8tap_smooth_regular_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_smooth_sharp_8bpc_neon(
     dst: &mut [u8],
@@ -86,7 +86,7 @@ fn put_8tap_smooth_sharp_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_sharp_8bpc_neon(
     dst: &mut [u8],
@@ -100,7 +100,7 @@ fn put_8tap_sharp_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_sharp_regular_8bpc_neon(
     dst: &mut [u8],
@@ -114,7 +114,7 @@ fn put_8tap_sharp_regular_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 8, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn put_8tap_sharp_smooth_8bpc_neon(
     dst: &mut [u8],
@@ -142,7 +142,7 @@ fn put_bilin_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_regular_8bpc_neon(
     tmp: &mut [i16],
@@ -155,7 +155,7 @@ fn prep_8tap_regular_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_regular_smooth_8bpc_neon(
     tmp: &mut [i16],
@@ -168,7 +168,7 @@ fn prep_8tap_regular_smooth_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_regular_sharp_8bpc_neon(
     tmp: &mut [i16],
@@ -181,7 +181,7 @@ fn prep_8tap_regular_sharp_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_smooth_8bpc_neon(
     tmp: &mut [i16],
@@ -194,7 +194,7 @@ fn prep_8tap_smooth_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_smooth_regular_8bpc_neon(
     tmp: &mut [i16],
@@ -207,7 +207,7 @@ fn prep_8tap_smooth_regular_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_smooth_sharp_8bpc_neon(
     tmp: &mut [i16],
@@ -220,7 +220,7 @@ fn prep_8tap_smooth_sharp_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_sharp_8bpc_neon(
     tmp: &mut [i16],
@@ -233,7 +233,7 @@ fn prep_8tap_sharp_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_sharp_regular_8bpc_neon(
     tmp: &mut [i16],
@@ -246,7 +246,7 @@ fn prep_8tap_sharp_regular_8bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
     [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 8, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
 fn prep_8tap_sharp_smooth_8bpc_neon(
     tmp: &mut [i16],
@@ -323,11 +323,11 @@ fn emu_edge_8bpc_neon(
     src_stride: usize,
 );
 
-#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, abcd.as_ptr(), mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, abcd.as_ptr(), mx, my, bitdepth_max,
     [dst.len() == dst_stride * 8, src.len() == src_stride * 15, abcd.len() == 4, dst_stride >= 8, src_stride >= 32, abcd[0] == alpha, abcd[1] == beta, abcd[2] == gamma, abcd[3] == delta, alpha >= -8191, alpha <= 8191, beta >= -4681, beta <= 4681, gamma >= -8191, gamma <= 8191, delta >= -8191, delta <= 8191, mx + 4 * alpha + 7 * beta >= -63, mx + 4 * alpha + 7 * beta <= 65535, my + 4 * gamma + 4 * delta >= -63, my + 4 * gamma + 4 * delta <= 65535])]
 fn warp_affine_8x8_8bpc_neon(dst: &mut [u8], dst_stride: usize, src: &[u8], src_stride: usize, abcd: &[i16], mx: i32, my: i32, bitdepth_max: i32, alpha: i32, beta: i32, gamma: i32, delta: i32);
 
-#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), tmp_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, abcd.as_ptr(), mx, my, bitdepth_max,
+#[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), tmp_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, abcd.as_ptr(), mx, my, bitdepth_max,
     [tmp.len() == tmp_stride * 8, src.len() == src_stride * 15, abcd.len() == 4, tmp_stride >= 8, src_stride >= 32, abcd[0] == alpha, abcd[1] == beta, abcd[2] == gamma, abcd[3] == delta, alpha >= -8191, alpha <= 8191, beta >= -4681, beta <= 4681, gamma >= -8191, gamma <= 8191, delta >= -8191, delta <= 8191, mx + 4 * alpha + 7 * beta >= -63, mx + 4 * alpha + 7 * beta <= 65535, my + 4 * gamma + 4 * delta >= -63, my + 4 * gamma + 4 * delta <= 65535])]
 fn warp_affine_8x8t_8bpc_neon(tmp: &mut [i16], tmp_stride: usize, src: &[u8], src_stride: usize, abcd: &[i16], mx: i32, my: i32, bitdepth_max: i32, alpha: i32, beta: i32, gamma: i32, delta: i32);
 
@@ -338,8 +338,8 @@ fn put_neon(dst: &mut [u8], dst_stride: usize, src: &[u8], src_stride: usize, w:
 #[bums::check_mem_safe("mc.S", tmp.as_mut_ptr(), src.as_ptr(), src_stride, w, h,
     [tmp.len() == w * h, src.len() == src_stride * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, reg(x8) == clz32(w) - 24])]
 fn prep_neon(tmp: &mut [i16], src: &[u8], src_stride: usize, w: usize, h: usize);
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_regular_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -352,8 +352,8 @@ fn put_8tap_regular_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_regular_smooth_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -366,8 +366,8 @@ fn put_8tap_regular_smooth_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_regular_sharp_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -380,8 +380,8 @@ fn put_8tap_regular_sharp_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_smooth_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -394,8 +394,8 @@ fn put_8tap_smooth_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_smooth_regular_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -408,8 +408,8 @@ fn put_8tap_smooth_regular_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_smooth_sharp_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -422,8 +422,8 @@ fn put_8tap_smooth_sharp_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_sharp_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -436,8 +436,8 @@ fn put_8tap_sharp_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_sharp_regular_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -450,8 +450,8 @@ fn put_8tap_sharp_regular_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_8tap_sharp_smooth_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -465,7 +465,7 @@ fn put_8tap_sharp_smooth_16bpc_neon(
 );
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr(), src_stride, w, h, mx, my, bitdepth_max,
-    [dst.len() == dst_stride * h, src.len() == src_stride * (h + 1) + w + 2, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * (h + 1) + w + 2, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_bilin_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -478,8 +478,8 @@ fn put_bilin_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_regular_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -491,8 +491,8 @@ fn prep_8tap_regular_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_regular_smooth_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -504,8 +504,8 @@ fn prep_8tap_regular_smooth_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_regular_sharp_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -517,8 +517,8 @@ fn prep_8tap_regular_sharp_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_smooth_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -530,8 +530,8 @@ fn prep_8tap_smooth_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_smooth_regular_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -543,8 +543,8 @@ fn prep_8tap_smooth_regular_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_smooth_sharp_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -556,8 +556,8 @@ fn prep_8tap_smooth_sharp_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_sharp_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -569,8 +569,8 @@ fn prep_8tap_sharp_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_sharp_regular_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -582,8 +582,8 @@ fn prep_8tap_sharp_regular_16bpc_neon(
     bitdepth_max: i32,
 );
 
-#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+#[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr().add(3 * (src_stride / 2) + 3), src_stride, w, h, mx, my, bitdepth_max,
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 6) + w + 7, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_8tap_sharp_smooth_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -596,7 +596,7 @@ fn prep_8tap_sharp_smooth_16bpc_neon(
 );
 
 #[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr(), src_stride, w, h, mx, my, bitdepth_max,
-    [tmp.len() == w * h, src.len() == src_stride * (h + 1) + w + 2, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * (h + 1) + w + 2, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, mx >= 0, mx <= 15, my >= 0, my <= 15, src_stride % 2 == 0])]
 fn prep_bilin_16bpc_neon(
     tmp: &mut [i16],
     src: &[u16],
@@ -609,39 +609,39 @@ fn prep_bilin_16bpc_neon(
 );
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp1.as_ptr(), tmp2.as_ptr(), w, h, bitdepth_max,
-    [dst.len() == stride * h, tmp1.len() == w * h, tmp2.len() == w * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp1.len() == w * h, tmp2.len() == w * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn avg_16bpc_neon(dst: &mut [u16], stride: usize, tmp1: &[i16], tmp2: &[i16], w: usize, h: usize, bitdepth_max: i32);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp1.as_ptr(), tmp2.as_ptr(), w, h, weight, bitdepth_max,
-    [dst.len() == stride * h, tmp1.len() == w * h, tmp2.len() == w * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp1.len() == w * h, tmp2.len() == w * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn w_avg_16bpc_neon(dst: &mut [u16], stride: usize, tmp1: &[i16], tmp2: &[i16], w: usize, h: usize, weight: i32, bitdepth_max: i32);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp1.as_ptr(), tmp2.as_ptr(), w, h, mask.as_ptr(), bitdepth_max,
-    [dst.len() == stride * h, tmp1.len() == w * h, tmp2.len() == w * h, mask.len() == w * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp1.len() == w * h, tmp2.len() == w * h, mask.len() == w * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn mask_16bpc_neon(dst: &mut [u16], stride: usize, tmp1: &[i16], tmp2: &[i16], w: usize, h: usize, mask: &[u8], bitdepth_max: i32);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp1.as_ptr(), tmp2.as_ptr(), w, h, mask.as_mut_ptr(), sign, bitdepth_max,
-    [dst.len() == stride * h, tmp1.len() == w * h, tmp2.len() == w * h, mask.len() == w * h / 4, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp1.len() == w * h, tmp2.len() == w * h, mask.len() == w * h / 4, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn w_mask_420_16bpc_neon(dst: &mut [u16], stride: usize, tmp1: &[i16], tmp2: &[i16], w: usize, h: usize, mask: &mut [u8], sign: i32, bitdepth_max: i32);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp1.as_ptr(), tmp2.as_ptr(), w, h, mask.as_mut_ptr(), sign, bitdepth_max,
-    [dst.len() == stride * h, tmp1.len() == w * h, tmp2.len() == w * h, mask.len() == w * h / 2, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp1.len() == w * h, tmp2.len() == w * h, mask.len() == w * h / 2, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn w_mask_422_16bpc_neon(dst: &mut [u16], stride: usize, tmp1: &[i16], tmp2: &[i16], w: usize, h: usize, mask: &mut [u8], sign: i32, bitdepth_max: i32);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp1.as_ptr(), tmp2.as_ptr(), w, h, mask.as_mut_ptr(), sign, bitdepth_max,
-    [dst.len() == stride * h, tmp1.len() == w * h, tmp2.len() == w * h, mask.len() == w * h / 1, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp1.len() == w * h, tmp2.len() == w * h, mask.len() == w * h / 1, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn w_mask_444_16bpc_neon(dst: &mut [u16], stride: usize, tmp1: &[i16], tmp2: &[i16], w: usize, h: usize, mask: &mut [u8], sign: i32, bitdepth_max: i32);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp.as_ptr(), w, h, mask.as_ptr(),
-    [dst.len() == stride * h, tmp.len() == w * h, mask.len() == w * h, w >= 4, h >= 4, w <= 32, h <= 32, 32 % h == 0, 32 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp.len() == w * h, mask.len() == w * h, w >= 4, h >= 4, w <= 32, h <= 32, 32 % h == 0, 32 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn blend_16bpc_neon(dst: &mut [u16], stride: usize, tmp: &[u16], w: usize, h: usize, mask: &[u8]);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp.as_ptr(), w, h,
-    [dst.len() == stride * h, tmp.len() == w * h, w >= 2, h >= 4, w <= 32, h <= 32, 32 % h == 0, 32 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp.len() == w * h, w >= 2, h >= 4, w <= 32, h <= 32, 32 % h == 0, 32 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn blend_v_16bpc_neon(dst: &mut [u16], stride: usize, tmp: &[u16], w: usize, h: usize);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), stride, tmp.as_ptr(), w, h,
-    [dst.len() == stride * h, tmp.len() == w * h, w >= 2, h >= 2, w <= 128, h <= 32, 32 % h == 0, 128 % w == 0, stride >= w])]
+    [dst.len() == (stride / 2) * h, tmp.len() == w * h, w >= 2, h >= 2, w <= 128, h <= 32, 32 % h == 0, 128 % w == 0, (stride / 2) >= w, stride % 2 == 0])]
 fn blend_h_16bpc_neon(dst: &mut [u16], stride: usize, tmp: &[u16], w: usize, h: usize);
 
 #[bums::check_mem_safe("mc16.S", bw, bh, iw, ih, x, y, dst.as_mut_ptr(), dst_stride, src.as_ptr(), src_stride,
@@ -660,7 +660,7 @@ fn emu_edge_16bpc_neon(
 );
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().byte_add(3 * src_stride + 6), src_stride, abcd.as_ptr(), mx, my, bitdepth_max,
-    [dst.len() == dst_stride * 8, src.len() * 2 == src_stride * 15, abcd.len() == 4, dst_stride >= 8, src_stride >= 64, src_stride % 2 == 0, abcd[0] == alpha, abcd[1] == beta, abcd[2] == gamma, abcd[3] == delta, alpha >= -8191, alpha <= 8191, beta >= -4681, beta <= 4681, gamma >= -8191, gamma <= 8191, delta >= -8191, delta <= 8191, mx + 4 * alpha + 7 * beta >= -63, mx + 4 * alpha + 7 * beta <= 65535, my + 4 * gamma + 4 * delta >= -63, my + 4 * gamma + 4 * delta <= 65535])]
+    [dst.len() == (dst_stride / 2) * 8, src.len() * 2 == (src_stride / 2) * 15, abcd.len() == 4, (dst_stride / 2) >= 8, (src_stride / 2) >= 64, (src_stride / 2) % 2 == 0, abcd[0] == alpha, abcd[1] == beta, abcd[2] == gamma, abcd[3] == delta, alpha >= -8191, alpha <= 8191, beta >= -4681, beta <= 4681, gamma >= -8191, gamma <= 8191, delta >= -8191, delta <= 8191, mx + 4 * alpha + 7 * beta >= -63, mx + 4 * alpha + 7 * beta <= 65535, my + 4 * gamma + 4 * delta >= -63, my + 4 * gamma + 4 * delta <= 65535, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn warp_affine_8x8_16bpc_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, abcd: &[i16], mx: i32, my: i32, bitdepth_max: i32, alpha: i32, beta: i32, gamma: i32, delta: i32);
 
 #[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), tmp_stride, src.as_ptr().byte_add(3 * src_stride + 6), src_stride, abcd.as_ptr(), mx, my, bitdepth_max,
@@ -668,11 +668,11 @@ fn warp_affine_8x8_16bpc_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], s
 fn warp_affine_8x8t_16bpc_neon(tmp: &mut [i16], tmp_stride: usize, src: &[u16], src_stride: usize, abcd: &[i16], mx: i32, my: i32, bitdepth_max: i32, alpha: i32, beta: i32, gamma: i32, delta: i32);
 
 #[bums::check_mem_safe("mc16.S", dst.as_mut_ptr(), dst_stride, src.as_ptr(), src_stride, w, h,
-    [dst.len() == dst_stride * h, src.len() == src_stride * h, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, reg(x9) == clz32(w) - 24])]
+    [dst.len() == (dst_stride / 2) * h, src.len() == (src_stride / 2) * h, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (dst_stride / 2) >= w, (src_stride / 2) >= w, reg(x9) == clz32(w) - 24, dst_stride % 2 == 0, src_stride % 2 == 0])]
 fn put_16bpc_neon(dst: &mut [u16], dst_stride: usize, src: &[u16], src_stride: usize, w: usize, h: usize);
 
 #[bums::check_mem_safe("mc16.S", tmp.as_mut_ptr(), src.as_ptr(), src_stride, w, h,
-    [tmp.len() == w * h, src.len() == src_stride * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, src_stride >= w, reg(x9) == clz32(w) - 24, reg(x8) == 2 * w])]
+    [tmp.len() == w * h, src.len() == (src_stride / 2) * h, w >= 4, h >= 4, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, (src_stride / 2) >= w, reg(x9) == clz32(w) - 24, reg(x8) == 2 * w, src_stride % 2 == 0])]
 fn prep_16bpc_neon(tmp: &mut [i16], src: &[u16], src_stride: usize, w: usize, h: usize);
 #[bums::check_mem_safe("mc_dotprod.S", dst.as_mut_ptr(), dst_stride, src.as_ptr().add(3 * src_stride + 3), src_stride, w, h, mx, my, bitdepth_max,
     [dst.len() == dst_stride * h, src.len() == src_stride * (h + 6) + w + 7, w >= 2, h >= 2, w <= 128, h <= 128, 128 % h == 0, 128 % w == 0, dst_stride >= w, src_stride >= w, mx >= 0, mx <= 15, my >= 0, my <= 15])]

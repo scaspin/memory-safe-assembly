@@ -88,7 +88,7 @@ fn cdef_padding8_edged_8bpc_neon(
     edges: u32,
 );
 #[bums::check_mem_safe("cdef16.S", tmp.as_mut_ptr().add(24), src.as_ptr(), src_stride, left.as_ptr(), top.as_ptr().add(2), bottom.as_ptr().add(2), h, edges,
-    [tmp.len() == 104, src.len() == src_stride * h + 2, left.len() == 16, top.len() == src_stride + 4 + 6, bottom.len() == src_stride + 4 + 6, h >= 4, h <= 8, src_stride >= 4])]
+    [tmp.len() == 104, src.len() == (src_stride / 2) * h + 2, left.len() == 16, top.len() == (src_stride / 2) + 4 + 6, bottom.len() == (src_stride / 2) + 4 + 6, h >= 4, h <= 8, (src_stride / 2) >= 4, src_stride % 2 == 0])]
 fn cdef_padding4_16bpc_neon(
     tmp: &mut [u16],
     src: &[u16],
@@ -101,7 +101,7 @@ fn cdef_padding4_16bpc_neon(
 );
 
 #[bums::check_mem_safe("cdef16.S", dst.as_mut_ptr(), dst_stride, tmp.as_ptr().add(24), pri_strength, sec_strength, dir, damping, h, edges, bitdepth_max,
-    [dst.len() == dst_stride * h, tmp.len() == 104, h >= 4, h <= 8, h % 4 == 0, dst_stride >= 4, dir >= 0, dir <= 7])]
+    [dst.len() == (dst_stride / 2) * h, tmp.len() == 104, h >= 4, h <= 8, h % 4 == 0, (dst_stride / 2) >= 4, dir >= 0, dir <= 7, dst_stride % 2 == 0])]
 fn cdef_filter4_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
@@ -116,7 +116,7 @@ fn cdef_filter4_16bpc_neon(
 );
 
 #[bums::check_mem_safe("cdef16.S", tmp.as_mut_ptr().add(40), src.as_ptr(), src_stride, left.as_ptr(), top.as_ptr().add(2), bottom.as_ptr().add(2), h, edges,
-    [tmp.len() == 200, src.len() == src_stride * h + 2, left.len() == 16, top.len() == src_stride + 8 + 6, bottom.len() == src_stride + 8 + 6, h >= 4, h <= 8, src_stride >= 8])]
+    [tmp.len() == 200, src.len() == (src_stride / 2) * h + 2, left.len() == 16, top.len() == (src_stride / 2) + 8 + 6, bottom.len() == (src_stride / 2) + 8 + 6, h >= 4, h <= 8, (src_stride / 2) >= 8, src_stride % 2 == 0])]
 fn cdef_padding8_16bpc_neon(
     tmp: &mut [u16],
     src: &[u16],
@@ -129,7 +129,7 @@ fn cdef_padding8_16bpc_neon(
 );
 
 #[bums::check_mem_safe("cdef16.S", dst.as_mut_ptr(), dst_stride, tmp.as_ptr().add(40), pri_strength, sec_strength, dir, damping, h, edges, bitdepth_max,
-    [dst.len() == dst_stride * h, tmp.len() == 200, h >= 4, h <= 8, h % 4 == 0, dst_stride >= 8, dir >= 0, dir <= 7])]
+    [dst.len() == (dst_stride / 2) * h, tmp.len() == 200, h >= 4, h <= 8, h % 4 == 0, (dst_stride / 2) >= 8, dir >= 0, dir <= 7, dst_stride % 2 == 0])]
 fn cdef_filter8_16bpc_neon(
     dst: &mut [u16],
     dst_stride: usize,
