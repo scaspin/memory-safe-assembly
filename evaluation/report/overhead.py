@@ -1,8 +1,6 @@
 import csv
 import random
 import statistics
-import sys
-from pathlib import Path
 
 import matplotlib
 import matplotlib.ticker
@@ -11,17 +9,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-HERE = Path(__file__).resolve().parent
-DOMAINS = [
-    ("crypto", "Cryptography", "#2a78d6", "o"),
-    ("media", "Media codecs", "#eb6834", "s"),
-    ("compression", "Compression", "#1baf7a", "^"),
-    ("numeric", "Numeric / ML", "#eda100", "D"),
-]
+from .suites import DOMAINS, GRID, INK, INK_2
+
 STYLE = {key: (color, marker) for key, _, color, marker in DOMAINS}
-INK = "#0b0b0b"
-INK_2 = "#52514e"
-GRID = "#e4e3df"
 SIZES = [("min", "Smallest valid input"), ("mid", "Typical input (~1 KiB)"), ("max", "Large input (16-64 KiB)")]
 
 
@@ -108,31 +98,32 @@ def added_figure(rows, out):
         figure.savefig(out / f"wrapper-overhead-added.{suffix}", dpi=200)
 
 
-def main():
-    path = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / "results" / "overhead.tsv"
-    isolated_path = Path(sys.argv[2]) if len(sys.argv) > 2 else path.parent / "isolated.tsv"
+def render(directory, out):
+    path = directory / "overhead.tsv"
+    isolated_path = directory / "isolated.tsv"
+    if not path.exists():
+        return []
     rows = load(path)
     plt.rcParams.update({"font.size": 8, "axes.edgecolor": INK_2, "axes.labelcolor": INK, "xtick.color": INK_2, "ytick.color": INK_2})
-    runtime_figure(rows, path.parent)
+    runtime_figure(rows, out)
+    paths = [out / "wrapper-overhead.pdf"]
     if isolated_path.exists():
         isolated = load(isolated_path)
-        added_figure(isolated, path.parent)
+        added_figure(isolated, out)
+        paths.append(out / "wrapper-overhead-added.pdf")
         once = [r for r in isolated if r["size"] == "min"]
         for label, group in (("no struct", [r for r in once if not r["structs"]]), ("struct", [r for r in once if r["structs"]])):
             added = sorted(r["added_ns"] for r in group)
-            print(f"isolated {label}: n={len(group)} added ns median {statistics.median(added):.2f}, range {added[0]:.2f}..{added[-1]:.2f}")
+            print(f"overhead, isolated {label}: n={len(group)} added ns median {statistics.median(added):.2f}, range {added[0]:.2f}..{added[-1]:.2f}")
     for size, _ in SIZES:
         mine = [r for r in rows if r["size"] == size]
         plain = [r["added_ns"] for r in mine if not r["structs"]]
         structs = [r["added_ns"] for r in mine if r["structs"]]
-        line = f"{size}: n={len(mine)}  median overhead {statistics.median(r['paired_ratio'] - 1 for r in mine) * 100:+.2f}%"
+        line = f"overhead, {size} input: n={len(mine)}  median overhead {statistics.median(r['paired_ratio'] - 1 for r in mine) * 100:+.2f}%"
         if plain:
             line += f"  added ns median {statistics.median(plain):.1f} (no struct)"
         if structs:
             line += f", {statistics.median(structs):.1f} (struct)"
         print(line)
-    print(path.parent / "wrapper-overhead.pdf")
-
-
-if __name__ == "__main__":
-    main()
+    plt.close("all")
+    return paths

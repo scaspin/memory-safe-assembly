@@ -2,8 +2,6 @@ import csv
 import random
 import re
 import statistics
-import sys
-from pathlib import Path
 
 import matplotlib
 import matplotlib.ticker
@@ -11,46 +9,11 @@ import matplotlib.ticker
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+from .suites import DOMAINS, GRID, INK, INK_2, REFERENCE, ROOT, SUITES
+
 TOKEN = re.compile(r"[A-Za-z_]\w*|\d+|->|==|<=|>=|!=|&&|\|\||\S")
 CHECKER_OPTION = re.compile(r"(?:(?:red_zone|abi|symbol)\s*=(?!=)|rejects$)")
 ATTRIBUTE = re.compile(r"#\[(?:cfg_attr\(\s*target_arch\s*=\s*\"(\w+)\"\s*,\s*)?(?:bums|bums_macros)::check_mem_safe\(")
-SUITES = {
-    "corecrypto": ("corecrypto-playground", "aarch64", "crypto"),
-    "graviola": ("graviola-playground", "aarch64", "crypto"),
-    "crypto": ("crypto-playground", "aarch64", "crypto"),
-    "crypto-x86": ("crypto-playground", "x86_64", "crypto"),
-    "bignum": ("bignum-playground", "aarch64", "crypto"),
-    "openblas": ("openblas-playground", "aarch64", "numeric"),
-    "openblas-x86": ("openblas-playground", "x86_64", "numeric"),
-    "candle": ("candle-playground", "aarch64", "numeric"),
-    "rav1d": ("rav1d-playground", "aarch64", "media"),
-    "rav1d-x86": ("rav1d-playground", "x86_64", "media"),
-    "ffmpeg": ("ffmpeg-playground", "aarch64", "media"),
-    "compression": ("compression-playground", "aarch64", "compression"),
-    "compression-x86": ("compression-playground", "x86_64", "compression"),
-    "blake3": ("blake3-secp256k1-playground", "aarch64", "crypto"),
-    "blake3-x86": ("blake3-secp256k1-playground", "x86_64", "crypto"),
-    "secsep-x86": ("secsep-playground", "x86_64", "crypto"),
-}
-DISPLAY = {
-    "crypto": "AWS-LC",
-    "crypto-x86": "AWS-LC-x86",
-    "blake3": "BLAKE3/secp256k1",
-    "blake3-x86": "BLAKE3/secp256k1-x86",
-    "secsep-x86": "BoringSSL (SecSep)-x86",
-}
-DOMAINS = [
-    ("crypto", "Cryptography", "#2a78d6", "o"),
-    ("media", "Media codecs", "#eb6834", "s"),
-    ("compression", "Compression", "#1baf7a", "^"),
-    ("numeric", "Numeric / ML", "#eda100", "D"),
-]
-REFERENCE = "#8a8984"
-INK = "#0b0b0b"
-INK_2 = "#52514e"
-GRID = "#e4e3df"
 
 
 def balanced(text, start):
@@ -126,19 +89,18 @@ def secsep_reference():
             for r in csv.DictReader(open(data / "per_function.csv"))]
 
 
-def main():
-    results = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / "published" / "rework-5f5018a4" / "run1"
-    out = Path(sys.argv[2]) if len(sys.argv) > 2 else results.parent
-    out.mkdir(parents=True, exist_ok=True)
+def render(results, out):
     points, unmatched = [], []
-    for suite, (crate, arch, domain) in SUITES.items():
-        ann = annotations(crate, arch)
-        for function, (seconds, loops) in verified(results, suite).items():
+    for suite in SUITES:
+        ann = annotations(suite.crate, suite.arch)
+        for function, (seconds, loops) in verified(results, suite.name).items():
             a = ann.get(function)
             if a is None:
-                unmatched.append(f"{suite}/{function}")
+                unmatched.append(f"{suite.name}/{function}")
                 continue
-            points.append(dict(suite=DISPLAY.get(suite, suite), domain=domain, function=function, clauses=a["clauses"], tokens=a["tokens"], seconds=seconds, loops=loops, file=a["file"]))
+            points.append(dict(suite=suite.display, domain=suite.domain, function=function, clauses=a["clauses"], tokens=a["tokens"], seconds=seconds, loops=loops, file=a["file"]))
+    if not points:
+        return None, points
     with open(out / "annotation-vs-time.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(points[0]))
         w.writeheader()
@@ -176,7 +138,7 @@ def main():
         figure.savefig(out / f"annotation-vs-time.{suffix}", dpi=200)
 
     times = [p["seconds"] for p in points]
-    print(f"{len(points)} verified functions plotted from {results}; {len(unmatched)} verified rows without a parsed annotation")
+    print(f"annotation vs time: {len(points)} verified functions; {len(unmatched)} without a parsed annotation")
     print(f"median time {statistics.median(times):.2f} s, median clauses {statistics.median(p['clauses'] for p in points)}, median tokens {statistics.median(p['tokens'] for p in points)}")
     for key, name, _, _ in DOMAINS:
         mine = [p for p in points if p["domain"] == key]
@@ -184,8 +146,5 @@ def main():
             print(f"  {name:14} n={len(mine):5}  loops {sum(p['loops'] > 0 for p in mine):5}  clauses median {statistics.median(p['clauses'] for p in mine):4}  time median {statistics.median(p['seconds'] for p in mine):7.2f} s")
     if unmatched:
         print("unmatched (first 10):", ", ".join(unmatched[:10]))
-    print(out / "annotation-vs-time.pdf")
-
-
-if __name__ == "__main__":
-    main()
+    plt.close(figure)
+    return out / "annotation-vs-time.pdf", points

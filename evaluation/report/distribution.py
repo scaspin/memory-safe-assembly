@@ -1,7 +1,5 @@
 import csv
 import statistics
-import sys
-from pathlib import Path
 
 import matplotlib
 
@@ -10,9 +8,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker
 import numpy
 
-from annotation_vs_time import DOMAINS, GRID, INK, INK_2, REFERENCE, secsep_reference
-
-HERE = Path(__file__).resolve().parent
+from .annotations import secsep_reference
+from .suites import DOMAINS, GRID, INK, INK_2, REFERENCE
 
 
 def seconds_label(value, _=None):
@@ -132,20 +129,21 @@ def full_version(points, theirs, stack_order, everything, width=25, zoom=5.0, zo
     return figure
 
 
-def main():
-    results = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / "published" / "rework-5f5018a4"
-    points = list(csv.DictReader(open(results / "annotation-vs-time.csv")))
+def render(out):
+    source = out / "annotation-vs-time.csv"
+    if not source.exists():
+        return []
+    points = list(csv.DictReader(open(source)))
     theirs = [r["seconds"] for r in secsep_reference()]
     everything = [float(p["seconds"]) for p in points]
-    stack_order = sorted(DOMAINS, key=lambda d: -sum(p["domain"] == d[0] for p in points))
+    present = [d for d in DOMAINS if any(p["domain"] == d[0] for p in points)]
+    stack_order = sorted(present, key=lambda d: -sum(p["domain"] == d[0] for p in points))
     plt.rcParams.update({"font.size": 8, "axes.edgecolor": INK_2, "axes.labelcolor": INK, "xtick.color": INK_2, "ytick.color": INK_2})
+    paths = []
     for name, build in (("log", log_version), ("linear-overflow", overflow_version), ("linear-full", full_version)):
         figure = build(points, theirs, stack_order, everything)
         for suffix in ("pdf", "png"):
-            figure.savefig(results / f"time-distribution-{name}.{suffix}", dpi=200)
+            figure.savefig(out / f"time-distribution-{name}.{suffix}", dpi=200)
         plt.close(figure)
-        print(results / f"time-distribution-{name}.pdf")
-
-
-if __name__ == "__main__":
-    main()
+        paths.append(out / f"time-distribution-{name}.pdf")
+    return paths
