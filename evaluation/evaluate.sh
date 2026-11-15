@@ -21,6 +21,7 @@ python=${PYTHON:-python3}
 tty=0
 [[ -t 2 ]] && tty=1
 checked=0
+resumed=-1
 total=0
 started=$(date +%s)
 suite_index=0
@@ -113,7 +114,7 @@ start_watchdog() {
 
 progress() {
   local suite=$1 pass=$2
-  awk -v suite="$suite" -v pass="$pass" -v before="$checked" -v total="$total" -v started="$started" \
+  awk -v suite="$suite" -v pass="$pass" -v before="$checked" -v resumed="$resumed" -v total="$total" -v started="$started" \
       -v progress_file="$out/progress.txt" -v tty="$tty" -v index_label="$suite_index/$suite_count" '
     function bar(done, all, width,   filled, text, i) {
       filled = all > 0 ? int(width * done / all) : 0
@@ -133,7 +134,8 @@ progress() {
         clock_command | getline now
         close(clock_command)
         elapsed = now - started
-        eta = done > 0 ? elapsed * (total - done) / done : 0
+        fresh = done - resumed
+        eta = fresh > 0 ? elapsed * (total - done) / fresh : 0
         line = sprintf("suite %s %-16s %-4s [%s] %d/%d | all [%s] %d/%d %3.0f%% | %s elapsed, ~%s left | %s %s",
                        index_label, suite, pass, bar(part[1], part[2], 20), part[1], part[2],
                        bar(done, total, 20), done, total, total ? 100 * done / total : 0,
@@ -204,6 +206,7 @@ sweep() {
       if [[ $run -gt 1 && -s $out/run1/$name.tsv ]]; then
         awk -F'\t' '$3 != "verified" && $3 != "rejected" {print $1}' "$out/run1/$name.tsv" >>"$skip_file"
       fi
+      [[ $resumed -lt 0 ]] && { resumed=$checked; started=$(date +%s); }
       echo "--- run $run suite $suite_index/$suite_count $name  $(date '+%T')"
       check_suite "$name" "$crate" "$flags" "$tsv" "$skip_file" "$slow_list"
       rm -f "$skip_file"
