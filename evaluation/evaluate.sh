@@ -18,6 +18,13 @@ slow_steps=20000000
 min_free_gb=1.5
 open_figures=false
 python=${PYTHON:-python3}
+tty=0
+[[ -t 2 ]] && tty=1
+checked=0
+total=0
+started=$(date +%s)
+suite_index=0
+suite_count=0
 
 usage() {
   cat <<EOF
@@ -104,39 +111,100 @@ start_watchdog() {
   trap 'kill $watchdog 2>/dev/null || true' EXIT
 }
 
+progress() {
+  local suite=$1 pass=$2
+  awk -v suite="$suite" -v pass="$pass" -v before="$checked" -v total="$total" -v started="$started" \
+      -v progress_file="$out/progress.txt" -v tty="$tty" -v index_label="$suite_index/$suite_count" '
+    function bar(done, all, width,   filled, text, i) {
+      filled = all > 0 ? int(width * done / all) : 0
+      text = ""
+      for (i = 0; i < width; i++) text = text (i < filled ? "#" : ".")
+      return text
+    }
+    function clock(seconds) { return sprintf("%dh%02dm", seconds / 3600, (seconds % 3600) / 60) }
+    {
+      print
+      fflush()
+      if (match($0, /^\[[0-9]+\/[0-9]+\]/)) {
+        split(substr($0, 2, RLENGTH - 2), part, "/")
+        done = before + part[1]
+        status[$4]++
+        clock_command = "date +%s"
+        clock_command | getline now
+        close(clock_command)
+        elapsed = now - started
+        eta = done > 0 ? elapsed * (total - done) / done : 0
+        line = sprintf("suite %s %-16s %-4s [%s] %d/%d | all [%s] %d/%d %3.0f%% | %s elapsed, ~%s left | %s %s",
+                       index_label, suite, pass, bar(part[1], part[2], 20), part[1], part[2],
+                       bar(done, total, 20), done, total, total ? 100 * done / total : 0,
+                       clock(elapsed), clock(eta), $2, $4)
+        print line > progress_file
+        close(progress_file)
+        if (tty) printf "\r\033[K%s", substr(line, 1, 150) > "/dev/stderr"
+      }
+    }
+    END { if (tty) printf "\r\033[K" > "/dev/stderr" }'
+}
+
 check_suite() {
   local name=$1 crate=$2 flags=$3 tsv=$4 skip_file=$5 slow_list=$6
   local skip=()
   [[ -s $skip_file ]] && skip=(--skip-file "$skip_file")
   (cd "$root" && "$check" "$crate" $flags --jobs "$jobs" --mem-gb "$mem_gb" --timeout "$timeout" \
-    ${skip[@]+"${skip[@]}"} --out "$tsv.partial") | tail -1 || true
+    ${skip[@]+"${skip[@]}"} --out "$tsv.partial") 2>&1 | { progress "$name" main; cat >/dev/null; } || true
+  checked=$((checked + $(wc -l <"$tsv.partial" 2>/dev/null || echo 0)))
   if [[ -s $slow_list ]]; then
     local pattern="^($(paste -sd'|' "$slow_list"))\$"
-    echo "    slow pass: $(wc -l <"$slow_list" | tr -d ' ') functions, up to ${slow_timeout}s each"
+    echo "    slow pass: $(wc -l <"$slow_list" | tr -d ' ') functions skipped above, now checked with up to ${slow_timeout}s each"
     (cd "$root" && BUMS_MAX_STEPS=$slow_steps "$check" "$crate" $flags --filter "$pattern" --jobs "$jobs" \
-      --mem-gb "$mem_gb" --timeout "$slow_timeout" --out "$tsv.slow") | tail -1 || true
+      --mem-gb "$mem_gb" --timeout "$slow_timeout" --out "$tsv.slow") 2>&1 | { progress "$name" slow; cat >/dev/null; } || true
     [[ -f $tsv.slow ]] && cat "$tsv.slow" >>"$tsv.partial"
+    checked=$((checked + $(wc -l <"$tsv.slow" 2>/dev/null || echo 0)))
     rm -f "$tsv.slow"
   fi
   mv "$tsv.partial" "$tsv"
+  awk -F'\t' '{n++; s[$3]++} END {printf "    %s: %d checks", FILENAME, n; for (k in s) printf ", %d %s", s[k], k; print ""}' "$tsv" \
+    | sed "s|$out/||"
+}
+
+count_checks() {
+  total=0
+  while IFS='|' read -r name crate flags; do
+    [[ -n $only && " $only " != *" $name "* ]] && continue
+    local n
+    n=$(cd "$root" && "$check" "$crate" $flags --list 2>/dev/null | awk -F'\t' 'NF >= 2' | wc -l | tr -d ' ')
+    total=$((total + n))
+  done < <(suites)
 }
 
 sweep() {
   (cd "$root" && cargo build --release -p bums-check)
+  echo "counting annotated functions in every suite"
+  count_checks
+  suite_count=$(suites | awk -F'|' -v only=" $only " 'only == "  " || index(only, " " $1 " ") {n++} END {print n}')
+  echo "$total checks in $suite_count suites; follow progress with: tail -f $out/progress.txt"
+  started=$(date +%s)
   start_watchdog
   for run in $(seq 1 "$runs"); do
     mkdir -p "$out/run$run"
+    checked=0
+    suite_index=0
     while IFS='|' read -r name crate flags; do
       [[ -n $only && " $only " != *" $name "* ]] && continue
+      suite_index=$((suite_index + 1))
       local tsv=$out/run$run/$name.tsv
-      [[ -s $tsv ]] && { echo "--- run $run $name: already done"; continue; }
+      if [[ -s $tsv ]]; then
+        checked=$((checked + $(wc -l <"$tsv")))
+        echo "--- run $run suite $suite_index/$suite_count $name: already done ($(wc -l <"$tsv" | tr -d ' ') checks)"
+        continue
+      fi
       local skip_file=$out/run$run/$name.skip slow_list=$here/slow/$name.txt
       : >"$skip_file"
       [[ -s $slow_list ]] && cat "$slow_list" >>"$skip_file"
       if [[ $run -gt 1 && -s $out/run1/$name.tsv ]]; then
         awk -F'\t' '$3 != "verified" && $3 != "rejected" {print $1}' "$out/run1/$name.tsv" >>"$skip_file"
       fi
-      echo "--- run $run $name  $(date '+%T')"
+      echo "--- run $run suite $suite_index/$suite_count $name  $(date '+%T')"
       check_suite "$name" "$crate" "$flags" "$tsv" "$skip_file" "$slow_list"
       rm -f "$skip_file"
     done < <(suites)
