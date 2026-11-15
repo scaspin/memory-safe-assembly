@@ -829,3 +829,28 @@ fn a_loop_with_several_back_edges_still_catches_a_read_past_the_block() {
     let program = latch_above_the_body("movzbl 64(%rdi),%eax");
     assert_rejected_access(analyze_with(program, at_least(0)));
 }
+
+#[test]
+fn a_short_block_that_keeps_the_loop_going_is_still_checked() {
+    let program = lines(&[
+        "start:",
+        "testq %rsi,%rsi",
+        "je .Lout",
+        "movq %rsi,%r10",
+        ".Lblock:",
+        "cmpq $64,%r10",
+        "movl $64,%r11d",
+        "cmovbq %r10,%r11",
+        "movzbl (%rdi),%eax",
+        "cmpq $64,%r11",
+        "jae .Lfull",
+        "shrq $1,%r11",
+        ".Lfull:",
+        "addq $64,%rdi",
+        "subq %r11,%r10",
+        "jne .Lblock",
+        ".Lout:",
+        "retq",
+    ]);
+    assert_rejected_access(analyze_with(program, at_least(0)));
+}

@@ -12,6 +12,7 @@ use super::*;
 enum Obligation {
     Step(usize),
     Cell(MemoryCell),
+    Tie(MemoryCell),
     Slots,
     Confined(usize),
     Ghost(Vec<bool>),
@@ -28,6 +29,7 @@ impl fmt::Display for Obligation {
         match self {
             Obligation::Step(i) => write!(f, "step of x{i}"),
             Obligation::Cell(cell) => write!(f, "cell {}+{}", cell.region, cell.offset),
+            Obligation::Tie(cell) => write!(f, "tie of cell {}+{}", cell.region, cell.offset),
             Obligation::Slots => write!(f, "saved slots"),
             Obligation::Confined(i) => write!(f, "width of x{i}"),
             Obligation::Ghost(path) => write!(f, "ghost operand at {path:?}"),
@@ -223,6 +225,7 @@ pub(super) struct PcRecord {
     select_refuted: bool,
     chosen_refuted: bool,
     unconfinable: BTreeSet<usize>,
+    untied_cells: BTreeSet<MemoryCell>,
 }
 
 #[derive(Default, Clone)]
@@ -2007,9 +2010,11 @@ impl<M: Machine> Engine<M> {
         self.computer.set_symbolic_slots(kept);
         let counter = LoopCounter::for_loop(id);
         let mut cell_ties: Vec<(MemoryCell, usize)> = Vec::new();
+        let untied_cells = self.record_at(pc, |record| record.untied_cells.clone());
         for (index, (cell, invariant)) in cells.iter().enumerate() {
             let stored = self.computer.cell_content(cell);
             let holding_register = (*invariant != LoopInvariant::Fixed
+                && !untied_cells.contains(cell)
                 && stored.kind == RegisterKind::RegisterBase)
                 .then(|| {
                     registers_before_summary
@@ -5234,34 +5239,37 @@ impl<M: Machine> Engine<M> {
         current: &MachineState,
     ) -> Vec<Obligation> {
         let mut broken = Vec::new();
-        let ghost = active
-            .ghost_checks
-            .iter()
-            .find(|(path, expected)| match condition_side(expression, path) {
-                Some(AbstractExpression::Register(now)) => !self.proves_within_budget(
-                    AbstractComparison::new("==", value_of(now), expected.clone()),
-                ),
-                _ => true,
-            })
-            .map(|(path, _)| Obligation::Ghost(path.clone()));
-        let operand = || {
-            active
-                .operand_checks
+        let unrepeated = self.while_staying(expression, active.entry_decision, |engine| {
+            let ghost = active
+                .ghost_checks
                 .iter()
-                .find(|(path, i)| match condition_side(expression, path) {
-                    Some(AbstractExpression::Register(now)) => {
-                        **now != current.0[*i]
-                            && !self.proves_within_budget(AbstractComparison::new(
-                                "==",
-                                value_of(now),
-                                value_of(&current.0[*i]),
-                            ))
-                    }
+                .find(|(path, expected)| match condition_side(expression, path) {
+                    Some(AbstractExpression::Register(now)) => !engine.proves_within_budget(
+                        AbstractComparison::new("==", value_of(now), expected.clone()),
+                    ),
                     _ => true,
                 })
-                .map(|(_, i)| Obligation::Operand(*i))
-        };
-        if let Some(unrepeated) = ghost.or_else(operand) {
+                .map(|(path, _)| Obligation::Ghost(path.clone()));
+            let operand = || {
+                active
+                    .operand_checks
+                    .iter()
+                    .find(|(path, i)| match condition_side(expression, path) {
+                        Some(AbstractExpression::Register(now)) => {
+                            **now != current.0[*i]
+                                && !engine.proves_within_budget(AbstractComparison::new(
+                                    "==",
+                                    value_of(now),
+                                    value_of(&current.0[*i]),
+                                ))
+                        }
+                        _ => true,
+                    })
+                    .map(|(_, i)| Obligation::Operand(*i))
+            };
+            ghost.or_else(operand)
+        });
+        if let Some(unrepeated) = unrepeated {
             log::info!("{} guard operand did not repeat its step", active.id);
             broken.push(unrepeated);
         }
@@ -5324,7 +5332,7 @@ impl<M: Machine> Engine<M> {
                 "{} cells no longer hold their registers: {untied:?}",
                 active.id
             );
-            broken.extend(untied.into_iter().map(Obligation::Cell));
+            broken.extend(untied.into_iter().map(Obligation::Tie));
         }
         let uncarried = self.while_staying(expression, active.entry_decision, |engine| {
             engine.branches_not_carried(active)
@@ -5415,6 +5423,7 @@ impl<M: Machine> Engine<M> {
         let listed: Vec<String> = broken.iter().map(Obligation::to_string).collect();
         log::info!("{} broke {}", active.id, listed.join(", "));
         let mut drifting_cells = Vec::new();
+        let mut untied_cells = BTreeSet::new();
         let mut uncarried = BTreeSet::new();
         let mut escaped = BTreeSet::new();
         let mut unbounded = Vec::new();
@@ -5425,6 +5434,10 @@ impl<M: Machine> Engine<M> {
             match obligation {
                 Obligation::Step(i) => moved.push(*i),
                 Obligation::Cell(cell) => drifting_cells.push(cell.clone()),
+                Obligation::Tie(cell) => {
+                    drifting_cells.push(cell.clone());
+                    untied_cells.insert(cell.clone());
+                }
                 Obligation::Slots => slots_hold = false,
                 Obligation::Confined(_) => {}
                 Obligation::Ghost(_) | Obligation::Operand(_) => ghosts_repeat = false,
@@ -5458,6 +5471,7 @@ impl<M: Machine> Engine<M> {
             });
         let newly_uncarried = self.update_record(active.pc, |record| {
             record.unstable_cells.extend(drifting);
+            record.untied_cells.extend(untied_cells.iter().cloned());
             record.wandering_cells.extend(wandering);
             record.select_refuted |= !steps_hold;
             record.chosen_refuted |= !chosen_hold;

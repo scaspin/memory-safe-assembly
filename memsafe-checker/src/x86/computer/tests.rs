@@ -321,7 +321,10 @@ fn a_32_bit_not_of_a_symbol_is_its_complement_within_32_bits() {
         .assert(ast::Int::new_const("n").eq(ast::Int::from_i64(3)));
     let value = expression_to_ast(c.registers[RCX].expression()).expect("a known value");
     assert_eq!(
-        check(&c.solver, &[value.eq(ast::Int::from_i64((1 << 32) - 4)).not()]),
+        check(
+            &c.solver,
+            &[value.eq(ast::Int::from_i64((1 << 32) - 4)).not()]
+        ),
         SatResult::Unsat
     );
 }
