@@ -8,7 +8,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .results import EXPECTED
-from .suites import BY_NAME, CASE_STUDIES, GRID, INK, INK_2, ROOT, SUITES
+from .suites import CASE_STUDIES, GRID, INK, INK_2, LIBRARY_ORDER, ROOT, SUITES, library_of
 
 REASONS = [
     ("timeout", "time limit", "#8a8984", lambda status, message: status == "TIMEOUT"),
@@ -65,7 +65,7 @@ def failures(first):
             rows.append({
                 "case_study": suite.case_study,
                 "suite": suite.name,
-                "library": suite.library,
+                "library": library_of(suite, record["function"], record["file"]),
                 "isa": suite.isa,
                 "function": record["function"],
                 "file": record["file"],
@@ -86,29 +86,39 @@ def write_failures(rows, path):
         writer.writerows(rows)
 
 
+def label(row):
+    return f"{row['library']} ({row['isa']})"
+
+
 def reason_counts(rows):
     counts = {}
     for row in rows:
-        counts.setdefault(row["suite"], Counter())[row["reason"]] += 1
+        counts.setdefault(label(row), Counter())[row["reason"]] += 1
     return counts
+
+
+def ordered_labels(rows):
+    rank = {name: i for i, name in enumerate(LIBRARY_ORDER)}
+    seen = {(r["library"], r["isa"]): label(r) for r in rows}
+    return [seen[key] for key in sorted(seen, key=lambda k: (rank.get(k[0], 99), k[1]))]
 
 
 def reasons_figure(rows, out):
     counts = reason_counts(rows)
-    suites = [s for s in SUITES if s.name in counts]
+    suites = ordered_labels(rows)
     if not suites:
         return None
     plt.rcParams.update({"font.size": 8, "axes.edgecolor": INK_2, "axes.labelcolor": INK, "xtick.color": INK_2, "ytick.color": INK_2})
     figure, axis = plt.subplots(figsize=(7.5, 0.32 * len(suites) + 1.6), constrained_layout=True)
     left = [0] * len(suites)
     for key, label, color, _ in REASONS:
-        widths = [counts[s.name][key] for s in suites]
+        widths = [counts[s][key] for s in suites]
         if not any(widths):
             continue
         axis.barh(range(len(suites)), widths, left=left, color=color, label=label, edgecolor="white", linewidth=0.6)
         left = [a + b for a, b in zip(left, widths)]
     axis.set_yticks(range(len(suites)))
-    axis.set_yticklabels([s.display for s in suites])
+    axis.set_yticklabels(suites)
     for row, total in enumerate(left):
         axis.text(total + 0.5, row, str(total), va="center", fontsize=7, color=INK_2)
     axis.invert_yaxis()
@@ -128,15 +138,15 @@ def reasons_figure(rows, out):
 def markdown(rows):
     counts = reason_counts(rows)
     used = [key for key, _, _, _ in REASONS if any(c[key] for c in counts.values())]
-    lines = ["| Case study | Suite | " + " | ".join(REASON_LABEL[k] for k in used) + " | total |",
+    lines = ["| Case study | Library (ISA) | " + " | ".join(REASON_LABEL[k] for k in used) + " | total |",
              "|---|---|" + "---:|" * (len(used) + 1)]
-    for study in CASE_STUDIES:
-        for suite in (s for s in SUITES if s.case_study == study and s.name in counts):
-            c = counts[suite.name]
-            lines.append(f"| {study} | {suite.display} | " + " | ".join(str(c[k] or "") for k in used)
-                         + f" | {sum(c.values())} |")
+    study_of = {label(r): r["case_study"] for r in rows}
+    for name in ordered_labels(rows):
+        c = counts[name]
+        lines.append(f"| {study_of[name]} | {name} | " + " | ".join(str(c[k] or "") for k in used)
+                     + f" | {sum(c.values())} |")
     findings = [r for r in rows if r["diagnosis_class"] == "real-finding"]
     if findings:
         lines += ["", "Diagnosed as real findings (hand-written diagnosis):", ""]
-        lines += [f"- `{r['function']}` ({BY_NAME[r['suite']].display}): {r['diagnosis']}" for r in findings]
+        lines += [f"- `{r['function']}` ({label(r)}): {r['diagnosis']}" for r in findings]
     return "\n".join(lines)

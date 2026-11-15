@@ -34,9 +34,10 @@ def main():
     drawn = []
 
     section("verification results")
-    summary = tables.summarize(first)
-    tables.write_csv(summary, out / "case-studies.csv")
-    tables.console(summary)
+    by_library, by_isa, findings = tables.summarize(first)
+    tables.write_csv(by_library, out / "libraries.csv")
+    tables.write_csv(by_isa, out / "libraries-by-isa.csv")
+    tables.console(by_library)
 
     section("why checks were not verified")
     failed = failures.failures(first)
@@ -70,7 +71,7 @@ def main():
     drawn += overhead.render(args.overhead, figures)
 
     drawn = [path for path in drawn if path]
-    write_summary(out, summary, failed, kinds, rows, drawn)
+    write_summary(out, (by_library, by_isa, findings), failed, kinds, rows, drawn)
     section("written")
     print(f"  {out / 'summary.md'}")
     print(f"  {len(drawn)} figures in {figures}")
@@ -83,7 +84,11 @@ def write_summary(out, summary, failed, kinds, rows, drawn):
     lines = ["# BUMS evaluation report", "",
              "Checks are annotations (one function on one architecture). `rejected` counts `rejects` contracts that",
              "failed as they must. Times are wall-clock seconds of verified and rejected checks, slow pass included.", "",
-             "## Verification by case study", "", tables.markdown(summary),
+             "## Verification by case study and library", "",
+             "Functions count each annotated function once per ISA; a function whose exact contract is `rejected` and whose",
+             "`_padded`/`_zero_extended`/`_from_64` twin verifies counts as verified, and the reliance appears under",
+             "Contract reliance. Findings come from `evaluation/findings.tsv`.", "",
+             tables.markdown(*summary),
              "## Why checks were not verified", "",
              "Each failing check is classified by its first failure; `failures.csv` lists every one with its message.", "",
              failures.markdown(failed), "",
