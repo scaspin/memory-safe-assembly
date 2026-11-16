@@ -108,7 +108,7 @@ def scatter(points, path):
             middle = statistics.median(p["median"] for p in chosen)
             shown = f"{middle * 1000:.0f} ms" if middle < 1 else f"{middle:.2f} s"
             axes.axhline(middle, color="black", linestyle="--", linewidth=1.0, label=f"median {shown}")
-        axes.legend(fontsize=9, ncol=2, frameon=False, loc="upper left", markerscale=1.6)
+        axes.legend(fontsize=9, ncol=1, frameon=False, loc="upper left", markerscale=1.6)
     straight.set_title(f"Functions without loops (n={len(without)})", fontsize=10)
     looping.set_title(f"Functions with loops (n={len(with_loops)})", fontsize=10)
     straight.set_ylabel("verification time (s, median of runs)")
