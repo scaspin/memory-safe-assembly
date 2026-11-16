@@ -15,6 +15,8 @@ def arguments():
     parser.add_argument("--out", type=Path, help="where to write the report (default: RESULTS/report)")
     parser.add_argument("--overhead", type=Path, default=EVALUATION / "wrapper-overhead" / "results",
                         help="directory holding overhead.tsv and isolated.tsv from the wrapper benchmark")
+    parser.add_argument("--overhead-all", type=Path,
+                        help="directory holding overhead.tsv from evaluation/overhead/run.py (default: RESULTS/overhead-all)")
     parser.add_argument("--open", action="store_true", help="open every figure when done (macOS)")
     return parser.parse_args()
 
@@ -68,7 +70,7 @@ def main():
           f"median {statistics.median(counted):g} per function, {sum(c == 0 for c in counted)} with none")
 
     section("runtime overhead of the checked wrappers")
-    drawn += overhead.render(args.overhead, figures)
+    drawn += overhead.render(args.overhead, figures, args.overhead_all or args.results / "overhead-all")
 
     drawn = [path for path in drawn if path]
     write_summary(out, (by_library, by_isa, findings), failed, kinds, rows, drawn)

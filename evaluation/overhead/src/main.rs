@@ -51,7 +51,7 @@ fn main() {
     if arguments.iter().any(|a| a == "--list") {
         for (index, meta) in wrappers::META.iter().enumerate() {
             let status = if meta.sample.is_some() { "ready" } else { "skipped" };
-            println!("{index}\t{}\t{}\t{status}\t{}", meta.function, meta.file, meta.skipped);
+            println!("{index}\t{}\t{}\t{status}\t{}\t{}", meta.function, meta.file, meta.skipped, meta.structs);
         }
         return;
     }

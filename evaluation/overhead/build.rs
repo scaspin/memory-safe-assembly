@@ -870,6 +870,7 @@ struct Entry {
     sampler: TokenStream,
     clauses: usize,
     preconditions: usize,
+    structs: usize,
 }
 
 fn mach_o_portable(source: &str, functions: &BTreeSet<String>, rodata_in_text: bool) -> String {
@@ -1102,6 +1103,7 @@ fn main() {
                 sampler,
                 clauses: bindings + preconditions,
                 preconditions,
+                structs: structs.len(),
             }),
             Err(reason) => skipped.push((function.clone(), file.clone(), format!("input generator: {reason}"))),
         }
@@ -1176,11 +1178,11 @@ fn main() {
     let domain = suite.domain;
     for entry in &entries {
         let (function, file) = (&entry.function, &entry.file);
-        let (clauses, preconditions) = (entry.clauses, entry.preconditions);
+        let (clauses, preconditions, structs) = (entry.clauses, entry.preconditions, entry.structs);
         if let Some(reason) = failed_files.get(&entry.asm_file) {
             let reason = format!("assembly did not build for Mach-O: {reason}");
             metadata.push(quote! {
-                Meta { suite: #suite_name, domain: #domain, function: #function, file: #file, clauses: #clauses, preconditions: #preconditions, sample: None, skipped: #reason }
+                Meta { suite: #suite_name, domain: #domain, function: #function, file: #file, clauses: #clauses, preconditions: #preconditions, structs: #structs, sample: None, skipped: #reason }
             });
             continue;
         }
@@ -1196,12 +1198,12 @@ fn main() {
             }
         });
         metadata.push(quote! {
-            Meta { suite: #suite_name, domain: #domain, function: #function, file: #file, clauses: #clauses, preconditions: #preconditions, sample: Some(#sampler_module::sample), skipped: "" }
+            Meta { suite: #suite_name, domain: #domain, function: #function, file: #file, clauses: #clauses, preconditions: #preconditions, structs: #structs, sample: Some(#sampler_module::sample), skipped: "" }
         });
     }
     for (function, file, reason) in &skipped {
         metadata.push(quote! {
-            Meta { suite: #suite_name, domain: #domain, function: #function, file: #file, clauses: 0, preconditions: 0, sample: None, skipped: #reason }
+            Meta { suite: #suite_name, domain: #domain, function: #function, file: #file, clauses: 0, preconditions: 0, structs: 0usize, sample: None, skipped: #reason }
         });
     }
     let generated = quote! {
@@ -1212,6 +1214,7 @@ fn main() {
             pub file: &'static str,
             pub clauses: usize,
             pub preconditions: usize,
+            pub structs: usize,
             pub sample: Option<fn(&mut crate::inputs::Rng) -> Option<crate::Sample>>,
             pub skipped: &'static str,
         }

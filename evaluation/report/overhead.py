@@ -1,9 +1,11 @@
 import csv
 import random
 import statistics
+from collections import defaultdict
 
 import matplotlib
 import matplotlib.ticker
+import numpy
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -45,7 +47,7 @@ def legend_handles():
                for _, n, c, m in DOMAINS]
     handles += [
         Line2D([], [], linestyle="", marker="o", markersize=5, markerfacecolor="white", markeredgecolor=INK_2, markeredgewidth=0.9, label='raw extern "C"'),
-        Line2D([], [], linestyle="", marker="o", markersize=5, color=INK_2, markeredgecolor="white", markeredgewidth=0.4, label="bums wrapper"),
+        Line2D([], [], linestyle="", marker="o", markersize=5, color=INK_2, markeredgecolor="white", markeredgewidth=0.4, label="CLAMS wrapper"),
         Line2D([], [], linestyle="", marker="o", markersize=8, markerfacecolor="none", markeredgecolor=INK, markeredgewidth=0.9, label="struct argument"),
     ]
     return handles
@@ -77,28 +79,85 @@ def runtime_figure(rows, out):
         figure.savefig(out / f"wrapper-overhead.{suffix}", dpi=200)
 
 
-def added_figure(rows, out):
-    rows = [r for r in rows if r["size"] == "min"]
-    jitter = jitters(rows)
-    figure, axis = plt.subplots(figsize=(3.5, 2.9), constrained_layout=True)
+def smallest_inputs(path):
+    rows = list(csv.DictReader(open(path), delimiter="\t"))
+    functions = defaultdict(list)
     for r in rows:
-        color, marker = STYLE[r["domain"]]
-        x = r["clauses"] + jitter[r["function"]]
-        axis.scatter([x], [r["added_ns"]], marker=marker, s=14, color=color, edgecolor="white", linewidth=0.4, zorder=3)
-        if r["structs"]:
-            axis.scatter([x], [r["added_ns"]], marker="o", s=55, facecolor="none", edgecolor=INK, linewidth=0.7, zorder=4)
+        if r["status"] == "ok":
+            functions[(r["suite"], r["function"], r["file"])].append(r)
+    chosen = []
+    for key in sorted(functions):
+        r = min(functions[key], key=lambda r: (int(r["input_bytes"]), int(r["sample"])))
+        raw = float(r["raw_ns"])
+        chosen.append({"domain": r["domain"], "function": r["function"], "clauses": int(r["clauses"]),
+                       "structs": int(r.get("structs") or 0),
+                       "raw_ns": raw, "added_ns": raw * (float(r["paired_ratio"]) - 1.0),
+                       "added_percent": 100.0 * (float(r["paired_ratio"]) - 1.0)})
+    return chosen
+
+
+ADDED_METRICS = {
+    "added_ns": ("added time per call (ns)", "Time CLAMS adds per call", "{:.2f} ns", "wrapper-overhead-added"),
+    "added_percent": ("added time per call (% of the raw call)", "CLAMS overhead per call", "{:.1f}%", "wrapper-overhead-percent"),
+}
+
+
+def theil_sen(xs, ys):
+    xs, ys = numpy.asarray(xs, dtype=float), numpy.asarray(ys, dtype=float)
+    first, second = numpy.triu_indices(len(xs), k=1)
+    run = xs[second] - xs[first]
+    distinct = run != 0
+    slope = float(numpy.median((ys[second] - ys[first])[distinct] / run[distinct]))
+    return slope, float(numpy.median(ys - slope * xs))
+
+
+def added_figure(rows, out, metric="added_ns"):
+    label, heading, shown, stem = ADDED_METRICS[metric]
+    rng = random.Random(7)
+    plt.rcParams.update({"font.size": 7})
+    figure, axis = plt.subplots(figsize=(3.4, 2.7), constrained_layout=True)
+    for key, name, color, marker in DOMAINS:
+        mine = [r for r in rows if r["domain"] == key]
+        if not mine:
+            continue
+        xs = [r["clauses"] + rng.uniform(-0.3, 0.3) for r in mine]
+        axis.scatter(xs, [r[metric] for r in mine], marker=marker, s=7, color=color, alpha=0.45,
+                     linewidth=0, zorder=3, label=f"{name} ({len(mine)})")
+        ringed = [(x, r[metric]) for x, r in zip(xs, mine) if r["structs"]]
+        if ringed:
+            axis.scatter(*zip(*ringed), marker="o", s=22, facecolor="none", edgecolor=INK, linewidth=0.5, zorder=5)
+    axis.scatter([], [], marker="o", s=22, facecolor="none", edgecolor=INK, linewidth=0.5,
+                 label=f"struct argument ({sum(r['structs'] > 0 for r in rows)})")
+    slope, intercept = theil_sen([r["clauses"] for r in rows], [r[metric] for r in rows])
+    unit = shown.format(slope).split()[-1] if " " in shown.format(slope) else "%"
+    span = numpy.linspace(0, max(r["clauses"] for r in rows), 200)
+    axis.plot(span, numpy.maximum(0.0, intercept + slope * span), color=INK, linewidth=1.2, zorder=4,
+              label=f"fit: {slope:.2f} {unit} per clause")
+    middle = statistics.median(r[metric] for r in rows)
     axis.axhline(0, color=INK_2, linewidth=0.6, zorder=1)
-    axis.set_title(f"Cost bums adds per call, assembly stubbed (n={len(rows)})", fontsize=8, color=INK)
-    axis.set_xlabel("Annotation clauses per function")
-    axis.set_ylabel("Added time per call (ns)")
-    axis.set_xlim(0, max(r["clauses"] for r in rows) + 1)
+    axis.set_yscale("symlog", linthresh=1, linscale=0.8)
+    axis.set_ylim(min(r[metric] for r in rows) * 1.5, max(r[metric] for r in rows) * 1.5)
+    axis.set_xlabel("annotation clauses per function")
+    axis.set_ylabel(label)
+    axis.set_xlim(-1, max(r["clauses"] for r in rows) + 1)
     style_axis(axis)
-    figure.legend(handles=legend_handles()[:4] + legend_handles()[6:], loc="outside upper center", ncol=3, frameon=False, fontsize=6, handletextpad=0.3, columnspacing=0.8)
+    axis.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(10))
+    axis.xaxis.set_minor_locator(matplotlib.ticker.MultipleLocator(5))
+    axis.set_title(f"{heading} (n={len(rows)}, median {shown.format(middle)})", fontsize=7, color=INK)
+    axis.legend(loc="lower right", fontsize=5.5, frameon=True, framealpha=0.85, edgecolor=GRID, markerscale=1.6,
+                handletextpad=0.3, labelspacing=0.25, borderpad=0.4)
     for suffix in ("pdf", "png"):
-        figure.savefig(out / f"wrapper-overhead-added.{suffix}", dpi=200)
+        figure.savefig(out / f"{stem}.{suffix}", dpi=300)
+    plt.close(figure)
+    plt.rcParams.update({"font.size": 8})
+    print(f"  Theil-Sen fit, floored at zero: max(0, {intercept:+.3f} + {slope:.3f} per clause), zero below {-intercept / slope:.1f} clauses")
+    within = sorted(r[metric] for r in rows)
+    print(f"overhead, all verified functions (smallest input): n={len(rows)} {metric} median {middle:.2f}, "
+          f"p10 {within[len(within) // 10]:.2f}, p90 {within[9 * len(within) // 10]:.2f}")
+    return out / f"{stem}.pdf"
 
 
-def render(directory, out):
+def render(directory, out, everything=None):
     path = directory / "overhead.tsv"
     isolated_path = directory / "isolated.tsv"
     if not path.exists():
@@ -107,10 +166,11 @@ def render(directory, out):
     plt.rcParams.update({"font.size": 8, "axes.edgecolor": INK_2, "axes.labelcolor": INK, "xtick.color": INK_2, "ytick.color": INK_2})
     runtime_figure(rows, out)
     paths = [out / "wrapper-overhead.pdf"]
+    if everything and (everything / "overhead.tsv").exists():
+        smallest = smallest_inputs(everything / "overhead.tsv")
+        paths += [added_figure(smallest, out, metric) for metric in ADDED_METRICS]
     if isolated_path.exists():
         isolated = load(isolated_path)
-        added_figure(isolated, out)
-        paths.append(out / "wrapper-overhead-added.pdf")
         once = [r for r in isolated if r["size"] == "min"]
         for label, group in (("no struct", [r for r in once if not r["structs"]]), ("struct", [r for r in once if r["structs"]])):
             added = sorted(r["added_ns"] for r in group)

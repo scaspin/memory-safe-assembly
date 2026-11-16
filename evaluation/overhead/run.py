@@ -16,8 +16,9 @@ sys.path.insert(0, str(EVALUATION))
 from report.suites import BY_NAME, library_of
 
 SUITES = ["graviola", "corecrypto", "candle", "openblas", "blake3", "bignum", "awslc", "openssl", "compression", "rav1d", "ffmpeg"]
+LISTING = ["index", "function", "file", "status", "detail", "structs"]
 COLUMNS = ["suite", "domain", "function", "file", "clauses", "preconditions", "sample", "input_bytes", "description", "status",
-           "raw_ns", "annotated_ns", "raw_p25", "raw_p75", "annotated_p25", "annotated_p75", "paired_ratio", "iterations", "drifted"]
+           "raw_ns", "annotated_ns", "raw_p25", "raw_p75", "annotated_p25", "annotated_p75", "paired_ratio", "iterations", "drifted", "structs"]
 
 
 def arguments():
@@ -32,6 +33,8 @@ def arguments():
     parser.add_argument("--batch-us", type=int, default=200, help="minimum duration of one timed batch")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=180, help="seconds per function")
+    parser.add_argument("--backfill-structs", action="store_true",
+                        help="rebuild the binaries and add the structs column to an existing OUT/overhead.tsv without measuring")
     return parser.parse_args()
 
 
@@ -45,10 +48,35 @@ def build(suite, verified):
     return HERE / "target" / suite / "release" / "overhead"
 
 
+def listing(binary):
+    lines = subprocess.run([binary, "--list"], capture_output=True, text=True, check=True).stdout.splitlines()
+    return [dict(zip(LISTING, line.split("\t"))) for line in lines]
+
+
+def backfill_structs(args, out):
+    structs = {}
+    for suite_name in args.suites:
+        print(f"== {suite_name}", flush=True)
+        for entry in listing(build(suite_name, args.results / "run1" / f"{suite_name}.tsv")):
+            structs[(suite_name, entry["function"], entry["file"])] = entry["structs"]
+    measurements = out / "overhead.tsv"
+    with open(measurements) as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    with open(measurements, "w") as handle:
+        handle.write("\t".join(["library"] + COLUMNS) + "\n")
+        for row in rows:
+            row["structs"] = structs[(row["suite"], row["function"], row["file"])]
+            handle.write("\t".join(row[key] for key in ["library"] + COLUMNS) + "\n")
+    print(f"added structs to {len(rows)} rows of {measurements}")
+
+
 def main():
     args = arguments()
     out = args.out or args.results / "overhead-all"
     out.mkdir(parents=True, exist_ok=True)
+    if args.backfill_structs:
+        backfill_structs(args, out)
+        return
     measurements = out / "overhead.tsv"
     statuses = out / "functions.tsv"
     with open(measurements, "w") as handle:
@@ -66,10 +94,11 @@ def main():
             verified = args.results / "run1" / f"{suite_name}.tsv"
             print(f"== {suite_name}", flush=True)
             binary = build(suite_name, verified)
-            listing = [line.split("\t") for line in subprocess.run([binary, "--list"], capture_output=True, text=True, check=True).stdout.splitlines()]
-            ready = [row for row in listing if row[3] == "ready"]
-            print(f"  {len(listing)} verified functions, {len(ready)} with an input generator", flush=True)
-            for index, function, file, status, detail in listing:
+            entries = listing(binary)
+            ready = [entry for entry in entries if entry["status"] == "ready"]
+            print(f"  {len(entries)} verified functions, {len(ready)} with an input generator", flush=True)
+            for entry in entries:
+                index, function, file, status, detail = (entry[key] for key in LISTING[:5])
                 library = library_of(suite, function, file)
                 if status != "ready":
                     status_file.write(f"{suite_name}\t{library}\t{function}\t{file}\tskipped\t{detail}\n")
@@ -90,7 +119,7 @@ def main():
                     rows = []
                 with open(measurements, "a") as handle:
                     for row in rows:
-                        handle.write("\t".join([library] + row) + "\n")
+                        handle.write("\t".join([library] + row + [entry["structs"]]) + "\n")
                 status_file.write(f"{suite_name}\t{library}\t{function}\t{file}\t{outcome}\t{detail}\n")
                 status_file.flush()
                 part.unlink(missing_ok=True)
