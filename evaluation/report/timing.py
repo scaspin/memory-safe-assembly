@@ -98,9 +98,14 @@ def draw(axes, points, size, label):
 
 
 def scatter(points, path):
-    figure, axes = plt.subplots(figsize=(7, 4.5))
-    draw(axes, points, "instructions", "instructions executed (distinct)")
-    axes.set_ylabel("verification time (s, median of runs)")
+    figure, (straight, looping) = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
+    without = [p for p in points if p["loops"] == 0]
+    with_loops = [p for p in points if p["loops"] > 0]
+    draw(straight, without, "instructions", "instructions executed (distinct)")
+    draw(looping, with_loops, "instructions", "instructions executed (distinct)")
+    straight.set_title(f"Functions without loops (n={len(without)})", fontsize=9)
+    looping.set_title(f"Functions with loops (n={len(with_loops)})", fontsize=9)
+    straight.set_ylabel("verification time (s, median of runs)")
     figure.tight_layout()
     figure.savefig(path)
     figure.savefig(Path(path).with_suffix(".png"), dpi=300)
