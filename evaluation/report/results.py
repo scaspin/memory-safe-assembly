@@ -1,4 +1,5 @@
 import csv
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -11,6 +12,7 @@ COLUMNS = [
     "parsing", "serialization",
 ]
 EXPECTED = ("verified", "rejected")
+csv.field_size_limit(sys.maxsize)
 
 
 def read_tsv(path):
