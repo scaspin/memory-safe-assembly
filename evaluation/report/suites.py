@@ -58,7 +58,6 @@ SUITES = [
     _suite("compression-x86", "compression-playground", "ISA-L", "x86-64", "Math", "compression", split=BY_FILE_COMPRESSION, cost=2.1),
     _suite("ffmpeg", "ffmpeg-playground", "FFmpeg", "aarch64", "Video", "media", "--all-features", cost=12.0),
     _suite("rav1d", "rav1d-playground", "rav1d/dav1d", "aarch64", "Video", "media", cost=8.3),
-    _suite("rav1d-x86", "rav1d-playground", "rav1d/dav1d", "x86-64", "Video", "media", cost=0.06),
 ]
 BY_NAME = {suite.name: suite for suite in SUITES}
 ALIASES = {"crypto": "awslc", "crypto-x86": "awslc-x86"}
