@@ -62,9 +62,8 @@ SUITES = [
 ]
 BY_NAME = {suite.name: suite for suite in SUITES}
 ALIASES = {"crypto": "awslc", "crypto-x86": "awslc-x86"}
-SHA3 = re.compile(r"keccak|sha3", re.IGNORECASE)
 LIBRARY_ORDER = ["AWS-LC", "OpenSSL", "BoringSSL (SecSep set)", "corecrypto", "graviola", "s2n-bignum",
-                 "SHA-3", "BLAKE3", "secp256k1", "candle", "OpenBLAS", "ISA-L", "zlib-ng", "zstd",
+                 "BLAKE3", "secp256k1", "candle", "OpenBLAS", "ISA-L", "zlib-ng", "zstd",
                  "FFmpeg", "rav1d/dav1d"]
 
 
@@ -73,8 +72,6 @@ def canonical(name):
 
 
 def library_of(suite, function, file):
-    if suite.case_study == "Cryptography" and SHA3.search(function):
-        return "SHA-3"
     for library, kind, pattern in suite.split:
         if re.search(pattern, file if kind == "file" else function):
             return library
@@ -82,7 +79,7 @@ def library_of(suite, function, file):
 
 
 def case_study_of(library):
-    return next(s.case_study for s in SUITES if library in (s.library, *[r[0] for r in s.split]) or library == "SHA-3")
+    return next(s.case_study for s in SUITES if library in (s.library, *[r[0] for r in s.split]))
 
 
 CASE_STUDIES = ["Cryptography", "Math", "Video"]
