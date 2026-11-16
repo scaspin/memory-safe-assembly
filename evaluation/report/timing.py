@@ -103,8 +103,14 @@ def scatter(points, path):
     with_loops = [p for p in points if p["loops"] > 0]
     draw(straight, without, "instructions", "instructions executed (distinct)")
     draw(looping, with_loops, "instructions", "instructions executed (distinct)")
-    straight.set_title(f"Functions without loops (n={len(without)})", fontsize=9)
-    looping.set_title(f"Functions with loops (n={len(with_loops)})", fontsize=9)
+    for axes, chosen in ((straight, without), (looping, with_loops)):
+        if chosen:
+            middle = statistics.median(p["median"] for p in chosen)
+            shown = f"{middle * 1000:.0f} ms" if middle < 1 else f"{middle:.2f} s"
+            axes.axhline(middle, color="black", linestyle="--", linewidth=1.0, label=f"median {shown}")
+        axes.legend(fontsize=9, ncol=2, frameon=False, loc="upper left", markerscale=1.6)
+    straight.set_title(f"Functions without loops (n={len(without)})", fontsize=10)
+    looping.set_title(f"Functions with loops (n={len(with_loops)})", fontsize=10)
     straight.set_ylabel("verification time (s, median of runs)")
     figure.tight_layout()
     figure.savefig(path)
