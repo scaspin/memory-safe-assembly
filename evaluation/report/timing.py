@@ -8,18 +8,29 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .results import read_runs, read_sizes
-from .suites import BY_NAME, DOMAIN_COLOR, DOMAINS, display
+from .suites import BY_NAME, DOMAIN_COLOR, DOMAINS, LIBRARY_ORDER, display, library_of
 
 DOMAIN_NAME = {key: name for key, name, _, _ in DOMAINS}
 PHASES = [
-    ("parsing", "parsing and setup", "#3d3b38"),
-    ("execution", "symbolic execution", "#a3a09a"),
-    ("forking", "path forking", "#d3d0ca"),
-    ("loop_resolution", "loop resolution", "#6e6b66"),
-    ("serialization", "serialization", "#e46aa6"),
-    ("smt_execution", "SMT (execution)", "#5a33b0"),
-    ("smt_loops", "SMT (loop resolution)", "#b7a2e8"),
+    ("parsing", "parsing and setup", "#DDDDDD"),
+    ("execution", "symbolic execution", "#882255"),
+    ("forking", "path forking", "#CC6677"),
+    ("loop_resolution", "loop resolution", "#AA4499"),
+    ("serialization", "serialization", "#999933"),
+    ("smt_execution", "SMT (execution)", "#332288"),
+    ("smt_loops", "SMT (loop resolution)", "#88CCEE"),
 ]
+BREAKDOWN_DOMAINS = ["crypto", "media", "numeric", "compression"]
+BREAKDOWN_EXCLUDED = {"rav1d/dav1d", "BoringSSL (SecSep set)"}
+SHORT_ISA = {"aarch64": "arm64", "x86-64": "x86"}
+
+
+def duration(seconds):
+    if seconds >= 3600:
+        return f"{seconds / 3600:.1f} h"
+    if seconds >= 100:
+        return f"{seconds / 60:.0f} min"
+    return f"{seconds:.0f} s" if seconds >= 10 else f"{seconds:.1f} s"
 
 
 def domain_of(suite):
@@ -40,7 +51,7 @@ def summarize(runs, sizes):
             }
             points.append({
                 "suite": suite,
-                "library": BY_NAME[suite].library if suite in BY_NAME else suite,
+                "library": library_of(BY_NAME[suite], function, file) if suite in BY_NAME else suite,
                 "isa": BY_NAME[suite].isa if suite in BY_NAME else "",
                 "domain": domain_of(suite),
                 "function": function,
@@ -128,32 +139,46 @@ def size_comparison(points, path):
 
 
 def breakdown(points, path):
-    suites = sorted({(p["domain"], p["suite"]) for p in points})
+    rank = {name: i for i, name in enumerate(LIBRARY_ORDER)}
+    groups = {(p["library"], p["isa"]): p["domain"] for p in points
+              if p["library"] not in BREAKDOWN_EXCLUDED and p["domain"] in BREAKDOWN_DOMAINS}
+    keys = sorted(groups, key=lambda k: (BREAKDOWN_DOMAINS.index(groups[k]), rank.get(k[0], 99), k[1]))
     totals = {
-        suite: {key: sum(p[key] for p in points if p["suite"] == suite) for key, _, _ in PHASES}
-        for _, suite in suites
+        group: {key: sum(p[key] for p in points if (p["library"], p["isa"]) == group) for key, _, _ in PHASES}
+        for group in keys
     }
-    labels = [suite for _, suite in suites]
-    figure, axes = plt.subplots(figsize=(7, 0.35 * len(labels) + 1.6))
-    axes.set_yticks(range(len(labels)))
+    labels = keys
+    plt.rcParams.update({"font.size": 7})
+    figure, axes = plt.subplots(figsize=(3.4, 0.19 * len(labels) + 1.35))
+    rows = range(len(labels))
     left = [0.0] * len(labels)
     for key, name, color in PHASES:
-        shares = []
-        for library in labels:
-            whole = sum(totals[library].values()) or 1.0
-            shares.append(100.0 * totals[library][key] / whole)
-        axes.barh(range(len(labels)), shares, left=left, color=color, label=name, edgecolor="white", linewidth=0.6)
+        shares = [100.0 * totals[suite][key] / (sum(totals[suite].values()) or 1.0) for suite in labels]
+        axes.barh(rows, shares, left=left, height=0.78, color=color, label=name, edgecolor="white", linewidth=0.4)
         left = [a + b for a, b in zip(left, shares)]
-    axes.set_yticklabels([display(l) for l in labels])
-    for row, library in enumerate(labels):
-        axes.text(101, row, f"{sum(totals[library].values()):.0f}s", va="center", fontsize=7)
-    axes.set_xlim(0, 112)
-    axes.set_xlabel("share of verification time (%)")
-    axes.invert_yaxis()
-    axes.legend(fontsize=7, ncol=3, frameon=False, loc="lower center", bbox_to_anchor=(0.5, 1.0))
-    figure.tight_layout()
-    figure.savefig(path)
-    figure.savefig(Path(path).with_suffix(".png"), dpi=300)
+    axes.set_yticks(list(rows))
+    axes.set_yticklabels([f"{library} ({SHORT_ISA.get(isa, isa)})" for library, isa in labels], fontsize=6.5)
+    for row, suite in enumerate(labels):
+        functions = sum((p["library"], p["isa"]) == suite for p in points)
+        axes.text(101.5, row - 0.17, duration(sum(totals[suite].values())), va="center", fontsize=6, clip_on=False)
+        axes.text(101.5, row + 0.2, f"n={functions}", va="center", fontsize=5, color="#555555", clip_on=False)
+    for row in range(1, len(labels)):
+        if groups[labels[row]] != groups[labels[row - 1]]:
+            axes.axhline(row - 0.5, color="#555555", linewidth=0.6)
+    axes.set_xlim(0, 100)
+    axes.set_xticks(range(0, 101, 25))
+    axes.set_xlabel("share of verification time (%)", fontsize=7)
+    axes.tick_params(axis="x", labelsize=6.5)
+    axes.set_ylim(len(labels) - 0.5, -0.5)
+    for side in ("top", "right"):
+        axes.spines[side].set_visible(False)
+    axes.legend(fontsize=7.5, ncol=2, frameon=False, loc="lower center", bbox_to_anchor=(0.32, 1.0),
+                handlelength=1.2, columnspacing=0.8, labelspacing=0.3)
+    figure.tight_layout(pad=0.3)
+    figure.savefig(path, bbox_inches="tight", pad_inches=0.02)
+    figure.savefig(Path(path).with_suffix(".png"), dpi=300, bbox_inches="tight", pad_inches=0.02)
+    plt.close(figure)
+    plt.rcParams.update(plt.rcParamsDefault)
 
 
 RANKS = {
