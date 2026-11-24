@@ -1,0 +1,11 @@
+benchmark,scheme,software_overhead_pct,comprehensive_overhead_pct,source
+salsa20,SecSep,0.75,1.5,read from paper Figure 12 bars (approx. +-0.2 pt)
+sha512,SecSep,1.4,1.5,read from paper Figure 12 bars (approx. +-0.2 pt)
+chacha20,SecSep,0.4,0.5,read from paper Figure 12 bars (approx. +-0.2 pt)
+x25519,SecSep,0.2,0.1,read from paper Figure 12 bars (approx. +-0.2 pt)
+poly1305,SecSep,0.95,1.0,read from paper Figure 12 bars (approx. +-0.2 pt)
+ed25519_sign,SecSep,2.3,2.5,read from paper Figure 12 bars (approx. +-0.2 pt)
+Avg,SecSep,1.0,1.2,exact (bar labels and Section 8.2 text)
+Avg,SecSep (no C_callee),0.1,26.2,exact (bar labels; text: C_callee adds 0.9 pt software and removes 25 pt with defense)
+Avg,ProSpeCT (secret stack),0.4,151.1,exact (bar labels and Section 8.2 text)
+Avg,ProSpeCT (public stack; insecure),4.2,4.4,exact (bar labels)

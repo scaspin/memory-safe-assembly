@@ -148,7 +148,7 @@ pub(crate) mod key;
 use aws_lc_rs::error::Unspecified;
 use aws_lc_rs::hkdf;
 use aws_lc_rs::hkdf::KeyType;
-use aws_lc_sys::{AES_cbc_encrypt, AES_ctr128_encrypt, AES_DECRYPT, AES_ENCRYPT, AES_KEY};
+use aws_lc_sys::{AES_DECRYPT, AES_ENCRYPT, AES_KEY, AES_cbc_encrypt, AES_ctr128_encrypt};
 use core::fmt::Debug;
 use core::mem::MaybeUninit;
 use fips::indicator_check;

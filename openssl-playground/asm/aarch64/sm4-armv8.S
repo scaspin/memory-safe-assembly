@@ -1,0 +1,834 @@
+.arch armv8-a+crypto
+.text
+.section .rodata
+.type _sm4_v8_consts,%object
+.align 6
+_sm4_v8_consts:
+.Lck:
+.long 0x00070E15, 0x1C232A31, 0x383F464D, 0x545B6269
+.long 0x70777E85, 0x8C939AA1, 0xA8AFB6BD, 0xC4CBD2D9
+.long 0xE0E7EEF5, 0xFC030A11, 0x181F262D, 0x343B4249
+.long 0x50575E65, 0x6C737A81, 0x888F969D, 0xA4ABB2B9
+.long 0xC0C7CED5, 0xDCE3EAF1, 0xF8FF060D, 0x141B2229
+.long 0x30373E45, 0x4C535A61, 0x686F767D, 0x848B9299
+.long 0xA0A7AEB5, 0xBCC3CAD1, 0xD8DFE6ED, 0xF4FB0209
+.long 0x10171E25, 0x2C333A41, 0x484F565D, 0x646B7279
+.Lfk:
+.long 0xa3b1bac6, 0x56aa3350, 0x677d9197, 0xb27022dc
+.size _sm4_v8_consts,.-_sm4_v8_consts
+.previous
+.globl sm4_v8_set_encrypt_key
+.type sm4_v8_set_encrypt_key,%function
+.align 5
+sm4_v8_set_encrypt_key:
+ ld1 {v0.4s},[x0]
+ adrp x2,.Lfk
+ add x2,x2,:lo12:.Lfk
+ ld1 {v24.4s},[x2]
+ adrp x2,.Lck
+ add x2,x2,:lo12:.Lck
+ ld1 {v16.4s,v17.4s,v18.4s,v19.4s},[x2],64
+ rev32 v0.16b,v0.16b
+ ld1 {v20.4s,v21.4s,v22.4s,v23.4s},[x2]
+ eor v0.16b,v0.16b,v24.16b;
+.inst 0xce70c800
+.inst 0xce71c801
+.inst 0xce72c822
+.inst 0xce73c843
+.inst 0xce74c864
+ st1 {v0.4s,v1.4s,v2.4s,v3.4s},[x1],64
+.inst 0xce75c885
+.inst 0xce76c8a6
+.inst 0xce77c8c7
+ st1 {v4.4s,v5.4s,v6.4s,v7.4s},[x1]
+ ret
+.size sm4_v8_set_encrypt_key,.-sm4_v8_set_encrypt_key
+.globl sm4_v8_set_decrypt_key
+.type sm4_v8_set_decrypt_key,%function
+.align 5
+sm4_v8_set_decrypt_key:
+ ld1 {v7.4s},[x0]
+ adrp x2,.Lfk
+ add x2,x2,:lo12:.Lfk
+ ld1 {v24.4s},[x2]
+ adrp x2,.Lck
+ add x2,x2,:lo12:.Lck
+ ld1 {v16.4s,v17.4s,v18.4s,v19.4s},[x2],64
+ rev32 v7.16b,v7.16b
+ ld1 {v20.4s,v21.4s,v22.4s,v23.4s},[x2]
+ eor v7.16b, v7.16b,v24.16b;
+.inst 0xce70c8e7
+.inst 0xce71c8e6
+.inst 0xce72c8c5
+ rev64 v7.4s,v7.4s
+ rev64 v6.4s,v6.4s
+ ext v7.16b,v7.16b,v7.16b,#8
+ ext v6.16b,v6.16b,v6.16b,#8
+.inst 0xce73c8a4
+.inst 0xce74c883
+ rev64 v5.4s,v5.4s
+ rev64 v4.4s,v4.4s
+ ext v5.16b,v5.16b,v5.16b,#8
+ ext v4.16b,v4.16b,v4.16b,#8
+.inst 0xce75c862
+.inst 0xce76c841
+ rev64 v3.4s,v3.4s
+ rev64 v2.4s,v2.4s
+ ext v3.16b,v3.16b,v3.16b,#8
+ ext v2.16b,v2.16b,v2.16b,#8
+.inst 0xce77c820
+ rev64 v1.4s, v1.4s
+ rev64 v0.4s, v0.4s
+ ext v1.16b,v1.16b,v1.16b,#8
+ ext v0.16b,v0.16b,v0.16b,#8
+ st1 {v0.4s,v1.4s,v2.4s,v3.4s},[x1],64
+ st1 {v4.4s,v5.4s,v6.4s,v7.4s},[x1]
+ ret
+.size sm4_v8_set_decrypt_key,.-sm4_v8_set_decrypt_key
+.globl sm4_v8_encrypt
+.type sm4_v8_encrypt,%function
+.align 5
+sm4_v8_encrypt:
+ ld1 {v16.4s},[x0]
+ ld1 {v0.4s,v1.4s,v2.4s,v3.4s},[x2],64
+ ld1 {v4.4s,v5.4s,v6.4s,v7.4s},[x2]
+ rev32 v16.16b,v16.16b
+.inst 0xcec08410
+.inst 0xcec08430
+.inst 0xcec08450
+.inst 0xcec08470
+.inst 0xcec08490
+.inst 0xcec084b0
+.inst 0xcec084d0
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev32 v16.16b,v16.16b
+ st1 {v16.4s},[x1]
+ ret
+.size sm4_v8_encrypt,.-sm4_v8_encrypt
+.globl sm4_v8_decrypt
+.type sm4_v8_decrypt,%function
+.align 5
+sm4_v8_decrypt:
+ ld1 {v16.4s},[x0]
+ ld1 {v0.4s,v1.4s,v2.4s,v3.4s},[x2],64
+ ld1 {v4.4s,v5.4s,v6.4s,v7.4s},[x2]
+ rev32 v16.16b,v16.16b
+.inst 0xcec08410
+.inst 0xcec08430
+.inst 0xcec08450
+.inst 0xcec08470
+.inst 0xcec08490
+.inst 0xcec084b0
+.inst 0xcec084d0
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev32 v16.16b,v16.16b
+ st1 {v16.4s},[x1]
+ ret
+.size sm4_v8_decrypt,.-sm4_v8_decrypt
+.globl sm4_v8_ecb_encrypt
+.type sm4_v8_ecb_encrypt,%function
+.align 5
+sm4_v8_ecb_encrypt:
+ ld1 {v0.4s,v1.4s,v2.4s,v3.4s},[x3],#64
+ ld1 {v4.4s,v5.4s,v6.4s,v7.4s},[x3]
+1:
+ cmp x2,#64
+ b.lt 1f
+ ld1 {v16.4s,v17.4s,v18.4s,v19.4s},[x0],#64
+ cmp x2,#128
+ b.lt 2f
+ ld1 {v20.4s,v21.4s,v22.4s,v23.4s},[x0],#64
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ rev32 v20.16b,v20.16b
+ rev32 v21.16b,v21.16b
+ rev32 v22.16b,v22.16b
+ rev32 v23.16b,v23.16b
+.inst 0xcec08410
+.inst 0xcec08411
+.inst 0xcec08412
+.inst 0xcec08413
+.inst 0xcec08430
+.inst 0xcec08431
+.inst 0xcec08432
+.inst 0xcec08433
+.inst 0xcec08450
+.inst 0xcec08451
+.inst 0xcec08452
+.inst 0xcec08453
+.inst 0xcec08470
+.inst 0xcec08471
+.inst 0xcec08472
+.inst 0xcec08473
+.inst 0xcec08490
+.inst 0xcec08491
+.inst 0xcec08492
+.inst 0xcec08493
+.inst 0xcec084b0
+.inst 0xcec084b1
+.inst 0xcec084b2
+.inst 0xcec084b3
+.inst 0xcec084d0
+.inst 0xcec084d1
+.inst 0xcec084d2
+.inst 0xcec084d3
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+.inst 0xcec084f1
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev64 v17.4S,v17.4S
+.inst 0xcec084f2
+ ext v17.16b,v17.16b,v17.16b,#8
+ rev64 v18.4S,v18.4S
+.inst 0xcec084f3
+ ext v18.16b,v18.16b,v18.16b,#8
+ rev64 v19.4S,v19.4S
+ ext v19.16b,v19.16b,v19.16b,#8
+.inst 0xcec08414
+.inst 0xcec08415
+.inst 0xcec08416
+.inst 0xcec08417
+.inst 0xcec08434
+.inst 0xcec08435
+.inst 0xcec08436
+.inst 0xcec08437
+.inst 0xcec08454
+.inst 0xcec08455
+.inst 0xcec08456
+.inst 0xcec08457
+.inst 0xcec08474
+.inst 0xcec08475
+.inst 0xcec08476
+.inst 0xcec08477
+.inst 0xcec08494
+.inst 0xcec08495
+.inst 0xcec08496
+.inst 0xcec08497
+.inst 0xcec084b4
+.inst 0xcec084b5
+.inst 0xcec084b6
+.inst 0xcec084b7
+.inst 0xcec084d4
+.inst 0xcec084d5
+.inst 0xcec084d6
+.inst 0xcec084d7
+.inst 0xcec084f4
+ rev64 v20.4S,v20.4S
+.inst 0xcec084f5
+ ext v20.16b,v20.16b,v20.16b,#8
+ rev64 v21.4S,v21.4S
+.inst 0xcec084f6
+ ext v21.16b,v21.16b,v21.16b,#8
+ rev64 v22.4S,v22.4S
+.inst 0xcec084f7
+ ext v22.16b,v22.16b,v22.16b,#8
+ rev64 v23.4S,v23.4S
+ ext v23.16b,v23.16b,v23.16b,#8
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ rev32 v20.16b,v20.16b
+ rev32 v21.16b,v21.16b
+ st1 {v16.4s,v17.4s,v18.4s,v19.4s},[x1],#64
+ rev32 v22.16b,v22.16b
+ rev32 v23.16b,v23.16b
+ st1 {v20.4s,v21.4s,v22.4s,v23.4s},[x1],#64
+ subs x2,x2,#128
+ b.gt 1b
+ ret
+2:
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+.inst 0xcec08410
+.inst 0xcec08411
+.inst 0xcec08412
+.inst 0xcec08413
+.inst 0xcec08430
+.inst 0xcec08431
+.inst 0xcec08432
+.inst 0xcec08433
+.inst 0xcec08450
+.inst 0xcec08451
+.inst 0xcec08452
+.inst 0xcec08453
+.inst 0xcec08470
+.inst 0xcec08471
+.inst 0xcec08472
+.inst 0xcec08473
+.inst 0xcec08490
+.inst 0xcec08491
+.inst 0xcec08492
+.inst 0xcec08493
+.inst 0xcec084b0
+.inst 0xcec084b1
+.inst 0xcec084b2
+.inst 0xcec084b3
+.inst 0xcec084d0
+.inst 0xcec084d1
+.inst 0xcec084d2
+.inst 0xcec084d3
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+.inst 0xcec084f1
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev64 v17.4S,v17.4S
+.inst 0xcec084f2
+ ext v17.16b,v17.16b,v17.16b,#8
+ rev64 v18.4S,v18.4S
+.inst 0xcec084f3
+ ext v18.16b,v18.16b,v18.16b,#8
+ rev64 v19.4S,v19.4S
+ ext v19.16b,v19.16b,v19.16b,#8
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ st1 {v16.4s,v17.4s,v18.4s,v19.4s},[x1],#64
+ subs x2,x2,#64
+ b.gt 1b
+1:
+ subs x2,x2,#16
+ b.lt 1f
+ ld1 {v16.4s},[x0],#16
+ rev32 v16.16b,v16.16b
+.inst 0xcec08410
+.inst 0xcec08430
+.inst 0xcec08450
+.inst 0xcec08470
+.inst 0xcec08490
+.inst 0xcec084b0
+.inst 0xcec084d0
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev32 v16.16b,v16.16b
+ st1 {v16.4s},[x1],#16
+ b.ne 1b
+1:
+ ret
+.size sm4_v8_ecb_encrypt,.-sm4_v8_ecb_encrypt
+.globl sm4_v8_cbc_encrypt
+.type sm4_v8_cbc_encrypt,%function
+.align 5
+sm4_v8_cbc_encrypt:
+ stp d8,d9,[sp, #-16]!
+ ld1 {v0.4s,v1.4s,v2.4s,v3.4s},[x3],#64
+ ld1 {v4.4s,v5.4s,v6.4s,v7.4s},[x3]
+ ld1 {v8.4s},[x4]
+ cmp w5,#0
+ b.eq .Ldec
+1:
+ cmp x2, #64
+ b.lt 1f
+ ld1 {v16.4s,v17.4s,v18.4s,v19.4s},[x0],#64
+ eor v16.16b,v16.16b,v8.16b
+ rev32 v17.16b,v17.16b
+ rev32 v16.16b,v16.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+.inst 0xcec08410
+.inst 0xcec08430
+.inst 0xcec08450
+.inst 0xcec08470
+.inst 0xcec08490
+.inst 0xcec084b0
+.inst 0xcec084d0
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+ ext v16.16b,v16.16b,v16.16b,#8
+ eor v17.16b,v17.16b,v16.16b
+.inst 0xcec08411
+.inst 0xcec08431
+.inst 0xcec08451
+.inst 0xcec08471
+.inst 0xcec08491
+.inst 0xcec084b1
+.inst 0xcec084d1
+.inst 0xcec084f1
+ rev64 v17.4S,v17.4S
+ ext v17.16b,v17.16b,v17.16b,#8
+ rev32 v16.16b,v16.16b
+ eor v18.16b,v18.16b,v17.16b
+.inst 0xcec08412
+.inst 0xcec08432
+.inst 0xcec08452
+.inst 0xcec08472
+.inst 0xcec08492
+.inst 0xcec084b2
+.inst 0xcec084d2
+.inst 0xcec084f2
+ rev64 v18.4S,v18.4S
+ ext v18.16b,v18.16b,v18.16b,#8
+ rev32 v17.16b,v17.16b
+ eor v19.16b,v19.16b,v18.16b
+.inst 0xcec08413
+.inst 0xcec08433
+.inst 0xcec08453
+.inst 0xcec08473
+.inst 0xcec08493
+.inst 0xcec084b3
+.inst 0xcec084d3
+.inst 0xcec084f3
+ rev64 v19.4S,v19.4S
+ ext v19.16b,v19.16b,v19.16b,#8
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ mov v8.16b,v19.16b
+ st1 {v16.4s,v17.4s,v18.4s,v19.4s},[x1],#64
+ subs x2,x2,#64
+ b.ne 1b
+1:
+ subs x2,x2,#16
+ b.lt 3f
+ ld1 {v16.4s},[x0],#16
+ eor v8.16b,v8.16b,v16.16b
+ rev32 v8.16b,v8.16b
+.inst 0xcec08408
+.inst 0xcec08428
+.inst 0xcec08448
+.inst 0xcec08468
+.inst 0xcec08488
+.inst 0xcec084a8
+.inst 0xcec084c8
+.inst 0xcec084e8
+ rev64 v8.4S,v8.4S
+ ext v8.16b,v8.16b,v8.16b,#8
+ rev32 v8.16b,v8.16b
+ st1 {v8.4s},[x1],#16
+ b.ne 1b
+ b 3f
+.Ldec:
+1:
+ cmp x2, #64
+ b.lt 1f
+ ld1 {v16.4s,v17.4s,v18.4s,v19.4s},[x0]
+ ld1 {v24.4s,v25.4s,v26.4s,v27.4s},[x0],#64
+ cmp x2,#128
+ b.lt 2f
+ ld1 {v20.4s,v21.4s,v22.4s,v23.4s},[x0]
+ ld1 {v28.4s,v29.4s,v30.4s,v31.4s},[x0],#64
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ rev32 v20.16b,v20.16b
+ rev32 v21.16b,v21.16b
+ rev32 v22.16b,v22.16b
+ rev32 v23.16b,v23.16b
+.inst 0xcec08410
+.inst 0xcec08411
+.inst 0xcec08412
+.inst 0xcec08413
+.inst 0xcec08430
+.inst 0xcec08431
+.inst 0xcec08432
+.inst 0xcec08433
+.inst 0xcec08450
+.inst 0xcec08451
+.inst 0xcec08452
+.inst 0xcec08453
+.inst 0xcec08470
+.inst 0xcec08471
+.inst 0xcec08472
+.inst 0xcec08473
+.inst 0xcec08490
+.inst 0xcec08491
+.inst 0xcec08492
+.inst 0xcec08493
+.inst 0xcec084b0
+.inst 0xcec084b1
+.inst 0xcec084b2
+.inst 0xcec084b3
+.inst 0xcec084d0
+.inst 0xcec084d1
+.inst 0xcec084d2
+.inst 0xcec084d3
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+.inst 0xcec084f1
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev64 v17.4S,v17.4S
+.inst 0xcec084f2
+ ext v17.16b,v17.16b,v17.16b,#8
+ rev64 v18.4S,v18.4S
+.inst 0xcec084f3
+ ext v18.16b,v18.16b,v18.16b,#8
+ rev64 v19.4S,v19.4S
+ ext v19.16b,v19.16b,v19.16b,#8
+.inst 0xcec08414
+.inst 0xcec08415
+.inst 0xcec08416
+.inst 0xcec08417
+.inst 0xcec08434
+.inst 0xcec08435
+.inst 0xcec08436
+.inst 0xcec08437
+.inst 0xcec08454
+.inst 0xcec08455
+.inst 0xcec08456
+.inst 0xcec08457
+.inst 0xcec08474
+.inst 0xcec08475
+.inst 0xcec08476
+.inst 0xcec08477
+.inst 0xcec08494
+.inst 0xcec08495
+.inst 0xcec08496
+.inst 0xcec08497
+.inst 0xcec084b4
+.inst 0xcec084b5
+.inst 0xcec084b6
+.inst 0xcec084b7
+.inst 0xcec084d4
+.inst 0xcec084d5
+.inst 0xcec084d6
+.inst 0xcec084d7
+.inst 0xcec084f4
+ rev64 v20.4S,v20.4S
+.inst 0xcec084f5
+ ext v20.16b,v20.16b,v20.16b,#8
+ rev64 v21.4S,v21.4S
+.inst 0xcec084f6
+ ext v21.16b,v21.16b,v21.16b,#8
+ rev64 v22.4S,v22.4S
+.inst 0xcec084f7
+ ext v22.16b,v22.16b,v22.16b,#8
+ rev64 v23.4S,v23.4S
+ ext v23.16b,v23.16b,v23.16b,#8
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ rev32 v20.16b,v20.16b
+ rev32 v21.16b,v21.16b
+ rev32 v22.16b,v22.16b
+ rev32 v23.16b,v23.16b
+ eor v16.16b,v16.16b,v8.16b
+ eor v17.16b,v17.16b,v24.16b
+ eor v18.16b,v18.16b,v25.16b
+ mov v8.16b,v31.16b
+ eor v19.16b,v19.16b,v26.16b
+ eor v20.16b,v20.16b,v27.16b
+ eor v21.16b,v21.16b,v28.16b
+ eor v22.16b,v22.16b,v29.16b
+ eor v23.16b,v23.16b,v30.16b
+ st1 {v16.4s,v17.4s,v18.4s,v19.4s},[x1],#64
+ st1 {v20.4s,v21.4s,v22.4s,v23.4s},[x1],#64
+ subs x2,x2,128
+ b.gt 1b
+ b 3f
+2:
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+.inst 0xcec08410
+.inst 0xcec08411
+.inst 0xcec08412
+.inst 0xcec08413
+.inst 0xcec08430
+.inst 0xcec08431
+.inst 0xcec08432
+.inst 0xcec08433
+.inst 0xcec08450
+.inst 0xcec08451
+.inst 0xcec08452
+.inst 0xcec08453
+.inst 0xcec08470
+.inst 0xcec08471
+.inst 0xcec08472
+.inst 0xcec08473
+.inst 0xcec08490
+.inst 0xcec08491
+.inst 0xcec08492
+.inst 0xcec08493
+.inst 0xcec084b0
+.inst 0xcec084b1
+.inst 0xcec084b2
+.inst 0xcec084b3
+.inst 0xcec084d0
+.inst 0xcec084d1
+.inst 0xcec084d2
+.inst 0xcec084d3
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+.inst 0xcec084f1
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev64 v17.4S,v17.4S
+.inst 0xcec084f2
+ ext v17.16b,v17.16b,v17.16b,#8
+ rev64 v18.4S,v18.4S
+.inst 0xcec084f3
+ ext v18.16b,v18.16b,v18.16b,#8
+ rev64 v19.4S,v19.4S
+ ext v19.16b,v19.16b,v19.16b,#8
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ eor v16.16b,v16.16b,v8.16b
+ eor v17.16b,v17.16b,v24.16b
+ mov v8.16b,v27.16b
+ eor v18.16b,v18.16b,v25.16b
+ eor v19.16b,v19.16b,v26.16b
+ st1 {v16.4s,v17.4s,v18.4s,v19.4s},[x1],#64
+ subs x2,x2,#64
+ b.gt 1b
+1:
+ subs x2,x2,#16
+ b.lt 3f
+ ld1 {v16.4s},[x0],#16
+ mov v24.16b,v16.16b
+ rev32 v16.16b,v16.16b
+.inst 0xcec08410
+.inst 0xcec08430
+.inst 0xcec08450
+.inst 0xcec08470
+.inst 0xcec08490
+.inst 0xcec084b0
+.inst 0xcec084d0
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev32 v16.16b,v16.16b
+ eor v16.16b,v16.16b,v8.16b
+ mov v8.16b,v24.16b
+ st1 {v16.4s},[x1],#16
+ b.ne 1b
+3:
+ st1 {v8.4s},[x4]
+ ldp d8,d9,[sp],#16
+ ret
+.size sm4_v8_cbc_encrypt,.-sm4_v8_cbc_encrypt
+.globl sm4_v8_ctr32_encrypt_blocks
+.type sm4_v8_ctr32_encrypt_blocks,%function
+.align 5
+sm4_v8_ctr32_encrypt_blocks:
+ stp d8,d9,[sp, #-16]!
+ ld1 {v8.4s},[x4]
+ ld1 {v0.4s,v1.4s,v2.4s,v3.4s},[x3],64
+ ld1 {v4.4s,v5.4s,v6.4s,v7.4s},[x3]
+ rev32 v8.16b,v8.16b
+ mov w5,v8.s[3]
+1:
+ cmp x2,#4
+ b.lt 1f
+ ld1 {v24.4s,v25.4s,v26.4s,v27.4s},[x0],#64
+ mov v16.16b,v8.16b
+ mov v17.16b,v8.16b
+ mov v18.16b,v8.16b
+ mov v19.16b,v8.16b
+ add w5,w5,#1
+ mov v17.s[3],w5
+ add w5,w5,#1
+ mov v18.s[3],w5
+ add w5,w5,#1
+ mov v19.s[3],w5
+ cmp x2,#8
+ b.lt 2f
+ ld1 {v28.4s,v29.4s,v30.4s,v31.4s},[x0],#64
+ mov v20.16b,v8.16b
+ mov v21.16b,v8.16b
+ mov v22.16b,v8.16b
+ mov v23.16b,v8.16b
+ add w5,w5,#1
+ mov v20.s[3],w5
+ add w5,w5,#1
+ mov v21.s[3],w5
+ add w5,w5,#1
+ mov v22.s[3],w5
+ add w5,w5,#1
+ mov v23.s[3],w5
+.inst 0xcec08410
+.inst 0xcec08411
+.inst 0xcec08412
+.inst 0xcec08413
+.inst 0xcec08430
+.inst 0xcec08431
+.inst 0xcec08432
+.inst 0xcec08433
+.inst 0xcec08450
+.inst 0xcec08451
+.inst 0xcec08452
+.inst 0xcec08453
+.inst 0xcec08470
+.inst 0xcec08471
+.inst 0xcec08472
+.inst 0xcec08473
+.inst 0xcec08490
+.inst 0xcec08491
+.inst 0xcec08492
+.inst 0xcec08493
+.inst 0xcec084b0
+.inst 0xcec084b1
+.inst 0xcec084b2
+.inst 0xcec084b3
+.inst 0xcec084d0
+.inst 0xcec084d1
+.inst 0xcec084d2
+.inst 0xcec084d3
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+.inst 0xcec084f1
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev64 v17.4S,v17.4S
+.inst 0xcec084f2
+ ext v17.16b,v17.16b,v17.16b,#8
+ rev64 v18.4S,v18.4S
+.inst 0xcec084f3
+ ext v18.16b,v18.16b,v18.16b,#8
+ rev64 v19.4S,v19.4S
+ ext v19.16b,v19.16b,v19.16b,#8
+.inst 0xcec08414
+.inst 0xcec08415
+.inst 0xcec08416
+.inst 0xcec08417
+.inst 0xcec08434
+.inst 0xcec08435
+.inst 0xcec08436
+.inst 0xcec08437
+.inst 0xcec08454
+.inst 0xcec08455
+.inst 0xcec08456
+.inst 0xcec08457
+.inst 0xcec08474
+.inst 0xcec08475
+.inst 0xcec08476
+.inst 0xcec08477
+.inst 0xcec08494
+.inst 0xcec08495
+.inst 0xcec08496
+.inst 0xcec08497
+.inst 0xcec084b4
+.inst 0xcec084b5
+.inst 0xcec084b6
+.inst 0xcec084b7
+.inst 0xcec084d4
+.inst 0xcec084d5
+.inst 0xcec084d6
+.inst 0xcec084d7
+.inst 0xcec084f4
+ rev64 v20.4S,v20.4S
+.inst 0xcec084f5
+ ext v20.16b,v20.16b,v20.16b,#8
+ rev64 v21.4S,v21.4S
+.inst 0xcec084f6
+ ext v21.16b,v21.16b,v21.16b,#8
+ rev64 v22.4S,v22.4S
+.inst 0xcec084f7
+ ext v22.16b,v22.16b,v22.16b,#8
+ rev64 v23.4S,v23.4S
+ ext v23.16b,v23.16b,v23.16b,#8
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ rev32 v20.16b,v20.16b
+ rev32 v21.16b,v21.16b
+ rev32 v22.16b,v22.16b
+ rev32 v23.16b,v23.16b
+ eor v16.16b,v16.16b,v24.16b
+ eor v17.16b,v17.16b,v25.16b
+ eor v18.16b,v18.16b,v26.16b
+ eor v19.16b,v19.16b,v27.16b
+ eor v20.16b,v20.16b,v28.16b
+ eor v21.16b,v21.16b,v29.16b
+ eor v22.16b,v22.16b,v30.16b
+ eor v23.16b,v23.16b,v31.16b
+ st1 {v16.4s,v17.4s,v18.4s,v19.4s},[x1],#64
+ st1 {v20.4s,v21.4s,v22.4s,v23.4s},[x1],#64
+ subs x2,x2,#8
+ b.eq 3f
+ add w5,w5,#1
+ mov v8.s[3],w5
+ b 1b
+2:
+.inst 0xcec08410
+.inst 0xcec08411
+.inst 0xcec08412
+.inst 0xcec08413
+.inst 0xcec08430
+.inst 0xcec08431
+.inst 0xcec08432
+.inst 0xcec08433
+.inst 0xcec08450
+.inst 0xcec08451
+.inst 0xcec08452
+.inst 0xcec08453
+.inst 0xcec08470
+.inst 0xcec08471
+.inst 0xcec08472
+.inst 0xcec08473
+.inst 0xcec08490
+.inst 0xcec08491
+.inst 0xcec08492
+.inst 0xcec08493
+.inst 0xcec084b0
+.inst 0xcec084b1
+.inst 0xcec084b2
+.inst 0xcec084b3
+.inst 0xcec084d0
+.inst 0xcec084d1
+.inst 0xcec084d2
+.inst 0xcec084d3
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+.inst 0xcec084f1
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev64 v17.4S,v17.4S
+.inst 0xcec084f2
+ ext v17.16b,v17.16b,v17.16b,#8
+ rev64 v18.4S,v18.4S
+.inst 0xcec084f3
+ ext v18.16b,v18.16b,v18.16b,#8
+ rev64 v19.4S,v19.4S
+ ext v19.16b,v19.16b,v19.16b,#8
+ rev32 v16.16b,v16.16b
+ rev32 v17.16b,v17.16b
+ rev32 v18.16b,v18.16b
+ rev32 v19.16b,v19.16b
+ eor v16.16b,v16.16b,v24.16b
+ eor v17.16b,v17.16b,v25.16b
+ eor v18.16b,v18.16b,v26.16b
+ eor v19.16b,v19.16b,v27.16b
+ st1 {v16.4s,v17.4s,v18.4s,v19.4s},[x1],#64
+ subs x2,x2,#4
+ b.eq 3f
+ add w5,w5,#1
+ mov v8.s[3],w5
+ b 1b
+1:
+ subs x2,x2,#1
+ b.lt 3f
+ mov v16.16b,v8.16b
+ ld1 {v24.4s},[x0],#16
+.inst 0xcec08410
+.inst 0xcec08430
+.inst 0xcec08450
+.inst 0xcec08470
+.inst 0xcec08490
+.inst 0xcec084b0
+.inst 0xcec084d0
+.inst 0xcec084f0
+ rev64 v16.4S,v16.4S
+ ext v16.16b,v16.16b,v16.16b,#8
+ rev32 v16.16b,v16.16b
+ eor v16.16b,v16.16b,v24.16b
+ st1 {v16.4s},[x1],#16
+ b.eq 3f
+ add w5,w5,#1
+ mov v8.s[3],w5
+ b 1b
+3:
+ ldp d8,d9,[sp],#16
+ ret
+.size sm4_v8_ctr32_encrypt_blocks,.-sm4_v8_ctr32_encrypt_blocks

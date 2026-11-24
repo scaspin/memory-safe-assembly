@@ -1,0 +1,20 @@
+[workspace]
+
+[package]
+name = "wrapper-overhead"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+bums_annotations = { path = "../../bums_annotations" }
+cc = "1"
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "visit-mut", "parsing", "printing", "extra-traits"] }
+
+[features]
+isolated = []
+
+[profile.release]
+codegen-units = 1

@@ -1,0 +1,11 @@
+max_len,kind,n,angr,binsec,bums,secsep
+16,unmutated,7,"7/7 complete, median 5.0 s","7/7 complete, median 10.1 s","7/7 verified, median 24.1 s","7/7 type-check, median 110.0 s"
+16,over-read mutant,9,"6/9 caught, median 0.2 s, 3 missed (accepted)","7/9 caught, median 0.5 s, 2 missed (accepted)","9/9 rejected, median 3.4 s","9/9 rejected, median 168.9 s (whole program)"
+64,unmutated,7,"6/7 complete, median 13.9 s, 1 timeout","6/7 complete, median 6.7 s, 1 timeout","7/7 verified, median 24.1 s","7/7 type-check, median 110.0 s"
+64,over-read mutant,9,"7/9 caught, median 0.1 s, 1 missed (accepted), 1 timeout","8/9 caught, median 1.5 s, 1 missed (accepted)","9/9 rejected, median 3.4 s","9/9 rejected, median 168.9 s (whole program)"
+256,unmutated,7,"3/7 complete, median 193.4 s, 4 timeout","4/7 complete, median 5.3 s, 3 timeout","7/7 verified, median 24.1 s","7/7 type-check, median 110.0 s"
+256,over-read mutant,9,"7/9 caught, median 0.1 s, 2 timeout","6/9 caught, median 2.6 s, 3 timeout","9/9 rejected, median 3.4 s","9/9 rejected, median 168.9 s (whole program)"
+1024,unmutated,7,"1/7 complete, median 22.5 s, 6 timeout","3/7 complete, median 8.0 s, 4 timeout","7/7 verified, median 24.1 s","7/7 type-check, median 110.0 s"
+1024,over-read mutant,9,"7/9 caught, median 0.2 s, 2 timeout","6/9 caught, median 3.2 s, 3 timeout","9/9 rejected, median 3.4 s","9/9 rejected, median 168.9 s (whole program)"
+4096,unmutated,7,"0/7 complete, median -, 7 timeout","2/7 complete, median 12.6 s, 5 timeout","7/7 verified, median 24.1 s","7/7 type-check, median 110.0 s"
+4096,over-read mutant,9,"7/9 caught, median 0.1 s, 2 timeout","6/9 caught, median 7.4 s, 3 timeout","9/9 rejected, median 3.4 s","9/9 rejected, median 168.9 s (whole program)"

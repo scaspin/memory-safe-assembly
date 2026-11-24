@@ -1,0 +1,40 @@
+[package]
+name = "ffmpeg-playground"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Annotations for FFmpeg's aarch64 assembly (https://github.com/FFmpeg/FFmpeg,
+# revision in include/FFMPEG_REVISION). The crate never links, so the extern
+# symbols do not need to resolve; only the proc-macro's symbolic execution runs.
+# Each module is a feature so a sweep can check one at a time; `probe` builds
+# only `src/probe.rs`, which a sweep rewrites with one annotation at a time.
+
+[features]
+# One feature per module: each annotation runs a full symbolic execution at
+# compile time, so build a module at a time (or use a sweep).
+default = []
+audio = []
+float_dsp = []
+h264 = []
+h264dsp = []
+hevc = []
+hevc_mc = []
+libavutil = []
+misc = []
+misc_video = []
+pixel = []
+swscale = []
+tx_float = []
+vp8 = []
+vp9 = []
+vvc = []
+vvc_alf = []
+yuv2rgb = []
+probe = []
+
+[dependencies]
+bums_macros = { path = "../bums_macros" }
+
+[build-dependencies]
+cc = "1.1.16"

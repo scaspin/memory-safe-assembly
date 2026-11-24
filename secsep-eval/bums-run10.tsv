@@ -1,0 +1,24 @@
+salsa20_words	src/lib.rs	verified	0.1	
+salsa20	src/lib.rs	verified	1.6	
+chacha_core	src/lib.rs	verified	0.1	
+CRYPTO_chacha_20	src/lib.rs	verified	56.0	
+CRYPTO_poly1305_init	src/lib.rs	verified	0.1	
+CRYPTO_poly1305_update	src/lib.rs	verified	231.5	
+CRYPTO_poly1305_finish	src/lib.rs	verified	7.7	
+poly1305_donna_mul	src/lib.rs	verified	0.1	
+poly1305_update	src/lib.rs	verified	24.1	
+sha512_block_data_order	src/lib.rs	verified	1.1	
+SHA512	src/lib.rs	verified	12.3	
+fe_mul_impl	src/lib.rs	verified	0.1	
+fe_tobytes	src/lib.rs	verified	0.1	
+fe_loose_invert	src/lib.rs	verified	3.1	
+X25519	src/lib.rs	verified	125.0	
+ge_madd	src/lib.rs	verified	0.2	
+ge_p2_dbl	src/lib.rs	verified	0.1	
+table_select	src/lib.rs	verified	0.1	
+x25519_ge_scalarmult_base	src/lib.rs	verified	21.6	
+x25519_sc_reduce	src/lib.rs	verified	0.1	
+ED25519_sign	src/lib.rs	verified	910.5	
+md5_block_asm_data_order	src/lib.rs	verified	0.8	
+md5_mutant_extra_block	src/lib.rs	FAIL	0.4	line 21 (movl): read of 4 bytes at data_as_ptr + 64 not provably within region of length data_len * 1
+md5_mutant_no_zero_check	src/lib.rs	FAIL	0.1	line 19 (movl): read of 4 bytes at data_as_ptr + 0 not provably within region of length data_len * 1

@@ -1,0 +1,33 @@
+benchmark,function,clauses,layout,nonoverlap,alignment_8,other,other_clauses,note
+salsa20,salsa20_words,16,12,3,1,0,,
+salsa20,salsa20,17,13,3,1,0,,
+salsa20,main,23,16,6,1,0,,
+sha512,sha512_block_data_order,26,19,6,1,0,,
+sha512,SHA512,26,19,6,1,0,,
+sha512,main,23,16,6,1,0,,
+chacha20,chacha_core,16,12,3,1,0,,
+chacha20,CRYPTO_chacha_20,45,28,15,1,1,(Cond (Le (SingleConst 32) (SingleBExp SingleSub (SingleVar 7) (SingleVar 6)))),other = the user-written @secsep_in constraint out - in >= 32
+chacha20,main,51,28,21,1,1,(Cond (Le (SingleConst 32) (SingleBExp SingleAdd (SingleVar -3) (SingleBExp SingleMul (SingleVar -4) (SingleConst -1))))),other = the user constraint propagated to the call site
+x25519,fe_mul_impl,29,20,8,1,0,,
+x25519,fe_tobytes,16,12,3,1,0,,
+x25519,fe_loose_invert,31,20,10,1,0,,
+x25519,X25519,50,28,21,1,0,,
+x25519,main,50,28,21,1,0,,
+poly1305,poly1305_donna_mul,11,8,1,1,1,(Cond (Eq (SingleBExp SingleAnd (SingleVar 7) (SingleConst 15)) (SingleConst 0))),
+poly1305,poly1305_update,28,19,7,1,1,(Cond (Eq (SingleBExp SingleAnd (SingleVar 7) (SingleConst 15)) (SingleConst 0))),
+poly1305,CRYPTO_poly1305_update,40,21,6,1,12,(Or ((Or ((Cond (Le (SingleITE (Be (SingleVar 2) (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 184) (SingleConst -1)) (SingleConst 16))) (SingleBExp Si ;; (Or ((Or ((Cond (Lt (SingleITE (Be (SingleVar 2) (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 184) (SingleConst -1)) (SingleConst 16))) (SingleBExp Si ;; (Or ((Or ((Cond (Le (SingleBExp SingleAdd (SingleVar 7) (SingleConst 56)) (SingleITE (Be (SingleVar 2) (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 18 ;; (Or ((Cond (Le (SingleITE (Be (SingleVar 2) (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 184) (SingleConst -1)) (SingleConst 16))) (SingleBExp SingleA ;; (Or ((Cond (Lt (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleVar 184) (SingleVar 7)) (SingleConst 59)) (SingleITE (Be (SingleVar 2) (SingleBExp SingleAdd ( ;; (Or ((Cond (Le (SingleBExp SingleAdd (SingleVar 7) (SingleConst 56)) (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleVar 184) (SingleVar 7)) (SingleConst 59) ;; (Or ((Cond (Le (SingleBExp SingleAdd (SingleVar 7) (SingleConst 56)) (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleVar 184) (SingleVar 7)) (SingleConst 58) ;; (Or ((Cond (Le (SingleBExp SingleAdd (SingleVar 7) (SingleConst 56)) (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleVar 184) (SingleVar 7)) (SingleConst 57) ;; (Or ((Cond (Le (SingleBExp SingleAdd (SingleVar 7) (SingleConst 56)) (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleVar 184) (SingleVar 7)) (SingleConst 56) ;; (Or ((Cond (Le (SingleConst 0) (SingleVar 184))) (Cond (Ne (SingleBExp SingleAnd (SingleVar 2) (SingleVar 2)) (SingleConst 0))))) ;; (Or ((Cond (Le (SingleVar 184) (SingleConst 15))) (Cond (Ne (SingleBExp SingleAnd (SingleVar 2) (SingleVar 2)) (SingleConst 0))))) ;; (Cond (Eq (SingleBExp SingleAnd (SingleVar 7) (SingleConst 15)) (SingleConst 0))),
+poly1305,CRYPTO_poly1305_init,17,12,3,1,1,(Cond (Eq (SingleBExp SingleAnd (SingleVar 7) (SingleConst 15)) (SingleConst 0))),other = inferred 16-byte state alignment
+poly1305,CRYPTO_poly1305_finish,26,16,6,1,3,(Or ((Cond (Le (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleVar 202) (SingleVar 7)) (SingleConst 56)) (SingleBExp SingleAdd (SingleVar 7) (SingleConst 72) ;; (Or ((Cond (Lt (SingleBExp SingleAdd (SingleVar 7) (SingleConst 56)) (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleVar 202) (SingleVar 7)) (SingleConst 56) ;; (Cond (Eq (SingleBExp SingleAnd (SingleVar 7) (SingleConst 15)) (SingleConst 0))),other = inferred 16-byte state alignment + inferred buf_used <= 16 (not annotated)
+poly1305,benchmark,24,16,6,1,1,(Cond (Eq (SingleBExp SingleAnd (SingleBExp SingleAdd (SingleVar 4) (SingleConst -128)) (SingleConst 15)) (SingleConst 0))),
+poly1305,main,24,16,6,1,1,(Cond (Eq (SingleBExp SingleAnd (SingleBExp SingleAdd (SingleVar 4) (SingleConst -144)) (SingleConst 15)) (SingleConst 0))),
+ed25519_sign,fe_mul_impl,29,20,8,1,0,,
+ed25519_sign,table_select,24,14,3,2,5,(Cond (Le (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 6) (SingleConst 768)) (SingleVar -56)) (SingleConst 768)) (SingleBExp Sin ;; (Cond (Lt (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 6) (SingleConst 768)) (SingleVar -56)) (SingleConst 752)) (SingleBExp Sin ;; (Cond (Le (SingleVar -56) (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 6) (SingleConst 768)) (SingleVar -56)) (SingleConst 752)) ;; (Cond (Le (SingleVar -56) (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 6) (SingleConst 768)) (SingleVar -56)) (SingleConst 496)) ;; (Cond (Le (SingleVar -56) (SingleBExp SingleAdd (SingleBExp SingleAdd (SingleBExp SingleMul (SingleVar 6) (SingleConst 768)) (SingleVar -56)) (SingleConst 240)),
+ed25519_sign,ge_p2_dbl,33,20,10,3,0,,
+ed25519_sign,ge_madd,53,28,21,4,0,,
+ed25519_sign,x25519_sc_reduce,10,8,1,1,0,,
+ed25519_sign,x25519_ge_scalarmult_base,101,44,55,2,0,,
+ed25519_sign,sha512_block_data_order,26,19,6,1,0,,
+ed25519_sign,fe_tobytes,16,12,3,1,0,,
+ed25519_sign,fe_loose_invert,31,20,10,1,0,,
+ed25519_sign,ED25519_sign,151,59,91,1,0,,
+ed25519_sign,main,148,56,91,1,0,,

@@ -1,0 +1,5 @@
+kernel,variant,precondition,instructions_after_port,ported_lines,dropped_nop_prefetch,flag_rewrites,octal_phase_reached,octal_error,failing_block,octal_wall_s,bums_x86
+dcopy_k,unit-stride,"inc_x = inc_y = 1",252,58,32,12,Valid Region Infer,set_st_op_type_slot slot annotation is None,.Ldcopy_k_98 (16-element unrolled copy loop),30.1,not annotated on x86
+dcopy_k,contract,"inc_x >= 1, inc_y >= 1, regions n*inc*8",252,58,32,12,Valid Region Infer,set_st_op_type_slot slot annotation is None,.Ldcopy_k_98 (16-element unrolled copy loop),280.0,not annotated on x86
+dasum_k,unit-stride,"inc_x = 1",166,88,14,6,Valid Region Infer,get_ld_op_type_slot slot annotation is None,.Ldasum_k_a0 (16-element unrolled sum loop),10.2,verified 53.7 s
+dasum_k,contract,"inc_x >= 1, region n*inc*8",166,88,14,6,Valid Region Infer,get_ld_op_type_slot slot annotation is None,.Ldasum_k_a0 (16-element unrolled sum loop),42.9,verified 53.7 s

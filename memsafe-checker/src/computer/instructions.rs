@@ -1,261 +1,928 @@
 use crate::computer::*;
+use std::str::FromStr;
 
-impl<'ctx> ARMCORTEXA<'_> {
+fn immediate(value: i64) -> RegisterValue {
+    RegisterValue {
+        kind: RegisterKind::Immediate,
+        base: None,
+        offset: value,
+    }
+}
+
+fn permuted(opcode: &str, word: bool, value: u64) -> u64 {
+    let per_half =
+        |f: &dyn Fn(u32) -> u32| ((f((value >> 32) as u32) as u64) << 32) | f(value as u32) as u64;
+    let swap_halfword_bytes = |x: u32| ((x & 0x00ff_00ff) << 8) | ((x >> 8) & 0x00ff_00ff);
+    match (opcode, word) {
+        ("rev", true) => (value as u32).swap_bytes() as u64,
+        ("rev", false) => value.swap_bytes(),
+        ("rev32", _) => per_half(&|x| x.swap_bytes()),
+        ("rev16", true) => swap_halfword_bytes(value as u32) as u64,
+        ("rev16", false) => per_half(&swap_halfword_bytes),
+        ("rbit", true) => (value as u32).reverse_bits() as u64,
+        _ => value.reverse_bits(),
+    }
+}
+
+fn changed(value: RegisterValue, change: &str) -> RegisterValue {
+    if value.kind == RegisterKind::Number {
+        return value;
+    }
+    let negated = |base: Option<AbstractExpression>| {
+        base.map(|b| generate_expression("-", AbstractExpression::Immediate(0), b))
+    };
+    match change {
+        "inc" => RegisterValue {
+            offset: value.offset.wrapping_add(1),
+            ..value
+        },
+        "inv" => RegisterValue {
+            base: negated(value.base),
+            offset: !value.offset,
+            ..value
+        },
+        _ => RegisterValue {
+            base: negated(value.base),
+            offset: value.offset.wrapping_neg(),
+            ..value
+        },
+    }
+}
+
+enum Tested {
+    Known(i64),
+    Symbolic(AbstractExpression),
+}
+
+impl ARMCORTEXA {
+    fn set_label_address(&mut self, register: &Operand, label: &str) {
+        match self.label_to_memory_index(label) {
+            Some((region, index)) => self.set_register(
+                register,
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(region)),
+                index,
+            ),
+            None => self.set_register(register, RegisterKind::Number, None, 0),
+        }
+    }
+
+    fn condition(&mut self, condition: &str) -> Result<FlagValue, String> {
+        let (tested, negated) = match condition {
+            "ne" => ("eq", true),
+            "hs" => ("cs", false),
+            "cc" | "lo" => ("cs", true),
+            "pl" => ("mi", true),
+            "vc" => ("vs", true),
+            "ls" => ("hi", true),
+            "ge" => ("lt", true),
+            "le" => ("gt", true),
+            "nv" => ("al", false),
+            other => (other, false),
+        };
+        let flag = |flag: &Option<FlagValue>| {
+            flag.clone()
+                .ok_or_else(|| format!("condition {condition} reads a flag the program never set"))
+        };
+        let holds = match tested {
+            "al" => FlagValue::Real(true),
+            "eq" => match flag(&self.zero)? {
+                FlagValue::Abstract(zero) => FlagValue::Abstract(self.unwrapped_zero(zero)),
+                real => real,
+            },
+            "cs" => flag(&self.carry)?,
+            "vs" => flag(&self.overflow)?,
+            "lt" => flag(&self.neg)?,
+            "mi" => match (flag(&self.neg)?, flag(&self.overflow)?) {
+                (negative, FlagValue::Real(false)) => negative,
+                (FlagValue::Real(n), FlagValue::Real(v)) => FlagValue::Real(n != v),
+                (negative, FlagValue::Abstract(overflow)) => {
+                    if self.refutes_within_budget(&overflow) {
+                        negative
+                    } else if let Some(sign) =
+                        super::instruction_aux::narrow_wrapped_sign(&overflow)
+                    {
+                        FlagValue::Abstract(sign)
+                    } else {
+                        self.unknown_condition()
+                    }
+                }
+                _ => self.unknown_condition(),
+            },
+            "gt" => match (flag(&self.neg)?, flag(&self.zero)?) {
+                (FlagValue::Abstract(less), _) if Self::is_signed_difference(&less) => {
+                    FlagValue::Abstract(AbstractComparison::new(">", *less.left, *less.right))
+                }
+                (FlagValue::Real(true), _) | (_, FlagValue::Real(true)) => FlagValue::Real(false),
+                (FlagValue::Real(false), zero) => zero.not(),
+                (less, FlagValue::Real(false)) => less.not(),
+                _ => self.unknown_condition(),
+            },
+            "hi" => match (flag(&self.carry)?, flag(&self.zero)?, self.unsigned_order()) {
+                (_, _, Some((left, right))) => {
+                    FlagValue::Abstract(AbstractComparison::new(">", left, right))
+                }
+                (FlagValue::Real(false), _, _) | (_, FlagValue::Real(true), _) => {
+                    FlagValue::Real(false)
+                }
+                (FlagValue::Real(true), zero, _) => zero.not(),
+                (carry, FlagValue::Real(false), _) => carry,
+                _ => self.unknown_condition(),
+            },
+            _ => return Err(format!("unknown condition {condition}")),
+        };
+        Ok(if negated { holds.not() } else { holds })
+    }
+
+    fn unwrapped_zero(&self, zero: AbstractComparison) -> AbstractComparison {
+        let wrapped = match (&*zero.left, &*zero.right) {
+            (AbstractExpression::Expression(op, sum, width), AbstractExpression::Immediate(0))
+                if zero.op == "==" && op == "sext" =>
+            {
+                match **width {
+                    AbstractExpression::Immediate(bits @ 1..=64) => Some((sum.clone(), bits)),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        let Some((sum, bits)) = wrapped else {
+            return zero;
+        };
+        let Some(value) = expression_to_ast((*sum).clone()) else {
+            return zero;
+        };
+        let modulus = ast::Int::from_str(&(1i128 << bits).to_string()).expect("modulus");
+        let beyond_one_turn = ast::Bool::or(&[value.ge(&modulus), value.le(modulus.unary_minus())]);
+        if self.refutes_ast_within_budget(beyond_one_turn) {
+            AbstractComparison::new("==", *sum, AbstractExpression::Immediate(0))
+        } else {
+            zero
+        }
+    }
+
+    fn is_signed_difference(less: &AbstractComparison) -> bool {
+        less.op == "<" && *less.right == AbstractExpression::Immediate(0)
+    }
+
+    fn unknown_condition(&mut self) -> FlagValue {
+        self.unknown_flag("condition")
+            .expect("an unknown flag is always abstract")
+    }
+
+    pub(crate) fn field_of_unknown(
+        &mut self,
+        value: RegisterValue,
+        width: i64,
+        signed: bool,
+    ) -> RegisterValue {
+        if value.kind != RegisterKind::Number || !(1..=62).contains(&width) {
+            return value;
+        }
+        let (low, high) = if signed {
+            (-(1i64 << (width - 1)), (1i64 << (width - 1)) - 1)
+        } else {
+            (0, (1i64 << width) - 1)
+        };
+        let name = self.fresh_symbol("field");
+        let bounded = generate_expression(
+            "atmost",
+            generate_expression(
+                "atleast",
+                AbstractExpression::Abstract(name),
+                AbstractExpression::Immediate(low),
+            ),
+            AbstractExpression::Immediate(high),
+        );
+        RegisterValue::new(RegisterKind::RegisterBase, Some(bounded), 0)
+    }
+
+    fn unsigned_order(&self) -> Option<(AbstractExpression, AbstractExpression)> {
+        let (Some(FlagValue::Abstract(carry)), Some(FlagValue::Abstract(_))) =
+            (&self.carry, &self.zero)
+        else {
+            return None;
+        };
+        let widened = |e: &AbstractExpression| {
+            matches!(e, AbstractExpression::Expression(op, _, width)
+                if op == "zext" && **width == AbstractExpression::Immediate(64))
+        };
+        let widened_plus_borrow = |e: &AbstractExpression| match e {
+            AbstractExpression::Expression(op, inner, borrow) => {
+                op == "+" && widened(inner) && **borrow == AbstractExpression::Immediate(1)
+            }
+            _ => false,
+        };
+        (carry.op == ">="
+            && widened(&carry.left)
+            && (widened(&carry.right) || widened_plus_borrow(&carry.right)))
+        .then(|| (*carry.left.clone(), *carry.right.clone()))
+    }
+
+    fn unsigned_extreme(
+        &self,
+        dest: &Operand,
+        opt1: &RegisterValue,
+        opt2: &RegisterValue,
+        cond: &str,
+    ) -> Option<AbstractExpression> {
+        if !matches!(dest, Operand::Register(RePrefix::W, _)) || !matches!(cond, "hi" | "ls") {
+            return None;
+        }
+        let (left, right) = self.unsigned_order()?;
+        let compared = |e: &AbstractExpression| match e {
+            AbstractExpression::Expression(_, inner, _) => match inner.as_ref() {
+                AbstractExpression::Register(r) => Some((**r).clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        let (left, right) = (compared(&left)?, compared(&right)?);
+        let in_order = *opt1 == left && *opt2 == right;
+        let swapped = *opt1 == right && *opt2 == left;
+        let known = opt1.kind != RegisterKind::Number && opt2.kind != RegisterKind::Number;
+        if !(in_order || swapped) || !known {
+            return None;
+        }
+        let extreme = if in_order == (cond == "ls") {
+            "atmost"
+        } else {
+            "atleast"
+        };
+        Some(generate_expression(
+            extreme,
+            instruction_aux::full_value(opt1),
+            instruction_aux::full_value(opt2),
+        ))
+    }
+
+    fn tested_value(&mut self, register: RegisterValue) -> Tested {
+        let no_base = register.base.is_none() || register.base == Some(AbstractExpression::Empty);
+        match (no_base, register.kind == RegisterKind::Number) {
+            (true, false) => Tested::Known(register.offset),
+            (true, true) => Tested::Symbolic(AbstractExpression::Abstract(format!(
+                "unknown_{}",
+                self.next_carry()
+            ))),
+            (false, _) => Tested::Symbolic(AbstractExpression::Register(Box::new(register))),
+        }
+    }
+
+    fn conditional_select(
+        &mut self,
+        dest: &Operand,
+        opt1: RegisterValue,
+        opt2: RegisterValue,
+        cond: &str,
+    ) -> Result<ExecuteReturnType, String> {
+        if let Some(extreme) = self.unsigned_extreme(dest, &opt1, &opt2, cond) {
+            self.set_register(dest, RegisterKind::RegisterBase, Some(extreme), 0);
+            return Ok(ExecuteReturnType::Next);
+        }
+        match self.condition(cond)? {
+            FlagValue::Real(true) => self.set_register(dest, opt1.kind, opt1.base, opt1.offset),
+            FlagValue::Real(false) => self.set_register(dest, opt2.kind, opt2.base, opt2.offset),
+            FlagValue::Abstract(holds) => {
+                return Ok(ExecuteReturnType::Select(holds, dest.clone(), opt1, opt2));
+            }
+        }
+        Ok(ExecuteReturnType::Next)
+    }
+
     pub fn execute(
         &mut self,
         pc: usize,
         instruction: &Instruction,
     ) -> Result<ExecuteReturnType, String> {
+        self.set_current_line(pc);
+        self.table_offsets_this_instruction = None;
+        self.note_pc_for_exact_lanes(pc);
+        if super::sve::is_scalable(instruction) {
+            return self.scalable(instruction);
+        }
+        let effect = self.plan_lane_effect(instruction);
+        let exact = self.plan_exact_lanes(instruction);
+        let result = self.execute_instruction(pc, instruction);
+        if result.is_ok() {
+            self.apply_lane_effect(effect);
+            self.apply_exact_lanes(exact);
+        } else {
+            self.forget_exact_lanes();
+        }
+        result
+    }
+
+    fn execute_instruction(
+        &mut self,
+        pc: usize,
+        instruction: &Instruction,
+    ) -> Result<ExecuteReturnType, String> {
+        if !matches!(
+            instruction.ty,
+            InstructionType::Label | InstructionType::Def
+        ) && is_floating_point(&instruction.opcode)
+        {
+            self.floating_point(instruction);
+            return Ok(ExecuteReturnType::Next);
+        }
         match instruction.ty {
             InstructionType::Arithmetic => match instruction.opcode.as_str() {
                 "add" => {
-                    self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
+                    self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
                 }
-                "sub" => {
-                    self.arithmetic("-", &|x, y| x - y, instruction.operands.clone());
+                "sub" => match self.low_bits_left_after_clearing(&instruction.operands) {
+                    Some(low) => self.set_register(
+                        &instruction.operands[0],
+                        RegisterKind::RegisterBase,
+                        Some(low),
+                        0,
+                    ),
+                    None => {
+                        self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
+                    }
+                },
+                "neg" => {
+                    let mut operands = instruction.operands.clone();
+                    operands.insert(1, Operand::Register(RePrefix::Ze, 0));
+                    self.arithmetic("-", |x, y| x - y, operands);
                 }
-                "mul" | "umulh" => {
-                    self.arithmetic("*", &|x, y| x * y, instruction.operands.clone());
+                "mul" => {
+                    self.arithmetic("*", |x, y| x * y, instruction.operands.clone());
                 }
                 "and" => {
-                    self.arithmetic("&", &|x, y| x & y, instruction.operands.clone());
+                    let mask = self.nonnegative_mask(instruction);
+                    self.arithmetic("&", |x, y| x & y, instruction.operands.clone());
+                    self.fold_mask_within_aligned_region(instruction);
+                    self.bound_masked_result(instruction, mask);
+                    self.realign_below_stack_pointer(instruction);
                 }
                 "orr" => {
-                    self.arithmetic("|", &|x, y| x | y, instruction.operands.clone());
+                    let bits = self.bitwise_operand_bits(instruction);
+                    let widths = if bits.is_none() {
+                        self.source_bit_widths(instruction)
+                    } else {
+                        None
+                    };
+                    self.arithmetic("|", |x, y| x | y, instruction.operands.clone());
+                    self.bound_bitwise_result(instruction, bits);
+                    self.bound_by_source_widths(instruction, widths);
                 }
                 "orn" => {
-                    self.arithmetic("!|", &|x, y: i64| x | !y, instruction.operands.clone());
+                    self.arithmetic("!|", |x, y: i64| x | !y, instruction.operands.clone());
+                }
+                "eon" => {
+                    self.arithmetic("!^", |x, y: i64| x ^ !y, instruction.operands.clone());
                 }
                 "eor" => {
-                    // potential TODO: deal with case where registers are the same but not imm
-                    self.arithmetic("^", &|x, y| x ^ y, instruction.operands.clone());
+                    let bits = self.bitwise_operand_bits(instruction);
+                    self.arithmetic("^", |x, y| x ^ y, instruction.operands.clone());
+                    self.bound_bitwise_result(instruction, bits);
                 }
                 "bic" => {
-                    self.arithmetic("!&", &|x, y: i64| x & !y, instruction.operands.clone());
+                    self.arithmetic("!&", |x, y: i64| x & !y, instruction.operands.clone());
                 }
                 "adds" => {
-                    self.cmn(&instruction.operands[0], &instruction.operands[1]);
-                    self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
+                    let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                    let bits = Self::flag_bits(&instruction.operands[1..]);
+                    self.cmn_values_sized(r1, r2, bits);
+                    self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
                 }
                 "subs" => {
-                    self.cmp(&instruction.operands[0], &instruction.operands[1]);
-                    self.arithmetic("-", &|x, y| x - y, instruction.operands.clone());
+                    let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                    let bits = Self::flag_bits(&instruction.operands[1..]);
+                    self.cmp_values_sized(r1, r2, bits);
+                    self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
                 }
-                "ror" | "lsl" | "lsr" => {
+                "ror" | "lsl" | "lsr" | "asr" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let reg0 = reg_iter.next().expect("Need destination register");
                     let reg1 = reg_iter.next().expect("Need first source register");
                     let reg2 = reg_iter.next().expect("Need second source register");
 
-                    self.shift_reg(reg0, reg1, reg2);
+                    self.shift_reg(&instruction.opcode, reg0, reg1, reg2);
                 }
                 "ands" => {
-                    self.cmp(&instruction.operands[0], &instruction.operands[1]);
-                    self.arithmetic("&", &|x, y| x & y, instruction.operands.clone());
+                    let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                    let bits = Self::flag_bits(&instruction.operands[1..]);
+                    self.tst_values_sized(r1, r2, bits);
+                    self.arithmetic("&", |x, y| x & y, instruction.operands.clone());
                 }
-                "adc" => {
-                    match &self.carry {
-                        Some(FlagValue::Real(b)) => {
-                            if *b == true {
-                                self.arithmetic(
-                                    "+",
-                                    &|x, y| x + y + 1,
-                                    instruction.operands.clone(),
-                                );
-                            } else {
-                                self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
-                            }
-                        }
-                        _ => todo!("adcs carry is not real not supported yet"),
-                        // Some(FlagValue::Abstract(c)) => {
-                        //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
-                        //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
-
-                        //     return Ok(ExecuteReturnType::Select(c.clone(), reg0.clone(), opt0, opt1));
-                        // }
-                        // None => {
-                        //     let opt0 = self.arithmetic("+", &|x, y| x + y, instruction.operands);
-                        //     let opt1 = self.arithmetic("+", &|x, y| x + y + 1, instruction.operands);
-
-                        //     return Ok(ExecuteReturnType::Select(
-                        //         AbstractComparison::new(
-                        //             "==",
-                        //             AbstractExpression::Abstract("carry".to_string()),
-                        //             AbstractExpression::Immediate(1),
-                        //         ),
-                        //         reg0.clone(),
-                        //         opt0,
-                        //         opt1,
-                        //     ));
-                        // }
+                "bics" => {
+                    let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                    let bits = Self::flag_bits(&instruction.operands[1..]);
+                    if r2.kind == RegisterKind::Immediate && r2.base.is_none() {
+                        self.tst_values_sized(r1, immediate(!r2.offset), bits);
+                    } else {
+                        self.set_unknown_flags();
                     }
+                    self.arithmetic("!&", |x, y: i64| x & !y, instruction.operands.clone());
                 }
-                "adcs" => {
-                    let mut reg_iter = instruction.operands.iter().clone();
-                    let _ = reg_iter.next().expect("Need destination register");
-                    let reg1 = reg_iter.next().expect("Need first choice register");
-                    let reg2 = reg_iter.next().expect("Need second choice source register");
-
-                    match &self.carry {
-                        Some(FlagValue::Real(b)) => {
-                            if *b == true {
-                                self.arithmetic(
-                                    "+",
-                                    &|x, y| x + y + 1,
-                                    instruction.operands.clone(),
-                                );
-                                self.cmn(reg1, reg2);
-                            } else {
-                                self.arithmetic("+", &|x, y| x + y, instruction.operands.clone());
-                                self.cmn(reg1, reg2);
-                            }
+                "adc" => match &self.carry {
+                    Some(FlagValue::Real(b)) => {
+                        if *b {
+                            self.arithmetic("+", |x, y| x + y + 1, instruction.operands.clone());
+                        } else {
+                            self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
                         }
-                        _ => todo!("adcs carry not real 2"),
                     }
-                }
+                    Some(FlagValue::Abstract(c)) => {
+                        let c = c.clone();
+                        return self.carry_select(
+                            "+",
+                            |x, y| x + y + 1,
+                            |x, y| x + y,
+                            &c,
+                            &instruction.operands,
+                        );
+                    }
+                    None => todo!("adc reads a carry flag the program never set"),
+                },
+                "adcs" => match &self.carry {
+                    Some(FlagValue::Real(b)) => {
+                        let carry_in = *b;
+                        let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                        let bits = Self::flag_bits(&instruction.operands[1..]);
+                        if carry_in {
+                            self.arithmetic("+", |x, y| x + y + 1, instruction.operands.clone());
+                        } else {
+                            self.arithmetic("+", |x, y| x + y, instruction.operands.clone());
+                        }
+                        self.add_with_carry_flags(r1, r2, bits, carry_in);
+                    }
+                    Some(FlagValue::Abstract(c)) => {
+                        let c = c.clone();
+                        self.set_unknown_flags();
+                        return self.carry_select(
+                            "+",
+                            |x, y| x + y + 1,
+                            |x, y| x + y,
+                            &c,
+                            &instruction.operands,
+                        );
+                    }
+                    None => todo!("adcs reads a carry flag the program never set"),
+                },
                 "sbc" => match &self.carry {
                     Some(FlagValue::Real(b)) => {
-                        if *b == true {
-                            self.arithmetic("-", &|x, y| x - y, instruction.operands.clone());
+                        if *b {
+                            self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
                         } else {
-                            self.arithmetic("+", &|x, y| x - y - 1, instruction.operands.clone());
+                            self.arithmetic("-", |x, y| x - y - 1, instruction.operands.clone());
                         }
                     }
-                    _ => todo!("sbc todo"),
+                    Some(FlagValue::Abstract(c)) => {
+                        let c = c.clone();
+                        return self.carry_select(
+                            "-",
+                            |x, y| x - y,
+                            |x, y| x - y - 1,
+                            &c,
+                            &instruction.operands,
+                        );
+                    }
+                    None => todo!("sbc reads a carry flag the program never set"),
                 },
-                "sbcs" => {
-                    let mut reg_iter = instruction.operands.iter().clone();
-                    let _ = reg_iter.next().expect("Need destination register");
-                    let reg1 = reg_iter.next().expect("Need first choice register");
-                    let reg2 = reg_iter.next().expect("Need second choice source register");
-
-                    match &self.carry {
-                        Some(FlagValue::Real(b)) => {
-                            if *b == true {
-                                self.arithmetic("-", &|x, y| x - y, instruction.operands.clone());
-                                self.cmp(reg1, reg2);
-                            } else {
-                                self.arithmetic(
-                                    "-",
-                                    &|x, y| x - y - 1,
-                                    instruction.operands.clone(),
-                                );
-                                self.cmp(reg1, reg2);
-                            }
+                "sbcs" => match &self.carry {
+                    Some(FlagValue::Real(b)) => {
+                        let carry_in = *b;
+                        let (r1, r2) = self.flag_operands(&instruction.operands[1..]);
+                        let bits = Self::flag_bits(&instruction.operands[1..]);
+                        if carry_in {
+                            self.arithmetic("-", |x, y| x - y, instruction.operands.clone());
+                        } else {
+                            self.arithmetic("-", |x, y| x - y - 1, instruction.operands.clone());
                         }
-                        _ => todo!("sbcs todo"),
+                        self.subtract_with_carry_flags(r1, r2, bits, carry_in);
+                    }
+                    Some(FlagValue::Abstract(c)) => {
+                        let c = c.clone();
+                        self.set_unknown_flags();
+                        return self.carry_select(
+                            "-",
+                            |x, y| x - y,
+                            |x, y| x - y - 1,
+                            &c,
+                            &instruction.operands,
+                        );
+                    }
+                    None => todo!("sbcs reads a carry flag the program never set"),
+                },
+                "clz" => {
+                    let dst = &instruction.operands[0];
+                    let width = match dst {
+                        Operand::Register(RePrefix::W, _) => 32,
+                        _ => 64,
+                    };
+                    let source = self.get_register(&instruction.operands[1]);
+                    let value = match source.kind {
+                        RegisterKind::Number => RegisterValue::new(
+                            RegisterKind::RegisterBase,
+                            Some(generate_expression(
+                                "atmost",
+                                generate_expression(
+                                    "atleast",
+                                    AbstractExpression::Abstract(
+                                        self.fresh_symbol("leading_zeros"),
+                                    ),
+                                    AbstractExpression::Immediate(0),
+                                ),
+                                AbstractExpression::Immediate(width as i64),
+                            )),
+                            0,
+                        ),
+                        _ => instruction_aux::count_leading_zeros(source, width),
+                    };
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "extr" => {
+                    let mut reg_iter = instruction.operands.iter().clone();
+                    let reg0 = reg_iter.next().expect("Need register output for extr");
+                    let reg1 = reg_iter.next().expect("Need high register for extr");
+                    let reg2 = reg_iter.next().expect("Need low register for extr");
+                    let lsb = match reg_iter.next() {
+                        Some(Operand::Immediate(i)) => *i as u32,
+                        _ => panic!("extr needs an immediate lsb"),
+                    };
+
+                    let high = self.get_register(reg1);
+                    let low = self.get_register(reg2);
+
+                    if high.kind == RegisterKind::Immediate
+                        && low.kind == RegisterKind::Immediate
+                        && lsb < 64
+                    {
+                        let value = if lsb == 0 {
+                            low.offset
+                        } else {
+                            (((high.offset as u64) << (64 - lsb)) | ((low.offset as u64) >> lsb))
+                                as i64
+                        };
+                        self.set_register(reg0, RegisterKind::Immediate, None, value);
+                    } else {
+                        self.set_register(reg0, RegisterKind::Number, None, 0);
                     }
                 }
-                "clz" => {
-                    let mut reg_iter = instruction.operands.iter().clone();
-                    let reg0 = reg_iter.next().expect("Need register output for clz");
-                    let reg1 = reg_iter.next().expect("Need register output for clz");
-
-                    let r1 = self.get_register(reg1);
-                    match r1.kind {
-                        RegisterKind::Immediate => {
-                            self.set_register(
-                                reg0,
-                                RegisterKind::Number,
-                                None,
-                                r1.offset.leading_zeros() as i64,
-                            );
+                "umulh" => {
+                    let dest = &instruction.operands[0];
+                    let left = self.get_register(&instruction.operands[1]);
+                    let right = self.get_register(&instruction.operands[2]);
+                    let constant = |value: &RegisterValue| {
+                        (value.kind == RegisterKind::Immediate && value.base.is_none())
+                            .then_some(value.offset)
+                    };
+                    let symbolic = |value: &RegisterValue| {
+                        let base = value.base.as_ref()?;
+                        let symbols = base.get_abstracts();
+                        let free_of_region_bases = !symbols.is_empty()
+                            && symbols.iter().all(|s| !self.memory.contains_key(s));
+                        (value.kind != RegisterKind::Number && free_of_region_bases)
+                            .then(|| value.expression())
+                    };
+                    let high_half = |a: i64, b: i64| {
+                        (((a as u64 as u128) * (b as u64 as u128)) >> 64) as u64 as i64
+                    };
+                    match (constant(&left), constant(&right)) {
+                        (Some(a), Some(b)) => {
+                            self.set_register(dest, RegisterKind::Immediate, None, high_half(a, b));
                         }
-                        _ => {
-                            self.set_register(reg0, RegisterKind::Number, None, 0);
+                        (Some(factor), None) | (None, Some(factor)) => {
+                            let other = if constant(&left).is_some() {
+                                &right
+                            } else {
+                                &left
+                            };
+                            match symbolic(other) {
+                                Some(value) => self.set_register(
+                                    dest,
+                                    RegisterKind::RegisterBase,
+                                    Some(generate_expression(
+                                        "umulh",
+                                        value,
+                                        AbstractExpression::Immediate(factor),
+                                    )),
+                                    0,
+                                ),
+                                None => self.set_register(dest, RegisterKind::Number, None, 0),
+                            }
                         }
+                        (None, None) => self.set_register(dest, RegisterKind::Number, None, 0),
                     }
+                }
+                "udiv" => {
+                    let [dst, dividend, divisor] = instruction.operands.as_slice() else {
+                        return Err("udiv needs three registers".to_string());
+                    };
+                    let (dividend, divisor) =
+                        (self.get_register(dividend), self.get_register(divisor));
+                    let word = matches!(dst, Operand::Register(RePrefix::W, _));
+                    let constant = |v: &RegisterValue| {
+                        (v.kind == RegisterKind::Immediate && v.base.is_none()).then_some(v.offset)
+                    };
+                    let positive = match constant(&divisor) {
+                        Some(d) => d > 0,
+                        None => {
+                            divisor.kind == RegisterKind::RegisterBase
+                                && comparison_to_ast(AbstractComparison::new(
+                                    "<=",
+                                    instruction_aux::full_value(&divisor),
+                                    AbstractExpression::Immediate(0),
+                                ))
+                                .is_some_and(|c| self.solver.check_timed(&[c]) == SatResult::Unsat)
+                        }
+                    };
+                    match (constant(&dividend), constant(&divisor)) {
+                        _ if !word || !positive || dividend.kind == RegisterKind::Number => {
+                            self.set_register(dst, RegisterKind::Number, None, 0);
+                        }
+                        (Some(n), Some(d)) => self.set_register(
+                            dst,
+                            RegisterKind::Immediate,
+                            None,
+                            ((n as u64 & 0xffff_ffff) / d as u64) as i64,
+                        ),
+                        _ => self.set_register(
+                            dst,
+                            RegisterKind::RegisterBase,
+                            Some(generate_expression(
+                                "/",
+                                instruction_aux::full_value(&dividend),
+                                instruction_aux::full_value(&divisor),
+                            )),
+                            0,
+                        ),
+                    }
+                }
+                "ubfiz" | "sbfiz" => {
+                    let [dst, src, Operand::Immediate(lsb), Operand::Immediate(width)] =
+                        instruction.operands.as_slice()
+                    else {
+                        return Err(format!("{} needs an lsb and a width", instruction.opcode));
+                    };
+                    let bits = match dst {
+                        Operand::Register(RePrefix::W, _) => 32,
+                        _ => 64,
+                    };
+                    let signed = instruction.opcode == "sbfiz";
+                    let field =
+                        instruction_aux::extract_bits(self.get_register(src), 0, *width, signed);
+                    let field = self.field_of_unknown(field, *width, signed);
+                    let value = if *lsb < 0 || lsb + width > bits {
+                        RegisterValue::new(RegisterKind::Number, None, 0)
+                    } else {
+                        instruction_aux::shift_imm("lsl".to_string(), field, *lsb)
+                    };
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "bfxil" => {
+                    let [dst, src, Operand::Immediate(lsb), Operand::Immediate(width)] =
+                        instruction.operands.as_slice()
+                    else {
+                        return Err("bfxil needs an lsb and a width".to_string());
+                    };
+                    let bits = match dst {
+                        Operand::Register(RePrefix::W, _) => 32,
+                        _ => 64,
+                    };
+                    let field =
+                        instruction_aux::extract_bits(self.get_register(src), *lsb, *width, false);
+                    let value = instruction_aux::insert_bits(
+                        self.get_register(dst),
+                        field,
+                        0,
+                        *width,
+                        bits,
+                    );
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "crc32b" | "crc32h" | "crc32w" | "crc32x" | "crc32cb" | "crc32ch" | "crc32cw"
+                | "crc32cx" => {
+                    self.set_register(&instruction.operands[0], RegisterKind::Number, None, 0);
+                }
+                "umull" | "smull" | "umnegl" | "smnegl" | "smulh" | "sdiv" | "mneg" | "ubfm"
+                | "sbfm" => {
+                    let dest = instruction
+                        .operands
+                        .first()
+                        .expect("Need destination register");
+                    self.set_register(dest, RegisterKind::Number, None, 0);
+                }
+                "madd" | "msub" | "smaddl" | "umaddl" | "smsubl" | "umsubl" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dst = reg_iter.next().expect("Need destination register for madd");
+                    let lhs = self.get_register(reg_iter.next().expect("madd first factor"));
+                    let rhs = self.get_register(reg_iter.next().expect("madd second factor"));
+                    let (lhs, rhs) = if instruction.opcode.starts_with("sm") {
+                        (
+                            instruction_aux::sign_extend_word(lhs),
+                            instruction_aux::sign_extend_word(rhs),
+                        )
+                    } else {
+                        (lhs, rhs)
+                    };
+                    let addend = self.get_register(reg_iter.next().expect("madd addend"));
+
+                    let operands = [&lhs, &rhs, &addend];
+                    let subtracts = instruction.opcode.contains("sub");
+
+                    if operands
+                        .iter()
+                        .all(|r| matches!(r.kind, RegisterKind::Immediate))
+                    {
+                        let product = lhs.offset.wrapping_mul(rhs.offset);
+                        let value = if subtracts {
+                            addend.offset.wrapping_sub(product)
+                        } else {
+                            addend.offset.wrapping_add(product)
+                        };
+                        self.set_register(dst, RegisterKind::Immediate, None, value);
+                    } else if operands
+                        .iter()
+                        .any(|r| matches!(r.kind, RegisterKind::Number))
+                    {
+                        self.set_register(dst, RegisterKind::Number, None, 0);
+                    } else {
+                        let product = generate_expression(
+                            "*",
+                            instruction_aux::full_value(&lhs),
+                            instruction_aux::full_value(&rhs),
+                        );
+                        let expression = generate_expression(
+                            if subtracts { "-" } else { "+" },
+                            instruction_aux::full_value(&addend),
+                            product,
+                        );
+                        self.set_register(dst, RegisterKind::RegisterBase, Some(expression), 0);
+                    }
+                }
+                "bfi" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dst = reg_iter.next().expect("Need destination register");
+                    let src = reg_iter.next().expect("Need source register");
+                    let (Some(Operand::Immediate(lsb)), Some(Operand::Immediate(width))) =
+                        (reg_iter.next(), reg_iter.next())
+                    else {
+                        return Err("bfi needs an lsb and a width".to_string());
+                    };
+                    let bits = match dst {
+                        Operand::Register(RePrefix::W, _) => 32,
+                        _ => 64,
+                    };
+                    let value = instruction_aux::insert_bits(
+                        self.get_register(dst),
+                        self.get_register(src),
+                        *lsb,
+                        *width,
+                        bits,
+                    );
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "ubfx" | "sbfx" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dst = reg_iter.next().expect("Need destination register");
+                    let src = reg_iter.next().expect("Need source register");
+                    let (Some(Operand::Immediate(lsb)), Some(Operand::Immediate(width))) =
+                        (reg_iter.next(), reg_iter.next())
+                    else {
+                        return Err(format!("{} needs an lsb and a width", instruction.opcode));
+                    };
+                    let signed = instruction.opcode == "sbfx";
+                    let value =
+                        instruction_aux::extract_bits(self.get_register(src), *lsb, *width, signed);
+                    let value = self.field_of_unknown(value, *width, signed);
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "cmp" => {
+                    let (r1, r2) = self.flag_operands(&instruction.operands);
+                    let bits = Self::flag_bits(&instruction.operands);
+                    self.cmp_values_sized(r1, r2, bits);
+                }
+                "cmn" => {
+                    let (r1, r2) = self.flag_operands(&instruction.operands);
+                    let bits = Self::flag_bits(&instruction.operands);
+                    self.cmn_values_sized(r1, r2, bits);
+                }
+                "tst" => {
+                    let (r1, r2) = self.flag_operands(&instruction.operands);
+                    let bits = Self::flag_bits(&instruction.operands);
+                    self.tst_values_sized(r1, r2, bits);
                 }
                 _ => todo!("Unsupported arithmetic instruction: {:?}", instruction),
             },
             InstructionType::ControlFlow => match instruction.opcode.as_str() {
-                // from sha256: add	x9, x9, _BORINGSSL_function_hit@PAGEOFF
-                "add" => (), // FIX
+                "add" => {
+                    if let [destination, source, ..] = instruction.operands.as_slice()
+                        && destination != source
+                    {
+                        let value = self.get_register(source);
+                        self.set_register(destination, value.kind, value.base, value.offset);
+                    }
+                }
                 "adr" => {
                     if let Operand::Address(label, _) = &instruction.operands[1] {
-                        let (region, index) = self.label_to_memory_index(label.clone());
-                        self.set_register(
-                            &instruction.operands[0],
-                            RegisterKind::RegisterBase,
-                            Some(AbstractExpression::Abstract(region)),
-                            index,
-                        );
+                        self.set_label_address(&instruction.operands[0], label);
                     } else if let Operand::Label(label) = &instruction.operands[1] {
-                        let (region, index) = self.label_to_memory_index(label.clone());
-                        self.set_register(
-                            &instruction.operands[0],
-                            RegisterKind::RegisterBase,
-                            Some(AbstractExpression::Abstract(region)),
-                            index,
-                        );
+                        self.set_label_address(&instruction.operands[0], label);
                     } else {
                         panic!("adr not invoked correctly with register and label")
                     }
                 }
                 "adrp" | "ldr" => {
-                    // Form PC-relative address to 4KB page adds an immediate value that is shifted left by 12 bits, to the PC value to form a PC-relative address, with the bottom 12 bits masked out, and writes the result to the destination register.
-                    // TODO: handle case for sha256 where we need @OFF page address
-                    if let Operand::Address(label, _) = &instruction.operands[1] {
-                        let (region, index) = self.label_to_memory_index(label.clone());
-                        self.set_register(
-                            &instruction.operands[0],
-                            RegisterKind::RegisterBase,
-                            Some(AbstractExpression::Abstract(region)),
-                            index << 12,
-                        );
+                    if let Operand::Address(label, _) | Operand::Label(label) =
+                        &instruction.operands[1]
+                    {
+                        self.set_label_address(&instruction.operands[0], label);
                     } else {
                         panic!("adrp not invoked correctly with register and label")
                     }
                 }
-                "cbz" => {
-                    // Compare and Branch on Zero compares the value in a register with zero, and conditionally branches to a label at a PC-relative offset if the comparison is equal. It provides a hint that this is not a subroutine call or return. This instruction does not affect condition flags.
-                    let register = self.get_register(&instruction.operands[0]);
-                    if let Operand::Label(label) = &instruction.operands[1] {
-                        if (register.base.is_none()
-                            || register.base == Some(AbstractExpression::Empty))
-                            && register.offset == 0
-                        {
-                            return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
-                        } else if register.kind == RegisterKind::RegisterBase {
-                            return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                AbstractComparison::new(
-                                    "==",
-                                    AbstractExpression::Immediate(0),
-                                    AbstractExpression::Register(Box::new(register)),
-                                ),
-                                label.to_string(),
-                            ));
-                        } else {
-                            return Ok(ExecuteReturnType::Next);
+                "tbz" | "tbnz" => {
+                    let (
+                        Some(register),
+                        Some(Operand::Immediate(bit)),
+                        Some(Operand::Label(label)),
+                    ) = (
+                        instruction.operands.first(),
+                        instruction.operands.get(1),
+                        instruction.operands.get(2),
+                    )
+                    else {
+                        return Err(format!(
+                            "{} needs a register, a bit and a label",
+                            instruction.opcode
+                        ));
+                    };
+                    let set_branches = instruction.opcode == "tbnz";
+                    let value = self.get_register(register);
+                    let condition = match value.kind {
+                        RegisterKind::Immediate => {
+                            let set = (value.offset >> bit) & 1 == 1;
+                            return Ok(if set == set_branches {
+                                ExecuteReturnType::JumpLabel(label.clone())
+                            } else {
+                                ExecuteReturnType::Next
+                            });
                         }
-                    } else {
+                        RegisterKind::RegisterBase => AbstractComparison::new(
+                            if set_branches { "!=" } else { "==" },
+                            generate_expression(
+                                "&",
+                                value.expression(),
+                                AbstractExpression::Immediate(1i64 << bit),
+                            ),
+                            AbstractExpression::Immediate(0),
+                        ),
+                        RegisterKind::Number => match self.unknown_flag("bit") {
+                            Some(FlagValue::Abstract(c)) => c,
+                            _ => return Err("no condition for an unknown bit".to_string()),
+                        },
+                    };
+                    return Ok(ExecuteReturnType::ConditionalJumpLabel(
+                        condition,
+                        label.clone(),
+                    ));
+                }
+                "br" => {
+                    let target = self.get_register(&instruction.operands[0]);
+                    return Ok(ExecuteReturnType::JumpIndirect(target));
+                }
+                "blr" => {
+                    let target = self.get_register(&instruction.operands[0]);
+                    self.set_register(
+                        &Operand::Register(RePrefix::X, 30),
+                        RegisterKind::RegisterBase,
+                        Some(AbstractExpression::Abstract(RETURN_TO.to_string())),
+                        (pc + 1) as i64,
+                    );
+                    return Ok(ExecuteReturnType::JumpIndirect(target));
+                }
+                "cbz" => {
+                    let register = self.get_register(&instruction.operands[0]);
+                    let Operand::Label(label) = &instruction.operands[1] else {
                         panic!("cbz not invoked correctly with register and label");
-                    }
+                    };
+                    return Ok(match self.tested_value(register) {
+                        Tested::Known(0) => ExecuteReturnType::JumpLabel(label.to_string()),
+                        Tested::Known(_) => ExecuteReturnType::Next,
+                        Tested::Symbolic(value) => ExecuteReturnType::ConditionalJumpLabel(
+                            AbstractComparison::new("==", AbstractExpression::Immediate(0), value),
+                            label.to_string(),
+                        ),
+                    });
                 }
                 "cbnz" => {
                     let register = self.get_register(&instruction.operands[0]);
-                    if let Operand::Label(label) = &instruction.operands[1] {
-                        if (register.base.is_none()
-                            || register.base == Some(AbstractExpression::Empty))
-                            && register.offset == 0
-                        {
-                            return Ok(ExecuteReturnType::Next);
-                        } else if register.kind == RegisterKind::RegisterBase {
-                            return Ok(ExecuteReturnType::ConditionalJumpLabel(
-                                AbstractComparison::new(
-                                    "!=",
-                                    AbstractExpression::Immediate(0),
-                                    AbstractExpression::Register(Box::new(register)),
-                                ),
-                                label.to_string(),
-                            ));
-                        } else {
-                            return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
-                        }
-                    } else {
+                    let Operand::Label(label) = &instruction.operands[1] else {
                         panic!("cbnz not invoked correctly with register and label");
-                    }
+                    };
+                    return Ok(match self.tested_value(register) {
+                        Tested::Known(0) => ExecuteReturnType::Next,
+                        Tested::Known(_) => ExecuteReturnType::JumpLabel(label.to_string()),
+                        Tested::Symbolic(value) => ExecuteReturnType::ConditionalJumpLabel(
+                            AbstractComparison::new("!=", AbstractExpression::Immediate(0), value),
+                            label.to_string(),
+                        ),
+                    });
                 }
                 "b" => {
                     if let Operand::Label(label) = &instruction.operands[0] {
@@ -268,378 +935,35 @@ impl<'ctx> ARMCORTEXA<'_> {
                     if let Operand::Label(label) = &instruction.operands[0] {
                         self.set_register(
                             &Operand::Register(RePrefix::X, 30),
-                            RegisterKind::Immediate,
-                            None,
-                            pc as i64,
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(RETURN_TO.to_string())),
+                            (pc + 1) as i64,
                         );
                         return Ok(ExecuteReturnType::JumpLabel(label.to_string()));
                     } else {
-                        panic!("b not invoked correctly");
+                        panic!("bl not invoked correctly");
                     }
                 }
-                "b.ne" | "bne" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match &self.zero {
-                            // if zero is set to false, then cmp -> not equal and we branch
-                            Some(flag) => match flag {
-                                FlagValue::Real(b) => {
-                                    if !b {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                FlagValue::Abstract(s) => {
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone().not(), label.clone()));
-                                }
-                            },
-                            None => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
-                        }
-                    }
-                    panic!("bne not invoked correctly with label");
-                }
-                "b.eq" | "beq" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match &self.zero {
-                            // if zero is set to false, then cmp -> not equal and we branch
-                            Some(flag) => match flag {
-                                FlagValue::Real(b) => {
-                                    if *b {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                    } else {
-                                        return Ok(ExecuteReturnType::Next);
-                                    }
-                                }
-                                FlagValue::Abstract(s) => {
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(s.clone(), label.clone()));
-                                }
-                            },
-                            None => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
-                        }
-                    }
-                    panic!("beq not invoked correctly with label");
-                }
-                "bgt" | "bt" | "b.gt" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.neg, &self.overflow) {
-                            (Some(zero), Some(neg), Some(ove)) => {
-                                match  (zero, neg, ove) {
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
-                                   if !z && n == v {  // Z = 0 AND N = V
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()))
-                                   } else {
-                                        return Ok(ExecuteReturnType::Next)
-                                   }
-                                },
-                                (FlagValue::Abstract(z) , _, _ ) =>  {
-                                    let expression = generate_comparison(">", *z.left.clone(), *z.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                                },
-                                (_,_,_) => todo!("match on undefined flags!")
-                                }
-                            },
-                            (_, _, _) => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
-                        }
-                    }
-                    panic!("b.gt not invoked correctly with label");
-                }
-                "b.lt" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.neg, &self.overflow) {
-                            (Some(zero), Some(neg), Some(ove)) => {
-                                match  (zero, neg, ove) {
-                                (FlagValue::Real(z), FlagValue::Real(n), FlagValue::Real(v)) => {
-                                   if !z && n != v {  // Z = 0 AND N = V
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()))
-                                   } else {
-                                        return Ok(ExecuteReturnType::Next)
-                                   }
-                                },
-                                (FlagValue::Abstract(z) , _, _ ) =>  {
-                                    let expression = generate_comparison("<", *z.left.clone(), *z.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel( expression, label.clone()));
-                                },
-                                (_,_,_) => todo!("match on undefined flags!")
-                                }
-                            },
-                            (_, _, _) => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
-                        }
-                    }
-                }
-                "b.ls" | "b.le" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match (&self.zero, &self.carry) {
-                        (Some(zero), Some(carry)) => {
-                            match  (zero, carry) {
-                            (FlagValue::Real(z), FlagValue::Real(c)) => {
-                               if !z && *c {
-                                    return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                               } else {
-                                    return Ok(ExecuteReturnType::Next)
-                               }
-                            },
-                            (FlagValue::Abstract(z) , _ ) | (_, FlagValue::Abstract(z) ) =>  {
-                                let expression = generate_comparison("<=", *z.left.clone(), *z.right.clone());
-                                return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                            },
-                            }
-                        },
-                        (_, _) => return Err(
-                            "Flag cannot be branched on since it has not been set within the program yet"
-                                .to_string(),
-                        ),
-                    }
-                    }
-                    panic!("b.ls not invoked correctly with label");
-                }
-                "b.cs" | "b.hs" | "bcs" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match&self.carry{
-                            Some(carry) => {
-                                match  carry {
-                                FlagValue::Real(c) => {
-                                   if *c {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                   } else {
-                                        return Ok(ExecuteReturnType::Next)
-                                   }
-                                },
-                                FlagValue::Abstract(c) =>  {
-                                    let expression = generate_comparison("<", *c.left.clone(), *c.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                                },
-                                }
-                            },
-                            None => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
-                        }
-                    }
-                    panic!("b.cs not invoked correctly");
-                }
-                "b.cc" | "b.lo" | "blo" => {
-                    if let Operand::Label(label) = &instruction.operands[0] {
-                        match&self.carry{
-                            Some(carry) => {
-                                match  carry {
-                                FlagValue::Real(c) => {
-                                   if !*c {
-                                        return Ok(ExecuteReturnType::JumpLabel(label.clone()));
-                                   } else {
-                                        return Ok(ExecuteReturnType::Next)
-                                   }
-                                },
-                                FlagValue::Abstract(c) =>  {
-                                    let expression = generate_comparison(">=", *c.left.clone(), *c.right.clone());
-                                    return Ok(ExecuteReturnType::ConditionalJumpLabel(expression, label.clone()));
-                                },
-                                }
-                            },
-                            None => return Err(
-                                "Flag cannot be branched on since it has not been set within the program yet"
-                                    .to_string(),
-                            ),
-                        }
-                    }
-                    panic!("b.cc/lo/blo not invoked correctly");
-                }
-                "cset" => {
-                    // match on condition based on flags
-                    let mut reg_iter = instruction.operands.iter();
-
-                    let register = register_to_tuple(reg_iter.next().expect("cset register"));
-                    let Operand::Label(cond) = reg_iter.next().expect("cset condition code") else {
-                        panic!("not a valid condition code")
+                "cset" | "csetm" => {
+                    let Some(dest) = instruction.operands.first() else {
+                        return Err(format!("{} needs a destination", instruction.opcode));
                     };
-
-                    match cond.as_str() {
-                        "cs" => match self.carry.clone().expect("Need carry flag set cset cs") {
-                            FlagValue::Real(b) => {
-                                if b == true {
-                                    self.set_register_from_tuple(
-                                        register,
-                                        RegisterKind::Immediate,
-                                        None,
-                                        1,
-                                    );
-                                } else {
-                                    self.set_register_from_tuple(
-                                        register,
-                                        RegisterKind::Immediate,
-                                        None,
-                                        0,
-                                    );
-                                }
-                            }
-                            FlagValue::Abstract(_) => {
-                                log::error!("Can't support this yet :)");
-                                todo!("Abstract Flag Expression3");
-                            }
-                        },
-                        "cc" | "lo" => {
-                            match self.carry.clone().expect("Need carry flag set cset cc") {
-                                FlagValue::Real(b) => {
-                                    if b == false {
-                                        self.set_register_from_tuple(
-                                            register,
-                                            RegisterKind::Immediate,
-                                            None,
-                                            1,
-                                        );
-                                    } else {
-                                        self.set_register_from_tuple(
-                                            register,
-                                            RegisterKind::Immediate,
-                                            None,
-                                            0,
-                                        );
-                                    }
-                                }
-                                FlagValue::Abstract(_) => {
-                                    log::error!("Can't support this yet :)");
-                                    todo!("Abstract Flag Expression3");
-                                }
-                            }
-                        }
-                        a => todo!("unimplemented condition code for set {}", a),
-                    }
+                    let Some(Operand::Label(cond)) = instruction.operands.get(1) else {
+                        return Err(format!("{} needs a condition", instruction.opcode));
+                    };
+                    let set = if instruction.opcode == "cset" { 1 } else { -1 };
+                    return self.conditional_select(dest, immediate(set), immediate(0), cond);
                 }
                 "csel" => {
-                    // match on condition based on flags
                     let mut reg_iter = instruction.operands.iter();
 
-                    let dest = reg_iter.next().expect("cset register");
+                    let dest = reg_iter.next().expect("csel register");
                     let opt1 = self.get_register(reg_iter.next().expect("csel register"));
                     let opt2 = self.get_register(reg_iter.next().expect("csel register"));
                     let Operand::Label(cond) = reg_iter.next().expect("csel condition code") else {
                         panic!("not a valid condition code")
                     };
-
-                    match cond.as_str() {
-                        "cc" | "lo" => {
-                            match self.carry.clone().expect("Need carry flag set csel cc") {
-                                FlagValue::Real(b) => {
-                                    if b == true {
-                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                    } else {
-                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                                    }
-                                }
-                                FlagValue::Abstract(a) => {
-                                    return Ok(ExecuteReturnType::Select(
-                                        a,
-                                        dest.clone(),
-                                        opt1,
-                                        opt2,
-                                    ));
-                                }
-                            }
-                        }
-                        "cs" => match self.carry.clone() {
-                            Some(FlagValue::Real(b)) => {
-                                if b == false {
-                                    self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                } else {
-                                    self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                                }
-                            }
-                            Some(FlagValue::Abstract(a)) => {
-                                return Ok(ExecuteReturnType::Select(
-                                    a.not(),
-                                    dest.clone(),
-                                    opt1,
-                                    opt2,
-                                ));
-                            }
-                            None => {
-                                return Ok(ExecuteReturnType::Select(
-                                    AbstractComparison::new(
-                                        "==",
-                                        AbstractExpression::Abstract("c_flag".to_string()),
-                                        AbstractExpression::Immediate(1),
-                                    ),
-                                    dest.clone(),
-                                    opt1,
-                                    opt2,
-                                ));
-                            }
-                        },
-                        "eq" => {
-                            match self.zero.clone().expect("Need zero flag set") {
-                                FlagValue::Real(z) => {
-                                    if z == true {
-                                        self.set_register(dest, opt1.kind, opt1.base, opt1.offset);
-                                    } else {
-                                        self.set_register(dest, opt2.kind, opt2.base, opt2.offset);
-                                    }
-                                }
-                                FlagValue::Abstract(z) => {
-                                    return Ok(ExecuteReturnType::Select(
-                                        z,
-                                        dest.clone(),
-                                        opt1,
-                                        opt2,
-                                    ));
-                                }
-                            };
-                        }
-                        a => todo!("csel with condition code not yet implemented {}", a),
-                    }
-                }
-                "csetm" => {
-                    let mut reg_iter = instruction.operands.iter();
-
-                    let dest = reg_iter.next().expect("cset register");
-                    let Operand::Label(cond) = reg_iter.next().expect("cset condition code") else {
-                        panic!("not a valid condition code")
-                    };
-
-                    match cond.as_str() {
-                        "eq" => match self.zero.clone().expect("Need zero flag set") {
-                            FlagValue::Real(b) => {
-                                if b == true {
-                                    self.set_register(&dest, RegisterKind::Immediate, None, 1);
-                                } else {
-                                    self.set_register(&dest, RegisterKind::Immediate, None, 0);
-                                }
-                            }
-                            FlagValue::Abstract(a) => {
-                                let opt1 = RegisterValue {
-                                    kind: RegisterKind::Immediate,
-                                    base: None,
-                                    offset: 1,
-                                };
-                                let opt2 = RegisterValue {
-                                    kind: RegisterKind::Immediate,
-                                    base: None,
-                                    offset: 1,
-                                };
-
-                                return Ok(ExecuteReturnType::Select(a, dest.clone(), opt1, opt2));
-                            }
-                        },
-                        _ => todo!("unsupported condition code for csetm {:?}", cond),
-                    }
-                }
-                // BIG TODO: reimplement these
-                "tst" => {
-                    let mut reg_iter = instruction.operands.iter();
-
-                    let dst = reg_iter.next().expect("Need destination register");
-                    self.set_register(dst, RegisterKind::Number, None, 0);
+                    return self.conditional_select(dest, opt1, opt2, cond);
                 }
                 "mov" | "movz" | "movk" => {
                     let mut reg_iter = instruction.operands.iter().clone();
@@ -650,60 +974,166 @@ impl<'ctx> ARMCORTEXA<'_> {
 
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);
                 }
+                "mrs" => match instruction.operands.as_slice() {
+                    [dest, Operand::Label(system_register)]
+                        if system_register.eq_ignore_ascii_case("nzcv") =>
+                    {
+                        let snapshot = self.save_flags();
+                        self.set_register(
+                            dest,
+                            RegisterKind::RegisterBase,
+                            Some(AbstractExpression::Abstract(snapshot)),
+                            0,
+                        );
+                    }
+                    [dest, ..] => self.set_register(dest, RegisterKind::Number, None, 0),
+                    [] => return Err("mrs needs a destination register".to_string()),
+                },
+                "msr" => match instruction.operands.as_slice() {
+                    [Operand::Label(system_register), source]
+                        if system_register.eq_ignore_ascii_case("nzcv") =>
+                    {
+                        let saved = self.get_register(source);
+                        self.restore_flags(&saved);
+                    }
+                    other => return Err(format!("msr to {other:?} is not modelled")),
+                },
+                op if op.starts_with("b.") => {
+                    let Some(Operand::Label(label)) = instruction.operands.first() else {
+                        return Err(format!("{op} needs a target label"));
+                    };
+                    return Ok(match self.condition(&op[2..])? {
+                        FlagValue::Real(true) => ExecuteReturnType::JumpLabel(label.clone()),
+                        FlagValue::Real(false) => ExecuteReturnType::Next,
+                        FlagValue::Abstract(condition) => {
+                            ExecuteReturnType::ConditionalJumpLabel(condition, label.clone())
+                        }
+                    });
+                }
+                "cinv" | "cinc" | "cneg" | "csinv" | "csinc" | "csneg" => {
+                    let ops = &instruction.operands;
+                    let (dest, first, second, cond, first_changed) = match ops.as_slice() {
+                        [dest, source, Operand::Label(cond)] => (dest, source, source, cond, true),
+                        [dest, first, second, Operand::Label(cond)] => {
+                            (dest, first, second, cond, false)
+                        }
+                        _ => return Err(format!("{} needs a condition", instruction.opcode)),
+                    };
+                    let change = &instruction.opcode[instruction.opcode.len() - 3..];
+                    let (first, second) = (self.get_register(first), self.get_register(second));
+                    let (taken, otherwise) = if first_changed {
+                        (changed(first, change), second)
+                    } else {
+                        (first, changed(second, change))
+                    };
+                    return self.conditional_select(dest, taken, otherwise, cond);
+                }
+                "ccmp" | "ccmn" => {
+                    let [left, right, Operand::Immediate(nzcv), Operand::Label(cond)] =
+                        instruction.operands.as_slice()
+                    else {
+                        return Err(format!(
+                            "{} needs two operands, flags and a condition",
+                            instruction.opcode
+                        ));
+                    };
+                    let decided = match self.condition(cond)? {
+                        FlagValue::Abstract(holds) => {
+                            let provable = |c: &AbstractComparison| {
+                                comparison_to_ast(c.clone().not()).is_some_and(|refuted| {
+                                    self.solver.check_assumptions(&[refuted]) == SatResult::Unsat
+                                })
+                            };
+                            if provable(&holds) {
+                                FlagValue::Real(true)
+                            } else if provable(&holds.clone().not()) {
+                                FlagValue::Real(false)
+                            } else {
+                                FlagValue::Abstract(holds)
+                            }
+                        }
+                        real => real,
+                    };
+                    let compared =
+                        [left, right].map(|operand| self.get_register(operand).expression());
+                    match decided {
+                        FlagValue::Real(true) => {
+                            let bits = Self::flag_bits(&instruction.operands);
+                            let (left, right) = (self.get_register(left), self.get_register(right));
+                            if instruction.opcode == "ccmp" {
+                                self.cmp_values_sized(left, right, bits);
+                            } else {
+                                self.cmn_values_sized(left, right, bits);
+                            }
+                        }
+                        FlagValue::Real(false) => {
+                            let (n, v) = (nzcv & 8 != 0, nzcv & 1 != 0);
+                            self.set_flags([
+                                Some(FlagValue::Real(nzcv & 4 != 0)),
+                                Some(FlagValue::Real(n != v)),
+                                Some(FlagValue::Real(nzcv & 2 != 0)),
+                                Some(FlagValue::Real(v)),
+                            ]);
+                        }
+                        FlagValue::Abstract(holds)
+                            if comparison_to_ast(holds.clone()).is_some()
+                                && self.mentions_a_region(&[
+                                    holds.left.as_ref().clone(),
+                                    holds.right.as_ref().clone(),
+                                    compared[0].clone(),
+                                    compared[1].clone(),
+                                ]) =>
+                        {
+                            return Ok(ExecuteReturnType::Split(vec![holds.clone(), holds.not()]));
+                        }
+                        FlagValue::Abstract(_) => self.set_unknown_flags(),
+                    }
+                }
                 _ => todo!(
                     "control flow instruction not yet implemented {:?}",
                     instruction
                 ),
             },
             InstructionType::Memory => match instruction.opcode.as_str() {
-                "ldr" | "ldrb" => {
-                    // TODO: split, have to rewrite load or do post-processing after load to extract meaningful byte
+                "ldr" | "ldrb" | "ldrh" | "ldrsb" | "ldrsh" | "ldrsw" | "ldur" | "ldurb"
+                | "ldurh" | "ldursb" | "ldursh" | "ldursw" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("ldr dst");
                     let src_addr = reg_iter.next().expect("ldr src");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
-                                .get_register(&Operand::Register(w.clone(), *reg_num))
-                                .clone();
-                            address.offset = address.offset + offset.unwrap_or(0);
+                        Operand::Memory(w, reg_num, offset, reg_offset, mode) => {
+                            let (mut address, writeback) =
+                                self.indexed_address(w, *reg_num, offset, reg_offset, mode);
 
-                            let res = self.load(dst.clone(), address.clone());
-                            match res {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            let width = access_width(&instruction.opcode, dst);
+                            match self.table_load(&address, width) {
+                                memory::TableLoad::Split(cases) if self.table_splits_allowed => {
+                                    return Ok(ExecuteReturnType::Split(cases));
+                                }
+                                memory::TableLoad::Split(_) => (),
+                                memory::TableLoad::Concrete(entry) => address = entry,
+                                memory::TableLoad::NotATable => (),
                             }
+                            let res = self.load(dst.clone(), address, width);
+                            if let Err(e) = res {
+                                return Err(e.to_string());
+                            }
+                            self.extend_loaded(dst, &instruction.opcode, width);
+                            let signed = instruction.opcode.starts_with("ldrs")
+                                || instruction.opcode.starts_with("ldurs");
+                            self.bound_loaded_element(dst, width, signed);
+                            self.apply_indexed_facts(dst, width, signed);
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0),
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
-                            }
+                            self.write_back(w, *reg_num, writeback);
                         }
                         _ => {
                             panic!("ldr not with correct syntax for memory operand");
                         }
                     }
                 }
-                "ldp" => {
+                "ldp" | "ldnp" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst1 = reg_iter.next().expect("ldr dst");
@@ -711,98 +1141,52 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let src_addr = reg_iter.next().expect("ldr src");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
-                                .get_register(&Operand::Register(w.clone(), *reg_num))
-                                .clone();
-                            address.offset = address.offset + offset.unwrap_or(0);
+                        Operand::Memory(w, reg_num, offset, reg_offset, mode) => {
+                            let (address, writeback) =
+                                self.indexed_address(w, *reg_num, offset, reg_offset, mode);
 
-                            let res1 = self.load(dst1.clone(), address.clone());
-                            address.offset += 8;
-                            let res2 = self.load(dst2.clone(), address.clone());
-                            match res1 {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                            match res2 {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            let width = access_width(&instruction.opcode, dst1);
+                            let mut second = address.clone();
+                            second.offset += width;
+                            for (dst, at) in [(dst1, address), (dst2, second)] {
+                                self.load(dst.clone(), at, width)
+                                    .map_err(|e| e.to_string())?;
+                                self.bound_loaded_element(dst, width, false);
+                                self.apply_indexed_facts(dst, width, false);
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0) - 8,
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
-                            }
+                            self.write_back(w, *reg_num, writeback);
                         }
                         _ => {
                             panic!("ldr not with correct syntax for memory operand");
                         }
                     }
                 }
-                "str" | "strb" => {
+                "str" | "strb" | "strh" | "stur" | "sturb" | "sturh" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst = reg_iter.next().expect("ldr dst");
                     let src_addr = reg_iter.next().expect("ldr src");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
-                                .get_register(&Operand::Register(w.clone(), *reg_num))
-                                .clone();
-                            address.offset = address.offset + offset.unwrap_or(0);
+                        Operand::Memory(w, reg_num, offset, reg_offset, mode) => {
+                            let (address, writeback) =
+                                self.indexed_address(w, *reg_num, offset, reg_offset, mode);
 
-                            let res = self.store(dst.clone(), address.clone());
-                            match res {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            let width = access_width(&instruction.opcode, dst);
+                            let res = self.store(dst.clone(), address, width);
+                            if let Err(e) = res {
+                                return Err(e.to_string());
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0),
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
-                            }
+                            self.write_back(w, *reg_num, writeback);
                         }
                         _ => {
                             panic!("ldr not with correct syntax for memory operand");
                         }
                     }
                 }
-                "stp" => {
+                "stp" | "stnp" => {
                     let mut reg_iter = instruction.operands.iter();
 
                     let dst1 = reg_iter.next().expect("ldr dst");
@@ -810,394 +1194,516 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let src_addr = reg_iter.next().expect("ldr src");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
-                                .get_register(&Operand::Register(w.clone(), *reg_num))
-                                .clone();
-                            address.offset = address.offset + offset.unwrap_or(0);
+                        Operand::Memory(w, reg_num, offset, reg_offset, mode) => {
+                            let (address, writeback) =
+                                self.indexed_address(w, *reg_num, offset, reg_offset, mode);
 
-                            let res1 = self.store(dst1.clone(), address.clone());
-                            address.offset += 8;
-                            let res2 = self.store(dst2.clone(), address.clone());
-                            match res1 {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            let width = access_width(&instruction.opcode, dst1);
+                            let mut second = address.clone();
+                            second.offset += width;
+                            let res1 = self.store(dst1.clone(), address, width);
+                            let res2 = self.store(dst2.clone(), second, width);
+                            if let Err(e) = res1 {
+                                return Err(e.to_string());
                             }
-                            match res2 {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            if let Err(e) = res2 {
+                                return Err(e.to_string());
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0) - 8,
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
-                            }
+                            self.write_back(w, *reg_num, writeback);
                         }
                         _ => {
                             panic!("ldr not with correct syntax for memory operand");
                         }
                     }
                 }
-                _ => todo!("memory instruction not supported yet {:?}", instruction),
+                "prfm" | "prfum" => {}
+                _ => {
+                    return Err(format!(
+                        "unsupported memory instruction {}",
+                        instruction.opcode
+                    ));
+                }
             },
+            InstructionType::SIMDArithmetic
+                if matches!(instruction.opcode.as_str(), "orr" | "bic" | "and" | "eor")
+                    && instruction
+                        .operands
+                        .iter()
+                        .skip(1)
+                        .any(|op| matches!(op, Operand::Immediate(_))) =>
+            {
+                let dst = instruction
+                    .operands
+                    .first()
+                    .expect("Need destination register");
+                self.set_register(dst, RegisterKind::Number, None, 0);
+            }
             InstructionType::SIMDArithmetic => match instruction.opcode.as_str() {
-                "rev64" | "rev64.16b" | "rev64.8h" => {
+                "rev64" => {
                     let mut reg_iter = instruction.operands.iter();
+                    let dst = reg_iter.next().expect("rev64 dst");
+                    let src = reg_iter.next().expect("rev64 src");
 
-                    let dest_op = reg_iter.next().expect("rev64 dst");
-                    let dest = &mut self.get_simd_register(dest_op);
-                    let src = self.get_simd_register(reg_iter.next().expect("rev64 src"));
-
-                    match dest_op {
-                        Operand::Vector(_, _, arr) => match arr {
-                            Arrangement::H8 => {
-                                for i in 0..8 {
-                                    let (base, offset) = src.get_halfword(7 - i);
-                                    dest.set_halfword(i, base, offset);
-                                }
-                            }
-                            Arrangement::B16 => {
-                                for i in 0..16 {
-                                    let (base, offset) = src.get_byte(15 - i);
-                                    dest.set_byte(i, base, offset);
-                                }
-                            }
-                            _ => todo!("rev64 support more arrangement modes"),
-                        },
-                        Operand::VectorRegister(_, _) => {
-                            let arr = instruction.opcode.split(".").collect::<Vec<&str>>()[1];
-                            match arr {
-                                "16b" => {
-                                    dest.kind = src.kind.clone();
-                                    for i in 0..16 {
-                                        let (base, offset) = src.get_byte(15 - i);
-                                        dest.set_byte(i, base, offset);
-                                    }
-                                }
-                                "8h" => {
-                                    for i in 0..8 {
-                                        let (base, offset) = src.get_halfword(7 - i);
-                                        dest.set_halfword(i, base, offset);
-                                    }
-                                }
-                                _ => todo!("support arr in rav1d for rev64"),
-                            }
+                    match dst {
+                        Operand::Vector(_, _, arrangement) => {
+                            let arrangement = arrangement.clone();
+                            let per_double = 8 / arrangement.lane_bytes();
+                            self.vector_permute(dst, src, &arrangement, |lane| {
+                                let group = lane / per_double;
+                                group * per_double + (per_double - 1 - (lane % per_double))
+                            });
                         }
-                        a => todo!("unsupported operand in simd rev64 {:?}", a),
+                        _ => self.vector_unknown(dst),
                     }
                 }
-                "and" => {
-                    self.vector_arithmetic(
-                        "&",
-                        &|x, y| x & y,
-                        &|x, y| x & y,
-                        &|x, y| x & y,
-                        &|x, y| x & y,
-                        instruction,
-                    );
+                "mov" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dst = reg_iter.next().expect("mov dst");
+                    let src = reg_iter.next().expect("mov src");
+                    let copied = self.get_simd_register(src);
+                    self.set_simd_register(dst, copied);
+                }
+                "and" => self.vector_arithmetic("&", |x, y| x & y, instruction),
+                "orr" => self.vector_arithmetic("|", |x, y| x | y, instruction),
+                "eor" => self.vector_arithmetic("^", |x, y| x ^ y, instruction),
+                "cmeq" | "cmhs" | "cmhi" | "cmls" | "cmlo" | "cmge" | "cmgt" | "cmle" | "cmlt"
+                | "cmtst" => {
+                    if let Some(dst) = instruction.operands.first() {
+                        self.vector_unknown(dst);
+                        let range = arrangement_of(dst)
+                            .and_then(|a| range_fits_lane((-1, 0), a.lane_bytes()));
+                        self.set_lane_range(dst, range);
+                    }
                 }
                 "add" => {
-                    self.vector_arithmetic(
-                        "+",
-                        &|x, y| x + y,
-                        &|x, y| x + y,
-                        &|x, y| x + y,
-                        &|x, y| x + y,
-                        instruction,
-                    );
+                    let summed = match (
+                        instruction.operands.get(1).map(|o| self.lane_range(o)),
+                        instruction.operands.get(2).map(|o| self.lane_range(o)),
+                    ) {
+                        (Some(Some((lo1, hi1))), Some(Some((lo2, hi2)))) => {
+                            Some((lo1 + lo2, hi1 + hi2))
+                        }
+                        _ => None,
+                    };
+                    self.vector_arithmetic("+", |x, y| x.wrapping_add(y), instruction);
+                    if let (Some(dst), Some(summed)) = (instruction.operands.first(), summed) {
+                        let range = arrangement_of(dst)
+                            .and_then(|a| range_fits_lane(summed, a.lane_bytes()));
+                        self.set_lane_range(dst, range);
+                    }
                 }
-                "orr" => {
-                    self.vector_arithmetic(
-                        "|",
-                        &|x, y| x | y,
-                        &|x, y| x | y,
-                        &|x, y| x | y,
-                        &|x, y| x | y,
-                        instruction,
-                    );
+                "addv" => {
+                    let summed = match (
+                        instruction.operands.get(1).map(|o| self.lane_range(o)),
+                        instruction.operands.get(1).and_then(arrangement_of),
+                    ) {
+                        (Some(Some((lo, hi))), Some(arrangement)) => {
+                            let lanes = arrangement.lanes() as i64;
+                            range_fits_lane(
+                                (std::cmp::min(lo * lanes, 0), std::cmp::max(hi * lanes, 0)),
+                                arrangement.lane_bytes(),
+                            )
+                        }
+                        _ => None,
+                    };
+                    if let Some(dst) = instruction.operands.first() {
+                        self.vector_unknown(dst);
+                        self.set_lane_range(dst, summed);
+                    }
                 }
-                "eor" => {
-                    self.vector_arithmetic(
-                        "^",
-                        &|x, y| x ^ y,
-                        &|x, y| x ^ y,
-                        &|x, y| x ^ y,
-                        &|x, y| x ^ y,
-                        instruction,
-                    );
+                "sub" => self.vector_arithmetic("-", |x, y| x.wrapping_sub(y), instruction),
+                "mul" => self.vector_arithmetic("*", |x, y| x.wrapping_mul(y), instruction),
+                "uaddw" | "uaddw2" | "saddw" | "saddw2" => {
+                    self.vector_widening_add("+", instruction)?
                 }
-                "mul" => {
-                    self.vector_arithmetic(
-                        "*",
-                        &|x, y| x * y,
-                        &|x, y| x * y,
-                        &|x, y| x * y,
-                        &|x, y| x * y,
-                        instruction,
-                    );
-                }
-                "sub" => {
-                    self.vector_arithmetic(
-                        "-",
-                        &|x, y| x - y,
-                        &|x, y| x - y,
-                        &|x, y| x - y,
-                        &|x, y| x - y,
-                        instruction,
-                    );
-                }
-                "shl" => {
+                "movi" | "mvni" => {
                     let mut reg_iter = instruction.operands.iter();
-
                     let dst = reg_iter.next().expect("Need destination register");
-                    let mut dst_reg = self.get_simd_register(dst);
-                    let src_name = reg_iter.next().expect("need src register shl");
-                    let src_reg = self.get_simd_register(src_name);
 
-                    let Operand::Vector(_, _, arr) = src_name else {
-                        panic!("need appropriate vector notation for shl")
-                    };
-                    let Operand::Immediate(shift) = reg_iter.next().expect("Need shift amount")
-                    else {
-                        panic!("cannot call shl without a shift amount")
-                    };
-                    let small_shift = u32::try_from(*shift).expect("shift shoudl fit into u32");
-
-                    match arr {
-                        Arrangement::D2 => {
-                            for i in 0..2 {
-                                let (bases, offsets) = src_reg.get_double(i);
-                                let mut offset = u64::from_be_bytes(offsets);
-                                (offset, _) = offset.overflowing_shl(small_shift);
-                                dst_reg.set_double(i, bases, offset.to_be_bytes());
+                    match (dst, reg_iter.next()) {
+                        (Operand::Vector(_, _, arrangement), Some(Operand::Immediate(value))) => {
+                            let arrangement = arrangement.clone();
+                            let lane_bytes = arrangement.lane_bytes();
+                            let mut value = *value as u128;
+                            if instruction.opcode == "mvni" {
+                                value = !value;
+                            }
+                            let shifted = instruction
+                                .operands
+                                .iter()
+                                .any(|o| matches!(o, Operand::Bitwise(..)));
+                            if shifted {
+                                self.vector_unknown(dst);
+                            } else {
+                                let value = value & ((1u128 << (8 * lane_bytes)) - 1);
+                                self.vector_broadcast(
+                                    dst,
+                                    &arrangement,
+                                    vec![None; lane_bytes],
+                                    value,
+                                    RegisterKind::Immediate,
+                                );
                             }
                         }
-                        _ => todo!("unsupported shl vector type"),
+                        _ => self.vector_unknown(dst),
                     }
-
-                    self.set_simd_register(dst, dst_reg);
                 }
-                "aese" | "aesmc" | "movi" | "ext" | "ushr" | "dup" | "sshr" | "pmull"
-                | "pmull2" | "zip1" | "zip2" | "trn1" | "trn2" | "bit" | "uaddl" | "uaddl2"
-                | "sqrshrun" | "sqrshrun2" | "umull" | "umull2" | "umlal" | "umlal2" | "rshrn"
-                | "rshrn2" => {
+                "dup" => {
                     let mut reg_iter = instruction.operands.iter();
-
                     let dst = reg_iter.next().expect("Need destination register");
-                    self.set_register(dst, RegisterKind::Number, None, 0);
+                    let src = reg_iter.next().expect("dup needs a source");
+
+                    let Operand::Vector(_, _, arrangement) = dst else {
+                        self.vector_unknown(dst);
+                        return Ok(ExecuteReturnType::Next);
+                    };
+                    let arrangement = arrangement.clone();
+                    let lane_bytes = arrangement.lane_bytes();
+
+                    match src {
+                        Operand::VectorAccess(_, index, element, lane) => {
+                            let element = element.clone();
+                            let source = self.simd_registers[*index].clone();
+                            let (bases, value) = source.get_lane(&element, *lane as usize);
+                            let kind = source.kind.clone();
+                            self.vector_broadcast(dst, &arrangement, bases, value, kind);
+                        }
+                        Operand::Register(..) => {
+                            let source = self.get_register(src);
+                            match source.kind {
+                                RegisterKind::Immediate => {
+                                    let value =
+                                        (source.offset as u128) & ((1u128 << (8 * lane_bytes)) - 1);
+                                    self.vector_broadcast(
+                                        dst,
+                                        &arrangement,
+                                        vec![None; lane_bytes],
+                                        value,
+                                        RegisterKind::Immediate,
+                                    );
+                                }
+                                _ => self.vector_unknown(dst),
+                            }
+                        }
+                        _ => self.vector_unknown(dst),
+                    }
                 }
-                a => todo!("simd arithmetic instruction not supported yet {:?}", a),
+                "shl" | "ushr" | "sshr" | "sshl" | "ushl" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dst = reg_iter.next().expect("Need destination register");
+                    let src = reg_iter.next().expect("need src register for shift");
+                    let amount = reg_iter.next();
+
+                    match (arrangement_of(dst), amount) {
+                        (Some(arrangement), Some(Operand::Immediate(shift))) => {
+                            let shift = (*shift) as u32;
+                            let lane_bytes = arrangement.lane_bytes();
+                            let source = self.get_simd_register(src);
+                            let mut destination = self.get_simd_register(dst);
+
+                            for lane in 0..arrangement.lanes() {
+                                let (_bases, value) = source.get_lane(&arrangement, lane);
+                                let value = match instruction.opcode.as_str() {
+                                    "shl" | "sshl" | "ushl" => {
+                                        value.checked_shl(shift).unwrap_or(0)
+                                    }
+                                    _ => value.checked_shr(shift).unwrap_or(0),
+                                };
+                                let value = if lane_bytes >= 16 {
+                                    value
+                                } else {
+                                    value & ((1u128 << (8 * lane_bytes)) - 1)
+                                };
+                                destination.set_lane(
+                                    &arrangement,
+                                    lane,
+                                    vec![None; lane_bytes],
+                                    value,
+                                );
+                            }
+
+                            self.set_simd_register(dst, destination);
+                        }
+                        _ => self.vector_unknown(dst),
+                    }
+                }
+                _ if instruction
+                    .operands
+                    .iter()
+                    .any(|op| matches!(op, Operand::Memory(..))) =>
+                {
+                    return Err(format!(
+                        "unsupported memory instruction {}",
+                        instruction.opcode
+                    ));
+                }
+                _ => {
+                    if let Some(dst) = instruction.operands.first() {
+                        match dst {
+                            Operand::Vector(..)
+                            | Operand::VectorRegister(..)
+                            | Operand::VectorAccess(..) => self.vector_unknown(dst),
+                            _ => self.set_register(dst, RegisterKind::Number, None, 0),
+                        }
+                    }
+                }
             },
             InstructionType::SIMDManagement => match instruction.opcode.as_str() {
-                "ld1r" => {
-                    // ld1r {v1.16b}, [x5]
-                    // load value from register and replicate it across all channels
+                "ld1r" | "ld2r" | "ld3r" | "ld4r" => {
+                    let (destinations, addr) = split_vector_operands(instruction);
+
+                    let Some(Operand::Memory(prefix, num, offset, reg_offset, indexing)) = addr
+                    else {
+                        return Err(format!("{} without an address", instruction.opcode));
+                    };
+                    let address = self.get_register(&Operand::Register(prefix.clone(), *num));
+
+                    let mut cursor = address.clone();
+                    for destination in &destinations {
+                        let element = arrangement_of(destination)
+                            .map(|a| a.element())
+                            .unwrap_or(Arrangement::B);
+                        let width = element.lane_bytes();
+
+                        if let Err(e) =
+                            self.mem_safe_vector_access(&cursor, width as i64, RegionType::READ)
+                        {
+                            return Err(e.to_string());
+                        }
+                        self.vector_unknown(destination);
+                        cursor.offset += width as i64;
+                    }
+
+                    self.apply_writeback(prefix, *num, &address, offset, reg_offset, indexing);
+                }
+                "ld1" | "ld2" | "ld3" | "ld4" => {
+                    let (destinations, addr) = split_vector_operands(instruction);
+
+                    let Some(Operand::Memory(prefix, num, offset, reg_offset, indexing)) = addr
+                    else {
+                        return Err(format!("{} without an address", instruction.opcode));
+                    };
+                    let address = self.get_register(&Operand::Register(prefix.clone(), *num));
+
+                    let mut cursor = address.clone();
+                    for destination in &destinations {
+                        let width = vector_access_width(destination) as i64;
+                        if let Err(e) = self.load_vector(destination.clone(), cursor.clone(), width)
+                        {
+                            return Err(e.to_string());
+                        }
+                        cursor.offset += width;
+                    }
+
+                    self.apply_writeback(prefix, *num, &address, offset, reg_offset, indexing);
+                }
+                "st1" | "st2" | "st3" | "st4" => {
+                    let (sources, addr) = split_vector_operands(instruction);
+
+                    let Some(Operand::Memory(prefix, num, offset, reg_offset, indexing)) = addr
+                    else {
+                        return Err(format!("{} without an address", instruction.opcode));
+                    };
+                    let address = self.get_register(&Operand::Register(prefix.clone(), *num));
+
+                    let mut cursor = address.clone();
+                    for source in &sources {
+                        let width = vector_access_width(source) as i64;
+                        if let Err(e) = self.store_vector(source.clone(), cursor.clone(), width) {
+                            return Err(e.to_string());
+                        }
+                        cursor.offset += width;
+                    }
+
+                    self.apply_writeback(prefix, *num, &address, offset, reg_offset, indexing);
+                }
+                "ldr" | "str" | "ldur" | "stur" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let reg = reg_iter.next().expect("need a register").clone();
+                    let addr = reg_iter.next().expect("need an address");
+
+                    let Operand::Memory(prefix, num, offset, reg_offset, mode) = addr else {
+                        return Err(format!("{} without an address", instruction.opcode));
+                    };
+
+                    let (address, writeback) =
+                        self.indexed_address(prefix, *num, offset, reg_offset, mode);
+
+                    let width = vector_access_width(&reg) as i64;
+                    let result = if instruction.opcode.starts_with('l') {
+                        self.load_vector(reg, address, width)
+                    } else {
+                        self.store_vector(reg, address, width)
+                    };
+                    if let Err(e) = result {
+                        return Err(e.to_string());
+                    }
+
+                    self.write_back(prefix, *num, writeback);
+                }
+                "stp" | "ldp" | "stnp" | "ldnp" => {
                     let mut reg_iter = instruction.operands.iter();
 
-                    let dst = reg_iter.next().expect("Need destination register");
-                    if let Some(Operand::Memory(prefix, num, _, _, _)) = reg_iter.next() {
-                        let a = self.get_register(&Operand::Register(prefix.clone(), *num));
-
-                        match self.load_vector(dst.clone(), a) {
-                            Err(e) => return Err(e.to_string()),
-                            _ => (),
-                        }
-                    }
-                    // let new_value = self.get_register(dst);
-                }
-                // FIX: extract arrangement from opcode
-                "ld1" | "ld1.16b" | "ld1.8h" => {
-                    // multiple versions:
-                    // ld1	{v24.2d,v25.2d,v26.2d,v27.2d}, [x10]
-                    // ld1 {v0.16b}, [x2], #16
-                    let mut destinations = Vec::new();
-                    let mut addr = None;
-                    for o in instruction.operands.iter() {
-                        match o {
-                            Operand::Vector(..) => destinations.push(o),
-                            Operand::VectorRegister(..) => addr = Some(o),
-                            Operand::Memory(..) => addr = Some(o),
-                            _ => panic!("not a valid operand for instruction ld1"),
-                        }
-                    }
-
-                    if let Some(Operand::Memory(prefix, num, offset, _, index)) = addr {
-                        let a = self.get_register(&Operand::Register(prefix.clone(), *num));
-                        for d in destinations {
-                            match self.load_vector(d.clone(), a.clone()) {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                        }
-
-                        if *index == Some(true) {
-                            if let Some(off) = offset {
-                                self.set_register(
-                                    &Operand::Register(prefix.clone(), *num),
-                                    a.kind,
-                                    a.base,
-                                    a.offset + off,
-                                );
-                            }
-                        }
-                    } else {
-                        panic!("ld1 does not include address {:?}", instruction)
-                    };
-                }
-                "st1" | "st1.d" => {
-                    // multiple versions:
-                    // st1  {v30.8h, v31.8h}, [x0], #32
-                    // st1	{v3.4s},[x2],#16
-                    let mut sources = Vec::new();
-                    let mut addr = None;
-                    for o in instruction.operands.iter() {
-                        match o {
-                            Operand::Vector(..) => sources.push(o),
-                            Operand::VectorAccess(..) => addr = Some(o),
-                            Operand::Memory(..) => addr = Some(o),
-                            _ => panic!("not a valid operand for instruction st1"),
-                        }
-                    }
-
-                    if let Some(Operand::Memory(prefix, num, num_offset, reg_offset, indexing)) =
-                        addr
-                    {
-                        let a = self.get_register(&Operand::Register(prefix.clone(), *num));
-                        for d in sources.clone() {
-                            match self.store_vector(d.clone(), a.clone()) {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
-                            }
-                        }
-
-                        if *indexing == Some(true) {
-                            if let Some(i) = num_offset {
-                                self.set_register(
-                                    &Operand::Register(prefix.clone(), *num),
-                                    a.kind.clone(),
-                                    a.base.clone(),
-                                    a.offset + i,
-                                );
-                            }
-                        };
-
-                        if let Some(reg) = reg_offset {
-                            let reg = self.get_register(reg);
-                            self.set_register(
-                                &Operand::Register(prefix.clone(), *num),
-                                a.kind,
-                                a.base,
-                                a.offset + reg.offset,
-                            );
-                        };
-                    } else {
-                        panic!("str1 does not include address {:?}", instruction);
-                    };
-                }
-                "stp" => {
-                    let mut reg_iter = instruction.operands.iter();
-
-                    let dst1 = reg_iter.next().expect("ldr dst");
-                    let dst2 = reg_iter.next().expect("ldr src");
-                    let src_addr = reg_iter.next().expect("ldr src");
+                    let reg1 = reg_iter.next().expect("stp/ldp first register");
+                    let reg2 = reg_iter.next().expect("stp/ldp second register");
+                    let src_addr = reg_iter.next().expect("stp/ldp address");
 
                     match src_addr {
-                        Operand::Memory(w, reg_num, offset, _, mode) => {
-                            let mut address = self
-                                .get_register(&Operand::Register(w.clone(), *reg_num))
-                                .clone();
-                            address.offset = address.offset + offset.unwrap_or(0);
+                        Operand::Memory(w, reg_num, offset, reg_offset, mode) => {
+                            let (mut address, writeback) =
+                                self.indexed_address(w, *reg_num, offset, reg_offset, mode);
 
-                            let res1 = self.store_vector(dst1.clone(), address.clone());
-                            address.offset += 8;
-                            let res2 = self.store_vector(dst2.clone(), address.clone());
-                            match res1 {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            let width = vector_access_width(reg1) as i64;
+                            let loading = instruction.opcode.starts_with('l');
+
+                            let res1 = if loading {
+                                self.load_vector(reg1.clone(), address.clone(), width)
+                            } else {
+                                self.store_vector(reg1.clone(), address.clone(), width)
+                            };
+                            address.offset += width;
+                            let res2 = if loading {
+                                self.load_vector(reg2.clone(), address.clone(), width)
+                            } else {
+                                self.store_vector(reg2.clone(), address.clone(), width)
+                            };
+                            if let Err(e) = res1 {
+                                return Err(e.to_string());
                             }
-                            match res2 {
-                                Err(e) => return Err(e.to_string()),
-                                _ => (),
+                            if let Err(e) = res2 {
+                                return Err(e.to_string());
                             }
 
-                            match mode {
-                                // pre
-                                Some(false) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset - offset.unwrap_or(0) - 8,
-                                    );
-                                }
-                                // post
-                                Some(true) => {
-                                    self.set_register(
-                                        &Operand::Register(w.clone(), *reg_num),
-                                        address.kind,
-                                        address.base,
-                                        address.offset,
-                                    );
-                                }
-                                None => {}
-                            }
+                            self.write_back(w, *reg_num, writeback);
                         }
                         _ => {
-                            panic!("ldr not with correct syntax for memory operand");
+                            return Err("stp/ldp without a memory operand".to_string());
                         }
                     }
                 }
-                // BIG TODO: reimplement these
-                "movi" | "mov" | "fmov" | "aese" | "dup" | "ins" => {
-                    let mut reg_iter = instruction.operands.iter();
-
-                    let dst = reg_iter.next().expect("Need destination register");
-                    self.set_register(dst, RegisterKind::Number, None, 0);
+                "movi" | "mvni" | "dup" => {
+                    return self.execute_instruction(
+                        pc,
+                        &Instruction {
+                            ty: InstructionType::SIMDArithmetic,
+                            opcode: instruction.opcode.clone(),
+                            operands: instruction.operands.clone(),
+                        },
+                    );
                 }
-                a => todo!("simd instruction {} not supported yet", a),
+                "smov" | "umov" => {
+                    let source = instruction.operands.get(1);
+                    let signed = instruction.opcode == "smov";
+                    let width = source
+                        .and_then(|o| arrangement_of(o).map(|a| a.lane_bytes()))
+                        .filter(|bytes| (1..=4).contains(bytes));
+                    let from_width = width.map(|bytes| {
+                        let bits = 8 * bytes as u32;
+                        if signed {
+                            (-(1i64 << (bits - 1)), (1i64 << (bits - 1)) - 1)
+                        } else {
+                            (0, (1i64 << bits) - 1)
+                        }
+                    });
+                    let range = if signed {
+                        source.and_then(|o| self.lane_range(o)).or(from_width)
+                    } else {
+                        let tracked = source.and_then(|o| self.unsigned_lane_max(o));
+                        from_width.map(|(low, high)| {
+                            let tracked = tracked
+                                .and_then(|max| i64::try_from(max).ok())
+                                .unwrap_or(high);
+                            (low, high.min(tracked))
+                        })
+                    };
+                    let maxima = match (source.and_then(vector_index), width) {
+                        (Some(n), Some(width)) if !signed => {
+                            maxima_covering(&self.lane_bounds.maxima[n], width)
+                        }
+                        _ => Vec::new(),
+                    };
+                    let Some(dst) = instruction.operands.first() else {
+                        return Ok(ExecuteReturnType::Next);
+                    };
+                    match range {
+                        Some((low, high)) => {
+                            let name = self.fresh_symbol("lane");
+                            let lane = generate_expression(
+                                "atmost",
+                                generate_expression(
+                                    "atleast",
+                                    AbstractExpression::Abstract(name),
+                                    AbstractExpression::Immediate(low),
+                                ),
+                                AbstractExpression::Immediate(high),
+                            );
+                            let bounded = maxima.into_iter().fold(lane, |value, maximum| {
+                                generate_expression("atmost", value, maximum)
+                            });
+                            self.set_register(dst, RegisterKind::RegisterBase, Some(bounded), 0);
+                        }
+                        None => self.set_register(dst, RegisterKind::Number, None, 0),
+                    }
+                }
+                _ if instruction
+                    .operands
+                    .iter()
+                    .any(|op| matches!(op, Operand::Memory(..))) =>
+                {
+                    return Err(format!(
+                        "unsupported memory instruction {}",
+                        instruction.opcode
+                    ));
+                }
+                _ => {
+                    if let Some(dst) = instruction.operands.first() {
+                        match dst {
+                            Operand::Vector(..)
+                            | Operand::VectorRegister(..)
+                            | Operand::VectorAccess(..) => self.vector_unknown(dst),
+                            _ => self.set_register(dst, RegisterKind::Number, None, 0),
+                        }
+                    }
+                }
             },
             InstructionType::Other => match instruction.opcode.as_str() {
+                "nop" | "hint" => {}
+                "bums.encoded_unknown" => {
+                    return Err("unsupported encoded instruction".to_string());
+                }
+                "brk" | "udf" | "hlt" => return Ok(ExecuteReturnType::Trap),
                 "cmp" => {
                     self.cmp(&instruction.operands[0], &instruction.operands[1]);
                 }
                 "cmn" => {
                     self.cmn(&instruction.operands[0], &instruction.operands[1]);
                 }
+                "tst" => {
+                    self.tst(&instruction.operands[0], &instruction.operands[1]);
+                }
                 "ret" => {
-                    let x30 = self.get_register(&Operand::Register(RePrefix::X, 30));
-                    if x30.kind == RegisterKind::RegisterBase {
-                        if let Some(AbstractExpression::Abstract(address)) = x30.base {
-                            if address == "return" && x30.offset == 0 {
-                                return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                            } else {
-                                return Ok(ExecuteReturnType::JumpLabel(address.to_string()));
-                            }
+                    let link = instruction
+                        .operands
+                        .first()
+                        .cloned()
+                        .unwrap_or(Operand::Register(RePrefix::X, 30));
+                    let x30 = self.get_register(&link);
+                    return match (&x30.kind, &x30.base) {
+                        (RegisterKind::RegisterBase, Some(AbstractExpression::Abstract(name)))
+                            if name == RETURN_TO =>
+                        {
+                            usize::try_from(x30.offset)
+                                .map(|line| ExecuteReturnType::JumpAddress(line as u128))
+                                .map_err(|_| "return to a negative line".to_string())
                         }
-                        return Ok(ExecuteReturnType::JumpAddress(
-                            x30.offset.try_into().expect("computer4"),
-                        ));
-                    } else {
-                        // FIX: why would this happen?
-                        return Ok(ExecuteReturnType::JumpLabel("return".to_string()));
-                        // panic!("return register not set before calling ret {:?}", x30)
-                    }
+                        (RegisterKind::RegisterBase, Some(AbstractExpression::Abstract(name)))
+                            if name == "return" && x30.offset == 0 =>
+                        {
+                            Ok(ExecuteReturnType::JumpLabel(name.clone()))
+                        }
+                        _ => Err(format!("return to an unknown address {}", x30.expression())),
+                    };
                 }
                 "mov" | "movz" | "movk" => {
                     let mut reg_iter = instruction.operands.iter().clone();
@@ -1205,522 +1711,139 @@ impl<'ctx> ARMCORTEXA<'_> {
                     let reg1 = reg_iter.next().expect("Need register output for mov");
 
                     let mut r1 = self.get_register(reg1);
+                    let mut shift = 0;
 
                     if let Some(a) = reg_iter.next() {
                         match a {
-                            Operand::Bitwise(op, shift) => {
-                                r1 = instruction_aux::shift_imm(op.to_string(), r1, *shift);
+                            Operand::Bitwise(op, s) => {
+                                shift = *s;
+                                r1 = instruction_aux::shift_imm(op.to_string(), r1, *s);
                             }
-                            _ => todo!("not sure what else can show up here"),
+                            other => todo!("unsupported trailing operand {other:?}"),
                         }
+                    }
+
+                    if instruction.opcode == "movk" {
+                        let r0 = self.get_register(reg0);
+                        r1 = if r0.kind == RegisterKind::Immediate
+                            && r1.kind == RegisterKind::Immediate
+                        {
+                            RegisterValue {
+                                kind: RegisterKind::Immediate,
+                                base: None,
+                                offset: (r0.offset & !(0xffff << shift)) | r1.offset,
+                            }
+                        } else {
+                            RegisterValue {
+                                kind: RegisterKind::Number,
+                                base: None,
+                                offset: 0,
+                            }
+                        };
                     }
 
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);
                 }
-                "rev" | "rev32" | "rbit" => {
+                "sxtb" | "sxth" | "sxtw" | "uxtb" | "uxth" => {
+                    let mut reg_iter = instruction.operands.iter();
+                    let dst = reg_iter.next().expect("Need destination register");
+                    let src = self.get_register(reg_iter.next().expect("Need source register"));
+                    let width = match &instruction.opcode[3..] {
+                        "b" => 8,
+                        "h" => 16,
+                        _ => 32,
+                    };
+                    let signed = instruction.opcode.starts_with('s');
+                    let value = instruction_aux::extract_bits(src, 0, width, signed);
+                    let value = self.field_of_unknown(value, width, signed);
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "rev" | "rev16" | "rev32" | "rbit" => {
+                    let [dst, src] = instruction.operands.as_slice() else {
+                        return Err(format!("{} needs two registers", instruction.opcode));
+                    };
+                    let word = matches!(dst, Operand::Register(RePrefix::W, _));
+                    let value = self.get_register(src);
+                    let value = match value.kind {
+                        RegisterKind::Immediate if value.base.is_none() => {
+                            immediate(
+                                permuted(&instruction.opcode, word, value.offset as u64) as i64
+                            )
+                        }
+                        _ if word => self.field_of_unknown(
+                            RegisterValue::new(RegisterKind::Number, None, 0),
+                            32,
+                            false,
+                        ),
+                        _ => RegisterValue::new(RegisterKind::Number, None, 0),
+                    };
+                    self.set_register(dst, value.kind, value.base, value.offset);
+                }
+                "neg" | "mvn" => {
                     let mut reg_iter = instruction.operands.iter().clone();
-                    let reg0 = reg_iter.next().expect("Need register output for rev");
-                    let reg1 = reg_iter.next().expect("Need register output for rev");
+                    let reg0 = reg_iter.next().expect("Need register output for neg");
+                    let reg1 = reg_iter.next().expect("Need register input for neg");
 
                     let mut r1 = self.get_register(reg1);
 
                     if let Some(base) = r1.base {
-                        r1.base = Some(generate_expression("rev", base, AbstractExpression::Empty));
+                        r1.base = Some(generate_expression(
+                            "-",
+                            AbstractExpression::Immediate(0),
+                            base,
+                        ));
                     }
 
-                    r1.offset = r1.offset.swap_bytes();
+                    r1.offset = if instruction.opcode == "mvn" {
+                        !r1.offset
+                    } else {
+                        r1.offset.wrapping_neg()
+                    };
                     self.set_register(reg0, r1.kind, r1.base, r1.offset);
+                }
+                "ngc" | "ngcs" | "negs" => {
+                    let dest = instruction
+                        .operands
+                        .first()
+                        .expect("Need destination register");
+                    self.set_register(dest, RegisterKind::Number, None, 0);
+                    if instruction.opcode.ends_with('s') {
+                        self.set_unknown_flags();
+                    }
                 }
                 _ => todo!("other instruction not implemented yet {:?}", instruction),
             },
-            _ => panic!(),
+            _ => panic!(
+                "instruction reached the executor with a non-executable type: {:?}",
+                instruction
+            ),
         }
 
         Ok(ExecuteReturnType::Next)
     }
+
+    fn floating_point(&mut self, instruction: &Instruction) {
+        if matches!(
+            instruction.opcode.as_str(),
+            "fcmp" | "fcmpe" | "fccmp" | "fccmpe"
+        ) {
+            self.set_unknown_flags();
+            return;
+        }
+        match instruction.operands.first() {
+            Some(
+                dst @ (Operand::Vector(..)
+                | Operand::VectorRegister(..)
+                | Operand::VectorAccess(..)),
+            ) => self.vector_unknown(dst),
+            Some(dst @ Operand::Register(..)) => {
+                self.set_register(dst, RegisterKind::Number, None, 0)
+            }
+            _ => (),
+        }
+    }
 }
 
-// "ushr" | "sshr" => {
-//     // FIX figure out how to do sshr over byte strings
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need source register");
-//     let reg3 = instruction.r3.clone().expect("Need immediate");
-//     let imm = self.operand(reg3);
-
-//     if let Some((_, arrange)) = reg1.split_once(".") {
-//         match arrange {
-//             "2d" => {
-//                 for i in 0..2 {
-//                     let (bases, offsets) = self.simd_registers
-//                         [get_register_index(reg2.clone())]
-//                     .get_double(i);
-//                     let mut offset = u64::from_be_bytes(offsets);
-//                     (offset, _) = offset.overflowing_shr(
-//                         imm.offset.try_into().expect("computer22"),
-//                     );
-//                     // TODO: figure out best way to modify bases
-//                     let dest =
-//                         &mut self.simd_registers[get_register_index(reg1.clone())];
-//                     dest.set_double(i, bases, offset.to_be_bytes());
-//                 }
-//             }
-//             "4s" => {
-//                 for i in 0..4 {
-//                     let (bases, offsets) = self.simd_registers
-//                         [get_register_index(reg2.clone())]
-//                     .get_word(i);
-//                     let mut offset = u32::from_be_bytes(offsets);
-//                     (offset, _) = offset.overflowing_shr(
-//                         imm.offset.try_into().expect("computer23"),
-//                     );
-//                     // TODO: figure out best way to modify bases
-//                     let dest =
-//                         &mut self.simd_registers[get_register_index(reg1.clone())];
-//                     dest.set_word(i, bases, offset.to_be_bytes());
-//                 }
-//             }
-//             _ => todo!("unsupported ushr vector type"),
-//         }
-//     }
-// }
-// "ext" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need source register");
-//     let reg3 = instruction.r3.clone().expect("Need immediate");
-//     let reg4 = instruction.r4.clone().expect("Need immediate");
-//     let imm = self.operand(reg4);
-
-//     if let Some((_, arrange)) = reg1.split_once(".") {
-//         match arrange {
-//             "8b" => {
-//                 let amt = imm.offset as usize;
-//                 assert!(amt < 8);
-//                 for i in 0..amt {
-//                     let (base, offset) = self.simd_registers
-//                         [get_register_index(reg2.clone())]
-//                     .get_byte(i);
-//                     let dest =
-//                         &mut self.simd_registers[get_register_index(reg1.clone())];
-//                     dest.set_byte(i, base.clone(), offset);
-//                 }
-//                 for i in amt..8 {
-//                     let (base, offset) = self.simd_registers
-//                         [get_register_index(reg3.clone())]
-//                     .get_byte(i);
-//                     let dest =
-//                         &mut self.simd_registers[get_register_index(reg1.clone())];
-//                     dest.set_byte(i, base.clone(), offset);
-//                 }
-//             }
-//             "16b" => {
-//                 let amt = imm.offset as usize;
-//                 assert!(amt < 16);
-//                 for i in 0..amt {
-//                     let (base, offset) = self.simd_registers
-//                         [get_register_index(reg2.clone())]
-//                     .get_byte(i);
-//                     let dest =
-//                         &mut self.simd_registers[get_register_index(reg1.clone())];
-//                     dest.set_byte(i, base.clone(), offset);
-//                 }
-//                 for i in amt..16 {
-//                     let (base, offset) = self.simd_registers
-//                         [get_register_index(reg3.clone())]
-//                     .get_byte(i);
-//                     let dest =
-//                         &mut self.simd_registers[get_register_index(reg1.clone())];
-//                     dest.set_byte(i, base.clone(), offset);
-//                 }
-//             }
-//             _ => todo!("unsupported ext vector type"),
-//         }
-//     }
-// }
-// "dup" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let mut reg2 = instruction.r2.clone().expect("Need source register");
-//     if reg2.contains("[") {
-//         let left_brac = reg2.find("[").expect("need left bracket");
-//         let right_brac = reg2.find("]").expect("need right bracket");
-//         let index_string = reg2
-//             .get((left_brac + 1)..right_brac)
-//             .expect("need brackets");
-//         let index = index_string
-//             .parse::<usize>()
-//             .expect("index into vector must be an integer");
-
-//         reg2 = reg2.split_at(left_brac).0.to_string();
-//         if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-//             if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-//                 assert!(arrangement1.contains(arrangement2));
-//                 let src = self.simd_registers
-//                     [get_register_index(vector2.to_string())]
-//                 .clone();
-//                 let dest = &mut self.simd_registers
-//                     [get_register_index(vector1.to_string())];
-
-//                 match arrangement2 {
-//                     "b" => {
-//                         let elem = src.get_byte(index);
-//                         for i in 0..16 {
-//                             dest.set_byte(i, elem.0.clone(), elem.1);
-//                         }
-//                     }
-//                     "h" => {
-//                         let elem = src.get_halfword(index);
-//                         for i in 0..8 {
-//                             dest.set_halfword(i, elem.0.clone(), elem.1);
-//                         }
-//                     }
-//                     "s" => {
-//                         let elem = src.get_word(index);
-//                         for i in 0..4 {
-//                             dest.set_word(i, elem.0.clone(), elem.1);
-//                         }
-//                     }
-//                     "d" => {
-//                         let elem = src.get_double(index);
-//                         for i in 0..2 {
-//                             dest.set_double(i, elem.0.clone(), elem.1);
-//                         }
-//                     }
-//                     _ => log::error!(
-//                         "Not a valid vector arrangement {:?}",
-//                         arrangement1
-//                     ),
-//                 }
-//             }
-//         };
-//     } else {
-//         if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-//             let dest =
-//                 &mut self.simd_registers[get_register_index(vector1.to_string())];
-//             let src = &mut self.registers[get_register_index(reg2)];
-
-//             dest.set_register(
-//                 arrangement1.to_string(),
-//                 src.kind.clone(),
-//                 src.base.clone(),
-//                 src.offset as u128,
-//             );
-//         };
-//     }
-// }
-// "rev32" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need source register");
-
-//     let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
-//     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-
-//     dest.kind = src.kind.clone();
-//     for i in 0..8 {
-//         let (base, offset) = src.get_byte(7 - i);
-//         dest.set_byte(i, base, offset);
-//     }
-
-//     for i in 8..16 {
-//         let (base, offset) = src.get_byte(15 - i);
-//         dest.set_byte(i, base, offset);
-//     }
-// }
-// "ins" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let mut reg2 = instruction.r2.clone().expect("Need source register");
-
-//     // vector, element
-//     if reg2.contains("v") {
-//         let left_brac = reg2.find("[").expect("need left bracket");
-//         let right_brac = reg2.find("]").expect("need right bracket");
-//         let index_string = reg2
-//             .get((left_brac + 1)..right_brac)
-//             .expect("need brackets");
-//         let index = index_string
-//             .parse::<usize>()
-//             .expect("index into vector must be an integer");
-
-//         reg2 = reg2.split_at(left_brac).0.to_string();
-//         if let Some((vector1, arrangement1)) = reg1.split_once(".") {
-//             if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-//                 assert!(arrangement1.contains(arrangement2));
-//                 let src = self.simd_registers
-//                     [get_register_index(vector2.to_string())]
-//                 .clone();
-//                 let dest = &mut self.simd_registers
-//                     [get_register_index(vector1.to_string())];
-
-//                 match arrangement2 {
-//                     "b" => {
-//                         let (base, offset) = src.get_byte(index);
-//                         dest.set_byte(index, base, offset);
-//                     }
-//                     "h" => {
-//                         let (base, offset) = src.get_halfword(index);
-//                         dest.set_halfword(index, base, offset);
-//                     }
-//                     "s" => {
-//                         let (base, offset) = src.get_word(index);
-//                         dest.set_word(index, base, offset);
-//                     }
-//                     "d" => {
-//                         let (base, offset) = src.get_double(index);
-//                         dest.set_double(index, base, offset);
-//                     }
-//                     _ => log::error!(
-//                         "Not a valid vector arrangement {:?}",
-//                         arrangement1
-//                     ),
-//                 }
-//             }
-//         }
-//     // vector, general
-//     } else {
-//         todo!("vector general ins unsupported");
-//     }
-// }
-// "pmull" | "pmull2" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need first source register");
-//     let reg3 = instruction.r3.clone().expect("Need second source register");
-
-//     if let Some((vector1, _)) = reg1.split_once(".") {
-//         if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-//             if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-//                 assert_eq!(arrangement2, arrangement3);
-
-//                 let src1 = self.simd_registers
-//                     [get_register_index(vector2.to_string())]
-//                 .clone();
-//                 let src2 = self.simd_registers
-//                     [get_register_index(vector3.to_string())]
-//                 .clone();
-//                 let dest = &mut self.simd_registers
-//                     [get_register_index(vector1.to_string())];
-
-//                 match arrangement2 {
-//                     "8b" => {
-//                         for i in 0..8 {
-//                             let base = generate_expression_from_options(
-//                                 "*",
-//                                 src1.get_byte(i).0,
-//                                 src2.get_byte(i).0,
-//                             );
-//                             let offset = src1.get_byte(i).1 * src2.get_byte(i).1;
-
-//                             dest.set_byte(i, base, offset);
-//                         }
-//                     }
-//                     "4h" => {
-//                         for i in 0..8 {
-//                             let (bases1, offsets1) = self.simd_registers
-//                                 [get_register_index(reg2.clone())]
-//                             .get_halfword(i);
-
-//                             let (bases2, offsets2) = self.simd_registers
-//                                 [get_register_index(reg3.clone())]
-//                             .get_halfword(i);
-//                             let a = u16::from_be_bytes(offsets1);
-//                             let b = u16::from_be_bytes(offsets2);
-//                             let offset = a * b;
-
-//                             let mut new_bases = [BASE_INIT; 2];
-//                             for i in 0..2 {
-//                                 new_bases[i] = generate_expression_from_options(
-//                                     "*",
-//                                     bases1[i].clone(),
-//                                     bases2[i].clone(),
-//                                 );
-//                             }
-
-//                             let dest = &mut self.simd_registers
-//                                 [get_register_index(reg1.clone())];
-//                             dest.set_halfword(i, new_bases, offset.to_be_bytes());
-//                         }
-//                     }
-//                     _ => todo!("pmull unsupported vector access"),
-//                 }
-//             }
-//         }
-//     }
-// }
-// "zip1" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need first source register");
-//     let reg3 = instruction.r3.clone().expect("Need second source register");
-
-//     if let Some((vector1, _)) = reg1.split_once(".") {
-//         if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-//             if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-//                 assert_eq!(arrangement2, arrangement3);
-
-//                 let src1 = self.simd_registers
-//                     [get_register_index(vector2.to_string())]
-//                 .clone();
-//                 let src2 = self.simd_registers
-//                     [get_register_index(vector3.to_string())]
-//                 .clone();
-//                 let dest = &mut self.simd_registers
-//                     [get_register_index(vector1.to_string())];
-
-//                 match arrangement2 {
-//                     "2d" => {
-//                         let elem = src1.get_double(0);
-//                         dest.set_double(0, elem.0, elem.1);
-
-//                         let elem = src2.get_double(0);
-//                         dest.set_double(1, elem.0, elem.1);
-//                     }
-//                     "16b" => {
-//                         for i in 0..16 {
-//                             if i % 2 == 0 {
-//                                 let elem = src1.get_byte(0);
-//                                 dest.set_byte(i, elem.0, elem.1);
-//                             } else {
-//                                 let elem = src2.get_byte(0);
-//                                 dest.set_byte(i, elem.0, elem.1);
-//                             }
-//                         }
-//                     }
-//                     _ => todo!("zip1 unsupported vector access"),
-//                 }
-//             }
-//         }
-//     }
-// }
-// "zip2" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need first source register");
-//     let reg3 = instruction.r3.clone().expect("Need second source register");
-
-//     if let Some((vector1, _)) = reg1.split_once(".") {
-//         if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-//             if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-//                 assert_eq!(arrangement2, arrangement3);
-
-//                 let src1 = self.simd_registers
-//                     [get_register_index(vector2.to_string())]
-//                 .clone();
-//                 let src2 = self.simd_registers
-//                     [get_register_index(vector3.to_string())]
-//                 .clone();
-//                 let dest = &mut self.simd_registers
-//                     [get_register_index(vector1.to_string())];
-
-//                 match arrangement2 {
-//                     "2d" => {
-//                         let elem = src1.get_double(1);
-//                         dest.set_double(0, elem.0, elem.1);
-
-//                         let elem = src2.get_double(1);
-//                         dest.set_double(1, elem.0, elem.1);
-//                     }
-//                     "16b" => {
-//                         //FIX
-//                         for i in 0..16 {
-//                             if i % 2 == 1 {
-//                                 let elem = src1.get_byte(0);
-//                                 dest.set_byte(i, elem.0, elem.1);
-//                             } else {
-//                                 let elem = src2.get_byte(0);
-//                                 dest.set_byte(i, elem.0, elem.1);
-//                             }
-//                         }
-//                     }
-//                     _ => todo!("zip2 unsupported vector access"),
-//                 }
-//             }
-//         }
-//     }
-// }
-// "aese" | "aesmc" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need first source register");
-
-//     let src = &self.simd_registers[get_register_index(reg2.clone())].clone();
-//     let dest = &mut self.simd_registers[get_register_index(reg1.clone())];
-
-//     match (src.kind.clone(), dest.kind.clone()) {
-//         (RegisterKind::Number, RegisterKind::Number) => {
-//             // don't need to do anything
-//             ()
-//         }
-//         _ => todo!(),
-//     }
-// }
-// "trn1" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need first source register");
-//     let reg3 = instruction.r3.clone().expect("Need second source register");
-
-//     if let Some((vector1, _)) = reg1.split_once(".") {
-//         if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-//             if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-//                 assert_eq!(arrangement2, arrangement3);
-
-//                 let src1 = self.simd_registers
-//                     [get_register_index(vector2.to_string())]
-//                 .clone();
-//                 let src2 = self.simd_registers
-//                     [get_register_index(vector3.to_string())]
-//                 .clone();
-//                 let dest = &mut self.simd_registers
-//                     [get_register_index(vector1.to_string())];
-
-//                 match arrangement2 {
-//                     "2d" => {
-//                         let elem = src1.get_double(0);
-//                         dest.set_double(0, elem.0, elem.1);
-
-//                         let elem = src2.get_double(0);
-//                         dest.set_double(1, elem.0, elem.1);
-//                     }
-//                     _ => todo!("trn1 unsupported vector access"),
-//                 }
-//             }
-//         }
-//     }
-// }
-// "trn2" => {
-//     let reg1 = instruction.r1.clone().expect("Need dst register");
-//     let reg2 = instruction.r2.clone().expect("Need first source register");
-//     let reg3 = instruction.r3.clone().expect("Need second source register");
-
-//     if let Some((vector1, _)) = reg1.split_once(".") {
-//         if let Some((vector2, arrangement2)) = reg2.split_once(".") {
-//             if let Some((vector3, arrangement3)) = reg3.split_once(".") {
-//                 assert_eq!(arrangement2, arrangement3);
-
-//                 let src1 = self.simd_registers
-//                     [get_register_index(vector2.to_string())]
-//                 .clone();
-//                 let src2 = self.simd_registers
-//                     [get_register_index(vector3.to_string())]
-//                 .clone();
-//                 let dest = &mut self.simd_registers
-//                     [get_register_index(vector1.to_string())];
-
-//                 match arrangement2 {
-//                     "2d" => {
-//                         let elem = src1.get_double(1);
-//                         dest.set_double(0, elem.0, elem.1);
-
-//                         let elem = src2.get_double(1);
-//                         dest.set_double(1, elem.0, elem.1);
-//                     }
-//                     _ => todo!("trn2 unsupported vector access"),
-//                 }
-//             }
-//         }
-//     }
-// }
-// "bit" | "uaddl" | "uaddl2" | "sqrshrun" | "sqrshrun2" | "umull" | "umull2"
-// | "umlal" | "umlal2" | "rshrn" | "rshrn2" => {
-// let dest = instruction.r1.clone().expect("need dest");
-// let reg = &mut self.simd_registers[get_register_index(dest.to_string())];
-// reg.set(
-//     "16b".to_string(),
-//     RegisterKind::Number,
-//     [BASE_INIT; 16],
-//     [0; 16],
-// );
-// },
+pub(crate) fn is_floating_point(opcode: &str) -> bool {
+    opcode.starts_with('f') || matches!(opcode, "scvtf" | "ucvtf")
+}

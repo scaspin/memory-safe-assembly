@@ -1,0 +1,6 @@
+primitive,origins,vaf_files,procedures,vaf_lines,spec_lines,code_and_proof_lines,fstar_lemma_files,fstar_lemma_lines
+aes / aes-gcm,crypto/aes; thirdPartyPorts/OpenSSL/aes; thirdPartyPorts/Intel/aes,16,150,10625,3881,6744,32,8032
+sha-256,crypto/sha; thirdPartyPorts/OpenSSL/sha,5,44,2259,704,1555,4,2080
+poly1305,crypto/poly1305; thirdPartyPorts/OpenSSL/poly1305,1,9,663,172,491,10,1730
+curve25519,crypto/ecc; thirdPartyPorts/rfc7748/curve25519,5,55,3949,1222,2727,13,1184
+bignum,crypto/bignum; thirdPartyPorts/SymCrypt/bignum,2,4,293,64,229,4,360

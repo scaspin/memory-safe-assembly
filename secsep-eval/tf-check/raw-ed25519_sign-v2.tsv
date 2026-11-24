@@ -1,0 +1,6 @@
+ge_madd	src/lib.rs	FAIL	0.1	line 10824 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+ge_p2_dbl	src/lib.rs	FAIL	0.1	line 12276 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+table_select	src/lib.rs	FAIL	0.1	line 11693 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+x25519_ge_scalarmult_base	src/lib.rs	FAIL	0.1	line 11029 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+x25519_sc_reduce	src/lib.rs	FAIL	0.1	line 13539 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+ED25519_sign	src/lib.rs	FAIL	0.1	line 14219 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)

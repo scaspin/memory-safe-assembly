@@ -1,58 +1,5 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.] */
+// Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com) All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef OPENSSL_HEADER_DH_H
 #define OPENSSL_HEADER_DH_H
@@ -75,6 +22,12 @@ extern "C" {
 
 
 // Allocation and destruction.
+//
+// A |DH| object represents a Diffie-Hellman key or group parameters. A given
+// object may be used concurrently on multiple threads by non-mutating
+// functions, provided no other thread is concurrently calling a mutating
+// function. Unless otherwise documented, functions which take a |const| pointer
+// are non-mutating and functions which take a non-|const| pointer are mutating.
 
 // DH_new returns a new, empty DH object or NULL on error.
 OPENSSL_EXPORT DH *DH_new(void);
@@ -87,7 +40,8 @@ OPENSSL_EXPORT DH *DH_new_by_nid(int nid);
 // count drops to zero.
 OPENSSL_EXPORT void DH_free(DH *dh);
 
-// DH_up_ref increments the reference count of |dh| and returns one.
+// DH_up_ref increments the reference count of |dh| and returns one. It does not
+// mutate |dh| for thread-safety purposes and may be used concurrently.
 OPENSSL_EXPORT int DH_up_ref(DH *dh);
 
 
@@ -153,32 +107,38 @@ OPENSSL_EXPORT DH *DH_get_rfc7919_4096(void);
 
 // BN_get_rfc3526_prime_1536 sets |*ret| to the 1536-bit MODP group from RFC
 // 3526 and returns |ret|. If |ret| is NULL then a fresh |BIGNUM| is allocated
-// and returned. It returns NULL on allocation failure.
+// and returned. It returns NULL on allocation failure. The generator for this
+// group is 2.
 OPENSSL_EXPORT BIGNUM *BN_get_rfc3526_prime_1536(BIGNUM *ret);
 
 // BN_get_rfc3526_prime_2048 sets |*ret| to the 2048-bit MODP group from RFC
 // 3526 and returns |ret|. If |ret| is NULL then a fresh |BIGNUM| is allocated
-// and returned. It returns NULL on allocation failure.
+// and returned. It returns NULL on allocation failure. The generator for this
+// group is 2.
 OPENSSL_EXPORT BIGNUM *BN_get_rfc3526_prime_2048(BIGNUM *ret);
 
 // BN_get_rfc3526_prime_3072 sets |*ret| to the 3072-bit MODP group from RFC
 // 3526 and returns |ret|. If |ret| is NULL then a fresh |BIGNUM| is allocated
-// and returned. It returns NULL on allocation failure.
+// and returned. It returns NULL on allocation failure. The generator for this
+// group is 2.
 OPENSSL_EXPORT BIGNUM *BN_get_rfc3526_prime_3072(BIGNUM *ret);
 
 // BN_get_rfc3526_prime_4096 sets |*ret| to the 4096-bit MODP group from RFC
 // 3526 and returns |ret|. If |ret| is NULL then a fresh |BIGNUM| is allocated
-// and returned. It returns NULL on allocation failure.
+// and returned. It returns NULL on allocation failure. The generator for this
+// group is 2.
 OPENSSL_EXPORT BIGNUM *BN_get_rfc3526_prime_4096(BIGNUM *ret);
 
 // BN_get_rfc3526_prime_6144 sets |*ret| to the 6144-bit MODP group from RFC
 // 3526 and returns |ret|. If |ret| is NULL then a fresh |BIGNUM| is allocated
-// and returned. It returns NULL on allocation failure.
+// and returned. It returns NULL on allocation failure. The generator for this
+// group is 2.
 OPENSSL_EXPORT BIGNUM *BN_get_rfc3526_prime_6144(BIGNUM *ret);
 
 // BN_get_rfc3526_prime_8192 sets |*ret| to the 8192-bit MODP group from RFC
 // 3526 and returns |ret|. If |ret| is NULL then a fresh |BIGNUM| is allocated
-// and returned. It returns NULL on allocation failure.
+// and returned. It returns NULL on allocation failure. The generator for this
+// group is 2.
 OPENSSL_EXPORT BIGNUM *BN_get_rfc3526_prime_8192(BIGNUM *ret);
 
 
@@ -223,6 +183,9 @@ OPENSSL_EXPORT int DH_generate_key(DH *dh);
 // Callers that expect a fixed-width secret should use this function over
 // |DH_compute_key|. Callers that use either function should migrate to a modern
 // primitive such as X25519 or ECDH with P-256 instead.
+//
+// This function does not mutate |dh| for thread-safety purposes and may be used
+// concurrently.
 OPENSSL_EXPORT int DH_compute_key_padded(uint8_t *out, const BIGNUM *peers_key,
                                          DH *dh);
 
@@ -234,6 +197,9 @@ OPENSSL_EXPORT int DH_compute_key_padded(uint8_t *out, const BIGNUM *peers_key,
 //
 // NOTE: this follows the usual BoringSSL return-value convention, but that's
 // different from |DH_compute_key| and |DH_compute_key_padded|.
+//
+// This function does not mutate |dh| for thread-safety purposes and may be used
+// concurrently.
 OPENSSL_EXPORT int DH_compute_key_hashed(DH *dh, uint8_t *out, size_t *out_len,
                                          size_t max_out_len,
                                          const BIGNUM *peers_key,
@@ -336,6 +302,9 @@ OPENSSL_EXPORT int i2d_DHparams(const DH *in, unsigned char **outp);
 // Callers that expect a fixed-width secret should use |DH_compute_key_padded|
 // instead. Callers that use either function should migrate to a modern
 // primitive such as X25519 or ECDH with P-256 instead.
+//
+// This function does not mutate |dh| for thread-safety purposes and may be used
+// concurrently.
 OPENSSL_EXPORT int DH_compute_key(uint8_t *out, const BIGNUM *peers_key,
                                   DH *dh);
 
@@ -348,15 +317,20 @@ OPENSSL_EXPORT int DH_compute_key(uint8_t *out, const BIGNUM *peers_key,
 // This function has been deprecated with no replacement.
 OPENSSL_EXPORT DH *DH_get_2048_256(void);
 
+
+// General No-op Functions [Deprecated].
+
 // DH_clear_flags does nothing and is included to simplify compiling code that
 // expects it.
-OPENSSL_EXPORT void DH_clear_flags(DH *dh, int flags);
+OPENSSL_EXPORT OPENSSL_DEPRECATED void DH_clear_flags(DH *dh, int flags);
 
 // DH_FLAG_CACHE_MONT_P is not supported by AWS-LC and is included to simplify
 // compiling code that expects it. This flag controls if the DH APIs should
 // cache the montgomery form of the prime to speed up multiplication at the cost
 // of increasing memory storage. AWS-LC always does this and does not support
 // turning this option off.
+// 
+// NOTE: This is also on by default in OpenSSL.
 #define DH_FLAG_CACHE_MONT_P 0
 
 

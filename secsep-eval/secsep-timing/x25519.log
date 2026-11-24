@@ -1,0 +1,55 @@
+[INFO] <MainProcess> - Working on 1 benchmark(s)...
+[INFO] <SpawnPoolWorker-3> - [x25519] (Preprocess) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Preprocess) time elapsed: [34m0.68 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Preprocess) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Single Type Infer) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Single Type Infer) time elapsed: [34m182.13 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Single Type Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Valid Region Infer) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Valid Region Infer) time elapsed: [34m39.24 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Valid Region Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Taint Type Infer) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Taint Type Infer) time elapsed: [34m16.82 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Taint Type Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Change Infer) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Change Infer) time elapsed: [34m0.77 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Change Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Type Checker) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Type Checker) time elapsed: [34m610.52 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Type Checker) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) time elapsed: [34m0.84 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [35mInstalling ../benchmark/analysis/x25519/x25519.tf3.s[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) time elapsed: [34m0.46 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [35mInstalling ../benchmark/analysis/x25519/x25519.tf2.s[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (push/pop TF disabled) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (push/pop TF disabled) time elapsed: [34m0.45 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) (push/pop TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [35mInstalling ../benchmark/analysis/x25519/x25519.tf1.s[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) started
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) time elapsed: [34m0.46 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [x25519] (Transformation) (delta: 0x800000) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [35mInstalling ../benchmark/analysis/x25519/x25519.tf.s[39m
+[INFO] <SpawnPoolWorker-3> - Successfully processed x25519
+[INFO] <MainProcess> - All benchmark(s) completed successfully
+      853.46 real       794.20 user         4.69 sys
+           455507968  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              209108  page reclaims
+                3922  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   1  signals received
+                1646  voluntary context switches
+              421411  involuntary context switches
+            17712156  instructions retired
+             9693180  cycles elapsed
+             1081656  peak memory footprint

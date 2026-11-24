@@ -1,0 +1,92 @@
+diff --git a/bin/check.ml b/bin/check.ml
+index 1f90bd2..df22af3 100644
+--- a/bin/check.ml
++++ b/bin/check.ml
+@@ -38,13 +38,7 @@ let () =
+         Printf.printf "skipping check\n";
+         acc_success
+       end else *)
+-      let success = Arch_type.ArchType.type_prop_check_one_func
+-        smt_ctx
+-        fi_list
+-        func_name
+-        func_type
+-        func_body
+-      in
++      let success = Type.Stat.time_func "check" func_name (fun () -> Arch_type.ArchType.type_prop_check_one_func smt_ctx fi_list func_name func_type func_body) in
+       Printf.printf "Function %s: %s\n" func_name (if success then "Passed" else "Failed");
+       Printf.printf "=================================================================\n\n\n\n\n%!";
+       acc_success && success
+diff --git a/lib/range_type_infer.ml b/lib/range_type_infer.ml
+index 01ceb1d..5395c2a 100644
+--- a/lib/range_type_infer.ml
++++ b/lib/range_type_infer.ml
+@@ -264,7 +264,7 @@ module RangeTypeInfer = struct
+         (acc: FuncInterface.t list) (entry: SingleTypeInfer.t) :
+         (FuncInterface.t list) * t =
+       Printf.printf "Inferring func %s\n" entry.func_name;
+-      let infer_state = infer_one_func acc entry in
++      let infer_state = Stat.time_func "range" entry.func_name (fun () -> infer_one_func acc entry) in
+       let func_interface = get_func_interface infer_state in
+       Printf.printf "Infer state of func %s\n" infer_state.func_name;
+       pp_func_type 0 infer_state;
+diff --git a/lib/single_type_infer.ml b/lib/single_type_infer.ml
+index 1d32d69..702be82 100644
+--- a/lib/single_type_infer.ml
++++ b/lib/single_type_infer.ml
+@@ -997,7 +997,7 @@ module SingleTypeInfer = struct
+       let func_input_reg = entry.reg_type in
+       let func_mem_interface = MemTypeBasic.map (fun (x, _) -> x) entry.mem_type in
+       Printf.printf "Inferring func %s\n" func_name;
+-      let infer_state = infer_one_func prog acc func_name func_input_reg func_mem_interface entry.stack_spill_info entry.constr_info iter solver_iter in
++      let infer_state = Stat.time_func "single" func_name (fun () -> infer_one_func prog acc func_name func_input_reg func_mem_interface entry.stack_spill_info entry.constr_info iter solver_iter) in
+       let infer_state = add_var_bound_constraint infer_state in
+       let func_interface = get_func_interface infer_state in
+       Printf.printf "Infer state of func %s\n" func_name;
+diff --git a/lib/stat.ml b/lib/stat.ml
+index 47a2532..b8439ed 100644
+--- a/lib/stat.ml
++++ b/lib/stat.ml
+@@ -19,3 +19,10 @@ let statistics_to_file (filename: string) =
+     stat.smt_queries
+     stat.smt_queries_time;
+   close_out channel
++
++let time_func (phase: string) (func_name: string) (f: unit -> 'a) : 'a =
++  let start_time = Sys.time () in
++  let start_queries = stat.smt_queries in
++  let result = f () in
++  Printf.printf "OCTAL_FUNC_TIME %s %s %f %d\n%!" phase func_name (Sys.time () -. start_time) (stat.smt_queries - start_queries);
++  result
+diff --git a/lib/taint_type_infer.ml b/lib/taint_type_infer.ml
+index c78a224..6a823c7 100644
+--- a/lib/taint_type_infer.ml
++++ b/lib/taint_type_infer.ml
+@@ -396,7 +396,7 @@ module TaintTypeInfer = struct
+     let helper
+         (acc: FuncInterface.t list) (entry: RangeTypeInfer.t) :
+         (FuncInterface.t list) * t =
+-      let infer_state = infer_one_func acc taint_input_list entry in
++      let infer_state = Stat.time_func "taint" entry.func_name (fun () -> infer_one_func acc taint_input_list entry) in
+       let func_interface = get_func_interface infer_state in
+       Printf.printf "Infer state of func %s\n" infer_state.func_name;
+       (* pp_func_type 0 infer_state; *)
+diff --git a/scripts/general.py b/scripts/general.py
+index 04b2b1e..4d29163 100644
+--- a/scripts/general.py
++++ b/scripts/general.py
+@@ -69,12 +69,12 @@ def setup_logger(level=logging.INFO, log_path: Optional[Path] = None):
+ 
+ def build_octal():
+     subprocess.run(
+-        ["dune", "build"],
++        ["dune", "build", "--root", ".", "-j", "1"],
+         cwd=OCTAL_DIR,
+         check=True,
+     )
+     subprocess.run(
+-        ["dune", "install"],
++        ["dune", "install", "--root", ".", "-j", "1"],
+         cwd=OCTAL_DIR,
+         check=True,
+     )

@@ -1,0 +1,7 @@
+benchmark,loc,funcs,funcs_called,prospect_vars,prospect_anno,secsep_args,secsep_anno
+salsa20,72,5,3,9 (5),4 (2),6,5
+sha512,290,16,3,24 (2),14 (1),6,5
+chacha20,100,7,3,8 (7),4 (3),8,7
+x25519,1034,41,5,361 (11),335 (4),10,7
+poly1305,314,11,7,33 (32),26 (25),11,74
+ed25519_sign,2314,72,11,512 (77),476 (69),25,24

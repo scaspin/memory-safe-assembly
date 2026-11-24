@@ -5,19 +5,11 @@
 
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__ELF__)
 // Copyright 2014-2020 The OpenSSL Project Authors. All Rights Reserved.
-//
-// Licensed under the OpenSSL license (the "License").  You may not use
-// this file except in compliance with the License.  You can obtain a copy
-// in the file LICENSE in the source distribution or at
-// https://www.openssl.org/source/license.html
+// SPDX-License-Identifier: Apache-2.0
 
 // ====================================================================
 // Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
-// project. The module is, however, dual licensed under OpenSSL and
-// CRYPTOGAMS licenses depending on where you obtain it. For further
-// details see http://www.openssl.org/~appro/cryptogams/.
-//
-// Permission to use under GPLv2 terms is granted.
+// project.
 // ====================================================================
 //
 // SHA256/512 for ARMv8.
@@ -50,26 +42,12 @@
 
 .text
 
-
-.hidden	OPENSSL_armcap_P
-.globl	sha256_block_data_order
-.hidden	sha256_block_data_order
-.type	sha256_block_data_order,%function
+.globl	sha256_block_data_order_nohw
+.hidden	sha256_block_data_order_nohw
+.type	sha256_block_data_order_nohw,%function
 .align	6
-sha256_block_data_order:
-	AARCH64_VALID_CALL_TARGET
-#ifndef	__KERNEL__
-#if defined(OPENSSL_HWASAN) && __clang_major__ >= 10
-	adrp	x16,:pg_hi21_nc:OPENSSL_armcap_P
-#else
-	adrp	x16,OPENSSL_armcap_P
-#endif
-	ldr	w16,[x16,:lo12:OPENSSL_armcap_P]
-	tst	w16,#ARMV8_SHA256
-	b.ne	.Lv8_entry
-#endif
+sha256_block_data_order_nohw:
 	AARCH64_SIGN_LINK_REGISTER
-
 	stp	x29,x30,[sp,#-128]!
 	add	x29,sp,#0
 
@@ -1032,8 +1010,7 @@ sha256_block_data_order:
 	ldp	x29,x30,[sp],#128
 	AARCH64_VALIDATE_LINK_REGISTER
 	ret
-
-.size	sha256_block_data_order,.-sha256_block_data_order
+.size	sha256_block_data_order_nohw,.-sha256_block_data_order_nohw
 
 .section	.rodata
 .align	6
@@ -1062,10 +1039,11 @@ sha256_block_data_order:
 .align	2
 .text
 #ifndef	__KERNEL__
-.type	sha256_block_armv8,%function
+.globl	sha256_block_data_order_hw
+.hidden	sha256_block_data_order_hw
+.type	sha256_block_data_order_hw,%function
 .align	6
-sha256_block_armv8:
-.Lv8_entry:
+sha256_block_data_order_hw:
 #ifdef BORINGSSL_DISPATCH_TEST
 
 	adrp	x9,BORINGSSL_function_hit
@@ -1074,6 +1052,7 @@ sha256_block_armv8:
 	strb	w10, [x9,#6] // kFlag_sha256_hw
 #endif
 	// Armv8.3-A PAuth: even though x30 is pushed to stack it is not popped later.
+	AARCH64_VALID_CALL_TARGET
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
 
@@ -1208,6 +1187,6 @@ sha256_block_armv8:
 
 	ldr	x29,[sp],#16
 	ret
-.size	sha256_block_armv8,.-sha256_block_armv8
+.size	sha256_block_data_order_hw,.-sha256_block_data_order_hw
 #endif
 #endif  // !OPENSSL_NO_ASM && defined(OPENSSL_AARCH64) && defined(__ELF__)

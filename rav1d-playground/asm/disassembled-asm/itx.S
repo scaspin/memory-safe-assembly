@@ -1,7320 +1,7379 @@
-_ltmp0:
-ld1.s	{ v0 }[0], [x0], x1
-ld1.s	{ v0 }[1], [x0], x1
-ld1.s	{ v1 }[0], [x0], x1
-ld1.s	{ v1 }[1], [x0], x1
-subs	w4, w4, #4
+	.text
+idct_dc_w4_neon:
+ld1	{ v0.s }[0], [x0], x1
+ld1	{ v0.s }[1], [x0], x1
+ld1	{ v1.s }[0], [x0], x1
+ld1	{ v1.s }[1], [x0], x1
+subs	w4, w4, #0x4
 sub	x0, x0, x1, lsl #2
-uaddw.8h	v0, v16, v0
-sqxtun.8b	v0, v0
-uaddw.8h	v1, v16, v1
-st1.s	{ v0 }[0], [x0], x1
-sqxtun.8b	v1, v1
-st1.s	{ v0 }[1], [x0], x1
-st1.s	{ v1 }[0], [x0], x1
-st1.s	{ v1 }[1], [x0], x1
-b.gt	ltmp0
+uaddw	v0.8h, v16.8h, v0.8b
+sqxtun	v0.8b, v0.8h
+uaddw	v1.8h, v16.8h, v1.8b
+st1	{ v0.s }[0], [x0], x1
+sqxtun	v1.8b, v1.8h
+st1	{ v0.s }[1], [x0], x1
+st1	{ v1.s }[0], [x0], x1
+st1	{ v1.s }[1], [x0], x1
+b.gt	idct_dc_w4_neon
 ret
-_idct_dc_w8_neon:
-ld1.8b	{ v0 }, [x0], x1
-ld1.8b	{ v1 }, [x0], x1
-ld1.8b	{ v2 }, [x0], x1
-uaddw.8h	v20, v16, v0
-ld1.8b	{ v3 }, [x0], x1
+idct_dc_w8_neon:
+ld1	{ v0.8b }, [x0], x1
+ld1	{ v1.8b }, [x0], x1
+ld1	{ v2.8b }, [x0], x1
+uaddw	v20.8h, v16.8h, v0.8b
+ld1	{ v3.8b }, [x0], x1
 sub	x0, x0, x1, lsl #2
-subs	w4, w4, #4
-uaddw.8h	v21, v16, v1
-sqxtun.8b	v0, v20
-uaddw.8h	v22, v16, v2
-sqxtun.8b	v1, v21
-uaddw.8h	v23, v16, v3
-st1.8b	{ v0 }, [x0], x1
-sqxtun.8b	v2, v22
-st1.8b	{ v1 }, [x0], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-st1.8b	{ v3 }, [x0], x1
+subs	w4, w4, #0x4
+uaddw	v21.8h, v16.8h, v1.8b
+sqxtun	v0.8b, v20.8h
+uaddw	v22.8h, v16.8h, v2.8b
+sqxtun	v1.8b, v21.8h
+uaddw	v23.8h, v16.8h, v3.8b
+st1	{ v0.8b }, [x0], x1
+sqxtun	v2.8b, v22.8h
+st1	{ v1.8b }, [x0], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+st1	{ v3.8b }, [x0], x1
 b.gt	idct_dc_w8_neon
 ret
-_idct_dc_w16_neon:
-ld1.16b	{ v0 }, [x0], x1
-ld1.16b	{ v1 }, [x0], x1
-ld1.16b	{ v2 }, [x0], x1
-subs	w4, w4, #4
-uaddw.8h	v20, v16, v0
-uaddw2.8h	v21, v16, v0
-ld1.16b	{ v3 }, [x0], x1
-uaddw.8h	v22, v16, v1
-uaddw2.8h	v23, v16, v1
+idct_dc_w16_neon:
+ld1	{ v0.16b }, [x0], x1
+ld1	{ v1.16b }, [x0], x1
+ld1	{ v2.16b }, [x0], x1
+subs	w4, w4, #0x4
+uaddw	v20.8h, v16.8h, v0.8b
+uaddw2	v21.8h, v16.8h, v0.16b
+ld1	{ v3.16b }, [x0], x1
+uaddw	v22.8h, v16.8h, v1.8b
+uaddw2	v23.8h, v16.8h, v1.16b
 sub	x0, x0, x1, lsl #2
-uaddw.8h	v24, v16, v2
-uaddw2.8h	v25, v16, v2
-sqxtun.8b	v0, v20
-sqxtun2.16b	v0, v21
-uaddw.8h	v26, v16, v3
-uaddw2.8h	v27, v16, v3
-sqxtun.8b	v1, v22
-sqxtun2.16b	v1, v23
-sqxtun.8b	v2, v24
-sqxtun2.16b	v2, v25
-st1.16b	{ v0 }, [x0], x1
-sqxtun.8b	v3, v26
-sqxtun2.16b	v3, v27
-st1.16b	{ v1 }, [x0], x1
-st1.16b	{ v2 }, [x0], x1
-st1.16b	{ v3 }, [x0], x1
+uaddw	v24.8h, v16.8h, v2.8b
+uaddw2	v25.8h, v16.8h, v2.16b
+sqxtun	v0.8b, v20.8h
+sqxtun2	v0.16b, v21.8h
+uaddw	v26.8h, v16.8h, v3.8b
+uaddw2	v27.8h, v16.8h, v3.16b
+sqxtun	v1.8b, v22.8h
+sqxtun2	v1.16b, v23.8h
+sqxtun	v2.8b, v24.8h
+sqxtun2	v2.16b, v25.8h
+st1	{ v0.16b }, [x0], x1
+sqxtun	v3.8b, v26.8h
+sqxtun2	v3.16b, v27.8h
+st1	{ v1.16b }, [x0], x1
+st1	{ v2.16b }, [x0], x1
+st1	{ v3.16b }, [x0], x1
 b.gt	idct_dc_w16_neon
 ret
-_idct_dc_w32_neon:
-ld1.16b	{ v0, v1 }, [x0], x1
-subs	w4, w4, #2
-uaddw.8h	v20, v16, v0
-uaddw2.8h	v21, v16, v0
-ld1.16b	{ v2, v3 }, [x0]
-uaddw.8h	v22, v16, v1
-uaddw2.8h	v23, v16, v1
+idct_dc_w32_neon:
+ld1	{ v0.16b, v1.16b }, [x0], x1
+subs	w4, w4, #0x2
+uaddw	v20.8h, v16.8h, v0.8b
+uaddw2	v21.8h, v16.8h, v0.16b
+ld1	{ v2.16b, v3.16b }, [x0]
+uaddw	v22.8h, v16.8h, v1.8b
+uaddw2	v23.8h, v16.8h, v1.16b
 sub	x0, x0, x1
-uaddw.8h	v24, v16, v2
-uaddw2.8h	v25, v16, v2
-sqxtun.8b	v0, v20
-sqxtun2.16b	v0, v21
-uaddw.8h	v26, v16, v3
-uaddw2.8h	v27, v16, v3
-sqxtun.8b	v1, v22
-sqxtun2.16b	v1, v23
-sqxtun.8b	v2, v24
-sqxtun2.16b	v2, v25
-st1.16b	{ v0, v1 }, [x0], x1
-sqxtun.8b	v3, v26
-sqxtun2.16b	v3, v27
-st1.16b	{ v2, v3 }, [x0], x1
+uaddw	v24.8h, v16.8h, v2.8b
+uaddw2	v25.8h, v16.8h, v2.16b
+sqxtun	v0.8b, v20.8h
+sqxtun2	v0.16b, v21.8h
+uaddw	v26.8h, v16.8h, v3.8b
+uaddw2	v27.8h, v16.8h, v3.16b
+sqxtun	v1.8b, v22.8h
+sqxtun2	v1.16b, v23.8h
+sqxtun	v2.8b, v24.8h
+sqxtun2	v2.16b, v25.8h
+st1	{ v0.16b, v1.16b }, [x0], x1
+sqxtun	v3.8b, v26.8h
+sqxtun2	v3.16b, v27.8h
+st1	{ v2.16b, v3.16b }, [x0], x1
 b.gt	idct_dc_w32_neon
 ret
-_idct_dc_w64_neon:
-ld1.16b	{ v0, v1, v2, v3 }, [x0]
-subs	w4, w4, #1
-uaddw.8h	v20, v16, v0
-uaddw2.8h	v21, v16, v0
-uaddw.8h	v22, v16, v1
-uaddw2.8h	v23, v16, v1
-uaddw.8h	v24, v16, v2
-uaddw2.8h	v25, v16, v2
-sqxtun.8b	v0, v20
-sqxtun2.16b	v0, v21
-uaddw.8h	v26, v16, v3
-uaddw2.8h	v27, v16, v3
-sqxtun.8b	v1, v22
-sqxtun2.16b	v1, v23
-sqxtun.8b	v2, v24
-sqxtun2.16b	v2, v25
-sqxtun.8b	v3, v26
-sqxtun2.16b	v3, v27
-st1.16b	{ v0, v1, v2, v3 }, [x0], x1
+idct_dc_w64_neon:
+ld1	{ v0.16b, v1.16b, v2.16b, v3.16b }, [x0]
+subs	w4, w4, #0x1
+uaddw	v20.8h, v16.8h, v0.8b
+uaddw2	v21.8h, v16.8h, v0.16b
+uaddw	v22.8h, v16.8h, v1.8b
+uaddw2	v23.8h, v16.8h, v1.16b
+uaddw	v24.8h, v16.8h, v2.8b
+uaddw2	v25.8h, v16.8h, v2.16b
+sqxtun	v0.8b, v20.8h
+sqxtun2	v0.16b, v21.8h
+uaddw	v26.8h, v16.8h, v3.8b
+uaddw2	v27.8h, v16.8h, v3.16b
+sqxtun	v1.8b, v22.8h
+sqxtun2	v1.16b, v23.8h
+sqxtun	v2.8b, v24.8h
+sqxtun2	v2.16b, v25.8h
+sqxtun	v3.8b, v26.8h
+sqxtun2	v3.16b, v27.8h
+st1	{ v0.16b, v1.16b, v2.16b, v3.16b }, [x0], x1
 b.gt	idct_dc_w64_neon
 ret
-_inv_dct_4h_x4_neon:
-adrp	x16, inv_dct_4h_x4_neon
-add	x16, x16, #0
-ld1.4h	{ v0 }, [x16]
-smull.4s	v6, v17, v0[3]
-smlal.4s	v6, v19, v0[2]
-smull.4s	v4, v17, v0[2]
-smlsl.4s	v4, v19, v0[3]
-smull.4s	v2, v16, v0[0]
-smlal.4s	v2, v18, v0[0]
-sqrshrn.4h	v6, v6, #12
-sqrshrn.4h	v7, v4, #12
-smull.4s	v4, v16, v0[0]
-smlsl.4s	v4, v18, v0[0]
-sqrshrn.4h	v2, v2, #12
-sqrshrn.4h	v3, v4, #12
-sqadd.4h	v16, v2, v6
-sqsub.4h	v19, v2, v6
-sqadd.4h	v17, v3, v7
-sqsub.4h	v18, v3, v7
+inv_dct_4h_x4_neon:
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+ld1	{ v0.4h }, [x16]
+smull	v6.4s, v17.4h, v0.h[3]
+smlal	v6.4s, v19.4h, v0.h[2]
+smull	v4.4s, v17.4h, v0.h[2]
+smlsl	v4.4s, v19.4h, v0.h[3]
+smull	v2.4s, v16.4h, v0.h[0]
+smlal	v2.4s, v18.4h, v0.h[0]
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn	v7.4h, v4.4s, #0xc
+smull	v4.4s, v16.4h, v0.h[0]
+smlsl	v4.4s, v18.4h, v0.h[0]
+sqrshrn	v2.4h, v2.4s, #0xc
+sqrshrn	v3.4h, v4.4s, #0xc
+sqadd	v16.4h, v2.4h, v6.4h
+sqsub	v19.4h, v2.4h, v6.4h
+sqadd	v17.4h, v3.4h, v7.4h
+sqsub	v18.4h, v3.4h, v7.4h
 ret
-_inv_dct_8h_x4_neon:
-adrp	x16, inv_dct_8h_x4_neon
-add	x16, x16, #0
-ld1.4h	{ v0 }, [x16]
-smull.4s	v6, v17, v0[3]
-smlal.4s	v6, v19, v0[2]
-smull2.4s	v7, v17, v0[3]
-smlal2.4s	v7, v19, v0[2]
-smull.4s	v4, v17, v0[2]
-smlsl.4s	v4, v19, v0[3]
-smull2.4s	v5, v17, v0[2]
-smlsl2.4s	v5, v19, v0[3]
-smull.4s	v2, v16, v0[0]
-smlal.4s	v2, v18, v0[0]
-smull2.4s	v3, v16, v0[0]
-smlal2.4s	v3, v18, v0[0]
-sqrshrn.4h	v6, v6, #12
-sqrshrn2.8h	v6, v7, #12
-sqrshrn.4h	v7, v4, #12
-sqrshrn2.8h	v7, v5, #12
-smull.4s	v4, v16, v0[0]
-smlsl.4s	v4, v18, v0[0]
-smull2.4s	v5, v16, v0[0]
-smlsl2.4s	v5, v18, v0[0]
-sqrshrn.4h	v2, v2, #12
-sqrshrn2.8h	v2, v3, #12
-sqrshrn.4h	v3, v4, #12
-sqrshrn2.8h	v3, v5, #12
-sqadd.8h	v16, v2, v6
-sqsub.8h	v19, v2, v6
-sqadd.8h	v17, v3, v7
-sqsub.8h	v18, v3, v7
+inv_dct_8h_x4_neon:
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+ld1	{ v0.4h }, [x16]
+smull	v6.4s, v17.4h, v0.h[3]
+smlal	v6.4s, v19.4h, v0.h[2]
+smull2	v7.4s, v17.8h, v0.h[3]
+smlal2	v7.4s, v19.8h, v0.h[2]
+smull	v4.4s, v17.4h, v0.h[2]
+smlsl	v4.4s, v19.4h, v0.h[3]
+smull2	v5.4s, v17.8h, v0.h[2]
+smlsl2	v5.4s, v19.8h, v0.h[3]
+smull	v2.4s, v16.4h, v0.h[0]
+smlal	v2.4s, v18.4h, v0.h[0]
+smull2	v3.4s, v16.8h, v0.h[0]
+smlal2	v3.4s, v18.8h, v0.h[0]
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn2	v6.8h, v7.4s, #0xc
+sqrshrn	v7.4h, v4.4s, #0xc
+sqrshrn2	v7.8h, v5.4s, #0xc
+smull	v4.4s, v16.4h, v0.h[0]
+smlsl	v4.4s, v18.4h, v0.h[0]
+smull2	v5.4s, v16.8h, v0.h[0]
+smlsl2	v5.4s, v18.8h, v0.h[0]
+sqrshrn	v2.4h, v2.4s, #0xc
+sqrshrn2	v2.8h, v3.4s, #0xc
+sqrshrn	v3.4h, v4.4s, #0xc
+sqrshrn2	v3.8h, v5.4s, #0xc
+sqadd	v16.8h, v2.8h, v6.8h
+sqsub	v19.8h, v2.8h, v6.8h
+sqadd	v17.8h, v3.8h, v7.8h
+sqsub	v18.8h, v3.8h, v7.8h
 ret
-_inv_adst_4h_x4_neon:
-adrp	x16, inv_adst_4h_x4_neon
-add	x16, x16, #0
-ld1.8h	{ v0 }, [x16]
-ssubl.4s	v3, v16, v18
-smull.4s	v4, v16, v0[0]
-smlal.4s	v4, v18, v0[1]
-smlal.4s	v4, v19, v0[2]
-smull.4s	v7, v17, v0[3]
-saddw.4s	v3, v3, v19
-smull.4s	v5, v16, v0[2]
-smlsl.4s	v5, v18, v0[0]
-smlsl.4s	v5, v19, v0[1]
-add.4s	v19, v4, v5
-mul.4s	v18, v3, v0[2]
-add.4s	v16, v4, v7
-add.4s	v17, v5, v7
-sub.4s	v19, v19, v7
-sqrshrn.4h	v16, v16, #12
-sqrshrn.4h	v18, v18, #12
-sqrshrn.4h	v17, v17, #12
-sqrshrn.4h	v19, v19, #12
+inv_adst_4h_x4_neon:
+adrp	x16, iadst4_coeffs
+add	x16, x16, :lo12:iadst4_coeffs
+ld1	{ v0.8h }, [x16]
+ssubl	v3.4s, v16.4h, v18.4h
+smull	v4.4s, v16.4h, v0.h[0]
+smlal	v4.4s, v18.4h, v0.h[1]
+smlal	v4.4s, v19.4h, v0.h[2]
+smull	v7.4s, v17.4h, v0.h[3]
+saddw	v3.4s, v3.4s, v19.4h
+smull	v5.4s, v16.4h, v0.h[2]
+smlsl	v5.4s, v18.4h, v0.h[0]
+smlsl	v5.4s, v19.4h, v0.h[1]
+add	v19.4s, v4.4s, v5.4s
+mul	v18.4s, v3.4s, v0.s[2]
+add	v16.4s, v4.4s, v7.4s
+add	v17.4s, v5.4s, v7.4s
+sub	v19.4s, v19.4s, v7.4s
+sqrshrn	v16.4h, v16.4s, #0xc
+sqrshrn	v18.4h, v18.4s, #0xc
+sqrshrn	v17.4h, v17.4s, #0xc
+sqrshrn	v19.4h, v19.4s, #0xc
 ret
-_inv_flipadst_4h_x4_neon:
-adrp	x16, inv_flipadst_4h_x4_neon
-add	x16, x16, #0
-ld1.8h	{ v0 }, [x16]
-ssubl.4s	v3, v16, v18
-smull.4s	v4, v16, v0[0]
-smlal.4s	v4, v18, v0[1]
-smlal.4s	v4, v19, v0[2]
-smull.4s	v7, v17, v0[3]
-saddw.4s	v3, v3, v19
-smull.4s	v5, v16, v0[2]
-smlsl.4s	v5, v18, v0[0]
-smlsl.4s	v5, v19, v0[1]
-add.4s	v16, v4, v5
-mul.4s	v17, v3, v0[2]
-add.4s	v19, v4, v7
-add.4s	v18, v5, v7
-sub.4s	v16, v16, v7
-sqrshrn.4h	v19, v19, #12
-sqrshrn.4h	v17, v17, #12
-sqrshrn.4h	v18, v18, #12
-sqrshrn.4h	v16, v16, #12
+inv_flipadst_4h_x4_neon:
+adrp	x16, iadst4_coeffs
+add	x16, x16, :lo12:iadst4_coeffs
+ld1	{ v0.8h }, [x16]
+ssubl	v3.4s, v16.4h, v18.4h
+smull	v4.4s, v16.4h, v0.h[0]
+smlal	v4.4s, v18.4h, v0.h[1]
+smlal	v4.4s, v19.4h, v0.h[2]
+smull	v7.4s, v17.4h, v0.h[3]
+saddw	v3.4s, v3.4s, v19.4h
+smull	v5.4s, v16.4h, v0.h[2]
+smlsl	v5.4s, v18.4h, v0.h[0]
+smlsl	v5.4s, v19.4h, v0.h[1]
+add	v16.4s, v4.4s, v5.4s
+mul	v17.4s, v3.4s, v0.s[2]
+add	v19.4s, v4.4s, v7.4s
+add	v18.4s, v5.4s, v7.4s
+sub	v16.4s, v16.4s, v7.4s
+sqrshrn	v19.4h, v19.4s, #0xc
+sqrshrn	v17.4h, v17.4s, #0xc
+sqrshrn	v18.4h, v18.4s, #0xc
+sqrshrn	v16.4h, v16.4s, #0xc
 ret
-_inv_adst_8h_x4_neon:
-adrp	x16, inv_adst_8h_x4_neon
-add	x16, x16, #0
-ld1.8h	{ v0 }, [x16]
-ssubl.4s	v2, v16, v18
-ssubl2.4s	v3, v16, v18
-smull.4s	v4, v16, v0[0]
-smlal.4s	v4, v18, v0[1]
-smlal.4s	v4, v19, v0[2]
-smull2.4s	v5, v16, v0[0]
-smlal2.4s	v5, v18, v0[1]
-smlal2.4s	v5, v19, v0[2]
-saddw.4s	v2, v2, v19
-saddw2.4s	v3, v3, v19
-smull.4s	v6, v16, v0[2]
-smlsl.4s	v6, v18, v0[0]
-smlsl.4s	v6, v19, v0[1]
-smull2.4s	v7, v16, v0[2]
-smlsl2.4s	v7, v18, v0[0]
-smlsl2.4s	v7, v19, v0[1]
-mul.4s	v18, v2, v0[2]
-mul.4s	v19, v3, v0[2]
-smull.4s	v2, v17, v0[3]
-smull2.4s	v3, v17, v0[3]
-add.4s	v16, v4, v2
-add.4s	v17, v5, v3
-add.4s	v4, v4, v6
-add.4s	v5, v5, v7
-add.4s	v6, v6, v2
-add.4s	v7, v7, v3
-sub.4s	v4, v4, v2
-sub.4s	v5, v5, v3
-sqrshrn.4h	v18, v18, #12
-sqrshrn2.8h	v18, v19, #12
-sqrshrn.4h	v16, v16, #12
-sqrshrn2.8h	v16, v17, #12
-sqrshrn.4h	v17, v6, #12
-sqrshrn2.8h	v17, v7, #12
-sqrshrn.4h	v19, v4, #12
-sqrshrn2.8h	v19, v5, #12
+inv_adst_8h_x4_neon:
+adrp	x16, iadst4_coeffs
+add	x16, x16, :lo12:iadst4_coeffs
+ld1	{ v0.8h }, [x16]
+ssubl	v2.4s, v16.4h, v18.4h
+ssubl2	v3.4s, v16.8h, v18.8h
+smull	v4.4s, v16.4h, v0.h[0]
+smlal	v4.4s, v18.4h, v0.h[1]
+smlal	v4.4s, v19.4h, v0.h[2]
+smull2	v5.4s, v16.8h, v0.h[0]
+smlal2	v5.4s, v18.8h, v0.h[1]
+smlal2	v5.4s, v19.8h, v0.h[2]
+saddw	v2.4s, v2.4s, v19.4h
+saddw2	v3.4s, v3.4s, v19.8h
+smull	v6.4s, v16.4h, v0.h[2]
+smlsl	v6.4s, v18.4h, v0.h[0]
+smlsl	v6.4s, v19.4h, v0.h[1]
+smull2	v7.4s, v16.8h, v0.h[2]
+smlsl2	v7.4s, v18.8h, v0.h[0]
+smlsl2	v7.4s, v19.8h, v0.h[1]
+mul	v18.4s, v2.4s, v0.s[2]
+mul	v19.4s, v3.4s, v0.s[2]
+smull	v2.4s, v17.4h, v0.h[3]
+smull2	v3.4s, v17.8h, v0.h[3]
+add	v16.4s, v4.4s, v2.4s
+add	v17.4s, v5.4s, v3.4s
+add	v4.4s, v4.4s, v6.4s
+add	v5.4s, v5.4s, v7.4s
+add	v6.4s, v6.4s, v2.4s
+add	v7.4s, v7.4s, v3.4s
+sub	v4.4s, v4.4s, v2.4s
+sub	v5.4s, v5.4s, v3.4s
+sqrshrn	v18.4h, v18.4s, #0xc
+sqrshrn2	v18.8h, v19.4s, #0xc
+sqrshrn	v16.4h, v16.4s, #0xc
+sqrshrn2	v16.8h, v17.4s, #0xc
+sqrshrn	v17.4h, v6.4s, #0xc
+sqrshrn2	v17.8h, v7.4s, #0xc
+sqrshrn	v19.4h, v4.4s, #0xc
+sqrshrn2	v19.8h, v5.4s, #0xc
 ret
-_inv_flipadst_8h_x4_neon:
-adrp	x16, inv_flipadst_8h_x4_neon
-add	x16, x16, #0
-ld1.8h	{ v0 }, [x16]
-ssubl.4s	v2, v16, v18
-ssubl2.4s	v3, v16, v18
-smull.4s	v4, v16, v0[0]
-smlal.4s	v4, v18, v0[1]
-smlal.4s	v4, v19, v0[2]
-smull2.4s	v5, v16, v0[0]
-smlal2.4s	v5, v18, v0[1]
-smlal2.4s	v5, v19, v0[2]
-saddw.4s	v2, v2, v19
-saddw2.4s	v3, v3, v19
-smull.4s	v6, v16, v0[2]
-smlsl.4s	v6, v18, v0[0]
-smlsl.4s	v6, v19, v0[1]
-smull2.4s	v7, v16, v0[2]
-smlsl2.4s	v7, v18, v0[0]
-smlsl2.4s	v7, v19, v0[1]
-mul.4s	v18, v2, v0[2]
-mul.4s	v19, v3, v0[2]
-smull.4s	v2, v17, v0[3]
-smull2.4s	v3, v17, v0[3]
-add.4s	v16, v4, v2
-add.4s	v17, v5, v3
-add.4s	v4, v4, v6
-add.4s	v5, v5, v7
-add.4s	v6, v6, v2
-add.4s	v7, v7, v3
-sub.4s	v4, v4, v2
-sub.4s	v5, v5, v3
-sqrshrn.4h	v18, v18, #12
-sqrshrn2.8h	v18, v19, #12
-sqrshrn.4h	v19, v16, #12
-sqrshrn2.8h	v19, v17, #12
-mov.16b	v17, v18
-sqrshrn.4h	v18, v6, #12
-sqrshrn2.8h	v18, v7, #12
-sqrshrn.4h	v16, v4, #12
-sqrshrn2.8h	v16, v5, #12
+inv_flipadst_8h_x4_neon:
+adrp	x16, iadst4_coeffs
+add	x16, x16, :lo12:iadst4_coeffs
+ld1	{ v0.8h }, [x16]
+ssubl	v2.4s, v16.4h, v18.4h
+ssubl2	v3.4s, v16.8h, v18.8h
+smull	v4.4s, v16.4h, v0.h[0]
+smlal	v4.4s, v18.4h, v0.h[1]
+smlal	v4.4s, v19.4h, v0.h[2]
+smull2	v5.4s, v16.8h, v0.h[0]
+smlal2	v5.4s, v18.8h, v0.h[1]
+smlal2	v5.4s, v19.8h, v0.h[2]
+saddw	v2.4s, v2.4s, v19.4h
+saddw2	v3.4s, v3.4s, v19.8h
+smull	v6.4s, v16.4h, v0.h[2]
+smlsl	v6.4s, v18.4h, v0.h[0]
+smlsl	v6.4s, v19.4h, v0.h[1]
+smull2	v7.4s, v16.8h, v0.h[2]
+smlsl2	v7.4s, v18.8h, v0.h[0]
+smlsl2	v7.4s, v19.8h, v0.h[1]
+mul	v18.4s, v2.4s, v0.s[2]
+mul	v19.4s, v3.4s, v0.s[2]
+smull	v2.4s, v17.4h, v0.h[3]
+smull2	v3.4s, v17.8h, v0.h[3]
+add	v16.4s, v4.4s, v2.4s
+add	v17.4s, v5.4s, v3.4s
+add	v4.4s, v4.4s, v6.4s
+add	v5.4s, v5.4s, v7.4s
+add	v6.4s, v6.4s, v2.4s
+add	v7.4s, v7.4s, v3.4s
+sub	v4.4s, v4.4s, v2.4s
+sub	v5.4s, v5.4s, v3.4s
+sqrshrn	v18.4h, v18.4s, #0xc
+sqrshrn2	v18.8h, v19.4s, #0xc
+sqrshrn	v19.4h, v16.4s, #0xc
+sqrshrn2	v19.8h, v17.4s, #0xc
+mov	v17.16b, v18.16b
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn2	v18.8h, v7.4s, #0xc
+sqrshrn	v16.4h, v4.4s, #0xc
+sqrshrn2	v16.8h, v5.4s, #0xc
 ret
-_inv_identity_4h_x4_neon:
-mov	w16, #13576
-dup.4h	v0, w16
-sqrdmulh.4h	v4, v16, v0[0]
-sqrdmulh.4h	v5, v17, v0[0]
-sqrdmulh.4h	v6, v18, v0[0]
-sqrdmulh.4h	v7, v19, v0[0]
-sqadd.4h	v16, v16, v4
-sqadd.4h	v17, v17, v5
-sqadd.4h	v18, v18, v6
-sqadd.4h	v19, v19, v7
+inv_identity_4h_x4_neon:
+mov	w16, #0x3508
+dup	v0.4h, w16
+sqrdmulh	v4.4h, v16.4h, v0.h[0]
+sqrdmulh	v5.4h, v17.4h, v0.h[0]
+sqrdmulh	v6.4h, v18.4h, v0.h[0]
+sqrdmulh	v7.4h, v19.4h, v0.h[0]
+sqadd	v16.4h, v16.4h, v4.4h
+sqadd	v17.4h, v17.4h, v5.4h
+sqadd	v18.4h, v18.4h, v6.4h
+sqadd	v19.4h, v19.4h, v7.4h
 ret
-_inv_identity_8h_x4_neon:
-mov	w16, #13576
-dup.4h	v0, w16
-sqrdmulh.8h	v4, v16, v0[0]
-sqrdmulh.8h	v5, v17, v0[0]
-sqrdmulh.8h	v6, v18, v0[0]
-sqrdmulh.8h	v7, v19, v0[0]
-sqadd.8h	v16, v16, v4
-sqadd.8h	v17, v17, v5
-sqadd.8h	v18, v18, v6
-sqadd.8h	v19, v19, v7
+inv_identity_8h_x4_neon:
+mov	w16, #0x3508
+dup	v0.4h, w16
+sqrdmulh	v4.8h, v16.8h, v0.h[0]
+sqrdmulh	v5.8h, v17.8h, v0.h[0]
+sqrdmulh	v6.8h, v18.8h, v0.h[0]
+sqrdmulh	v7.8h, v19.8h, v0.h[0]
+sqadd	v16.8h, v16.8h, v4.8h
+sqadd	v17.8h, v17.8h, v5.8h
+sqadd	v18.8h, v18.8h, v6.8h
+sqadd	v19.8h, v19.8h, v7.8h
 ret
-_inv_txfm_add_wht_wht_4x4_8bpc_neon:
+inv_txfm_add_wht_wht_4x4_8bpc_neon:
 mov	x15, x30
-movi.8h	v31, #0
-ld1.4h	{ v16, v17, v18, v19 }, [x2]
-st1.8h	{ v31 }, [x2], #16
-sshr.4h	v16, v16, #2
-sshr.4h	v17, v17, #2
-sshr.4h	v18, v18, #2
-sshr.4h	v19, v19, #2
-add.4h	v16, v16, v17
-sub.4h	v21, v18, v19
-sub.4h	v20, v16, v21
-sshr.4h	v20, v20, #1
-sub.4h	v18, v20, v17
-sub.4h	v17, v20, v19
-add.4h	v19, v21, v18
-sub.4h	v16, v16, v17
-st1.8h	{ v31 }, [x2], #16
-trn1.4h	v20, v16, v17
-trn2.4h	v21, v16, v17
-trn1.4h	v22, v18, v19
-trn2.4h	v23, v18, v19
-trn1.2s	v16, v20, v22
-trn2.2s	v18, v20, v22
-trn1.2s	v17, v21, v23
-trn2.2s	v19, v21, v23
-add.4h	v16, v16, v17
-sub.4h	v21, v18, v19
-sub.4h	v20, v16, v21
-sshr.4h	v20, v20, #1
-sub.4h	v18, v20, v17
-sub.4h	v17, v20, v19
-add.4h	v19, v21, v18
-sub.4h	v16, v16, v17
-ld1.s	{ v0 }[0], [x0], x1
-ld1.s	{ v0 }[1], [x0], x1
-mov.d	v16[1], v17[0]
-mov.d	v18[1], v19[0]
-ld1.s	{ v1 }[0], [x0], x1
-ld1.s	{ v1 }[1], [x0], x1
-b	inv_txfm_add_4x4_neon
-_inv_txfm_add_4x4_neon:
-movi.8h	v31, #0
-ld1.4h	{ v16, v17, v18, v19 }, [x2]
-st1.8h	{ v31 }, [x2], #16
+movi	v31.8h, #0x0
+ld1	{ v16.4h, v17.4h, v18.4h, v19.4h }, [x2]
+st1	{ v31.8h }, [x2], #16
+sshr	v16.4h, v16.4h, #0x2
+sshr	v17.4h, v17.4h, #0x2
+sshr	v18.4h, v18.4h, #0x2
+sshr	v19.4h, v19.4h, #0x2
+add	v16.4h, v16.4h, v17.4h
+sub	v21.4h, v18.4h, v19.4h
+sub	v20.4h, v16.4h, v21.4h
+sshr	v20.4h, v20.4h, #0x1
+sub	v18.4h, v20.4h, v17.4h
+sub	v17.4h, v20.4h, v19.4h
+add	v19.4h, v21.4h, v18.4h
+sub	v16.4h, v16.4h, v17.4h
+st1	{ v31.8h }, [x2], #16
+trn1	v20.4h, v16.4h, v17.4h
+trn2	v21.4h, v16.4h, v17.4h
+trn1	v22.4h, v18.4h, v19.4h
+trn2	v23.4h, v18.4h, v19.4h
+trn1	v16.2s, v20.2s, v22.2s
+trn2	v18.2s, v20.2s, v22.2s
+trn1	v17.2s, v21.2s, v23.2s
+trn2	v19.2s, v21.2s, v23.2s
+add	v16.4h, v16.4h, v17.4h
+sub	v21.4h, v18.4h, v19.4h
+sub	v20.4h, v16.4h, v21.4h
+sshr	v20.4h, v20.4h, #0x1
+sub	v18.4h, v20.4h, v17.4h
+sub	v17.4h, v20.4h, v19.4h
+add	v19.4h, v21.4h, v18.4h
+sub	v16.4h, v16.4h, v17.4h
+ld1	{ v0.s }[0], [x0], x1
+ld1	{ v0.s }[1], [x0], x1
+mov	v16.d[1], v17.d[0]
+mov	v18.d[1], v19.d[0]
+ld1	{ v1.s }[0], [x0], x1
+ld1	{ v1.s }[1], [x0], x1
+b	L_5c8
+inv_txfm_add_4x4_neon:
+movi	v31.8h, #0x0
+ld1	{ v16.4h, v17.4h, v18.4h, v19.4h }, [x2]
+st1	{ v31.8h }, [x2], #16
 blr	x4
-st1.8h	{ v31 }, [x2], #16
-trn1.4h	v20, v16, v17
-trn2.4h	v21, v16, v17
-trn1.4h	v22, v18, v19
-trn2.4h	v23, v18, v19
-trn1.2s	v16, v20, v22
-trn2.2s	v18, v20, v22
-trn1.2s	v17, v21, v23
-trn2.2s	v19, v21, v23
+st1	{ v31.8h }, [x2], #16
+trn1	v20.4h, v16.4h, v17.4h
+trn2	v21.4h, v16.4h, v17.4h
+trn1	v22.4h, v18.4h, v19.4h
+trn2	v23.4h, v18.4h, v19.4h
+trn1	v16.2s, v20.2s, v22.2s
+trn2	v18.2s, v20.2s, v22.2s
+trn1	v17.2s, v21.2s, v23.2s
+trn2	v19.2s, v21.2s, v23.2s
 blr	x5
-ld1.s	{ v0 }[0], [x0], x1
-ld1.s	{ v0 }[1], [x0], x1
-mov.d	v16[1], v17[0]
-mov.d	v18[1], v19[0]
-ld1.s	{ v1 }[0], [x0], x1
-ld1.s	{ v1 }[1], [x0], x1
-srshr.8h	v16, v16, #4
-srshr.8h	v18, v18, #4
+ld1	{ v0.s }[0], [x0], x1
+ld1	{ v0.s }[1], [x0], x1
+mov	v16.d[1], v17.d[0]
+mov	v18.d[1], v19.d[0]
+ld1	{ v1.s }[0], [x0], x1
+ld1	{ v1.s }[1], [x0], x1
+srshr	v16.8h, v16.8h, #0x4
+srshr	v18.8h, v18.8h, #0x4
+L_5c8:
 sub	x0, x0, x1, lsl #2
-uaddw.8h	v16, v16, v0
-sqxtun.8b	v0, v16
-uaddw.8h	v18, v18, v1
-st1.s	{ v0 }[0], [x0], x1
-sqxtun.8b	v1, v18
-st1.s	{ v0 }[1], [x0], x1
-st1.s	{ v1 }[0], [x0], x1
-st1.s	{ v1 }[1], [x0], x1
+uaddw	v16.8h, v16.8h, v0.8b
+sqxtun	v0.8b, v16.8h
+uaddw	v18.8h, v18.8h, v1.8b
+st1	{ v0.s }[0], [x0], x1
+sqxtun	v1.8b, v18.8h
+st1	{ v0.s }[1], [x0], x1
+st1	{ v1.s }[0], [x0], x1
+st1	{ v1.s }[1], [x0], x1
 ret	x15
-_inv_txfm_add_dct_dct_4x4_8bpc_neon:
+inv_txfm_add_dct_dct_4x4_8bpc_neon:
 mov	x15, x30
-cbnz	w3, inv_txfm_add_dct_dct_4x4_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.8h	v4, w16
+cbnz	w3, L_62c
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v4.8h, w16
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v4[0]
-ld1.s	{ v0 }[0], [x0], x1
-sqrdmulh.8h	v20, v16, v4[0]
-ld1.s	{ v0 }[1], [x0], x1
-srshr.8h	v16, v20, #4
-ld1.s	{ v1 }[0], [x0], x1
-srshr.8h	v18, v20, #4
-ld1.s	{ v1 }[1], [x0], x1
+sqrdmulh	v16.8h, v16.8h, v4.h[0]
+ld1	{ v0.s }[0], [x0], x1
+sqrdmulh	v20.8h, v16.8h, v4.h[0]
+ld1	{ v0.s }[1], [x0], x1
+srshr	v16.8h, v20.8h, #0x4
+ld1	{ v1.s }[0], [x0], x1
+srshr	v18.8h, v20.8h, #0x4
+ld1	{ v1.s }[1], [x0], x1
+b	L_5c8
+L_62c:
+adr	x4, inv_dct_4h_x4_neon
+adr	x5, inv_dct_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-adr	x4, #-1144
-adr	x5, #-1148
-b	inv_txfm_add_4x4_neon
-_inv_txfm_add_identity_identity_4x4_8bpc_neon:
+inv_txfm_add_identity_identity_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-452
-adr	x5, #-456
+adr	x4, inv_identity_4h_x4_neon
+adr	x5, inv_identity_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_dct_adst_4x4_8bpc_neon:
+inv_txfm_add_dct_adst_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1176
-adr	x5, #-972
+adr	x4, inv_dct_4h_x4_neon
+adr	x5, inv_adst_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_dct_flipadst_4x4_8bpc_neon:
+inv_txfm_add_dct_flipadst_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1192
-adr	x5, #-900
+adr	x4, inv_dct_4h_x4_neon
+adr	x5, inv_flipadst_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_dct_identity_4x4_8bpc_neon:
+inv_txfm_add_dct_identity_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1208
-adr	x5, #-504
+adr	x4, inv_dct_4h_x4_neon
+adr	x5, inv_identity_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_adst_dct_4x4_8bpc_neon:
+inv_txfm_add_adst_dct_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1016
-adr	x5, #-1228
+adr	x4, inv_adst_4h_x4_neon
+adr	x5, inv_dct_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_adst_adst_4x4_8bpc_neon:
+inv_txfm_add_adst_adst_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1032
-adr	x5, #-1036
+adr	x4, inv_adst_4h_x4_neon
+adr	x5, inv_adst_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_adst_flipadst_4x4_8bpc_neon:
+inv_txfm_add_adst_flipadst_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1048
-adr	x5, #-964
+adr	x4, inv_adst_4h_x4_neon
+adr	x5, inv_flipadst_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_flipadst_dct_4x4_8bpc_neon:
+inv_txfm_add_flipadst_dct_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-976
-adr	x5, #-1276
+adr	x4, inv_flipadst_4h_x4_neon
+adr	x5, inv_dct_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_flipadst_adst_4x4_8bpc_neon:
+inv_txfm_add_flipadst_adst_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-992
-adr	x5, #-1084
+adr	x4, inv_flipadst_4h_x4_neon
+adr	x5, inv_adst_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_flipadst_flipadst_4x4_8bpc_neon:
+inv_txfm_add_flipadst_flipadst_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1008
-adr	x5, #-1012
+adr	x4, inv_flipadst_4h_x4_neon
+adr	x5, inv_flipadst_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_identity_dct_4x4_8bpc_neon:
+inv_txfm_add_identity_dct_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-612
-adr	x5, #-1324
+adr	x4, inv_identity_4h_x4_neon
+adr	x5, inv_dct_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_adst_identity_4x4_8bpc_neon:
+inv_txfm_add_adst_identity_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1128
-adr	x5, #-632
+adr	x4, inv_adst_4h_x4_neon
+adr	x5, inv_identity_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_flipadst_identity_4x4_8bpc_neon:
+inv_txfm_add_flipadst_identity_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1056
-adr	x5, #-648
+adr	x4, inv_flipadst_4h_x4_neon
+adr	x5, inv_identity_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_identity_adst_4x4_8bpc_neon:
+inv_txfm_add_identity_adst_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-660
-adr	x5, #-1164
+adr	x4, inv_identity_4h_x4_neon
+adr	x5, inv_adst_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_txfm_add_identity_flipadst_4x4_8bpc_neon:
+inv_txfm_add_identity_flipadst_4x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-676
-adr	x5, #-1092
+adr	x4, inv_identity_4h_x4_neon
+adr	x5, inv_flipadst_4h_x4_neon
 b	inv_txfm_add_4x4_neon
-_inv_dct_8h_x8_neon:
-adrp	x16, inv_dct_8h_x8_neon
-add	x16, x16, #0
-ld1.8h	{ v0 }, [x16]
-smull.4s	v6, v18, v0[3]
-smlal.4s	v6, v22, v0[2]
-smull2.4s	v7, v18, v0[3]
-smlal2.4s	v7, v22, v0[2]
-smull.4s	v4, v18, v0[2]
-smlsl.4s	v4, v22, v0[3]
-smull2.4s	v5, v18, v0[2]
-smlsl2.4s	v5, v22, v0[3]
-smull.4s	v2, v16, v0[0]
-smlal.4s	v2, v20, v0[0]
-smull2.4s	v3, v16, v0[0]
-smlal2.4s	v3, v20, v0[0]
-sqrshrn.4h	v6, v6, #12
-sqrshrn2.8h	v6, v7, #12
-sqrshrn.4h	v7, v4, #12
-sqrshrn2.8h	v7, v5, #12
-smull.4s	v4, v16, v0[0]
-smlsl.4s	v4, v20, v0[0]
-smull2.4s	v5, v16, v0[0]
-smlsl2.4s	v5, v20, v0[0]
-sqrshrn.4h	v2, v2, #12
-sqrshrn2.8h	v2, v3, #12
-sqrshrn.4h	v3, v4, #12
-sqrshrn2.8h	v3, v5, #12
-sqadd.8h	v16, v2, v6
-sqsub.8h	v22, v2, v6
-sqadd.8h	v18, v3, v7
-sqsub.8h	v20, v3, v7
-smull.4s	v2, v17, v0[4]
-smlsl.4s	v2, v23, v0[5]
-smull2.4s	v3, v17, v0[4]
-smlsl2.4s	v3, v23, v0[5]
-smull.4s	v4, v17, v0[5]
-smlal.4s	v4, v23, v0[4]
-smull2.4s	v5, v17, v0[5]
-smlal2.4s	v5, v23, v0[4]
-smull.4s	v6, v21, v0[6]
-smlsl.4s	v6, v19, v0[7]
-smull2.4s	v7, v21, v0[6]
-smlsl2.4s	v7, v19, v0[7]
-sqrshrn.4h	v17, v2, #12
-sqrshrn2.8h	v17, v3, #12
-sqrshrn.4h	v23, v4, #12
-sqrshrn2.8h	v23, v5, #12
-smull.4s	v2, v21, v0[7]
-smlal.4s	v2, v19, v0[6]
-smull2.4s	v3, v21, v0[7]
-smlal2.4s	v3, v19, v0[6]
-sqrshrn.4h	v19, v6, #12
-sqrshrn2.8h	v19, v7, #12
-sqrshrn.4h	v21, v2, #12
-sqrshrn2.8h	v21, v3, #12
-sqadd.8h	v2, v17, v19
-sqsub.8h	v17, v17, v19
-sqadd.8h	v3, v23, v21
-sqsub.8h	v19, v23, v21
-smull.4s	v4, v19, v0[0]
-smlsl.4s	v4, v17, v0[0]
-smull2.4s	v5, v19, v0[0]
-smlsl2.4s	v5, v17, v0[0]
-smull.4s	v6, v19, v0[0]
-smlal.4s	v6, v17, v0[0]
-smull2.4s	v7, v19, v0[0]
-smlal2.4s	v7, v17, v0[0]
-sqrshrn.4h	v4, v4, #12
-sqrshrn2.8h	v4, v5, #12
-sqrshrn.4h	v5, v6, #12
-sqrshrn2.8h	v5, v7, #12
-sqsub.8h	v23, v16, v3
-sqadd.8h	v16, v16, v3
-sqadd.8h	v17, v18, v5
-sqsub.8h	v6, v18, v5
-sqadd.8h	v18, v20, v4
-sqsub.8h	v21, v20, v4
-sqadd.8h	v19, v22, v2
-sqsub.8h	v20, v22, v2
-mov.16b	v22, v6
+inv_dct_8h_x8_neon:
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+ld1	{ v0.8h }, [x16]
+smull	v6.4s, v18.4h, v0.h[3]
+smlal	v6.4s, v22.4h, v0.h[2]
+smull2	v7.4s, v18.8h, v0.h[3]
+smlal2	v7.4s, v22.8h, v0.h[2]
+smull	v4.4s, v18.4h, v0.h[2]
+smlsl	v4.4s, v22.4h, v0.h[3]
+smull2	v5.4s, v18.8h, v0.h[2]
+smlsl2	v5.4s, v22.8h, v0.h[3]
+smull	v2.4s, v16.4h, v0.h[0]
+smlal	v2.4s, v20.4h, v0.h[0]
+smull2	v3.4s, v16.8h, v0.h[0]
+smlal2	v3.4s, v20.8h, v0.h[0]
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn2	v6.8h, v7.4s, #0xc
+sqrshrn	v7.4h, v4.4s, #0xc
+sqrshrn2	v7.8h, v5.4s, #0xc
+smull	v4.4s, v16.4h, v0.h[0]
+smlsl	v4.4s, v20.4h, v0.h[0]
+smull2	v5.4s, v16.8h, v0.h[0]
+smlsl2	v5.4s, v20.8h, v0.h[0]
+sqrshrn	v2.4h, v2.4s, #0xc
+sqrshrn2	v2.8h, v3.4s, #0xc
+sqrshrn	v3.4h, v4.4s, #0xc
+sqrshrn2	v3.8h, v5.4s, #0xc
+sqadd	v16.8h, v2.8h, v6.8h
+sqsub	v22.8h, v2.8h, v6.8h
+sqadd	v18.8h, v3.8h, v7.8h
+sqsub	v20.8h, v3.8h, v7.8h
+smull	v2.4s, v17.4h, v0.h[4]
+smlsl	v2.4s, v23.4h, v0.h[5]
+smull2	v3.4s, v17.8h, v0.h[4]
+smlsl2	v3.4s, v23.8h, v0.h[5]
+smull	v4.4s, v17.4h, v0.h[5]
+smlal	v4.4s, v23.4h, v0.h[4]
+smull2	v5.4s, v17.8h, v0.h[5]
+smlal2	v5.4s, v23.8h, v0.h[4]
+smull	v6.4s, v21.4h, v0.h[6]
+smlsl	v6.4s, v19.4h, v0.h[7]
+smull2	v7.4s, v21.8h, v0.h[6]
+smlsl2	v7.4s, v19.8h, v0.h[7]
+sqrshrn	v17.4h, v2.4s, #0xc
+sqrshrn2	v17.8h, v3.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+sqrshrn2	v23.8h, v5.4s, #0xc
+smull	v2.4s, v21.4h, v0.h[7]
+smlal	v2.4s, v19.4h, v0.h[6]
+smull2	v3.4s, v21.8h, v0.h[7]
+smlal2	v3.4s, v19.8h, v0.h[6]
+sqrshrn	v19.4h, v6.4s, #0xc
+sqrshrn2	v19.8h, v7.4s, #0xc
+sqrshrn	v21.4h, v2.4s, #0xc
+sqrshrn2	v21.8h, v3.4s, #0xc
+sqadd	v2.8h, v17.8h, v19.8h
+sqsub	v17.8h, v17.8h, v19.8h
+sqadd	v3.8h, v23.8h, v21.8h
+sqsub	v19.8h, v23.8h, v21.8h
+smull	v4.4s, v19.4h, v0.h[0]
+smlsl	v4.4s, v17.4h, v0.h[0]
+smull2	v5.4s, v19.8h, v0.h[0]
+smlsl2	v5.4s, v17.8h, v0.h[0]
+smull	v6.4s, v19.4h, v0.h[0]
+smlal	v6.4s, v17.4h, v0.h[0]
+smull2	v7.4s, v19.8h, v0.h[0]
+smlal2	v7.4s, v17.8h, v0.h[0]
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn2	v4.8h, v5.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+sqrshrn2	v5.8h, v7.4s, #0xc
+sqsub	v23.8h, v16.8h, v3.8h
+sqadd	v16.8h, v16.8h, v3.8h
+sqadd	v17.8h, v18.8h, v5.8h
+sqsub	v6.8h, v18.8h, v5.8h
+sqadd	v18.8h, v20.8h, v4.8h
+sqsub	v21.8h, v20.8h, v4.8h
+sqadd	v19.8h, v22.8h, v2.8h
+sqsub	v20.8h, v22.8h, v2.8h
+mov	v22.16b, v6.16b
 ret
-_inv_dct_4h_x8_neon:
-adrp	x16, inv_dct_4h_x8_neon
-add	x16, x16, #0
-ld1.8h	{ v0 }, [x16]
-smull.4s	v6, v18, v0[3]
-smlal.4s	v6, v22, v0[2]
-smull.4s	v4, v18, v0[2]
-smlsl.4s	v4, v22, v0[3]
-smull.4s	v2, v16, v0[0]
-smlal.4s	v2, v20, v0[0]
-sqrshrn.4h	v6, v6, #12
-sqrshrn.4h	v7, v4, #12
-smull.4s	v4, v16, v0[0]
-smlsl.4s	v4, v20, v0[0]
-sqrshrn.4h	v2, v2, #12
-sqrshrn.4h	v3, v4, #12
-sqadd.4h	v16, v2, v6
-sqsub.4h	v22, v2, v6
-sqadd.4h	v18, v3, v7
-sqsub.4h	v20, v3, v7
-smull.4s	v2, v17, v0[4]
-smlsl.4s	v2, v23, v0[5]
-smull.4s	v4, v17, v0[5]
-smlal.4s	v4, v23, v0[4]
-smull.4s	v6, v21, v0[6]
-smlsl.4s	v6, v19, v0[7]
-sqrshrn.4h	v17, v2, #12
-sqrshrn.4h	v23, v4, #12
-smull.4s	v2, v21, v0[7]
-smlal.4s	v2, v19, v0[6]
-sqrshrn.4h	v19, v6, #12
-sqrshrn.4h	v21, v2, #12
-sqadd.4h	v2, v17, v19
-sqsub.4h	v17, v17, v19
-sqadd.4h	v3, v23, v21
-sqsub.4h	v19, v23, v21
-smull.4s	v4, v19, v0[0]
-smlsl.4s	v4, v17, v0[0]
-smull.4s	v6, v19, v0[0]
-smlal.4s	v6, v17, v0[0]
-sqrshrn.4h	v4, v4, #12
-sqrshrn.4h	v5, v6, #12
-sqsub.4h	v23, v16, v3
-sqadd.4h	v16, v16, v3
-sqadd.4h	v17, v18, v5
-sqsub.4h	v6, v18, v5
-sqadd.4h	v18, v20, v4
-sqsub.4h	v21, v20, v4
-sqadd.4h	v19, v22, v2
-sqsub.4h	v20, v22, v2
-mov.8b	v22, v6
+inv_dct_4h_x8_neon:
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+ld1	{ v0.8h }, [x16]
+smull	v6.4s, v18.4h, v0.h[3]
+smlal	v6.4s, v22.4h, v0.h[2]
+smull	v4.4s, v18.4h, v0.h[2]
+smlsl	v4.4s, v22.4h, v0.h[3]
+smull	v2.4s, v16.4h, v0.h[0]
+smlal	v2.4s, v20.4h, v0.h[0]
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn	v7.4h, v4.4s, #0xc
+smull	v4.4s, v16.4h, v0.h[0]
+smlsl	v4.4s, v20.4h, v0.h[0]
+sqrshrn	v2.4h, v2.4s, #0xc
+sqrshrn	v3.4h, v4.4s, #0xc
+sqadd	v16.4h, v2.4h, v6.4h
+sqsub	v22.4h, v2.4h, v6.4h
+sqadd	v18.4h, v3.4h, v7.4h
+sqsub	v20.4h, v3.4h, v7.4h
+smull	v2.4s, v17.4h, v0.h[4]
+smlsl	v2.4s, v23.4h, v0.h[5]
+smull	v4.4s, v17.4h, v0.h[5]
+smlal	v4.4s, v23.4h, v0.h[4]
+smull	v6.4s, v21.4h, v0.h[6]
+smlsl	v6.4s, v19.4h, v0.h[7]
+sqrshrn	v17.4h, v2.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+smull	v2.4s, v21.4h, v0.h[7]
+smlal	v2.4s, v19.4h, v0.h[6]
+sqrshrn	v19.4h, v6.4s, #0xc
+sqrshrn	v21.4h, v2.4s, #0xc
+sqadd	v2.4h, v17.4h, v19.4h
+sqsub	v17.4h, v17.4h, v19.4h
+sqadd	v3.4h, v23.4h, v21.4h
+sqsub	v19.4h, v23.4h, v21.4h
+smull	v4.4s, v19.4h, v0.h[0]
+smlsl	v4.4s, v17.4h, v0.h[0]
+smull	v6.4s, v19.4h, v0.h[0]
+smlal	v6.4s, v17.4h, v0.h[0]
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+sqsub	v23.4h, v16.4h, v3.4h
+sqadd	v16.4h, v16.4h, v3.4h
+sqadd	v17.4h, v18.4h, v5.4h
+sqsub	v6.4h, v18.4h, v5.4h
+sqadd	v18.4h, v20.4h, v4.4h
+sqsub	v21.4h, v20.4h, v4.4h
+sqadd	v19.4h, v22.4h, v2.4h
+sqsub	v20.4h, v22.4h, v2.4h
+mov	v22.8b, v6.8b
 ret
-_inv_adst_8h_x8_neon:
-adrp	x16, inv_adst_8h_x8_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-smull.4s	v2, v23, v0[0]
-smlal.4s	v2, v16, v0[1]
-smull2.4s	v3, v23, v0[0]
-smlal2.4s	v3, v16, v0[1]
-smull.4s	v4, v23, v0[1]
-smlsl.4s	v4, v16, v0[0]
-smull2.4s	v5, v23, v0[1]
-smlsl2.4s	v5, v16, v0[0]
-smull.4s	v6, v21, v0[2]
-smlal.4s	v6, v18, v0[3]
-smull2.4s	v7, v21, v0[2]
-smlal2.4s	v7, v18, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn2.8h	v16, v3, #12
-sqrshrn.4h	v23, v4, #12
-sqrshrn2.8h	v23, v5, #12
-smull.4s	v2, v21, v0[3]
-smlsl.4s	v2, v18, v0[2]
-smull2.4s	v3, v21, v0[3]
-smlsl2.4s	v3, v18, v0[2]
-smull.4s	v4, v19, v0[4]
-smlal.4s	v4, v20, v0[5]
-smull2.4s	v5, v19, v0[4]
-smlal2.4s	v5, v20, v0[5]
-sqrshrn.4h	v18, v6, #12
-sqrshrn2.8h	v18, v7, #12
-sqrshrn.4h	v21, v2, #12
-sqrshrn2.8h	v21, v3, #12
-smull.4s	v6, v19, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull2.4s	v7, v19, v0[5]
-smlsl2.4s	v7, v20, v0[4]
-smull.4s	v2, v17, v0[6]
-smlal.4s	v2, v22, v0[7]
-smull2.4s	v3, v17, v0[6]
-smlal2.4s	v3, v22, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn2.8h	v20, v5, #12
-sqrshrn.4h	v19, v6, #12
-sqrshrn2.8h	v19, v7, #12
-smull.4s	v4, v17, v0[7]
-smlsl.4s	v4, v22, v0[6]
-smull2.4s	v5, v17, v0[7]
-smlsl2.4s	v5, v22, v0[6]
-sqrshrn.4h	v22, v2, #12
-sqrshrn2.8h	v22, v3, #12
-sqrshrn.4h	v17, v4, #12
-sqrshrn2.8h	v17, v5, #12
-sqadd.8h	v2, v16, v20
-sqsub.8h	v3, v16, v20
-sqadd.8h	v4, v23, v19
-sqsub.8h	v5, v23, v19
-sqadd.8h	v6, v18, v22
-sqsub.8h	v7, v18, v22
-sqadd.8h	v18, v21, v17
-sqsub.8h	v19, v21, v17
-smull.4s	v16, v3, v1[3]
-smlal.4s	v16, v5, v1[2]
-smull2.4s	v17, v3, v1[3]
-smlal2.4s	v17, v5, v1[2]
-smull.4s	v20, v3, v1[2]
-smlsl.4s	v20, v5, v1[3]
-smull2.4s	v21, v3, v1[2]
-smlsl2.4s	v21, v5, v1[3]
-smull.4s	v22, v19, v1[3]
-smlsl.4s	v22, v7, v1[2]
-smull2.4s	v23, v19, v1[3]
-smlsl2.4s	v23, v7, v1[2]
-sqrshrn.4h	v3, v16, #12
-sqrshrn2.8h	v3, v17, #12
-sqrshrn.4h	v5, v20, #12
-sqrshrn2.8h	v5, v21, #12
-smull.4s	v16, v19, v1[2]
-smlal.4s	v16, v7, v1[3]
-smull2.4s	v17, v19, v1[2]
-smlal2.4s	v17, v7, v1[3]
-sqrshrn.4h	v7, v22, #12
-sqrshrn2.8h	v7, v23, #12
-sqrshrn.4h	v19, v16, #12
-sqrshrn2.8h	v19, v17, #12
-sqadd.8h	v16, v2, v6
-sqsub.8h	v2, v2, v6
-sqadd.8h	v23, v4, v18
-sqsub.8h	v4, v4, v18
-sqneg.8h	v23, v23
-sqadd.8h	v17, v3, v7
-sqsub.8h	v3, v3, v7
-sqadd.8h	v22, v5, v19
-sqsub.8h	v5, v5, v19
-sqneg.8h	v17, v17
-smull.4s	v18, v2, v1[0]
-smlal.4s	v18, v4, v1[0]
-smull2.4s	v19, v2, v1[0]
-smlal2.4s	v19, v4, v1[0]
-smull.4s	v6, v2, v1[0]
-smlsl.4s	v6, v4, v1[0]
-smull2.4s	v7, v2, v1[0]
-smlsl2.4s	v7, v4, v1[0]
-smull.4s	v20, v3, v1[0]
-smlsl.4s	v20, v5, v1[0]
-smull2.4s	v21, v3, v1[0]
-smlsl2.4s	v21, v5, v1[0]
-sqrshrn.4h	v2, v18, #12
-sqrshrn2.8h	v2, v19, #12
-smull.4s	v18, v3, v1[0]
-smlal.4s	v18, v5, v1[0]
-smull2.4s	v19, v3, v1[0]
-smlal2.4s	v19, v5, v1[0]
-sqrshrn.4h	v3, v20, #12
-sqrshrn2.8h	v3, v21, #12
-sqrshrn.4h	v18, v18, #12
-sqrshrn2.8h	v18, v19, #12
-sqrshrn.4h	v20, v6, #12
-sqrshrn2.8h	v20, v7, #12
-sqneg.8h	v19, v2
-sqneg.8h	v21, v3
+inv_adst_8h_x8_neon:
+adrp	x16, iadst8_coeffs
+add	x16, x16, :lo12:iadst8_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+smull	v2.4s, v23.4h, v0.h[0]
+smlal	v2.4s, v16.4h, v0.h[1]
+smull2	v3.4s, v23.8h, v0.h[0]
+smlal2	v3.4s, v16.8h, v0.h[1]
+smull	v4.4s, v23.4h, v0.h[1]
+smlsl	v4.4s, v16.4h, v0.h[0]
+smull2	v5.4s, v23.8h, v0.h[1]
+smlsl2	v5.4s, v16.8h, v0.h[0]
+smull	v6.4s, v21.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+smull2	v7.4s, v21.8h, v0.h[2]
+smlal2	v7.4s, v18.8h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn2	v16.8h, v3.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+sqrshrn2	v23.8h, v5.4s, #0xc
+smull	v2.4s, v21.4h, v0.h[3]
+smlsl	v2.4s, v18.4h, v0.h[2]
+smull2	v3.4s, v21.8h, v0.h[3]
+smlsl2	v3.4s, v18.8h, v0.h[2]
+smull	v4.4s, v19.4h, v0.h[4]
+smlal	v4.4s, v20.4h, v0.h[5]
+smull2	v5.4s, v19.8h, v0.h[4]
+smlal2	v5.4s, v20.8h, v0.h[5]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn2	v18.8h, v7.4s, #0xc
+sqrshrn	v21.4h, v2.4s, #0xc
+sqrshrn2	v21.8h, v3.4s, #0xc
+smull	v6.4s, v19.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull2	v7.4s, v19.8h, v0.h[5]
+smlsl2	v7.4s, v20.8h, v0.h[4]
+smull	v2.4s, v17.4h, v0.h[6]
+smlal	v2.4s, v22.4h, v0.h[7]
+smull2	v3.4s, v17.8h, v0.h[6]
+smlal2	v3.4s, v22.8h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn2	v20.8h, v5.4s, #0xc
+sqrshrn	v19.4h, v6.4s, #0xc
+sqrshrn2	v19.8h, v7.4s, #0xc
+smull	v4.4s, v17.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+smull2	v5.4s, v17.8h, v0.h[7]
+smlsl2	v5.4s, v22.8h, v0.h[6]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn2	v22.8h, v3.4s, #0xc
+sqrshrn	v17.4h, v4.4s, #0xc
+sqrshrn2	v17.8h, v5.4s, #0xc
+sqadd	v2.8h, v16.8h, v20.8h
+sqsub	v3.8h, v16.8h, v20.8h
+sqadd	v4.8h, v23.8h, v19.8h
+sqsub	v5.8h, v23.8h, v19.8h
+sqadd	v6.8h, v18.8h, v22.8h
+sqsub	v7.8h, v18.8h, v22.8h
+sqadd	v18.8h, v21.8h, v17.8h
+sqsub	v19.8h, v21.8h, v17.8h
+smull	v16.4s, v3.4h, v1.h[3]
+smlal	v16.4s, v5.4h, v1.h[2]
+smull2	v17.4s, v3.8h, v1.h[3]
+smlal2	v17.4s, v5.8h, v1.h[2]
+smull	v20.4s, v3.4h, v1.h[2]
+smlsl	v20.4s, v5.4h, v1.h[3]
+smull2	v21.4s, v3.8h, v1.h[2]
+smlsl2	v21.4s, v5.8h, v1.h[3]
+smull	v22.4s, v19.4h, v1.h[3]
+smlsl	v22.4s, v7.4h, v1.h[2]
+smull2	v23.4s, v19.8h, v1.h[3]
+smlsl2	v23.4s, v7.8h, v1.h[2]
+sqrshrn	v3.4h, v16.4s, #0xc
+sqrshrn2	v3.8h, v17.4s, #0xc
+sqrshrn	v5.4h, v20.4s, #0xc
+sqrshrn2	v5.8h, v21.4s, #0xc
+smull	v16.4s, v19.4h, v1.h[2]
+smlal	v16.4s, v7.4h, v1.h[3]
+smull2	v17.4s, v19.8h, v1.h[2]
+smlal2	v17.4s, v7.8h, v1.h[3]
+sqrshrn	v7.4h, v22.4s, #0xc
+sqrshrn2	v7.8h, v23.4s, #0xc
+sqrshrn	v19.4h, v16.4s, #0xc
+sqrshrn2	v19.8h, v17.4s, #0xc
+sqadd	v16.8h, v2.8h, v6.8h
+sqsub	v2.8h, v2.8h, v6.8h
+sqadd	v23.8h, v4.8h, v18.8h
+sqsub	v4.8h, v4.8h, v18.8h
+sqneg	v23.8h, v23.8h
+sqadd	v17.8h, v3.8h, v7.8h
+sqsub	v3.8h, v3.8h, v7.8h
+sqadd	v22.8h, v5.8h, v19.8h
+sqsub	v5.8h, v5.8h, v19.8h
+sqneg	v17.8h, v17.8h
+smull	v18.4s, v2.4h, v1.h[0]
+smlal	v18.4s, v4.4h, v1.h[0]
+smull2	v19.4s, v2.8h, v1.h[0]
+smlal2	v19.4s, v4.8h, v1.h[0]
+smull	v6.4s, v2.4h, v1.h[0]
+smlsl	v6.4s, v4.4h, v1.h[0]
+smull2	v7.4s, v2.8h, v1.h[0]
+smlsl2	v7.4s, v4.8h, v1.h[0]
+smull	v20.4s, v3.4h, v1.h[0]
+smlsl	v20.4s, v5.4h, v1.h[0]
+smull2	v21.4s, v3.8h, v1.h[0]
+smlsl2	v21.4s, v5.8h, v1.h[0]
+sqrshrn	v2.4h, v18.4s, #0xc
+sqrshrn2	v2.8h, v19.4s, #0xc
+smull	v18.4s, v3.4h, v1.h[0]
+smlal	v18.4s, v5.4h, v1.h[0]
+smull2	v19.4s, v3.8h, v1.h[0]
+smlal2	v19.4s, v5.8h, v1.h[0]
+sqrshrn	v3.4h, v20.4s, #0xc
+sqrshrn2	v3.8h, v21.4s, #0xc
+sqrshrn	v18.4h, v18.4s, #0xc
+sqrshrn2	v18.8h, v19.4s, #0xc
+sqrshrn	v20.4h, v6.4s, #0xc
+sqrshrn2	v20.8h, v7.4s, #0xc
+sqneg	v19.8h, v2.8h
+sqneg	v21.8h, v3.8h
 ret
-_inv_flipadst_8h_x8_neon:
-adrp	x16, inv_flipadst_8h_x8_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-smull.4s	v2, v23, v0[0]
-smlal.4s	v2, v16, v0[1]
-smull2.4s	v3, v23, v0[0]
-smlal2.4s	v3, v16, v0[1]
-smull.4s	v4, v23, v0[1]
-smlsl.4s	v4, v16, v0[0]
-smull2.4s	v5, v23, v0[1]
-smlsl2.4s	v5, v16, v0[0]
-smull.4s	v6, v21, v0[2]
-smlal.4s	v6, v18, v0[3]
-smull2.4s	v7, v21, v0[2]
-smlal2.4s	v7, v18, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn2.8h	v16, v3, #12
-sqrshrn.4h	v23, v4, #12
-sqrshrn2.8h	v23, v5, #12
-smull.4s	v2, v21, v0[3]
-smlsl.4s	v2, v18, v0[2]
-smull2.4s	v3, v21, v0[3]
-smlsl2.4s	v3, v18, v0[2]
-smull.4s	v4, v19, v0[4]
-smlal.4s	v4, v20, v0[5]
-smull2.4s	v5, v19, v0[4]
-smlal2.4s	v5, v20, v0[5]
-sqrshrn.4h	v18, v6, #12
-sqrshrn2.8h	v18, v7, #12
-sqrshrn.4h	v21, v2, #12
-sqrshrn2.8h	v21, v3, #12
-smull.4s	v6, v19, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull2.4s	v7, v19, v0[5]
-smlsl2.4s	v7, v20, v0[4]
-smull.4s	v2, v17, v0[6]
-smlal.4s	v2, v22, v0[7]
-smull2.4s	v3, v17, v0[6]
-smlal2.4s	v3, v22, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn2.8h	v20, v5, #12
-sqrshrn.4h	v19, v6, #12
-sqrshrn2.8h	v19, v7, #12
-smull.4s	v4, v17, v0[7]
-smlsl.4s	v4, v22, v0[6]
-smull2.4s	v5, v17, v0[7]
-smlsl2.4s	v5, v22, v0[6]
-sqrshrn.4h	v22, v2, #12
-sqrshrn2.8h	v22, v3, #12
-sqrshrn.4h	v17, v4, #12
-sqrshrn2.8h	v17, v5, #12
-sqadd.8h	v2, v16, v20
-sqsub.8h	v3, v16, v20
-sqadd.8h	v4, v23, v19
-sqsub.8h	v5, v23, v19
-sqadd.8h	v6, v18, v22
-sqsub.8h	v7, v18, v22
-sqadd.8h	v18, v21, v17
-sqsub.8h	v19, v21, v17
-smull.4s	v16, v3, v1[3]
-smlal.4s	v16, v5, v1[2]
-smull2.4s	v17, v3, v1[3]
-smlal2.4s	v17, v5, v1[2]
-smull.4s	v20, v3, v1[2]
-smlsl.4s	v20, v5, v1[3]
-smull2.4s	v21, v3, v1[2]
-smlsl2.4s	v21, v5, v1[3]
-smull.4s	v22, v19, v1[3]
-smlsl.4s	v22, v7, v1[2]
-smull2.4s	v23, v19, v1[3]
-smlsl2.4s	v23, v7, v1[2]
-sqrshrn.4h	v3, v16, #12
-sqrshrn2.8h	v3, v17, #12
-sqrshrn.4h	v5, v20, #12
-sqrshrn2.8h	v5, v21, #12
-smull.4s	v16, v19, v1[2]
-smlal.4s	v16, v7, v1[3]
-smull2.4s	v17, v19, v1[2]
-smlal2.4s	v17, v7, v1[3]
-sqrshrn.4h	v7, v22, #12
-sqrshrn2.8h	v7, v23, #12
-sqrshrn.4h	v19, v16, #12
-sqrshrn2.8h	v19, v17, #12
-sqadd.8h	v23, v2, v6
-sqsub.8h	v2, v2, v6
-sqadd.8h	v16, v4, v18
-sqsub.8h	v4, v4, v18
-sqneg.8h	v16, v16
-sqadd.8h	v22, v3, v7
-sqsub.8h	v3, v3, v7
-sqadd.8h	v17, v5, v19
-sqsub.8h	v5, v5, v19
-sqneg.8h	v22, v22
-smull.4s	v18, v2, v1[0]
-smlal.4s	v18, v4, v1[0]
-smull2.4s	v19, v2, v1[0]
-smlal2.4s	v19, v4, v1[0]
-smull.4s	v6, v2, v1[0]
-smlsl.4s	v6, v4, v1[0]
-smull2.4s	v7, v2, v1[0]
-smlsl2.4s	v7, v4, v1[0]
-smull.4s	v20, v3, v1[0]
-smlsl.4s	v20, v5, v1[0]
-smull2.4s	v21, v3, v1[0]
-smlsl2.4s	v21, v5, v1[0]
-sqrshrn.4h	v2, v18, #12
-sqrshrn2.8h	v2, v19, #12
-smull.4s	v18, v3, v1[0]
-smlal.4s	v18, v5, v1[0]
-smull2.4s	v19, v3, v1[0]
-smlal2.4s	v19, v5, v1[0]
-sqrshrn.4h	v3, v20, #12
-sqrshrn2.8h	v3, v21, #12
-sqrshrn.4h	v21, v18, #12
-sqrshrn2.8h	v21, v19, #12
-sqrshrn.4h	v19, v6, #12
-sqrshrn2.8h	v19, v7, #12
-sqneg.8h	v20, v2
-sqneg.8h	v18, v3
+inv_flipadst_8h_x8_neon:
+adrp	x16, iadst8_coeffs
+add	x16, x16, :lo12:iadst8_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+smull	v2.4s, v23.4h, v0.h[0]
+smlal	v2.4s, v16.4h, v0.h[1]
+smull2	v3.4s, v23.8h, v0.h[0]
+smlal2	v3.4s, v16.8h, v0.h[1]
+smull	v4.4s, v23.4h, v0.h[1]
+smlsl	v4.4s, v16.4h, v0.h[0]
+smull2	v5.4s, v23.8h, v0.h[1]
+smlsl2	v5.4s, v16.8h, v0.h[0]
+smull	v6.4s, v21.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+smull2	v7.4s, v21.8h, v0.h[2]
+smlal2	v7.4s, v18.8h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn2	v16.8h, v3.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+sqrshrn2	v23.8h, v5.4s, #0xc
+smull	v2.4s, v21.4h, v0.h[3]
+smlsl	v2.4s, v18.4h, v0.h[2]
+smull2	v3.4s, v21.8h, v0.h[3]
+smlsl2	v3.4s, v18.8h, v0.h[2]
+smull	v4.4s, v19.4h, v0.h[4]
+smlal	v4.4s, v20.4h, v0.h[5]
+smull2	v5.4s, v19.8h, v0.h[4]
+smlal2	v5.4s, v20.8h, v0.h[5]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn2	v18.8h, v7.4s, #0xc
+sqrshrn	v21.4h, v2.4s, #0xc
+sqrshrn2	v21.8h, v3.4s, #0xc
+smull	v6.4s, v19.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull2	v7.4s, v19.8h, v0.h[5]
+smlsl2	v7.4s, v20.8h, v0.h[4]
+smull	v2.4s, v17.4h, v0.h[6]
+smlal	v2.4s, v22.4h, v0.h[7]
+smull2	v3.4s, v17.8h, v0.h[6]
+smlal2	v3.4s, v22.8h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn2	v20.8h, v5.4s, #0xc
+sqrshrn	v19.4h, v6.4s, #0xc
+sqrshrn2	v19.8h, v7.4s, #0xc
+smull	v4.4s, v17.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+smull2	v5.4s, v17.8h, v0.h[7]
+smlsl2	v5.4s, v22.8h, v0.h[6]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn2	v22.8h, v3.4s, #0xc
+sqrshrn	v17.4h, v4.4s, #0xc
+sqrshrn2	v17.8h, v5.4s, #0xc
+sqadd	v2.8h, v16.8h, v20.8h
+sqsub	v3.8h, v16.8h, v20.8h
+sqadd	v4.8h, v23.8h, v19.8h
+sqsub	v5.8h, v23.8h, v19.8h
+sqadd	v6.8h, v18.8h, v22.8h
+sqsub	v7.8h, v18.8h, v22.8h
+sqadd	v18.8h, v21.8h, v17.8h
+sqsub	v19.8h, v21.8h, v17.8h
+smull	v16.4s, v3.4h, v1.h[3]
+smlal	v16.4s, v5.4h, v1.h[2]
+smull2	v17.4s, v3.8h, v1.h[3]
+smlal2	v17.4s, v5.8h, v1.h[2]
+smull	v20.4s, v3.4h, v1.h[2]
+smlsl	v20.4s, v5.4h, v1.h[3]
+smull2	v21.4s, v3.8h, v1.h[2]
+smlsl2	v21.4s, v5.8h, v1.h[3]
+smull	v22.4s, v19.4h, v1.h[3]
+smlsl	v22.4s, v7.4h, v1.h[2]
+smull2	v23.4s, v19.8h, v1.h[3]
+smlsl2	v23.4s, v7.8h, v1.h[2]
+sqrshrn	v3.4h, v16.4s, #0xc
+sqrshrn2	v3.8h, v17.4s, #0xc
+sqrshrn	v5.4h, v20.4s, #0xc
+sqrshrn2	v5.8h, v21.4s, #0xc
+smull	v16.4s, v19.4h, v1.h[2]
+smlal	v16.4s, v7.4h, v1.h[3]
+smull2	v17.4s, v19.8h, v1.h[2]
+smlal2	v17.4s, v7.8h, v1.h[3]
+sqrshrn	v7.4h, v22.4s, #0xc
+sqrshrn2	v7.8h, v23.4s, #0xc
+sqrshrn	v19.4h, v16.4s, #0xc
+sqrshrn2	v19.8h, v17.4s, #0xc
+sqadd	v23.8h, v2.8h, v6.8h
+sqsub	v2.8h, v2.8h, v6.8h
+sqadd	v16.8h, v4.8h, v18.8h
+sqsub	v4.8h, v4.8h, v18.8h
+sqneg	v16.8h, v16.8h
+sqadd	v22.8h, v3.8h, v7.8h
+sqsub	v3.8h, v3.8h, v7.8h
+sqadd	v17.8h, v5.8h, v19.8h
+sqsub	v5.8h, v5.8h, v19.8h
+sqneg	v22.8h, v22.8h
+smull	v18.4s, v2.4h, v1.h[0]
+smlal	v18.4s, v4.4h, v1.h[0]
+smull2	v19.4s, v2.8h, v1.h[0]
+smlal2	v19.4s, v4.8h, v1.h[0]
+smull	v6.4s, v2.4h, v1.h[0]
+smlsl	v6.4s, v4.4h, v1.h[0]
+smull2	v7.4s, v2.8h, v1.h[0]
+smlsl2	v7.4s, v4.8h, v1.h[0]
+smull	v20.4s, v3.4h, v1.h[0]
+smlsl	v20.4s, v5.4h, v1.h[0]
+smull2	v21.4s, v3.8h, v1.h[0]
+smlsl2	v21.4s, v5.8h, v1.h[0]
+sqrshrn	v2.4h, v18.4s, #0xc
+sqrshrn2	v2.8h, v19.4s, #0xc
+smull	v18.4s, v3.4h, v1.h[0]
+smlal	v18.4s, v5.4h, v1.h[0]
+smull2	v19.4s, v3.8h, v1.h[0]
+smlal2	v19.4s, v5.8h, v1.h[0]
+sqrshrn	v3.4h, v20.4s, #0xc
+sqrshrn2	v3.8h, v21.4s, #0xc
+sqrshrn	v21.4h, v18.4s, #0xc
+sqrshrn2	v21.8h, v19.4s, #0xc
+sqrshrn	v19.4h, v6.4s, #0xc
+sqrshrn2	v19.8h, v7.4s, #0xc
+sqneg	v20.8h, v2.8h
+sqneg	v18.8h, v3.8h
 ret
-_inv_adst_4h_x8_neon:
-adrp	x16, inv_adst_4h_x8_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-smull.4s	v2, v23, v0[0]
-smlal.4s	v2, v16, v0[1]
-smull.4s	v4, v23, v0[1]
-smlsl.4s	v4, v16, v0[0]
-smull.4s	v6, v21, v0[2]
-smlal.4s	v6, v18, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn.4h	v23, v4, #12
-smull.4s	v2, v21, v0[3]
-smlsl.4s	v2, v18, v0[2]
-smull.4s	v4, v19, v0[4]
-smlal.4s	v4, v20, v0[5]
-sqrshrn.4h	v18, v6, #12
-sqrshrn.4h	v21, v2, #12
-smull.4s	v6, v19, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull.4s	v2, v17, v0[6]
-smlal.4s	v2, v22, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn.4h	v19, v6, #12
-smull.4s	v4, v17, v0[7]
-smlsl.4s	v4, v22, v0[6]
-sqrshrn.4h	v22, v2, #12
-sqrshrn.4h	v17, v4, #12
-sqadd.4h	v2, v16, v20
-sqsub.4h	v3, v16, v20
-sqadd.4h	v4, v23, v19
-sqsub.4h	v5, v23, v19
-sqadd.4h	v6, v18, v22
-sqsub.4h	v7, v18, v22
-sqadd.4h	v18, v21, v17
-sqsub.4h	v19, v21, v17
-smull.4s	v16, v3, v1[3]
-smlal.4s	v16, v5, v1[2]
-smull.4s	v20, v3, v1[2]
-smlsl.4s	v20, v5, v1[3]
-smull.4s	v22, v19, v1[3]
-smlsl.4s	v22, v7, v1[2]
-sqrshrn.4h	v3, v16, #12
-sqrshrn.4h	v5, v20, #12
-smull.4s	v16, v19, v1[2]
-smlal.4s	v16, v7, v1[3]
-sqrshrn.4h	v7, v22, #12
-sqrshrn.4h	v19, v16, #12
-sqadd.4h	v16, v2, v6
-sqsub.4h	v2, v2, v6
-sqadd.4h	v23, v4, v18
-sqsub.4h	v4, v4, v18
-sqneg.4h	v23, v23
-sqadd.4h	v17, v3, v7
-sqsub.4h	v3, v3, v7
-sqadd.4h	v22, v5, v19
-sqsub.4h	v5, v5, v19
-sqneg.4h	v17, v17
-smull.4s	v18, v2, v1[0]
-smlal.4s	v18, v4, v1[0]
-smull.4s	v6, v2, v1[0]
-smlsl.4s	v6, v4, v1[0]
-smull.4s	v20, v3, v1[0]
-smlsl.4s	v20, v5, v1[0]
-sqrshrn.4h	v2, v18, #12
-smull.4s	v18, v3, v1[0]
-smlal.4s	v18, v5, v1[0]
-sqrshrn.4h	v3, v20, #12
-sqrshrn.4h	v18, v18, #12
-sqrshrn.4h	v20, v6, #12
-sqneg.4h	v19, v2
-sqneg.4h	v21, v3
+inv_adst_4h_x8_neon:
+adrp	x16, iadst8_coeffs
+add	x16, x16, :lo12:iadst8_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+smull	v2.4s, v23.4h, v0.h[0]
+smlal	v2.4s, v16.4h, v0.h[1]
+smull	v4.4s, v23.4h, v0.h[1]
+smlsl	v4.4s, v16.4h, v0.h[0]
+smull	v6.4s, v21.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+smull	v2.4s, v21.4h, v0.h[3]
+smlsl	v2.4s, v18.4h, v0.h[2]
+smull	v4.4s, v19.4h, v0.h[4]
+smlal	v4.4s, v20.4h, v0.h[5]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn	v21.4h, v2.4s, #0xc
+smull	v6.4s, v19.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull	v2.4s, v17.4h, v0.h[6]
+smlal	v2.4s, v22.4h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn	v19.4h, v6.4s, #0xc
+smull	v4.4s, v17.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn	v17.4h, v4.4s, #0xc
+sqadd	v2.4h, v16.4h, v20.4h
+sqsub	v3.4h, v16.4h, v20.4h
+sqadd	v4.4h, v23.4h, v19.4h
+sqsub	v5.4h, v23.4h, v19.4h
+sqadd	v6.4h, v18.4h, v22.4h
+sqsub	v7.4h, v18.4h, v22.4h
+sqadd	v18.4h, v21.4h, v17.4h
+sqsub	v19.4h, v21.4h, v17.4h
+smull	v16.4s, v3.4h, v1.h[3]
+smlal	v16.4s, v5.4h, v1.h[2]
+smull	v20.4s, v3.4h, v1.h[2]
+smlsl	v20.4s, v5.4h, v1.h[3]
+smull	v22.4s, v19.4h, v1.h[3]
+smlsl	v22.4s, v7.4h, v1.h[2]
+sqrshrn	v3.4h, v16.4s, #0xc
+sqrshrn	v5.4h, v20.4s, #0xc
+smull	v16.4s, v19.4h, v1.h[2]
+smlal	v16.4s, v7.4h, v1.h[3]
+sqrshrn	v7.4h, v22.4s, #0xc
+sqrshrn	v19.4h, v16.4s, #0xc
+sqadd	v16.4h, v2.4h, v6.4h
+sqsub	v2.4h, v2.4h, v6.4h
+sqadd	v23.4h, v4.4h, v18.4h
+sqsub	v4.4h, v4.4h, v18.4h
+sqneg	v23.4h, v23.4h
+sqadd	v17.4h, v3.4h, v7.4h
+sqsub	v3.4h, v3.4h, v7.4h
+sqadd	v22.4h, v5.4h, v19.4h
+sqsub	v5.4h, v5.4h, v19.4h
+sqneg	v17.4h, v17.4h
+smull	v18.4s, v2.4h, v1.h[0]
+smlal	v18.4s, v4.4h, v1.h[0]
+smull	v6.4s, v2.4h, v1.h[0]
+smlsl	v6.4s, v4.4h, v1.h[0]
+smull	v20.4s, v3.4h, v1.h[0]
+smlsl	v20.4s, v5.4h, v1.h[0]
+sqrshrn	v2.4h, v18.4s, #0xc
+smull	v18.4s, v3.4h, v1.h[0]
+smlal	v18.4s, v5.4h, v1.h[0]
+sqrshrn	v3.4h, v20.4s, #0xc
+sqrshrn	v18.4h, v18.4s, #0xc
+sqrshrn	v20.4h, v6.4s, #0xc
+sqneg	v19.4h, v2.4h
+sqneg	v21.4h, v3.4h
 ret
-_inv_flipadst_4h_x8_neon:
-adrp	x16, inv_flipadst_4h_x8_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-smull.4s	v2, v23, v0[0]
-smlal.4s	v2, v16, v0[1]
-smull.4s	v4, v23, v0[1]
-smlsl.4s	v4, v16, v0[0]
-smull.4s	v6, v21, v0[2]
-smlal.4s	v6, v18, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn.4h	v23, v4, #12
-smull.4s	v2, v21, v0[3]
-smlsl.4s	v2, v18, v0[2]
-smull.4s	v4, v19, v0[4]
-smlal.4s	v4, v20, v0[5]
-sqrshrn.4h	v18, v6, #12
-sqrshrn.4h	v21, v2, #12
-smull.4s	v6, v19, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull.4s	v2, v17, v0[6]
-smlal.4s	v2, v22, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn.4h	v19, v6, #12
-smull.4s	v4, v17, v0[7]
-smlsl.4s	v4, v22, v0[6]
-sqrshrn.4h	v22, v2, #12
-sqrshrn.4h	v17, v4, #12
-sqadd.4h	v2, v16, v20
-sqsub.4h	v3, v16, v20
-sqadd.4h	v4, v23, v19
-sqsub.4h	v5, v23, v19
-sqadd.4h	v6, v18, v22
-sqsub.4h	v7, v18, v22
-sqadd.4h	v18, v21, v17
-sqsub.4h	v19, v21, v17
-smull.4s	v16, v3, v1[3]
-smlal.4s	v16, v5, v1[2]
-smull.4s	v20, v3, v1[2]
-smlsl.4s	v20, v5, v1[3]
-smull.4s	v22, v19, v1[3]
-smlsl.4s	v22, v7, v1[2]
-sqrshrn.4h	v3, v16, #12
-sqrshrn.4h	v5, v20, #12
-smull.4s	v16, v19, v1[2]
-smlal.4s	v16, v7, v1[3]
-sqrshrn.4h	v7, v22, #12
-sqrshrn.4h	v19, v16, #12
-sqadd.4h	v23, v2, v6
-sqsub.4h	v2, v2, v6
-sqadd.4h	v16, v4, v18
-sqsub.4h	v4, v4, v18
-sqneg.4h	v16, v16
-sqadd.4h	v22, v3, v7
-sqsub.4h	v3, v3, v7
-sqadd.4h	v17, v5, v19
-sqsub.4h	v5, v5, v19
-sqneg.4h	v22, v22
-smull.4s	v18, v2, v1[0]
-smlal.4s	v18, v4, v1[0]
-smull.4s	v6, v2, v1[0]
-smlsl.4s	v6, v4, v1[0]
-smull.4s	v20, v3, v1[0]
-smlsl.4s	v20, v5, v1[0]
-sqrshrn.4h	v2, v18, #12
-smull.4s	v18, v3, v1[0]
-smlal.4s	v18, v5, v1[0]
-sqrshrn.4h	v3, v20, #12
-sqrshrn.4h	v21, v18, #12
-sqrshrn.4h	v19, v6, #12
-sqneg.4h	v20, v2
-sqneg.4h	v18, v3
+inv_flipadst_4h_x8_neon:
+adrp	x16, iadst8_coeffs
+add	x16, x16, :lo12:iadst8_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+smull	v2.4s, v23.4h, v0.h[0]
+smlal	v2.4s, v16.4h, v0.h[1]
+smull	v4.4s, v23.4h, v0.h[1]
+smlsl	v4.4s, v16.4h, v0.h[0]
+smull	v6.4s, v21.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+smull	v2.4s, v21.4h, v0.h[3]
+smlsl	v2.4s, v18.4h, v0.h[2]
+smull	v4.4s, v19.4h, v0.h[4]
+smlal	v4.4s, v20.4h, v0.h[5]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn	v21.4h, v2.4s, #0xc
+smull	v6.4s, v19.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull	v2.4s, v17.4h, v0.h[6]
+smlal	v2.4s, v22.4h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn	v19.4h, v6.4s, #0xc
+smull	v4.4s, v17.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn	v17.4h, v4.4s, #0xc
+sqadd	v2.4h, v16.4h, v20.4h
+sqsub	v3.4h, v16.4h, v20.4h
+sqadd	v4.4h, v23.4h, v19.4h
+sqsub	v5.4h, v23.4h, v19.4h
+sqadd	v6.4h, v18.4h, v22.4h
+sqsub	v7.4h, v18.4h, v22.4h
+sqadd	v18.4h, v21.4h, v17.4h
+sqsub	v19.4h, v21.4h, v17.4h
+smull	v16.4s, v3.4h, v1.h[3]
+smlal	v16.4s, v5.4h, v1.h[2]
+smull	v20.4s, v3.4h, v1.h[2]
+smlsl	v20.4s, v5.4h, v1.h[3]
+smull	v22.4s, v19.4h, v1.h[3]
+smlsl	v22.4s, v7.4h, v1.h[2]
+sqrshrn	v3.4h, v16.4s, #0xc
+sqrshrn	v5.4h, v20.4s, #0xc
+smull	v16.4s, v19.4h, v1.h[2]
+smlal	v16.4s, v7.4h, v1.h[3]
+sqrshrn	v7.4h, v22.4s, #0xc
+sqrshrn	v19.4h, v16.4s, #0xc
+sqadd	v23.4h, v2.4h, v6.4h
+sqsub	v2.4h, v2.4h, v6.4h
+sqadd	v16.4h, v4.4h, v18.4h
+sqsub	v4.4h, v4.4h, v18.4h
+sqneg	v16.4h, v16.4h
+sqadd	v22.4h, v3.4h, v7.4h
+sqsub	v3.4h, v3.4h, v7.4h
+sqadd	v17.4h, v5.4h, v19.4h
+sqsub	v5.4h, v5.4h, v19.4h
+sqneg	v22.4h, v22.4h
+smull	v18.4s, v2.4h, v1.h[0]
+smlal	v18.4s, v4.4h, v1.h[0]
+smull	v6.4s, v2.4h, v1.h[0]
+smlsl	v6.4s, v4.4h, v1.h[0]
+smull	v20.4s, v3.4h, v1.h[0]
+smlsl	v20.4s, v5.4h, v1.h[0]
+sqrshrn	v2.4h, v18.4s, #0xc
+smull	v18.4s, v3.4h, v1.h[0]
+smlal	v18.4s, v5.4h, v1.h[0]
+sqrshrn	v3.4h, v20.4s, #0xc
+sqrshrn	v21.4h, v18.4s, #0xc
+sqrshrn	v19.4h, v6.4s, #0xc
+sqneg	v20.4h, v2.4h
+sqneg	v18.4h, v3.4h
 ret
-_inv_identity_8h_x8_neon:
-sqshl.8h	v16, v16, #1
-sqshl.8h	v17, v17, #1
-sqshl.8h	v18, v18, #1
-sqshl.8h	v19, v19, #1
-sqshl.8h	v20, v20, #1
-sqshl.8h	v21, v21, #1
-sqshl.8h	v22, v22, #1
-sqshl.8h	v23, v23, #1
+inv_identity_8h_x8_neon:
+sqshl	v16.8h, v16.8h, #0x1
+sqshl	v17.8h, v17.8h, #0x1
+sqshl	v18.8h, v18.8h, #0x1
+sqshl	v19.8h, v19.8h, #0x1
+sqshl	v20.8h, v20.8h, #0x1
+sqshl	v21.8h, v21.8h, #0x1
+sqshl	v22.8h, v22.8h, #0x1
+sqshl	v23.8h, v23.8h, #0x1
 ret
-_inv_identity_4h_x8_neon:
-sqshl.4h	v16, v16, #1
-sqshl.4h	v17, v17, #1
-sqshl.4h	v18, v18, #1
-sqshl.4h	v19, v19, #1
-sqshl.4h	v20, v20, #1
-sqshl.4h	v21, v21, #1
-sqshl.4h	v22, v22, #1
-sqshl.4h	v23, v23, #1
+inv_identity_4h_x8_neon:
+sqshl	v16.4h, v16.4h, #0x1
+sqshl	v17.4h, v17.4h, #0x1
+sqshl	v18.4h, v18.4h, #0x1
+sqshl	v19.4h, v19.4h, #0x1
+sqshl	v20.4h, v20.4h, #0x1
+sqshl	v21.4h, v21.4h, #0x1
+sqshl	v22.4h, v22.4h, #0x1
+sqshl	v23.4h, v23.4h, #0x1
 ret
-_inv_txfm_identity_add_8x8_neon:
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
-ld1.8h	{ v16, v17, v18, v19 }, [x2]
-st1.8h	{ v28, v29, v30, v31 }, [x2], #64
-ld1.8h	{ v20, v21, v22, v23 }, [x2]
-st1.8h	{ v28, v29, v30, v31 }, [x2]
-b	inv_txfm_add_8x8_neon
-_inv_txfm_add_8x8_neon:
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
-ld1.8h	{ v16, v17, v18, v19 }, [x2]
-st1.8h	{ v28, v29, v30, v31 }, [x2], #64
-ld1.8h	{ v20, v21, v22, v23 }, [x2]
-st1.8h	{ v28, v29, v30, v31 }, [x2]
+inv_txfm_identity_add_8x8_neon:
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+ld1	{ v16.8h, v17.8h, v18.8h, v19.8h }, [x2]
+st1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x2], #64
+ld1	{ v20.8h, v21.8h, v22.8h, v23.8h }, [x2]
+st1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x2]
+b	L_fe8
+inv_txfm_add_8x8_neon:
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+ld1	{ v16.8h, v17.8h, v18.8h, v19.8h }, [x2]
+st1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x2], #64
+ld1	{ v20.8h, v21.8h, v22.8h, v23.8h }, [x2]
+st1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x2]
 blr	x4
-srshr.8h	v16, v16, #1
-srshr.8h	v17, v17, #1
-srshr.8h	v18, v18, #1
-srshr.8h	v19, v19, #1
-srshr.8h	v20, v20, #1
-srshr.8h	v21, v21, #1
-srshr.8h	v22, v22, #1
-srshr.8h	v23, v23, #1
-trn1.8h	v24, v16, v17
-trn2.8h	v25, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v25, v19
-trn2.4s	v25, v25, v19
-trn1.4s	v19, v24, v17
-trn2.4s	v24, v24, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v24, v18
-trn1.2d	v18, v24, v18
-trn1.2d	v19, v25, v23
-trn2.2d	v23, v25, v23
+srshr	v16.8h, v16.8h, #0x1
+srshr	v17.8h, v17.8h, #0x1
+srshr	v18.8h, v18.8h, #0x1
+srshr	v19.8h, v19.8h, #0x1
+srshr	v20.8h, v20.8h, #0x1
+srshr	v21.8h, v21.8h, #0x1
+srshr	v22.8h, v22.8h, #0x1
+srshr	v23.8h, v23.8h, #0x1
+L_fe8:
+trn1	v24.8h, v16.8h, v17.8h
+trn2	v25.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v25.4s, v19.4s
+trn2	v25.4s, v25.4s, v19.4s
+trn1	v19.4s, v24.4s, v17.4s
+trn2	v24.4s, v24.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v24.2d, v18.2d
+trn1	v18.2d, v24.2d, v18.2d
+trn1	v19.2d, v25.2d, v23.2d
+trn2	v23.2d, v25.2d, v23.2d
 blr	x5
 mov	x7, x0
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #4
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #4
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #4
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #4
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x0], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x0], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x0], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-st1.8b	{ v3 }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x4
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x4
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x4
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x4
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x0], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x0], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x0], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+st1	{ v3.8b }, [x0], x1
 ret	x15
-_inv_txfm_add_dct_dct_8x8_8bpc_neon:
+inv_txfm_add_dct_dct_8x8_8bpc_neon:
 mov	x15, x30
-cbnz	w3, inv_txfm_add_dct_dct_8x8_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+cbnz	w3, L_1124
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #8
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x8
 b	idct_dc_w8_neon
-adr	x5, #-2556
-adr	x4, #-2560
+L_1124:
+adr	x5, inv_dct_8h_x8_neon
+adr	x4, inv_dct_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_identity_identity_8x8_8bpc_neon:
+inv_txfm_add_identity_identity_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-508
+adr	x5, inv_identity_8h_x8_neon
 b	inv_txfm_identity_add_8x8_neon
-_inv_txfm_add_dct_adst_8x8_8bpc_neon:
+inv_txfm_add_dct_adst_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-2056
-adr	x4, #-2588
+adr	x5, inv_adst_8h_x8_neon
+adr	x4, inv_dct_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_dct_flipadst_8x8_8bpc_neon:
+inv_txfm_add_dct_flipadst_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-1592
-adr	x4, #-2604
+adr	x5, inv_flipadst_8h_x8_neon
+adr	x4, inv_dct_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_dct_identity_8x8_8bpc_neon:
+inv_txfm_add_dct_identity_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-552
-adr	x4, #-2620
+adr	x5, inv_identity_8h_x8_neon
+adr	x4, inv_dct_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_adst_dct_8x8_8bpc_neon:
+inv_txfm_add_adst_dct_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-2632
-adr	x4, #-2108
+adr	x5, inv_dct_8h_x8_neon
+adr	x4, inv_adst_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_adst_adst_8x8_8bpc_neon:
+inv_txfm_add_adst_adst_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-2120
-adr	x4, #-2124
+adr	x5, inv_adst_8h_x8_neon
+adr	x4, inv_adst_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_adst_flipadst_8x8_8bpc_neon:
+inv_txfm_add_adst_flipadst_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-1656
-adr	x4, #-2140
+adr	x5, inv_flipadst_8h_x8_neon
+adr	x4, inv_adst_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_flipadst_dct_8x8_8bpc_neon:
+inv_txfm_add_flipadst_dct_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-2680
-adr	x4, #-1676
+adr	x5, inv_dct_8h_x8_neon
+adr	x4, inv_flipadst_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_flipadst_adst_8x8_8bpc_neon:
+inv_txfm_add_flipadst_adst_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-2168
-adr	x4, #-1692
+adr	x5, inv_adst_8h_x8_neon
+adr	x4, inv_flipadst_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_flipadst_flipadst_8x8_8bpc_neon:
+inv_txfm_add_flipadst_flipadst_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-1704
-adr	x4, #-1708
+adr	x5, inv_flipadst_8h_x8_neon
+adr	x4, inv_flipadst_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_identity_dct_8x8_8bpc_neon:
+inv_txfm_add_identity_dct_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-2728
+adr	x5, inv_dct_8h_x8_neon
 b	inv_txfm_identity_add_8x8_neon
-_inv_txfm_add_adst_identity_8x8_8bpc_neon:
+inv_txfm_add_adst_identity_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-676
-adr	x4, #-2216
+adr	x5, inv_identity_8h_x8_neon
+adr	x4, inv_adst_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_flipadst_identity_8x8_8bpc_neon:
+inv_txfm_add_flipadst_identity_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-692
-adr	x4, #-1752
+adr	x5, inv_identity_8h_x8_neon
+adr	x4, inv_flipadst_8h_x8_neon
 b	inv_txfm_add_8x8_neon
-_inv_txfm_add_identity_adst_8x8_8bpc_neon:
+inv_txfm_add_identity_adst_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-2244
+adr	x5, inv_adst_8h_x8_neon
 b	inv_txfm_identity_add_8x8_neon
-_inv_txfm_add_identity_flipadst_8x8_8bpc_neon:
+inv_txfm_add_identity_flipadst_8x8_8bpc_neon:
 mov	x15, x30
-adr	x5, #-1776
+adr	x5, inv_flipadst_8h_x8_neon
 b	inv_txfm_identity_add_8x8_neon
-_inv_txfm_add_8x4_neon:
-movi.8h	v30, #0
-movi.8h	v31, #0
-mov	w16, #23168
-dup.4h	v0, w16
-ld1.4h	{ v16, v17, v18, v19 }, [x2]
-st1.8h	{ v30, v31 }, [x2], #32
-ld1.4h	{ v20, v21, v22, v23 }, [x2]
-st1.8h	{ v30, v31 }, [x2]
-sqrdmulh.4h	v16, v16, v0[0]
-sqrdmulh.4h	v17, v17, v0[0]
-sqrdmulh.4h	v18, v18, v0[0]
-sqrdmulh.4h	v19, v19, v0[0]
-sqrdmulh.4h	v20, v20, v0[0]
-sqrdmulh.4h	v21, v21, v0[0]
-sqrdmulh.4h	v22, v22, v0[0]
-sqrdmulh.4h	v23, v23, v0[0]
+inv_txfm_add_8x4_neon:
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+ld1	{ v16.4h, v17.4h, v18.4h, v19.4h }, [x2]
+st1	{ v30.8h, v31.8h }, [x2], #32
+ld1	{ v20.4h, v21.4h, v22.4h, v23.4h }, [x2]
+st1	{ v30.8h, v31.8h }, [x2]
+sqrdmulh	v16.4h, v16.4h, v0.h[0]
+sqrdmulh	v17.4h, v17.4h, v0.h[0]
+sqrdmulh	v18.4h, v18.4h, v0.h[0]
+sqrdmulh	v19.4h, v19.4h, v0.h[0]
+sqrdmulh	v20.4h, v20.4h, v0.h[0]
+sqrdmulh	v21.4h, v21.4h, v0.h[0]
+sqrdmulh	v22.4h, v22.4h, v0.h[0]
+sqrdmulh	v23.4h, v23.4h, v0.h[0]
 blr	x4
-trn1.4h	v4, v16, v17
-trn2.4h	v5, v16, v17
-trn1.4h	v6, v18, v19
-trn2.4h	v7, v18, v19
-trn1.2s	v16, v4, v6
-trn2.2s	v18, v4, v6
-trn1.2s	v17, v5, v7
-trn2.2s	v19, v5, v7
-trn1.4h	v4, v20, v21
-trn2.4h	v5, v20, v21
-trn1.4h	v6, v22, v23
-trn2.4h	v7, v22, v23
-trn1.2s	v20, v4, v6
-trn2.2s	v22, v4, v6
-trn1.2s	v21, v5, v7
-trn2.2s	v23, v5, v7
-mov.d	v16[1], v20[0]
-mov.d	v17[1], v21[0]
-mov.d	v18[1], v22[0]
-mov.d	v19[1], v23[0]
+trn1	v4.4h, v16.4h, v17.4h
+trn2	v5.4h, v16.4h, v17.4h
+trn1	v6.4h, v18.4h, v19.4h
+trn2	v7.4h, v18.4h, v19.4h
+trn1	v16.2s, v4.2s, v6.2s
+trn2	v18.2s, v4.2s, v6.2s
+trn1	v17.2s, v5.2s, v7.2s
+trn2	v19.2s, v5.2s, v7.2s
+trn1	v4.4h, v20.4h, v21.4h
+trn2	v5.4h, v20.4h, v21.4h
+trn1	v6.4h, v22.4h, v23.4h
+trn2	v7.4h, v22.4h, v23.4h
+trn1	v20.2s, v4.2s, v6.2s
+trn2	v22.2s, v4.2s, v6.2s
+trn1	v21.2s, v5.2s, v7.2s
+trn2	v23.2s, v5.2s, v7.2s
+mov	v16.d[1], v20.d[0]
+mov	v17.d[1], v21.d[0]
+mov	v18.d[1], v22.d[0]
+mov	v19.d[1], v23.d[0]
 blr	x5
 mov	x7, x0
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-st1.8b	{ v5 }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+st1	{ v5.8b }, [x0], x1
 ret	x15
-_inv_txfm_add_4x8_neon:
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
-mov	w16, #23168
-dup.4h	v0, w16
-ld1.8h	{ v16, v17, v18, v19 }, [x2]
-st1.8h	{ v28, v29, v30, v31 }, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
+inv_txfm_add_4x8_neon:
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+ld1	{ v16.8h, v17.8h, v18.8h, v19.8h }, [x2]
+st1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x2]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
 blr	x4
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v6, v18, v19
-trn2.8h	v7, v18, v19
-trn1.4s	v16, v4, v6
-trn2.4s	v18, v4, v6
-trn1.4s	v17, v5, v7
-trn2.4s	v19, v5, v7
-mov.d	v20[0], v16[1]
-mov.d	v21[0], v17[1]
-mov.d	v22[0], v18[1]
-mov.d	v23[0], v19[1]
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v6.8h, v18.8h, v19.8h
+trn2	v7.8h, v18.8h, v19.8h
+trn1	v16.4s, v4.4s, v6.4s
+trn2	v18.4s, v4.4s, v6.4s
+trn1	v17.4s, v5.4s, v7.4s
+trn2	v19.4s, v5.4s, v7.4s
+mov	v20.d[0], v16.d[1]
+mov	v21.d[0], v17.d[1]
+mov	v22.d[0], v18.d[1]
+mov	v23.d[0], v19.d[1]
 blr	x5
 mov	x7, x0
-ld1.s	{ v0 }[0], [x7], x1
-mov.d	v16[1], v17[0]
-ld1.s	{ v0 }[1], [x7], x1
-ld1.s	{ v1 }[0], [x7], x1
-mov.d	v18[1], v19[0]
-ld1.s	{ v1 }[1], [x7], x1
-ld1.s	{ v2 }[0], [x7], x1
-mov.d	v20[1], v21[0]
-srshr.8h	v16, v16, #4
-ld1.s	{ v2 }[1], [x7], x1
-ld1.s	{ v3 }[0], [x7], x1
-mov.d	v22[1], v23[0]
-srshr.8h	v18, v18, #4
-ld1.s	{ v3 }[1], [x7], x1
-uaddw.8h	v16, v16, v0
-srshr.8h	v20, v20, #4
-uaddw.8h	v18, v18, v1
-sqxtun.8b	v0, v16
-srshr.8h	v22, v22, #4
-uaddw.8h	v20, v20, v2
-st1.s	{ v0 }[0], [x0], x1
-sqxtun.8b	v1, v18
-st1.s	{ v0 }[1], [x0], x1
-uaddw.8h	v22, v22, v3
-st1.s	{ v1 }[0], [x0], x1
-sqxtun.8b	v2, v20
-st1.s	{ v1 }[1], [x0], x1
-st1.s	{ v2 }[0], [x0], x1
-sqxtun.8b	v3, v22
-st1.s	{ v2 }[1], [x0], x1
-st1.s	{ v3 }[0], [x0], x1
-st1.s	{ v3 }[1], [x0], x1
+ld1	{ v0.s }[0], [x7], x1
+mov	v16.d[1], v17.d[0]
+ld1	{ v0.s }[1], [x7], x1
+ld1	{ v1.s }[0], [x7], x1
+mov	v18.d[1], v19.d[0]
+ld1	{ v1.s }[1], [x7], x1
+ld1	{ v2.s }[0], [x7], x1
+mov	v20.d[1], v21.d[0]
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v2.s }[1], [x7], x1
+ld1	{ v3.s }[0], [x7], x1
+mov	v22.d[1], v23.d[0]
+srshr	v18.8h, v18.8h, #0x4
+ld1	{ v3.s }[1], [x7], x1
+uaddw	v16.8h, v16.8h, v0.8b
+srshr	v20.8h, v20.8h, #0x4
+uaddw	v18.8h, v18.8h, v1.8b
+sqxtun	v0.8b, v16.8h
+srshr	v22.8h, v22.8h, #0x4
+uaddw	v20.8h, v20.8h, v2.8b
+st1	{ v0.s }[0], [x0], x1
+sqxtun	v1.8b, v18.8h
+st1	{ v0.s }[1], [x0], x1
+uaddw	v22.8h, v22.8h, v3.8b
+st1	{ v1.s }[0], [x0], x1
+sqxtun	v2.8b, v20.8h
+st1	{ v1.s }[1], [x0], x1
+st1	{ v2.s }[0], [x0], x1
+sqxtun	v3.8b, v22.8h
+st1	{ v2.s }[1], [x0], x1
+st1	{ v3.s }[0], [x0], x1
+st1	{ v3.s }[1], [x0], x1
 ret	x15
-_inv_txfm_add_dct_dct_4x8_8bpc_neon:
+inv_txfm_add_dct_dct_4x8_8bpc_neon:
 mov	x15, x30
-cbnz	w3, inv_txfm_add_dct_dct_4x8_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+cbnz	w3, L_1420
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #8
-b	ltmp0
-adr	x4, #-4636
-adr	x5, #-3000
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x8
+b	idct_dc_w4_neon
+L_1420:
+adr	x4, inv_dct_8h_x4_neon
+adr	x5, inv_dct_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_identity_identity_4x8_8bpc_neon:
+inv_txfm_add_identity_identity_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-3980
-adr	x5, #-1240
+adr	x4, inv_identity_8h_x4_neon
+adr	x5, inv_identity_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_dct_adst_4x8_8bpc_neon:
+inv_txfm_add_dct_adst_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4668
-adr	x5, #-1868
+adr	x4, inv_dct_8h_x4_neon
+adr	x5, inv_adst_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_dct_flipadst_4x8_8bpc_neon:
+inv_txfm_add_dct_flipadst_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4684
-adr	x5, #-1596
+adr	x4, inv_dct_8h_x4_neon
+adr	x5, inv_flipadst_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_dct_identity_4x8_8bpc_neon:
+inv_txfm_add_dct_identity_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4700
-adr	x5, #-1288
+adr	x4, inv_dct_8h_x4_neon
+adr	x5, inv_identity_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_adst_dct_4x8_8bpc_neon:
+inv_txfm_add_adst_dct_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4412
-adr	x5, #-3080
+adr	x4, inv_adst_8h_x4_neon
+adr	x5, inv_dct_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_adst_adst_4x8_8bpc_neon:
+inv_txfm_add_adst_adst_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4428
-adr	x5, #-1932
+adr	x4, inv_adst_8h_x4_neon
+adr	x5, inv_adst_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_adst_flipadst_4x8_8bpc_neon:
+inv_txfm_add_adst_flipadst_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4444
-adr	x5, #-1660
+adr	x4, inv_adst_8h_x4_neon
+adr	x5, inv_flipadst_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_flipadst_dct_4x8_8bpc_neon:
+inv_txfm_add_flipadst_dct_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4300
-adr	x5, #-3128
+adr	x4, inv_flipadst_8h_x4_neon
+adr	x5, inv_dct_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_flipadst_adst_4x8_8bpc_neon:
+inv_txfm_add_flipadst_adst_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4316
-adr	x5, #-1980
+adr	x4, inv_flipadst_8h_x4_neon
+adr	x5, inv_adst_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_flipadst_flipadst_4x8_8bpc_neon:
+inv_txfm_add_flipadst_flipadst_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4332
-adr	x5, #-1708
+adr	x4, inv_flipadst_8h_x4_neon
+adr	x5, inv_flipadst_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_identity_dct_4x8_8bpc_neon:
+inv_txfm_add_identity_dct_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4140
-adr	x5, #-3176
+adr	x4, inv_identity_8h_x4_neon
+adr	x5, inv_dct_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_adst_identity_4x8_8bpc_neon:
+inv_txfm_add_adst_identity_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4524
-adr	x5, #-1416
+adr	x4, inv_adst_8h_x4_neon
+adr	x5, inv_identity_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_flipadst_identity_4x8_8bpc_neon:
+inv_txfm_add_flipadst_identity_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4380
-adr	x5, #-1432
+adr	x4, inv_flipadst_8h_x4_neon
+adr	x5, inv_identity_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_identity_adst_4x8_8bpc_neon:
+inv_txfm_add_identity_adst_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4188
-adr	x5, #-2060
+adr	x4, inv_identity_8h_x4_neon
+adr	x5, inv_adst_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_identity_flipadst_4x8_8bpc_neon:
+inv_txfm_add_identity_flipadst_4x8_8bpc_neon:
 mov	x15, x30
-adr	x4, #-4204
-adr	x5, #-1788
+adr	x4, inv_identity_8h_x4_neon
+adr	x5, inv_flipadst_4h_x8_neon
 b	inv_txfm_add_4x8_neon
-_inv_txfm_add_dct_dct_8x4_8bpc_neon:
+inv_txfm_add_dct_dct_8x4_8bpc_neon:
 mov	x15, x30
-cbnz	w3, inv_txfm_add_dct_dct_8x4_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+cbnz	w3, L_154c
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #4
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x4
 b	idct_dc_w8_neon
-adr	x4, #-3296
-adr	x5, #-4940
+L_154c:
+adr	x4, inv_dct_4h_x8_neon
+adr	x5, inv_dct_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_identity_identity_8x4_8bpc_neon:
+inv_txfm_add_identity_identity_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1536
-adr	x5, #-4284
+adr	x4, inv_identity_4h_x8_neon
+adr	x5, inv_identity_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_dct_adst_8x4_8bpc_neon:
+inv_txfm_add_dct_adst_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-3328
-adr	x5, #-4668
+adr	x4, inv_dct_4h_x8_neon
+adr	x5, inv_adst_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_dct_flipadst_8x4_8bpc_neon:
+inv_txfm_add_dct_flipadst_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-3344
-adr	x5, #-4524
+adr	x4, inv_dct_4h_x8_neon
+adr	x5, inv_flipadst_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_dct_identity_8x4_8bpc_neon:
+inv_txfm_add_dct_identity_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-3360
-adr	x5, #-4332
+adr	x4, inv_dct_4h_x8_neon
+adr	x5, inv_identity_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_adst_dct_8x4_8bpc_neon:
+inv_txfm_add_adst_dct_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-2212
-adr	x5, #-5020
+adr	x4, inv_adst_4h_x8_neon
+adr	x5, inv_dct_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_adst_adst_8x4_8bpc_neon:
+inv_txfm_add_adst_adst_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-2228
-adr	x5, #-4732
+adr	x4, inv_adst_4h_x8_neon
+adr	x5, inv_adst_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_adst_flipadst_8x4_8bpc_neon:
+inv_txfm_add_adst_flipadst_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-2244
-adr	x5, #-4588
+adr	x4, inv_adst_4h_x8_neon
+adr	x5, inv_flipadst_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_flipadst_dct_8x4_8bpc_neon:
+inv_txfm_add_flipadst_dct_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1972
-adr	x5, #-5068
+adr	x4, inv_flipadst_4h_x8_neon
+adr	x5, inv_dct_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_flipadst_adst_8x4_8bpc_neon:
+inv_txfm_add_flipadst_adst_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1988
-adr	x5, #-4780
+adr	x4, inv_flipadst_4h_x8_neon
+adr	x5, inv_adst_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_flipadst_flipadst_8x4_8bpc_neon:
+inv_txfm_add_flipadst_flipadst_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-2004
-adr	x5, #-4636
+adr	x4, inv_flipadst_4h_x8_neon
+adr	x5, inv_flipadst_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_identity_dct_8x4_8bpc_neon:
+inv_txfm_add_identity_dct_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1696
-adr	x5, #-5116
+adr	x4, inv_identity_4h_x8_neon
+adr	x5, inv_dct_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_adst_identity_8x4_8bpc_neon:
+inv_txfm_add_adst_identity_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-2324
-adr	x5, #-4460
+adr	x4, inv_adst_4h_x8_neon
+adr	x5, inv_identity_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_flipadst_identity_8x4_8bpc_neon:
+inv_txfm_add_flipadst_identity_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-2052
-adr	x5, #-4476
+adr	x4, inv_flipadst_4h_x8_neon
+adr	x5, inv_identity_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_identity_adst_8x4_8bpc_neon:
+inv_txfm_add_identity_adst_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1744
-adr	x5, #-4860
+adr	x4, inv_identity_4h_x8_neon
+adr	x5, inv_adst_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_txfm_add_identity_flipadst_8x4_8bpc_neon:
+inv_txfm_add_identity_flipadst_8x4_8bpc_neon:
 mov	x15, x30
-adr	x4, #-1760
-adr	x5, #-4716
+adr	x4, inv_identity_4h_x8_neon
+adr	x5, inv_flipadst_8h_x4_neon
 b	inv_txfm_add_8x4_neon
-_inv_dct_8h_x16_neon:
-adrp	x16, inv_dct_8h_x16_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-smull.4s	v6, v20, v0[3]
-smlal.4s	v6, v28, v0[2]
-smull2.4s	v7, v20, v0[3]
-smlal2.4s	v7, v28, v0[2]
-smull.4s	v4, v20, v0[2]
-smlsl.4s	v4, v28, v0[3]
-smull2.4s	v5, v20, v0[2]
-smlsl2.4s	v5, v28, v0[3]
-smull.4s	v2, v16, v0[0]
-smlal.4s	v2, v24, v0[0]
-smull2.4s	v3, v16, v0[0]
-smlal2.4s	v3, v24, v0[0]
-sqrshrn.4h	v6, v6, #12
-sqrshrn2.8h	v6, v7, #12
-sqrshrn.4h	v7, v4, #12
-sqrshrn2.8h	v7, v5, #12
-smull.4s	v4, v16, v0[0]
-smlsl.4s	v4, v24, v0[0]
-smull2.4s	v5, v16, v0[0]
-smlsl2.4s	v5, v24, v0[0]
-sqrshrn.4h	v2, v2, #12
-sqrshrn2.8h	v2, v3, #12
-sqrshrn.4h	v3, v4, #12
-sqrshrn2.8h	v3, v5, #12
-sqadd.8h	v16, v2, v6
-sqsub.8h	v28, v2, v6
-sqadd.8h	v20, v3, v7
-sqsub.8h	v24, v3, v7
-smull.4s	v2, v18, v0[4]
-smlsl.4s	v2, v30, v0[5]
-smull2.4s	v3, v18, v0[4]
-smlsl2.4s	v3, v30, v0[5]
-smull.4s	v4, v18, v0[5]
-smlal.4s	v4, v30, v0[4]
-smull2.4s	v5, v18, v0[5]
-smlal2.4s	v5, v30, v0[4]
-smull.4s	v6, v26, v0[6]
-smlsl.4s	v6, v22, v0[7]
-smull2.4s	v7, v26, v0[6]
-smlsl2.4s	v7, v22, v0[7]
-sqrshrn.4h	v18, v2, #12
-sqrshrn2.8h	v18, v3, #12
-sqrshrn.4h	v30, v4, #12
-sqrshrn2.8h	v30, v5, #12
-smull.4s	v2, v26, v0[7]
-smlal.4s	v2, v22, v0[6]
-smull2.4s	v3, v26, v0[7]
-smlal2.4s	v3, v22, v0[6]
-sqrshrn.4h	v22, v6, #12
-sqrshrn2.8h	v22, v7, #12
-sqrshrn.4h	v26, v2, #12
-sqrshrn2.8h	v26, v3, #12
-sqadd.8h	v2, v18, v22
-sqsub.8h	v18, v18, v22
-sqadd.8h	v3, v30, v26
-sqsub.8h	v22, v30, v26
-smull.4s	v4, v22, v0[0]
-smlsl.4s	v4, v18, v0[0]
-smull2.4s	v5, v22, v0[0]
-smlsl2.4s	v5, v18, v0[0]
-smull.4s	v6, v22, v0[0]
-smlal.4s	v6, v18, v0[0]
-smull2.4s	v7, v22, v0[0]
-smlal2.4s	v7, v18, v0[0]
-sqrshrn.4h	v4, v4, #12
-sqrshrn2.8h	v4, v5, #12
-sqrshrn.4h	v5, v6, #12
-sqrshrn2.8h	v5, v7, #12
-sqsub.8h	v30, v16, v3
-sqadd.8h	v16, v16, v3
-sqadd.8h	v18, v20, v5
-sqsub.8h	v6, v20, v5
-sqadd.8h	v20, v24, v4
-sqsub.8h	v26, v24, v4
-sqadd.8h	v22, v28, v2
-sqsub.8h	v24, v28, v2
-mov.16b	v28, v6
-smull.4s	v2, v17, v1[0]
-smlsl.4s	v2, v31, v1[1]
-smull2.4s	v3, v17, v1[0]
-smlsl2.4s	v3, v31, v1[1]
-smull.4s	v4, v17, v1[1]
-smlal.4s	v4, v31, v1[0]
-smull2.4s	v5, v17, v1[1]
-smlal2.4s	v5, v31, v1[0]
-smull.4s	v6, v25, v1[2]
-smlsl.4s	v6, v23, v1[3]
-smull2.4s	v7, v25, v1[2]
-smlsl2.4s	v7, v23, v1[3]
-sqrshrn.4h	v17, v2, #12
-sqrshrn2.8h	v17, v3, #12
-sqrshrn.4h	v31, v4, #12
-sqrshrn2.8h	v31, v5, #12
-smull.4s	v2, v25, v1[3]
-smlal.4s	v2, v23, v1[2]
-smull2.4s	v3, v25, v1[3]
-smlal2.4s	v3, v23, v1[2]
-smull.4s	v4, v21, v1[4]
-smlsl.4s	v4, v27, v1[5]
-smull2.4s	v5, v21, v1[4]
-smlsl2.4s	v5, v27, v1[5]
-sqrshrn.4h	v23, v6, #12
-sqrshrn2.8h	v23, v7, #12
-sqrshrn.4h	v25, v2, #12
-sqrshrn2.8h	v25, v3, #12
-smull.4s	v6, v21, v1[5]
-smlal.4s	v6, v27, v1[4]
-smull2.4s	v7, v21, v1[5]
-smlal2.4s	v7, v27, v1[4]
-smull.4s	v2, v29, v1[6]
-smlsl.4s	v2, v19, v1[7]
-smull2.4s	v3, v29, v1[6]
-smlsl2.4s	v3, v19, v1[7]
-sqrshrn.4h	v21, v4, #12
-sqrshrn2.8h	v21, v5, #12
-sqrshrn.4h	v27, v6, #12
-sqrshrn2.8h	v27, v7, #12
-smull.4s	v4, v29, v1[7]
-smlal.4s	v4, v19, v1[6]
-smull2.4s	v5, v29, v1[7]
-smlal2.4s	v5, v19, v1[6]
-sqrshrn.4h	v19, v2, #12
-sqrshrn2.8h	v19, v3, #12
-sqrshrn.4h	v29, v4, #12
-sqrshrn2.8h	v29, v5, #12
-sqsub.8h	v2, v17, v23
-sqadd.8h	v17, v17, v23
-sqsub.8h	v3, v31, v25
-sqadd.8h	v31, v31, v25
-sqsub.8h	v23, v19, v21
-sqadd.8h	v19, v19, v21
-sqadd.8h	v25, v29, v27
-sqsub.8h	v29, v29, v27
-smull.4s	v4, v3, v0[2]
-smlsl.4s	v4, v2, v0[3]
-smull2.4s	v5, v3, v0[2]
-smlsl2.4s	v5, v2, v0[3]
-smull.4s	v6, v3, v0[3]
-smlal.4s	v6, v2, v0[2]
-smull2.4s	v7, v3, v0[3]
-smlal2.4s	v7, v2, v0[2]
-sqrshrn.4h	v21, v4, #12
-sqrshrn2.8h	v21, v5, #12
-sqrshrn.4h	v27, v6, #12
-sqrshrn2.8h	v27, v7, #12
-smull.4s	v4, v29, v0[2]
-smlsl.4s	v4, v23, v0[3]
-smull2.4s	v5, v29, v0[2]
-smlsl2.4s	v5, v23, v0[3]
-smull.4s	v6, v29, v0[3]
-smlal.4s	v6, v23, v0[2]
-smull2.4s	v7, v29, v0[3]
-smlal2.4s	v7, v23, v0[2]
-sqrshrn.4h	v29, v4, #12
-sqrshrn2.8h	v29, v5, #12
-neg.4s	v6, v6
-neg.4s	v7, v7
-sqrshrn.4h	v23, v6, #12
-sqrshrn2.8h	v23, v7, #12
-sqsub.8h	v2, v17, v19
-sqadd.8h	v17, v17, v19
-sqsub.8h	v3, v31, v25
-sqadd.8h	v31, v31, v25
-sqadd.8h	v19, v21, v23
-sqsub.8h	v21, v21, v23
-sqsub.8h	v25, v27, v29
-sqadd.8h	v27, v27, v29
-smull.4s	v4, v3, v0[0]
-smlsl.4s	v4, v2, v0[0]
-smull2.4s	v5, v3, v0[0]
-smlsl2.4s	v5, v2, v0[0]
-smull.4s	v6, v3, v0[0]
-smlal.4s	v6, v2, v0[0]
-smull2.4s	v7, v3, v0[0]
-smlal2.4s	v7, v2, v0[0]
-smull.4s	v2, v25, v0[0]
-smlsl.4s	v2, v21, v0[0]
-smull2.4s	v3, v25, v0[0]
-smlsl2.4s	v3, v21, v0[0]
-sqrshrn.4h	v4, v4, #12
-sqrshrn2.8h	v4, v5, #12
-sqrshrn.4h	v5, v6, #12
-sqrshrn2.8h	v5, v7, #12
-smull.4s	v6, v25, v0[0]
-smlal.4s	v6, v21, v0[0]
-smull2.4s	v7, v25, v0[0]
-smlal2.4s	v7, v21, v0[0]
-sqrshrn.4h	v2, v2, #12
-sqrshrn2.8h	v2, v3, #12
-sqrshrn.4h	v3, v6, #12
-sqrshrn2.8h	v3, v7, #12
-sqadd.8h	v6, v16, v31
-sqsub.8h	v31, v16, v31
-mov.16b	v16, v6
-sqadd.8h	v23, v30, v17
-sqsub.8h	v7, v30, v17
-sqadd.8h	v17, v18, v27
-sqsub.8h	v30, v18, v27
-sqadd.8h	v18, v20, v3
-sqsub.8h	v29, v20, v3
-sqadd.8h	v3, v28, v19
-sqsub.8h	v25, v28, v19
-sqadd.8h	v19, v22, v5
-sqsub.8h	v28, v22, v5
-sqadd.8h	v20, v24, v4
-sqsub.8h	v27, v24, v4
-sqadd.8h	v21, v26, v2
-sqsub.8h	v26, v26, v2
-mov.16b	v24, v7
-mov.16b	v22, v3
+inv_dct_8h_x16_neon:
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+smull	v6.4s, v20.4h, v0.h[3]
+smlal	v6.4s, v28.4h, v0.h[2]
+smull2	v7.4s, v20.8h, v0.h[3]
+smlal2	v7.4s, v28.8h, v0.h[2]
+smull	v4.4s, v20.4h, v0.h[2]
+smlsl	v4.4s, v28.4h, v0.h[3]
+smull2	v5.4s, v20.8h, v0.h[2]
+smlsl2	v5.4s, v28.8h, v0.h[3]
+smull	v2.4s, v16.4h, v0.h[0]
+smlal	v2.4s, v24.4h, v0.h[0]
+smull2	v3.4s, v16.8h, v0.h[0]
+smlal2	v3.4s, v24.8h, v0.h[0]
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn2	v6.8h, v7.4s, #0xc
+sqrshrn	v7.4h, v4.4s, #0xc
+sqrshrn2	v7.8h, v5.4s, #0xc
+smull	v4.4s, v16.4h, v0.h[0]
+smlsl	v4.4s, v24.4h, v0.h[0]
+smull2	v5.4s, v16.8h, v0.h[0]
+smlsl2	v5.4s, v24.8h, v0.h[0]
+sqrshrn	v2.4h, v2.4s, #0xc
+sqrshrn2	v2.8h, v3.4s, #0xc
+sqrshrn	v3.4h, v4.4s, #0xc
+sqrshrn2	v3.8h, v5.4s, #0xc
+sqadd	v16.8h, v2.8h, v6.8h
+sqsub	v28.8h, v2.8h, v6.8h
+sqadd	v20.8h, v3.8h, v7.8h
+sqsub	v24.8h, v3.8h, v7.8h
+smull	v2.4s, v18.4h, v0.h[4]
+smlsl	v2.4s, v30.4h, v0.h[5]
+smull2	v3.4s, v18.8h, v0.h[4]
+smlsl2	v3.4s, v30.8h, v0.h[5]
+smull	v4.4s, v18.4h, v0.h[5]
+smlal	v4.4s, v30.4h, v0.h[4]
+smull2	v5.4s, v18.8h, v0.h[5]
+smlal2	v5.4s, v30.8h, v0.h[4]
+smull	v6.4s, v26.4h, v0.h[6]
+smlsl	v6.4s, v22.4h, v0.h[7]
+smull2	v7.4s, v26.8h, v0.h[6]
+smlsl2	v7.4s, v22.8h, v0.h[7]
+sqrshrn	v18.4h, v2.4s, #0xc
+sqrshrn2	v18.8h, v3.4s, #0xc
+sqrshrn	v30.4h, v4.4s, #0xc
+sqrshrn2	v30.8h, v5.4s, #0xc
+smull	v2.4s, v26.4h, v0.h[7]
+smlal	v2.4s, v22.4h, v0.h[6]
+smull2	v3.4s, v26.8h, v0.h[7]
+smlal2	v3.4s, v22.8h, v0.h[6]
+sqrshrn	v22.4h, v6.4s, #0xc
+sqrshrn2	v22.8h, v7.4s, #0xc
+sqrshrn	v26.4h, v2.4s, #0xc
+sqrshrn2	v26.8h, v3.4s, #0xc
+sqadd	v2.8h, v18.8h, v22.8h
+sqsub	v18.8h, v18.8h, v22.8h
+sqadd	v3.8h, v30.8h, v26.8h
+sqsub	v22.8h, v30.8h, v26.8h
+smull	v4.4s, v22.4h, v0.h[0]
+smlsl	v4.4s, v18.4h, v0.h[0]
+smull2	v5.4s, v22.8h, v0.h[0]
+smlsl2	v5.4s, v18.8h, v0.h[0]
+smull	v6.4s, v22.4h, v0.h[0]
+smlal	v6.4s, v18.4h, v0.h[0]
+smull2	v7.4s, v22.8h, v0.h[0]
+smlal2	v7.4s, v18.8h, v0.h[0]
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn2	v4.8h, v5.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+sqrshrn2	v5.8h, v7.4s, #0xc
+sqsub	v30.8h, v16.8h, v3.8h
+sqadd	v16.8h, v16.8h, v3.8h
+sqadd	v18.8h, v20.8h, v5.8h
+sqsub	v6.8h, v20.8h, v5.8h
+sqadd	v20.8h, v24.8h, v4.8h
+sqsub	v26.8h, v24.8h, v4.8h
+sqadd	v22.8h, v28.8h, v2.8h
+sqsub	v24.8h, v28.8h, v2.8h
+mov	v28.16b, v6.16b
+smull	v2.4s, v17.4h, v1.h[0]
+smlsl	v2.4s, v31.4h, v1.h[1]
+smull2	v3.4s, v17.8h, v1.h[0]
+smlsl2	v3.4s, v31.8h, v1.h[1]
+smull	v4.4s, v17.4h, v1.h[1]
+smlal	v4.4s, v31.4h, v1.h[0]
+smull2	v5.4s, v17.8h, v1.h[1]
+smlal2	v5.4s, v31.8h, v1.h[0]
+smull	v6.4s, v25.4h, v1.h[2]
+smlsl	v6.4s, v23.4h, v1.h[3]
+smull2	v7.4s, v25.8h, v1.h[2]
+smlsl2	v7.4s, v23.8h, v1.h[3]
+sqrshrn	v17.4h, v2.4s, #0xc
+sqrshrn2	v17.8h, v3.4s, #0xc
+sqrshrn	v31.4h, v4.4s, #0xc
+sqrshrn2	v31.8h, v5.4s, #0xc
+smull	v2.4s, v25.4h, v1.h[3]
+smlal	v2.4s, v23.4h, v1.h[2]
+smull2	v3.4s, v25.8h, v1.h[3]
+smlal2	v3.4s, v23.8h, v1.h[2]
+smull	v4.4s, v21.4h, v1.h[4]
+smlsl	v4.4s, v27.4h, v1.h[5]
+smull2	v5.4s, v21.8h, v1.h[4]
+smlsl2	v5.4s, v27.8h, v1.h[5]
+sqrshrn	v23.4h, v6.4s, #0xc
+sqrshrn2	v23.8h, v7.4s, #0xc
+sqrshrn	v25.4h, v2.4s, #0xc
+sqrshrn2	v25.8h, v3.4s, #0xc
+smull	v6.4s, v21.4h, v1.h[5]
+smlal	v6.4s, v27.4h, v1.h[4]
+smull2	v7.4s, v21.8h, v1.h[5]
+smlal2	v7.4s, v27.8h, v1.h[4]
+smull	v2.4s, v29.4h, v1.h[6]
+smlsl	v2.4s, v19.4h, v1.h[7]
+smull2	v3.4s, v29.8h, v1.h[6]
+smlsl2	v3.4s, v19.8h, v1.h[7]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn2	v21.8h, v5.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn2	v27.8h, v7.4s, #0xc
+smull	v4.4s, v29.4h, v1.h[7]
+smlal	v4.4s, v19.4h, v1.h[6]
+smull2	v5.4s, v29.8h, v1.h[7]
+smlal2	v5.4s, v19.8h, v1.h[6]
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn2	v19.8h, v3.4s, #0xc
+sqrshrn	v29.4h, v4.4s, #0xc
+sqrshrn2	v29.8h, v5.4s, #0xc
+sqsub	v2.8h, v17.8h, v23.8h
+sqadd	v17.8h, v17.8h, v23.8h
+sqsub	v3.8h, v31.8h, v25.8h
+sqadd	v31.8h, v31.8h, v25.8h
+sqsub	v23.8h, v19.8h, v21.8h
+sqadd	v19.8h, v19.8h, v21.8h
+sqadd	v25.8h, v29.8h, v27.8h
+sqsub	v29.8h, v29.8h, v27.8h
+smull	v4.4s, v3.4h, v0.h[2]
+smlsl	v4.4s, v2.4h, v0.h[3]
+smull2	v5.4s, v3.8h, v0.h[2]
+smlsl2	v5.4s, v2.8h, v0.h[3]
+smull	v6.4s, v3.4h, v0.h[3]
+smlal	v6.4s, v2.4h, v0.h[2]
+smull2	v7.4s, v3.8h, v0.h[3]
+smlal2	v7.4s, v2.8h, v0.h[2]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn2	v21.8h, v5.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn2	v27.8h, v7.4s, #0xc
+smull	v4.4s, v29.4h, v0.h[2]
+smlsl	v4.4s, v23.4h, v0.h[3]
+smull2	v5.4s, v29.8h, v0.h[2]
+smlsl2	v5.4s, v23.8h, v0.h[3]
+smull	v6.4s, v29.4h, v0.h[3]
+smlal	v6.4s, v23.4h, v0.h[2]
+smull2	v7.4s, v29.8h, v0.h[3]
+smlal2	v7.4s, v23.8h, v0.h[2]
+sqrshrn	v29.4h, v4.4s, #0xc
+sqrshrn2	v29.8h, v5.4s, #0xc
+neg	v6.4s, v6.4s
+neg	v7.4s, v7.4s
+sqrshrn	v23.4h, v6.4s, #0xc
+sqrshrn2	v23.8h, v7.4s, #0xc
+sqsub	v2.8h, v17.8h, v19.8h
+sqadd	v17.8h, v17.8h, v19.8h
+sqsub	v3.8h, v31.8h, v25.8h
+sqadd	v31.8h, v31.8h, v25.8h
+sqadd	v19.8h, v21.8h, v23.8h
+sqsub	v21.8h, v21.8h, v23.8h
+sqsub	v25.8h, v27.8h, v29.8h
+sqadd	v27.8h, v27.8h, v29.8h
+smull	v4.4s, v3.4h, v0.h[0]
+smlsl	v4.4s, v2.4h, v0.h[0]
+smull2	v5.4s, v3.8h, v0.h[0]
+smlsl2	v5.4s, v2.8h, v0.h[0]
+smull	v6.4s, v3.4h, v0.h[0]
+smlal	v6.4s, v2.4h, v0.h[0]
+smull2	v7.4s, v3.8h, v0.h[0]
+smlal2	v7.4s, v2.8h, v0.h[0]
+smull	v2.4s, v25.4h, v0.h[0]
+smlsl	v2.4s, v21.4h, v0.h[0]
+smull2	v3.4s, v25.8h, v0.h[0]
+smlsl2	v3.4s, v21.8h, v0.h[0]
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn2	v4.8h, v5.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+sqrshrn2	v5.8h, v7.4s, #0xc
+smull	v6.4s, v25.4h, v0.h[0]
+smlal	v6.4s, v21.4h, v0.h[0]
+smull2	v7.4s, v25.8h, v0.h[0]
+smlal2	v7.4s, v21.8h, v0.h[0]
+sqrshrn	v2.4h, v2.4s, #0xc
+sqrshrn2	v2.8h, v3.4s, #0xc
+sqrshrn	v3.4h, v6.4s, #0xc
+sqrshrn2	v3.8h, v7.4s, #0xc
+sqadd	v6.8h, v16.8h, v31.8h
+sqsub	v31.8h, v16.8h, v31.8h
+mov	v16.16b, v6.16b
+sqadd	v23.8h, v30.8h, v17.8h
+sqsub	v7.8h, v30.8h, v17.8h
+sqadd	v17.8h, v18.8h, v27.8h
+sqsub	v30.8h, v18.8h, v27.8h
+sqadd	v18.8h, v20.8h, v3.8h
+sqsub	v29.8h, v20.8h, v3.8h
+sqadd	v3.8h, v28.8h, v19.8h
+sqsub	v25.8h, v28.8h, v19.8h
+sqadd	v19.8h, v22.8h, v5.8h
+sqsub	v28.8h, v22.8h, v5.8h
+sqadd	v20.8h, v24.8h, v4.8h
+sqsub	v27.8h, v24.8h, v4.8h
+sqadd	v21.8h, v26.8h, v2.8h
+sqsub	v26.8h, v26.8h, v2.8h
+mov	v24.16b, v7.16b
+mov	v22.16b, v3.16b
 ret
-_inv_dct_4h_x16_neon:
-adrp	x16, inv_dct_4h_x16_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-smull.4s	v6, v20, v0[3]
-smlal.4s	v6, v28, v0[2]
-smull.4s	v4, v20, v0[2]
-smlsl.4s	v4, v28, v0[3]
-smull.4s	v2, v16, v0[0]
-smlal.4s	v2, v24, v0[0]
-sqrshrn.4h	v6, v6, #12
-sqrshrn.4h	v7, v4, #12
-smull.4s	v4, v16, v0[0]
-smlsl.4s	v4, v24, v0[0]
-sqrshrn.4h	v2, v2, #12
-sqrshrn.4h	v3, v4, #12
-sqadd.4h	v16, v2, v6
-sqsub.4h	v28, v2, v6
-sqadd.4h	v20, v3, v7
-sqsub.4h	v24, v3, v7
-smull.4s	v2, v18, v0[4]
-smlsl.4s	v2, v30, v0[5]
-smull.4s	v4, v18, v0[5]
-smlal.4s	v4, v30, v0[4]
-smull.4s	v6, v26, v0[6]
-smlsl.4s	v6, v22, v0[7]
-sqrshrn.4h	v18, v2, #12
-sqrshrn.4h	v30, v4, #12
-smull.4s	v2, v26, v0[7]
-smlal.4s	v2, v22, v0[6]
-sqrshrn.4h	v22, v6, #12
-sqrshrn.4h	v26, v2, #12
-sqadd.4h	v2, v18, v22
-sqsub.4h	v18, v18, v22
-sqadd.4h	v3, v30, v26
-sqsub.4h	v22, v30, v26
-smull.4s	v4, v22, v0[0]
-smlsl.4s	v4, v18, v0[0]
-smull.4s	v6, v22, v0[0]
-smlal.4s	v6, v18, v0[0]
-sqrshrn.4h	v4, v4, #12
-sqrshrn.4h	v5, v6, #12
-sqsub.4h	v30, v16, v3
-sqadd.4h	v16, v16, v3
-sqadd.4h	v18, v20, v5
-sqsub.4h	v6, v20, v5
-sqadd.4h	v20, v24, v4
-sqsub.4h	v26, v24, v4
-sqadd.4h	v22, v28, v2
-sqsub.4h	v24, v28, v2
-mov.8b	v28, v6
-smull.4s	v2, v17, v1[0]
-smlsl.4s	v2, v31, v1[1]
-smull.4s	v4, v17, v1[1]
-smlal.4s	v4, v31, v1[0]
-smull.4s	v6, v25, v1[2]
-smlsl.4s	v6, v23, v1[3]
-sqrshrn.4h	v17, v2, #12
-sqrshrn.4h	v31, v4, #12
-smull.4s	v2, v25, v1[3]
-smlal.4s	v2, v23, v1[2]
-smull.4s	v4, v21, v1[4]
-smlsl.4s	v4, v27, v1[5]
-sqrshrn.4h	v23, v6, #12
-sqrshrn.4h	v25, v2, #12
-smull.4s	v6, v21, v1[5]
-smlal.4s	v6, v27, v1[4]
-smull.4s	v2, v29, v1[6]
-smlsl.4s	v2, v19, v1[7]
-sqrshrn.4h	v21, v4, #12
-sqrshrn.4h	v27, v6, #12
-smull.4s	v4, v29, v1[7]
-smlal.4s	v4, v19, v1[6]
-sqrshrn.4h	v19, v2, #12
-sqrshrn.4h	v29, v4, #12
-sqsub.4h	v2, v17, v23
-sqadd.4h	v17, v17, v23
-sqsub.4h	v3, v31, v25
-sqadd.4h	v31, v31, v25
-sqsub.4h	v23, v19, v21
-sqadd.4h	v19, v19, v21
-sqadd.4h	v25, v29, v27
-sqsub.4h	v29, v29, v27
-smull.4s	v4, v3, v0[2]
-smlsl.4s	v4, v2, v0[3]
-smull.4s	v6, v3, v0[3]
-smlal.4s	v6, v2, v0[2]
-sqrshrn.4h	v21, v4, #12
-sqrshrn.4h	v27, v6, #12
-smull.4s	v4, v29, v0[2]
-smlsl.4s	v4, v23, v0[3]
-smull.4s	v6, v29, v0[3]
-smlal.4s	v6, v23, v0[2]
-sqrshrn.4h	v29, v4, #12
-neg.4s	v6, v6
-sqrshrn.4h	v23, v6, #12
-sqsub.4h	v2, v17, v19
-sqadd.4h	v17, v17, v19
-sqsub.4h	v3, v31, v25
-sqadd.4h	v31, v31, v25
-sqadd.4h	v19, v21, v23
-sqsub.4h	v21, v21, v23
-sqsub.4h	v25, v27, v29
-sqadd.4h	v27, v27, v29
-smull.4s	v4, v3, v0[0]
-smlsl.4s	v4, v2, v0[0]
-smull.4s	v6, v3, v0[0]
-smlal.4s	v6, v2, v0[0]
-smull.4s	v2, v25, v0[0]
-smlsl.4s	v2, v21, v0[0]
-sqrshrn.4h	v4, v4, #12
-sqrshrn.4h	v5, v6, #12
-smull.4s	v6, v25, v0[0]
-smlal.4s	v6, v21, v0[0]
-sqrshrn.4h	v2, v2, #12
-sqrshrn.4h	v3, v6, #12
-sqadd.4h	v6, v16, v31
-sqsub.4h	v31, v16, v31
-mov.8b	v16, v6
-sqadd.4h	v23, v30, v17
-sqsub.4h	v7, v30, v17
-sqadd.4h	v17, v18, v27
-sqsub.4h	v30, v18, v27
-sqadd.4h	v18, v20, v3
-sqsub.4h	v29, v20, v3
-sqadd.4h	v3, v28, v19
-sqsub.4h	v25, v28, v19
-sqadd.4h	v19, v22, v5
-sqsub.4h	v28, v22, v5
-sqadd.4h	v20, v24, v4
-sqsub.4h	v27, v24, v4
-sqadd.4h	v21, v26, v2
-sqsub.4h	v26, v26, v2
-mov.8b	v24, v7
-mov.8b	v22, v3
+inv_dct_4h_x16_neon:
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+smull	v6.4s, v20.4h, v0.h[3]
+smlal	v6.4s, v28.4h, v0.h[2]
+smull	v4.4s, v20.4h, v0.h[2]
+smlsl	v4.4s, v28.4h, v0.h[3]
+smull	v2.4s, v16.4h, v0.h[0]
+smlal	v2.4s, v24.4h, v0.h[0]
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn	v7.4h, v4.4s, #0xc
+smull	v4.4s, v16.4h, v0.h[0]
+smlsl	v4.4s, v24.4h, v0.h[0]
+sqrshrn	v2.4h, v2.4s, #0xc
+sqrshrn	v3.4h, v4.4s, #0xc
+sqadd	v16.4h, v2.4h, v6.4h
+sqsub	v28.4h, v2.4h, v6.4h
+sqadd	v20.4h, v3.4h, v7.4h
+sqsub	v24.4h, v3.4h, v7.4h
+smull	v2.4s, v18.4h, v0.h[4]
+smlsl	v2.4s, v30.4h, v0.h[5]
+smull	v4.4s, v18.4h, v0.h[5]
+smlal	v4.4s, v30.4h, v0.h[4]
+smull	v6.4s, v26.4h, v0.h[6]
+smlsl	v6.4s, v22.4h, v0.h[7]
+sqrshrn	v18.4h, v2.4s, #0xc
+sqrshrn	v30.4h, v4.4s, #0xc
+smull	v2.4s, v26.4h, v0.h[7]
+smlal	v2.4s, v22.4h, v0.h[6]
+sqrshrn	v22.4h, v6.4s, #0xc
+sqrshrn	v26.4h, v2.4s, #0xc
+sqadd	v2.4h, v18.4h, v22.4h
+sqsub	v18.4h, v18.4h, v22.4h
+sqadd	v3.4h, v30.4h, v26.4h
+sqsub	v22.4h, v30.4h, v26.4h
+smull	v4.4s, v22.4h, v0.h[0]
+smlsl	v4.4s, v18.4h, v0.h[0]
+smull	v6.4s, v22.4h, v0.h[0]
+smlal	v6.4s, v18.4h, v0.h[0]
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+sqsub	v30.4h, v16.4h, v3.4h
+sqadd	v16.4h, v16.4h, v3.4h
+sqadd	v18.4h, v20.4h, v5.4h
+sqsub	v6.4h, v20.4h, v5.4h
+sqadd	v20.4h, v24.4h, v4.4h
+sqsub	v26.4h, v24.4h, v4.4h
+sqadd	v22.4h, v28.4h, v2.4h
+sqsub	v24.4h, v28.4h, v2.4h
+mov	v28.8b, v6.8b
+smull	v2.4s, v17.4h, v1.h[0]
+smlsl	v2.4s, v31.4h, v1.h[1]
+smull	v4.4s, v17.4h, v1.h[1]
+smlal	v4.4s, v31.4h, v1.h[0]
+smull	v6.4s, v25.4h, v1.h[2]
+smlsl	v6.4s, v23.4h, v1.h[3]
+sqrshrn	v17.4h, v2.4s, #0xc
+sqrshrn	v31.4h, v4.4s, #0xc
+smull	v2.4s, v25.4h, v1.h[3]
+smlal	v2.4s, v23.4h, v1.h[2]
+smull	v4.4s, v21.4h, v1.h[4]
+smlsl	v4.4s, v27.4h, v1.h[5]
+sqrshrn	v23.4h, v6.4s, #0xc
+sqrshrn	v25.4h, v2.4s, #0xc
+smull	v6.4s, v21.4h, v1.h[5]
+smlal	v6.4s, v27.4h, v1.h[4]
+smull	v2.4s, v29.4h, v1.h[6]
+smlsl	v2.4s, v19.4h, v1.h[7]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+smull	v4.4s, v29.4h, v1.h[7]
+smlal	v4.4s, v19.4h, v1.h[6]
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn	v29.4h, v4.4s, #0xc
+sqsub	v2.4h, v17.4h, v23.4h
+sqadd	v17.4h, v17.4h, v23.4h
+sqsub	v3.4h, v31.4h, v25.4h
+sqadd	v31.4h, v31.4h, v25.4h
+sqsub	v23.4h, v19.4h, v21.4h
+sqadd	v19.4h, v19.4h, v21.4h
+sqadd	v25.4h, v29.4h, v27.4h
+sqsub	v29.4h, v29.4h, v27.4h
+smull	v4.4s, v3.4h, v0.h[2]
+smlsl	v4.4s, v2.4h, v0.h[3]
+smull	v6.4s, v3.4h, v0.h[3]
+smlal	v6.4s, v2.4h, v0.h[2]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+smull	v4.4s, v29.4h, v0.h[2]
+smlsl	v4.4s, v23.4h, v0.h[3]
+smull	v6.4s, v29.4h, v0.h[3]
+smlal	v6.4s, v23.4h, v0.h[2]
+sqrshrn	v29.4h, v4.4s, #0xc
+neg	v6.4s, v6.4s
+sqrshrn	v23.4h, v6.4s, #0xc
+sqsub	v2.4h, v17.4h, v19.4h
+sqadd	v17.4h, v17.4h, v19.4h
+sqsub	v3.4h, v31.4h, v25.4h
+sqadd	v31.4h, v31.4h, v25.4h
+sqadd	v19.4h, v21.4h, v23.4h
+sqsub	v21.4h, v21.4h, v23.4h
+sqsub	v25.4h, v27.4h, v29.4h
+sqadd	v27.4h, v27.4h, v29.4h
+smull	v4.4s, v3.4h, v0.h[0]
+smlsl	v4.4s, v2.4h, v0.h[0]
+smull	v6.4s, v3.4h, v0.h[0]
+smlal	v6.4s, v2.4h, v0.h[0]
+smull	v2.4s, v25.4h, v0.h[0]
+smlsl	v2.4s, v21.4h, v0.h[0]
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+smull	v6.4s, v25.4h, v0.h[0]
+smlal	v6.4s, v21.4h, v0.h[0]
+sqrshrn	v2.4h, v2.4s, #0xc
+sqrshrn	v3.4h, v6.4s, #0xc
+sqadd	v6.4h, v16.4h, v31.4h
+sqsub	v31.4h, v16.4h, v31.4h
+mov	v16.8b, v6.8b
+sqadd	v23.4h, v30.4h, v17.4h
+sqsub	v7.4h, v30.4h, v17.4h
+sqadd	v17.4h, v18.4h, v27.4h
+sqsub	v30.4h, v18.4h, v27.4h
+sqadd	v18.4h, v20.4h, v3.4h
+sqsub	v29.4h, v20.4h, v3.4h
+sqadd	v3.4h, v28.4h, v19.4h
+sqsub	v25.4h, v28.4h, v19.4h
+sqadd	v19.4h, v22.4h, v5.4h
+sqsub	v28.4h, v22.4h, v5.4h
+sqadd	v20.4h, v24.4h, v4.4h
+sqsub	v27.4h, v24.4h, v4.4h
+sqadd	v21.4h, v26.4h, v2.4h
+sqsub	v26.4h, v26.4h, v2.4h
+mov	v24.8b, v7.8b
+mov	v22.8b, v3.8b
 ret
-_inv_adst_8h_x16_neon:
-adrp	x16, inv_adst_8h_x16_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-adrp	x16, inv_adst_8h_x16_neon
-add	x16, x16, #0
-smull.4s	v2, v31, v0[0]
-smlal.4s	v2, v16, v0[1]
-smull2.4s	v3, v31, v0[0]
-smlal2.4s	v3, v16, v0[1]
-smull.4s	v4, v31, v0[1]
-smlsl.4s	v4, v16, v0[0]
-smull2.4s	v5, v31, v0[1]
-smlsl2.4s	v5, v16, v0[0]
-smull.4s	v6, v29, v0[2]
-smlal.4s	v6, v18, v0[3]
-smull2.4s	v7, v29, v0[2]
-smlal2.4s	v7, v18, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn2.8h	v16, v3, #12
-sqrshrn.4h	v31, v4, #12
-sqrshrn2.8h	v31, v5, #12
-smull.4s	v2, v29, v0[3]
-smlsl.4s	v2, v18, v0[2]
-smull2.4s	v3, v29, v0[3]
-smlsl2.4s	v3, v18, v0[2]
-smull.4s	v4, v27, v0[4]
-smlal.4s	v4, v20, v0[5]
-smull2.4s	v5, v27, v0[4]
-smlal2.4s	v5, v20, v0[5]
-sqrshrn.4h	v18, v6, #12
-sqrshrn2.8h	v18, v7, #12
-sqrshrn.4h	v29, v2, #12
-sqrshrn2.8h	v29, v3, #12
-smull.4s	v6, v27, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull2.4s	v7, v27, v0[5]
-smlsl2.4s	v7, v20, v0[4]
-smull.4s	v2, v25, v0[6]
-smlal.4s	v2, v22, v0[7]
-smull2.4s	v3, v25, v0[6]
-smlal2.4s	v3, v22, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn2.8h	v20, v5, #12
-sqrshrn.4h	v27, v6, #12
-sqrshrn2.8h	v27, v7, #12
-smull.4s	v4, v25, v0[7]
-smlsl.4s	v4, v22, v0[6]
-smull2.4s	v5, v25, v0[7]
-smlsl2.4s	v5, v22, v0[6]
-smull.4s	v6, v23, v1[0]
-smlal.4s	v6, v24, v1[1]
-smull2.4s	v7, v23, v1[0]
-smlal2.4s	v7, v24, v1[1]
-sqrshrn.4h	v22, v2, #12
-sqrshrn2.8h	v22, v3, #12
-sqrshrn.4h	v25, v4, #12
-sqrshrn2.8h	v25, v5, #12
-smull.4s	v2, v23, v1[1]
-smlsl.4s	v2, v24, v1[0]
-smull2.4s	v3, v23, v1[1]
-smlsl2.4s	v3, v24, v1[0]
-smull.4s	v4, v21, v1[2]
-smlal.4s	v4, v26, v1[3]
-smull2.4s	v5, v21, v1[2]
-smlal2.4s	v5, v26, v1[3]
-sqrshrn.4h	v23, v6, #12
-sqrshrn2.8h	v23, v7, #12
-sqrshrn.4h	v24, v2, #12
-sqrshrn2.8h	v24, v3, #12
-smull.4s	v6, v21, v1[3]
-smlsl.4s	v6, v26, v1[2]
-smull2.4s	v7, v21, v1[3]
-smlsl2.4s	v7, v26, v1[2]
-smull.4s	v2, v19, v1[4]
-smlal.4s	v2, v28, v1[5]
-smull2.4s	v3, v19, v1[4]
-smlal2.4s	v3, v28, v1[5]
-sqrshrn.4h	v21, v4, #12
-sqrshrn2.8h	v21, v5, #12
-sqrshrn.4h	v26, v6, #12
-sqrshrn2.8h	v26, v7, #12
-smull.4s	v4, v19, v1[5]
-smlsl.4s	v4, v28, v1[4]
-smull2.4s	v5, v19, v1[5]
-smlsl2.4s	v5, v28, v1[4]
-smull.4s	v6, v17, v1[6]
-smlal.4s	v6, v30, v1[7]
-smull2.4s	v7, v17, v1[6]
-smlal2.4s	v7, v30, v1[7]
-sqrshrn.4h	v19, v2, #12
-sqrshrn2.8h	v19, v3, #12
-sqrshrn.4h	v28, v4, #12
-sqrshrn2.8h	v28, v5, #12
-smull.4s	v2, v17, v1[7]
-smlsl.4s	v2, v30, v1[6]
-smull2.4s	v3, v17, v1[7]
-smlsl2.4s	v3, v30, v1[6]
-sqrshrn.4h	v17, v6, #12
-sqrshrn2.8h	v17, v7, #12
-sqrshrn.4h	v30, v2, #12
-sqrshrn2.8h	v30, v3, #12
-ld1.8h	{ v0 }, [x16]
-sqsub.8h	v2, v16, v23
-sqadd.8h	v16, v16, v23
-sqsub.8h	v3, v31, v24
-sqadd.8h	v31, v31, v24
-sqadd.8h	v23, v18, v21
-sqsub.8h	v18, v18, v21
-sqadd.8h	v24, v29, v26
-sqsub.8h	v29, v29, v26
-sqadd.8h	v21, v20, v19
-sqsub.8h	v20, v20, v19
-sqadd.8h	v26, v27, v28
-sqsub.8h	v27, v27, v28
-sqadd.8h	v19, v22, v17
-sqsub.8h	v22, v22, v17
-sqadd.8h	v28, v25, v30
-sqsub.8h	v25, v25, v30
-smull.4s	v4, v2, v0[5]
-smlal.4s	v4, v3, v0[4]
-smull2.4s	v5, v2, v0[5]
-smlal2.4s	v5, v3, v0[4]
-smull.4s	v6, v2, v0[4]
-smlsl.4s	v6, v3, v0[5]
-smull2.4s	v7, v2, v0[4]
-smlsl2.4s	v7, v3, v0[5]
-smull.4s	v2, v18, v0[7]
-smlal.4s	v2, v29, v0[6]
-smull2.4s	v3, v18, v0[7]
-smlal2.4s	v3, v29, v0[6]
-sqrshrn.4h	v17, v4, #12
-sqrshrn2.8h	v17, v5, #12
-sqrshrn.4h	v30, v6, #12
-sqrshrn2.8h	v30, v7, #12
-smull.4s	v4, v18, v0[6]
-smlsl.4s	v4, v29, v0[7]
-smull2.4s	v5, v18, v0[6]
-smlsl2.4s	v5, v29, v0[7]
-smull.4s	v6, v27, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull2.4s	v7, v27, v0[5]
-smlsl2.4s	v7, v20, v0[4]
-sqrshrn.4h	v18, v2, #12
-sqrshrn2.8h	v18, v3, #12
-sqrshrn.4h	v29, v4, #12
-sqrshrn2.8h	v29, v5, #12
-smull.4s	v2, v27, v0[4]
-smlal.4s	v2, v20, v0[5]
-smull2.4s	v3, v27, v0[4]
-smlal2.4s	v3, v20, v0[5]
-smull.4s	v4, v25, v0[7]
-smlsl.4s	v4, v22, v0[6]
-smull2.4s	v5, v25, v0[7]
-smlsl2.4s	v5, v22, v0[6]
-sqrshrn.4h	v27, v6, #12
-sqrshrn2.8h	v27, v7, #12
-sqrshrn.4h	v20, v2, #12
-sqrshrn2.8h	v20, v3, #12
-smull.4s	v6, v25, v0[6]
-smlal.4s	v6, v22, v0[7]
-smull2.4s	v7, v25, v0[6]
-smlal2.4s	v7, v22, v0[7]
-sqrshrn.4h	v25, v4, #12
-sqrshrn2.8h	v25, v5, #12
-sqrshrn.4h	v22, v6, #12
-sqrshrn2.8h	v22, v7, #12
-sqsub.8h	v2, v16, v21
-sqadd.8h	v16, v16, v21
-sqsub.8h	v3, v31, v26
-sqadd.8h	v31, v31, v26
-sqadd.8h	v21, v23, v19
-sqsub.8h	v23, v23, v19
-sqadd.8h	v26, v24, v28
-sqsub.8h	v24, v24, v28
-sqadd.8h	v19, v17, v27
-sqsub.8h	v17, v17, v27
-sqadd.8h	v28, v30, v20
-sqsub.8h	v30, v30, v20
-sqadd.8h	v27, v18, v25
-sqsub.8h	v18, v18, v25
-sqadd.8h	v20, v29, v22
-sqsub.8h	v29, v29, v22
-smull.4s	v4, v2, v0[3]
-smlal.4s	v4, v3, v0[2]
-smull2.4s	v5, v2, v0[3]
-smlal2.4s	v5, v3, v0[2]
-smull.4s	v6, v2, v0[2]
-smlsl.4s	v6, v3, v0[3]
-smull2.4s	v7, v2, v0[2]
-smlsl2.4s	v7, v3, v0[3]
-smull.4s	v2, v24, v0[3]
-smlsl.4s	v2, v23, v0[2]
-smull2.4s	v3, v24, v0[3]
-smlsl2.4s	v3, v23, v0[2]
-sqrshrn.4h	v22, v4, #12
-sqrshrn2.8h	v22, v5, #12
-sqrshrn.4h	v25, v6, #12
-sqrshrn2.8h	v25, v7, #12
-smull.4s	v4, v24, v0[2]
-smlal.4s	v4, v23, v0[3]
-smull2.4s	v5, v24, v0[2]
-smlal2.4s	v5, v23, v0[3]
-smull.4s	v6, v17, v0[3]
-smlal.4s	v6, v30, v0[2]
-smull2.4s	v7, v17, v0[3]
-smlal2.4s	v7, v30, v0[2]
-sqrshrn.4h	v24, v2, #12
-sqrshrn2.8h	v24, v3, #12
-sqrshrn.4h	v23, v4, #12
-sqrshrn2.8h	v23, v5, #12
-smull.4s	v2, v17, v0[2]
-smlsl.4s	v2, v30, v0[3]
-smull2.4s	v3, v17, v0[2]
-smlsl2.4s	v3, v30, v0[3]
-smull.4s	v4, v29, v0[3]
-smlsl.4s	v4, v18, v0[2]
-smull2.4s	v5, v29, v0[3]
-smlsl2.4s	v5, v18, v0[2]
-sqrshrn.4h	v17, v6, #12
-sqrshrn2.8h	v17, v7, #12
-smull.4s	v6, v29, v0[2]
-smlal.4s	v6, v18, v0[3]
-smull2.4s	v7, v29, v0[2]
-smlal2.4s	v7, v18, v0[3]
-sqrshrn.4h	v29, v2, #12
-sqrshrn2.8h	v29, v3, #12
-sqrshrn.4h	v30, v4, #12
-sqrshrn2.8h	v30, v5, #12
-sqrshrn.4h	v18, v6, #12
-sqrshrn2.8h	v18, v7, #12
-sqsub.8h	v2, v16, v21
-sqadd.8h	v16, v16, v21
-sqsub.8h	v21, v31, v26
-sqadd.8h	v31, v31, v26
-sqneg.8h	v31, v31
-sqsub.8h	v3, v29, v18
-sqadd.8h	v29, v29, v18
-sqadd.8h	v18, v17, v30
-sqsub.8h	v26, v17, v30
-sqneg.8h	v29, v29
-sqadd.8h	v17, v19, v27
-sqsub.8h	v27, v19, v27
-sqadd.8h	v30, v28, v20
-sqsub.8h	v20, v28, v20
-sqneg.8h	v17, v17
-sqadd.8h	v19, v22, v24
-sqsub.8h	v22, v22, v24
-sqadd.8h	v28, v25, v23
-sqsub.8h	v23, v25, v23
-sqneg.8h	v19, v19
-smull.4s	v24, v2, v0[0]
-smlsl.4s	v24, v21, v0[0]
-smull2.4s	v25, v2, v0[0]
-smlsl2.4s	v25, v21, v0[0]
-smull.4s	v4, v2, v0[0]
-smlal.4s	v4, v21, v0[0]
-smull2.4s	v5, v2, v0[0]
-smlal2.4s	v5, v21, v0[0]
-smull.4s	v6, v26, v0[0]
-smlal.4s	v6, v3, v0[0]
-smull2.4s	v7, v26, v0[0]
-smlal2.4s	v7, v3, v0[0]
-sqrshrn.4h	v24, v24, #12
-sqrshrn2.8h	v24, v25, #12
-sqrshrn.4h	v4, v4, #12
-sqrshrn2.8h	v4, v5, #12
-sqrshrn.4h	v5, v6, #12
-sqrshrn2.8h	v5, v7, #12
-smull.4s	v6, v26, v0[0]
-smlsl.4s	v6, v3, v0[0]
-smull2.4s	v7, v26, v0[0]
-smlsl2.4s	v7, v3, v0[0]
-smull.4s	v2, v22, v0[0]
-smlal.4s	v2, v23, v0[0]
-smull2.4s	v3, v22, v0[0]
-smlal2.4s	v3, v23, v0[0]
-sqrshrn.4h	v26, v6, #12
-sqrshrn2.8h	v26, v7, #12
-smull.4s	v6, v22, v0[0]
-smlsl.4s	v6, v23, v0[0]
-smull2.4s	v7, v22, v0[0]
-smlsl2.4s	v7, v23, v0[0]
-smull.4s	v22, v27, v0[0]
-smlal.4s	v22, v20, v0[0]
-smull2.4s	v23, v27, v0[0]
-smlal2.4s	v23, v20, v0[0]
-smull.4s	v21, v27, v0[0]
-smlsl.4s	v21, v20, v0[0]
-smull2.4s	v25, v27, v0[0]
-smlsl2.4s	v25, v20, v0[0]
-sqrshrn.4h	v20, v2, #12
-sqrshrn2.8h	v20, v3, #12
-sqrshrn.4h	v6, v6, #12
-sqrshrn2.8h	v6, v7, #12
-sqrshrn.4h	v7, v21, #12
-sqrshrn2.8h	v7, v25, #12
-sqrshrn.4h	v22, v22, #12
-sqrshrn2.8h	v22, v23, #12
-sqneg.8h	v23, v4
-sqneg.8h	v21, v5
-sqneg.8h	v27, v6
-sqneg.8h	v25, v7
+inv_adst_8h_x16_neon:
+adrp	x16, iadst16_coeffs
+add	x16, x16, :lo12:iadst16_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+smull	v2.4s, v31.4h, v0.h[0]
+smlal	v2.4s, v16.4h, v0.h[1]
+smull2	v3.4s, v31.8h, v0.h[0]
+smlal2	v3.4s, v16.8h, v0.h[1]
+smull	v4.4s, v31.4h, v0.h[1]
+smlsl	v4.4s, v16.4h, v0.h[0]
+smull2	v5.4s, v31.8h, v0.h[1]
+smlsl2	v5.4s, v16.8h, v0.h[0]
+smull	v6.4s, v29.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+smull2	v7.4s, v29.8h, v0.h[2]
+smlal2	v7.4s, v18.8h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn2	v16.8h, v3.4s, #0xc
+sqrshrn	v31.4h, v4.4s, #0xc
+sqrshrn2	v31.8h, v5.4s, #0xc
+smull	v2.4s, v29.4h, v0.h[3]
+smlsl	v2.4s, v18.4h, v0.h[2]
+smull2	v3.4s, v29.8h, v0.h[3]
+smlsl2	v3.4s, v18.8h, v0.h[2]
+smull	v4.4s, v27.4h, v0.h[4]
+smlal	v4.4s, v20.4h, v0.h[5]
+smull2	v5.4s, v27.8h, v0.h[4]
+smlal2	v5.4s, v20.8h, v0.h[5]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn2	v18.8h, v7.4s, #0xc
+sqrshrn	v29.4h, v2.4s, #0xc
+sqrshrn2	v29.8h, v3.4s, #0xc
+smull	v6.4s, v27.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull2	v7.4s, v27.8h, v0.h[5]
+smlsl2	v7.4s, v20.8h, v0.h[4]
+smull	v2.4s, v25.4h, v0.h[6]
+smlal	v2.4s, v22.4h, v0.h[7]
+smull2	v3.4s, v25.8h, v0.h[6]
+smlal2	v3.4s, v22.8h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn2	v20.8h, v5.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn2	v27.8h, v7.4s, #0xc
+smull	v4.4s, v25.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+smull2	v5.4s, v25.8h, v0.h[7]
+smlsl2	v5.4s, v22.8h, v0.h[6]
+smull	v6.4s, v23.4h, v1.h[0]
+smlal	v6.4s, v24.4h, v1.h[1]
+smull2	v7.4s, v23.8h, v1.h[0]
+smlal2	v7.4s, v24.8h, v1.h[1]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn2	v22.8h, v3.4s, #0xc
+sqrshrn	v25.4h, v4.4s, #0xc
+sqrshrn2	v25.8h, v5.4s, #0xc
+smull	v2.4s, v23.4h, v1.h[1]
+smlsl	v2.4s, v24.4h, v1.h[0]
+smull2	v3.4s, v23.8h, v1.h[1]
+smlsl2	v3.4s, v24.8h, v1.h[0]
+smull	v4.4s, v21.4h, v1.h[2]
+smlal	v4.4s, v26.4h, v1.h[3]
+smull2	v5.4s, v21.8h, v1.h[2]
+smlal2	v5.4s, v26.8h, v1.h[3]
+sqrshrn	v23.4h, v6.4s, #0xc
+sqrshrn2	v23.8h, v7.4s, #0xc
+sqrshrn	v24.4h, v2.4s, #0xc
+sqrshrn2	v24.8h, v3.4s, #0xc
+smull	v6.4s, v21.4h, v1.h[3]
+smlsl	v6.4s, v26.4h, v1.h[2]
+smull2	v7.4s, v21.8h, v1.h[3]
+smlsl2	v7.4s, v26.8h, v1.h[2]
+smull	v2.4s, v19.4h, v1.h[4]
+smlal	v2.4s, v28.4h, v1.h[5]
+smull2	v3.4s, v19.8h, v1.h[4]
+smlal2	v3.4s, v28.8h, v1.h[5]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn2	v21.8h, v5.4s, #0xc
+sqrshrn	v26.4h, v6.4s, #0xc
+sqrshrn2	v26.8h, v7.4s, #0xc
+smull	v4.4s, v19.4h, v1.h[5]
+smlsl	v4.4s, v28.4h, v1.h[4]
+smull2	v5.4s, v19.8h, v1.h[5]
+smlsl2	v5.4s, v28.8h, v1.h[4]
+smull	v6.4s, v17.4h, v1.h[6]
+smlal	v6.4s, v30.4h, v1.h[7]
+smull2	v7.4s, v17.8h, v1.h[6]
+smlal2	v7.4s, v30.8h, v1.h[7]
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn2	v19.8h, v3.4s, #0xc
+sqrshrn	v28.4h, v4.4s, #0xc
+sqrshrn2	v28.8h, v5.4s, #0xc
+smull	v2.4s, v17.4h, v1.h[7]
+smlsl	v2.4s, v30.4h, v1.h[6]
+smull2	v3.4s, v17.8h, v1.h[7]
+smlsl2	v3.4s, v30.8h, v1.h[6]
+sqrshrn	v17.4h, v6.4s, #0xc
+sqrshrn2	v17.8h, v7.4s, #0xc
+sqrshrn	v30.4h, v2.4s, #0xc
+sqrshrn2	v30.8h, v3.4s, #0xc
+ld1	{ v0.8h }, [x16]
+sqsub	v2.8h, v16.8h, v23.8h
+sqadd	v16.8h, v16.8h, v23.8h
+sqsub	v3.8h, v31.8h, v24.8h
+sqadd	v31.8h, v31.8h, v24.8h
+sqadd	v23.8h, v18.8h, v21.8h
+sqsub	v18.8h, v18.8h, v21.8h
+sqadd	v24.8h, v29.8h, v26.8h
+sqsub	v29.8h, v29.8h, v26.8h
+sqadd	v21.8h, v20.8h, v19.8h
+sqsub	v20.8h, v20.8h, v19.8h
+sqadd	v26.8h, v27.8h, v28.8h
+sqsub	v27.8h, v27.8h, v28.8h
+sqadd	v19.8h, v22.8h, v17.8h
+sqsub	v22.8h, v22.8h, v17.8h
+sqadd	v28.8h, v25.8h, v30.8h
+sqsub	v25.8h, v25.8h, v30.8h
+smull	v4.4s, v2.4h, v0.h[5]
+smlal	v4.4s, v3.4h, v0.h[4]
+smull2	v5.4s, v2.8h, v0.h[5]
+smlal2	v5.4s, v3.8h, v0.h[4]
+smull	v6.4s, v2.4h, v0.h[4]
+smlsl	v6.4s, v3.4h, v0.h[5]
+smull2	v7.4s, v2.8h, v0.h[4]
+smlsl2	v7.4s, v3.8h, v0.h[5]
+smull	v2.4s, v18.4h, v0.h[7]
+smlal	v2.4s, v29.4h, v0.h[6]
+smull2	v3.4s, v18.8h, v0.h[7]
+smlal2	v3.4s, v29.8h, v0.h[6]
+sqrshrn	v17.4h, v4.4s, #0xc
+sqrshrn2	v17.8h, v5.4s, #0xc
+sqrshrn	v30.4h, v6.4s, #0xc
+sqrshrn2	v30.8h, v7.4s, #0xc
+smull	v4.4s, v18.4h, v0.h[6]
+smlsl	v4.4s, v29.4h, v0.h[7]
+smull2	v5.4s, v18.8h, v0.h[6]
+smlsl2	v5.4s, v29.8h, v0.h[7]
+smull	v6.4s, v27.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull2	v7.4s, v27.8h, v0.h[5]
+smlsl2	v7.4s, v20.8h, v0.h[4]
+sqrshrn	v18.4h, v2.4s, #0xc
+sqrshrn2	v18.8h, v3.4s, #0xc
+sqrshrn	v29.4h, v4.4s, #0xc
+sqrshrn2	v29.8h, v5.4s, #0xc
+smull	v2.4s, v27.4h, v0.h[4]
+smlal	v2.4s, v20.4h, v0.h[5]
+smull2	v3.4s, v27.8h, v0.h[4]
+smlal2	v3.4s, v20.8h, v0.h[5]
+smull	v4.4s, v25.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+smull2	v5.4s, v25.8h, v0.h[7]
+smlsl2	v5.4s, v22.8h, v0.h[6]
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn2	v27.8h, v7.4s, #0xc
+sqrshrn	v20.4h, v2.4s, #0xc
+sqrshrn2	v20.8h, v3.4s, #0xc
+smull	v6.4s, v25.4h, v0.h[6]
+smlal	v6.4s, v22.4h, v0.h[7]
+smull2	v7.4s, v25.8h, v0.h[6]
+smlal2	v7.4s, v22.8h, v0.h[7]
+sqrshrn	v25.4h, v4.4s, #0xc
+sqrshrn2	v25.8h, v5.4s, #0xc
+sqrshrn	v22.4h, v6.4s, #0xc
+sqrshrn2	v22.8h, v7.4s, #0xc
+sqsub	v2.8h, v16.8h, v21.8h
+sqadd	v16.8h, v16.8h, v21.8h
+sqsub	v3.8h, v31.8h, v26.8h
+sqadd	v31.8h, v31.8h, v26.8h
+sqadd	v21.8h, v23.8h, v19.8h
+sqsub	v23.8h, v23.8h, v19.8h
+sqadd	v26.8h, v24.8h, v28.8h
+sqsub	v24.8h, v24.8h, v28.8h
+sqadd	v19.8h, v17.8h, v27.8h
+sqsub	v17.8h, v17.8h, v27.8h
+sqadd	v28.8h, v30.8h, v20.8h
+sqsub	v30.8h, v30.8h, v20.8h
+sqadd	v27.8h, v18.8h, v25.8h
+sqsub	v18.8h, v18.8h, v25.8h
+sqadd	v20.8h, v29.8h, v22.8h
+sqsub	v29.8h, v29.8h, v22.8h
+smull	v4.4s, v2.4h, v0.h[3]
+smlal	v4.4s, v3.4h, v0.h[2]
+smull2	v5.4s, v2.8h, v0.h[3]
+smlal2	v5.4s, v3.8h, v0.h[2]
+smull	v6.4s, v2.4h, v0.h[2]
+smlsl	v6.4s, v3.4h, v0.h[3]
+smull2	v7.4s, v2.8h, v0.h[2]
+smlsl2	v7.4s, v3.8h, v0.h[3]
+smull	v2.4s, v24.4h, v0.h[3]
+smlsl	v2.4s, v23.4h, v0.h[2]
+smull2	v3.4s, v24.8h, v0.h[3]
+smlsl2	v3.4s, v23.8h, v0.h[2]
+sqrshrn	v22.4h, v4.4s, #0xc
+sqrshrn2	v22.8h, v5.4s, #0xc
+sqrshrn	v25.4h, v6.4s, #0xc
+sqrshrn2	v25.8h, v7.4s, #0xc
+smull	v4.4s, v24.4h, v0.h[2]
+smlal	v4.4s, v23.4h, v0.h[3]
+smull2	v5.4s, v24.8h, v0.h[2]
+smlal2	v5.4s, v23.8h, v0.h[3]
+smull	v6.4s, v17.4h, v0.h[3]
+smlal	v6.4s, v30.4h, v0.h[2]
+smull2	v7.4s, v17.8h, v0.h[3]
+smlal2	v7.4s, v30.8h, v0.h[2]
+sqrshrn	v24.4h, v2.4s, #0xc
+sqrshrn2	v24.8h, v3.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+sqrshrn2	v23.8h, v5.4s, #0xc
+smull	v2.4s, v17.4h, v0.h[2]
+smlsl	v2.4s, v30.4h, v0.h[3]
+smull2	v3.4s, v17.8h, v0.h[2]
+smlsl2	v3.4s, v30.8h, v0.h[3]
+smull	v4.4s, v29.4h, v0.h[3]
+smlsl	v4.4s, v18.4h, v0.h[2]
+smull2	v5.4s, v29.8h, v0.h[3]
+smlsl2	v5.4s, v18.8h, v0.h[2]
+sqrshrn	v17.4h, v6.4s, #0xc
+sqrshrn2	v17.8h, v7.4s, #0xc
+smull	v6.4s, v29.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+smull2	v7.4s, v29.8h, v0.h[2]
+smlal2	v7.4s, v18.8h, v0.h[3]
+sqrshrn	v29.4h, v2.4s, #0xc
+sqrshrn2	v29.8h, v3.4s, #0xc
+sqrshrn	v30.4h, v4.4s, #0xc
+sqrshrn2	v30.8h, v5.4s, #0xc
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn2	v18.8h, v7.4s, #0xc
+sqsub	v2.8h, v16.8h, v21.8h
+sqadd	v16.8h, v16.8h, v21.8h
+sqsub	v21.8h, v31.8h, v26.8h
+sqadd	v31.8h, v31.8h, v26.8h
+sqneg	v31.8h, v31.8h
+sqsub	v3.8h, v29.8h, v18.8h
+sqadd	v29.8h, v29.8h, v18.8h
+sqadd	v18.8h, v17.8h, v30.8h
+sqsub	v26.8h, v17.8h, v30.8h
+sqneg	v29.8h, v29.8h
+sqadd	v17.8h, v19.8h, v27.8h
+sqsub	v27.8h, v19.8h, v27.8h
+sqadd	v30.8h, v28.8h, v20.8h
+sqsub	v20.8h, v28.8h, v20.8h
+sqneg	v17.8h, v17.8h
+sqadd	v19.8h, v22.8h, v24.8h
+sqsub	v22.8h, v22.8h, v24.8h
+sqadd	v28.8h, v25.8h, v23.8h
+sqsub	v23.8h, v25.8h, v23.8h
+sqneg	v19.8h, v19.8h
+smull	v24.4s, v2.4h, v0.h[0]
+smlsl	v24.4s, v21.4h, v0.h[0]
+smull2	v25.4s, v2.8h, v0.h[0]
+smlsl2	v25.4s, v21.8h, v0.h[0]
+smull	v4.4s, v2.4h, v0.h[0]
+smlal	v4.4s, v21.4h, v0.h[0]
+smull2	v5.4s, v2.8h, v0.h[0]
+smlal2	v5.4s, v21.8h, v0.h[0]
+smull	v6.4s, v26.4h, v0.h[0]
+smlal	v6.4s, v3.4h, v0.h[0]
+smull2	v7.4s, v26.8h, v0.h[0]
+smlal2	v7.4s, v3.8h, v0.h[0]
+sqrshrn	v24.4h, v24.4s, #0xc
+sqrshrn2	v24.8h, v25.4s, #0xc
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn2	v4.8h, v5.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+sqrshrn2	v5.8h, v7.4s, #0xc
+smull	v6.4s, v26.4h, v0.h[0]
+smlsl	v6.4s, v3.4h, v0.h[0]
+smull2	v7.4s, v26.8h, v0.h[0]
+smlsl2	v7.4s, v3.8h, v0.h[0]
+smull	v2.4s, v22.4h, v0.h[0]
+smlal	v2.4s, v23.4h, v0.h[0]
+smull2	v3.4s, v22.8h, v0.h[0]
+smlal2	v3.4s, v23.8h, v0.h[0]
+sqrshrn	v26.4h, v6.4s, #0xc
+sqrshrn2	v26.8h, v7.4s, #0xc
+smull	v6.4s, v22.4h, v0.h[0]
+smlsl	v6.4s, v23.4h, v0.h[0]
+smull2	v7.4s, v22.8h, v0.h[0]
+smlsl2	v7.4s, v23.8h, v0.h[0]
+smull	v22.4s, v27.4h, v0.h[0]
+smlal	v22.4s, v20.4h, v0.h[0]
+smull2	v23.4s, v27.8h, v0.h[0]
+smlal2	v23.4s, v20.8h, v0.h[0]
+smull	v21.4s, v27.4h, v0.h[0]
+smlsl	v21.4s, v20.4h, v0.h[0]
+smull2	v25.4s, v27.8h, v0.h[0]
+smlsl2	v25.4s, v20.8h, v0.h[0]
+sqrshrn	v20.4h, v2.4s, #0xc
+sqrshrn2	v20.8h, v3.4s, #0xc
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn2	v6.8h, v7.4s, #0xc
+sqrshrn	v7.4h, v21.4s, #0xc
+sqrshrn2	v7.8h, v25.4s, #0xc
+sqrshrn	v22.4h, v22.4s, #0xc
+sqrshrn2	v22.8h, v23.4s, #0xc
+sqneg	v23.8h, v4.8h
+sqneg	v21.8h, v5.8h
+sqneg	v27.8h, v6.8h
+sqneg	v25.8h, v7.8h
 ret
-_inv_flipadst_8h_x16_neon:
-adrp	x16, inv_flipadst_8h_x16_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-adrp	x16, inv_flipadst_8h_x16_neon
-add	x16, x16, #0
-smull.4s	v2, v31, v0[0]
-smlal.4s	v2, v16, v0[1]
-smull2.4s	v3, v31, v0[0]
-smlal2.4s	v3, v16, v0[1]
-smull.4s	v4, v31, v0[1]
-smlsl.4s	v4, v16, v0[0]
-smull2.4s	v5, v31, v0[1]
-smlsl2.4s	v5, v16, v0[0]
-smull.4s	v6, v29, v0[2]
-smlal.4s	v6, v18, v0[3]
-smull2.4s	v7, v29, v0[2]
-smlal2.4s	v7, v18, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn2.8h	v16, v3, #12
-sqrshrn.4h	v31, v4, #12
-sqrshrn2.8h	v31, v5, #12
-smull.4s	v2, v29, v0[3]
-smlsl.4s	v2, v18, v0[2]
-smull2.4s	v3, v29, v0[3]
-smlsl2.4s	v3, v18, v0[2]
-smull.4s	v4, v27, v0[4]
-smlal.4s	v4, v20, v0[5]
-smull2.4s	v5, v27, v0[4]
-smlal2.4s	v5, v20, v0[5]
-sqrshrn.4h	v18, v6, #12
-sqrshrn2.8h	v18, v7, #12
-sqrshrn.4h	v29, v2, #12
-sqrshrn2.8h	v29, v3, #12
-smull.4s	v6, v27, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull2.4s	v7, v27, v0[5]
-smlsl2.4s	v7, v20, v0[4]
-smull.4s	v2, v25, v0[6]
-smlal.4s	v2, v22, v0[7]
-smull2.4s	v3, v25, v0[6]
-smlal2.4s	v3, v22, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn2.8h	v20, v5, #12
-sqrshrn.4h	v27, v6, #12
-sqrshrn2.8h	v27, v7, #12
-smull.4s	v4, v25, v0[7]
-smlsl.4s	v4, v22, v0[6]
-smull2.4s	v5, v25, v0[7]
-smlsl2.4s	v5, v22, v0[6]
-smull.4s	v6, v23, v1[0]
-smlal.4s	v6, v24, v1[1]
-smull2.4s	v7, v23, v1[0]
-smlal2.4s	v7, v24, v1[1]
-sqrshrn.4h	v22, v2, #12
-sqrshrn2.8h	v22, v3, #12
-sqrshrn.4h	v25, v4, #12
-sqrshrn2.8h	v25, v5, #12
-smull.4s	v2, v23, v1[1]
-smlsl.4s	v2, v24, v1[0]
-smull2.4s	v3, v23, v1[1]
-smlsl2.4s	v3, v24, v1[0]
-smull.4s	v4, v21, v1[2]
-smlal.4s	v4, v26, v1[3]
-smull2.4s	v5, v21, v1[2]
-smlal2.4s	v5, v26, v1[3]
-sqrshrn.4h	v23, v6, #12
-sqrshrn2.8h	v23, v7, #12
-sqrshrn.4h	v24, v2, #12
-sqrshrn2.8h	v24, v3, #12
-smull.4s	v6, v21, v1[3]
-smlsl.4s	v6, v26, v1[2]
-smull2.4s	v7, v21, v1[3]
-smlsl2.4s	v7, v26, v1[2]
-smull.4s	v2, v19, v1[4]
-smlal.4s	v2, v28, v1[5]
-smull2.4s	v3, v19, v1[4]
-smlal2.4s	v3, v28, v1[5]
-sqrshrn.4h	v21, v4, #12
-sqrshrn2.8h	v21, v5, #12
-sqrshrn.4h	v26, v6, #12
-sqrshrn2.8h	v26, v7, #12
-smull.4s	v4, v19, v1[5]
-smlsl.4s	v4, v28, v1[4]
-smull2.4s	v5, v19, v1[5]
-smlsl2.4s	v5, v28, v1[4]
-smull.4s	v6, v17, v1[6]
-smlal.4s	v6, v30, v1[7]
-smull2.4s	v7, v17, v1[6]
-smlal2.4s	v7, v30, v1[7]
-sqrshrn.4h	v19, v2, #12
-sqrshrn2.8h	v19, v3, #12
-sqrshrn.4h	v28, v4, #12
-sqrshrn2.8h	v28, v5, #12
-smull.4s	v2, v17, v1[7]
-smlsl.4s	v2, v30, v1[6]
-smull2.4s	v3, v17, v1[7]
-smlsl2.4s	v3, v30, v1[6]
-sqrshrn.4h	v17, v6, #12
-sqrshrn2.8h	v17, v7, #12
-sqrshrn.4h	v30, v2, #12
-sqrshrn2.8h	v30, v3, #12
-ld1.8h	{ v0 }, [x16]
-sqsub.8h	v2, v16, v23
-sqadd.8h	v16, v16, v23
-sqsub.8h	v3, v31, v24
-sqadd.8h	v31, v31, v24
-sqadd.8h	v23, v18, v21
-sqsub.8h	v18, v18, v21
-sqadd.8h	v24, v29, v26
-sqsub.8h	v29, v29, v26
-sqadd.8h	v21, v20, v19
-sqsub.8h	v20, v20, v19
-sqadd.8h	v26, v27, v28
-sqsub.8h	v27, v27, v28
-sqadd.8h	v19, v22, v17
-sqsub.8h	v22, v22, v17
-sqadd.8h	v28, v25, v30
-sqsub.8h	v25, v25, v30
-smull.4s	v4, v2, v0[5]
-smlal.4s	v4, v3, v0[4]
-smull2.4s	v5, v2, v0[5]
-smlal2.4s	v5, v3, v0[4]
-smull.4s	v6, v2, v0[4]
-smlsl.4s	v6, v3, v0[5]
-smull2.4s	v7, v2, v0[4]
-smlsl2.4s	v7, v3, v0[5]
-smull.4s	v2, v18, v0[7]
-smlal.4s	v2, v29, v0[6]
-smull2.4s	v3, v18, v0[7]
-smlal2.4s	v3, v29, v0[6]
-sqrshrn.4h	v17, v4, #12
-sqrshrn2.8h	v17, v5, #12
-sqrshrn.4h	v30, v6, #12
-sqrshrn2.8h	v30, v7, #12
-smull.4s	v4, v18, v0[6]
-smlsl.4s	v4, v29, v0[7]
-smull2.4s	v5, v18, v0[6]
-smlsl2.4s	v5, v29, v0[7]
-smull.4s	v6, v27, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull2.4s	v7, v27, v0[5]
-smlsl2.4s	v7, v20, v0[4]
-sqrshrn.4h	v18, v2, #12
-sqrshrn2.8h	v18, v3, #12
-sqrshrn.4h	v29, v4, #12
-sqrshrn2.8h	v29, v5, #12
-smull.4s	v2, v27, v0[4]
-smlal.4s	v2, v20, v0[5]
-smull2.4s	v3, v27, v0[4]
-smlal2.4s	v3, v20, v0[5]
-smull.4s	v4, v25, v0[7]
-smlsl.4s	v4, v22, v0[6]
-smull2.4s	v5, v25, v0[7]
-smlsl2.4s	v5, v22, v0[6]
-sqrshrn.4h	v27, v6, #12
-sqrshrn2.8h	v27, v7, #12
-sqrshrn.4h	v20, v2, #12
-sqrshrn2.8h	v20, v3, #12
-smull.4s	v6, v25, v0[6]
-smlal.4s	v6, v22, v0[7]
-smull2.4s	v7, v25, v0[6]
-smlal2.4s	v7, v22, v0[7]
-sqrshrn.4h	v25, v4, #12
-sqrshrn2.8h	v25, v5, #12
-sqrshrn.4h	v22, v6, #12
-sqrshrn2.8h	v22, v7, #12
-sqsub.8h	v2, v16, v21
-sqadd.8h	v16, v16, v21
-sqsub.8h	v3, v31, v26
-sqadd.8h	v31, v31, v26
-sqadd.8h	v21, v23, v19
-sqsub.8h	v23, v23, v19
-sqadd.8h	v26, v24, v28
-sqsub.8h	v24, v24, v28
-sqadd.8h	v19, v17, v27
-sqsub.8h	v17, v17, v27
-sqadd.8h	v28, v30, v20
-sqsub.8h	v30, v30, v20
-sqadd.8h	v27, v18, v25
-sqsub.8h	v18, v18, v25
-sqadd.8h	v20, v29, v22
-sqsub.8h	v29, v29, v22
-smull.4s	v4, v2, v0[3]
-smlal.4s	v4, v3, v0[2]
-smull2.4s	v5, v2, v0[3]
-smlal2.4s	v5, v3, v0[2]
-smull.4s	v6, v2, v0[2]
-smlsl.4s	v6, v3, v0[3]
-smull2.4s	v7, v2, v0[2]
-smlsl2.4s	v7, v3, v0[3]
-smull.4s	v2, v24, v0[3]
-smlsl.4s	v2, v23, v0[2]
-smull2.4s	v3, v24, v0[3]
-smlsl2.4s	v3, v23, v0[2]
-sqrshrn.4h	v22, v4, #12
-sqrshrn2.8h	v22, v5, #12
-sqrshrn.4h	v25, v6, #12
-sqrshrn2.8h	v25, v7, #12
-smull.4s	v4, v24, v0[2]
-smlal.4s	v4, v23, v0[3]
-smull2.4s	v5, v24, v0[2]
-smlal2.4s	v5, v23, v0[3]
-smull.4s	v6, v17, v0[3]
-smlal.4s	v6, v30, v0[2]
-smull2.4s	v7, v17, v0[3]
-smlal2.4s	v7, v30, v0[2]
-sqrshrn.4h	v24, v2, #12
-sqrshrn2.8h	v24, v3, #12
-sqrshrn.4h	v23, v4, #12
-sqrshrn2.8h	v23, v5, #12
-smull.4s	v2, v17, v0[2]
-smlsl.4s	v2, v30, v0[3]
-smull2.4s	v3, v17, v0[2]
-smlsl2.4s	v3, v30, v0[3]
-smull.4s	v4, v29, v0[3]
-smlsl.4s	v4, v18, v0[2]
-smull2.4s	v5, v29, v0[3]
-smlsl2.4s	v5, v18, v0[2]
-sqrshrn.4h	v17, v6, #12
-sqrshrn2.8h	v17, v7, #12
-smull.4s	v6, v29, v0[2]
-smlal.4s	v6, v18, v0[3]
-smull2.4s	v7, v29, v0[2]
-smlal2.4s	v7, v18, v0[3]
-sqrshrn.4h	v29, v2, #12
-sqrshrn2.8h	v29, v3, #12
-sqrshrn.4h	v30, v4, #12
-sqrshrn2.8h	v30, v5, #12
-sqrshrn.4h	v18, v6, #12
-sqrshrn2.8h	v18, v7, #12
-sqsub.8h	v2, v16, v21
-sqadd.8h	v4, v16, v21
-sqsub.8h	v21, v31, v26
-sqadd.8h	v16, v31, v26
-mov.16b	v31, v4
-sqneg.8h	v16, v16
-sqsub.8h	v3, v29, v18
-sqadd.8h	v18, v29, v18
-sqadd.8h	v29, v17, v30
-sqsub.8h	v26, v17, v30
-sqneg.8h	v18, v18
-sqadd.8h	v30, v19, v27
-sqsub.8h	v27, v19, v27
-sqadd.8h	v17, v28, v20
-sqsub.8h	v20, v28, v20
-sqneg.8h	v30, v30
-sqadd.8h	v28, v22, v24
-sqsub.8h	v22, v22, v24
-sqadd.8h	v19, v25, v23
-sqsub.8h	v23, v25, v23
-sqneg.8h	v28, v28
-smull.4s	v24, v2, v0[0]
-smlsl.4s	v24, v21, v0[0]
-smull2.4s	v25, v2, v0[0]
-smlsl2.4s	v25, v21, v0[0]
-smull.4s	v4, v2, v0[0]
-smlal.4s	v4, v21, v0[0]
-smull2.4s	v5, v2, v0[0]
-smlal2.4s	v5, v21, v0[0]
-smull.4s	v6, v26, v0[0]
-smlal.4s	v6, v3, v0[0]
-smull2.4s	v7, v26, v0[0]
-smlal2.4s	v7, v3, v0[0]
-sqrshrn.4h	v24, v24, #12
-sqrshrn2.8h	v24, v25, #12
-sqrshrn.4h	v4, v4, #12
-sqrshrn2.8h	v4, v5, #12
-sqrshrn.4h	v5, v6, #12
-sqrshrn2.8h	v5, v7, #12
-smull.4s	v6, v26, v0[0]
-smlsl.4s	v6, v3, v0[0]
-smull2.4s	v7, v26, v0[0]
-smlsl2.4s	v7, v3, v0[0]
-smull.4s	v2, v22, v0[0]
-smlal.4s	v2, v23, v0[0]
-smull2.4s	v3, v22, v0[0]
-smlal2.4s	v3, v23, v0[0]
-sqrshrn.4h	v26, v6, #12
-sqrshrn2.8h	v26, v7, #12
-smull.4s	v6, v22, v0[0]
-smlsl.4s	v6, v23, v0[0]
-smull2.4s	v7, v22, v0[0]
-smlsl2.4s	v7, v23, v0[0]
-smull.4s	v22, v27, v0[0]
-smlal.4s	v22, v20, v0[0]
-smull2.4s	v23, v27, v0[0]
-smlal2.4s	v23, v20, v0[0]
-smull.4s	v21, v27, v0[0]
-smlsl.4s	v21, v20, v0[0]
-smull2.4s	v25, v27, v0[0]
-smlsl2.4s	v25, v20, v0[0]
-sqrshrn.4h	v27, v2, #12
-sqrshrn2.8h	v27, v3, #12
-sqrshrn.4h	v6, v6, #12
-sqrshrn2.8h	v6, v7, #12
-sqrshrn.4h	v7, v21, #12
-sqrshrn2.8h	v7, v25, #12
-sqrshrn.4h	v25, v22, #12
-sqrshrn2.8h	v25, v23, #12
-mov.16b	v23, v24
-mov.16b	v21, v26
-sqneg.8h	v24, v4
-sqneg.8h	v26, v5
-sqneg.8h	v20, v6
-sqneg.8h	v22, v7
+inv_flipadst_8h_x16_neon:
+adrp	x16, iadst16_coeffs
+add	x16, x16, :lo12:iadst16_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+smull	v2.4s, v31.4h, v0.h[0]
+smlal	v2.4s, v16.4h, v0.h[1]
+smull2	v3.4s, v31.8h, v0.h[0]
+smlal2	v3.4s, v16.8h, v0.h[1]
+smull	v4.4s, v31.4h, v0.h[1]
+smlsl	v4.4s, v16.4h, v0.h[0]
+smull2	v5.4s, v31.8h, v0.h[1]
+smlsl2	v5.4s, v16.8h, v0.h[0]
+smull	v6.4s, v29.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+smull2	v7.4s, v29.8h, v0.h[2]
+smlal2	v7.4s, v18.8h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn2	v16.8h, v3.4s, #0xc
+sqrshrn	v31.4h, v4.4s, #0xc
+sqrshrn2	v31.8h, v5.4s, #0xc
+smull	v2.4s, v29.4h, v0.h[3]
+smlsl	v2.4s, v18.4h, v0.h[2]
+smull2	v3.4s, v29.8h, v0.h[3]
+smlsl2	v3.4s, v18.8h, v0.h[2]
+smull	v4.4s, v27.4h, v0.h[4]
+smlal	v4.4s, v20.4h, v0.h[5]
+smull2	v5.4s, v27.8h, v0.h[4]
+smlal2	v5.4s, v20.8h, v0.h[5]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn2	v18.8h, v7.4s, #0xc
+sqrshrn	v29.4h, v2.4s, #0xc
+sqrshrn2	v29.8h, v3.4s, #0xc
+smull	v6.4s, v27.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull2	v7.4s, v27.8h, v0.h[5]
+smlsl2	v7.4s, v20.8h, v0.h[4]
+smull	v2.4s, v25.4h, v0.h[6]
+smlal	v2.4s, v22.4h, v0.h[7]
+smull2	v3.4s, v25.8h, v0.h[6]
+smlal2	v3.4s, v22.8h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn2	v20.8h, v5.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn2	v27.8h, v7.4s, #0xc
+smull	v4.4s, v25.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+smull2	v5.4s, v25.8h, v0.h[7]
+smlsl2	v5.4s, v22.8h, v0.h[6]
+smull	v6.4s, v23.4h, v1.h[0]
+smlal	v6.4s, v24.4h, v1.h[1]
+smull2	v7.4s, v23.8h, v1.h[0]
+smlal2	v7.4s, v24.8h, v1.h[1]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn2	v22.8h, v3.4s, #0xc
+sqrshrn	v25.4h, v4.4s, #0xc
+sqrshrn2	v25.8h, v5.4s, #0xc
+smull	v2.4s, v23.4h, v1.h[1]
+smlsl	v2.4s, v24.4h, v1.h[0]
+smull2	v3.4s, v23.8h, v1.h[1]
+smlsl2	v3.4s, v24.8h, v1.h[0]
+smull	v4.4s, v21.4h, v1.h[2]
+smlal	v4.4s, v26.4h, v1.h[3]
+smull2	v5.4s, v21.8h, v1.h[2]
+smlal2	v5.4s, v26.8h, v1.h[3]
+sqrshrn	v23.4h, v6.4s, #0xc
+sqrshrn2	v23.8h, v7.4s, #0xc
+sqrshrn	v24.4h, v2.4s, #0xc
+sqrshrn2	v24.8h, v3.4s, #0xc
+smull	v6.4s, v21.4h, v1.h[3]
+smlsl	v6.4s, v26.4h, v1.h[2]
+smull2	v7.4s, v21.8h, v1.h[3]
+smlsl2	v7.4s, v26.8h, v1.h[2]
+smull	v2.4s, v19.4h, v1.h[4]
+smlal	v2.4s, v28.4h, v1.h[5]
+smull2	v3.4s, v19.8h, v1.h[4]
+smlal2	v3.4s, v28.8h, v1.h[5]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn2	v21.8h, v5.4s, #0xc
+sqrshrn	v26.4h, v6.4s, #0xc
+sqrshrn2	v26.8h, v7.4s, #0xc
+smull	v4.4s, v19.4h, v1.h[5]
+smlsl	v4.4s, v28.4h, v1.h[4]
+smull2	v5.4s, v19.8h, v1.h[5]
+smlsl2	v5.4s, v28.8h, v1.h[4]
+smull	v6.4s, v17.4h, v1.h[6]
+smlal	v6.4s, v30.4h, v1.h[7]
+smull2	v7.4s, v17.8h, v1.h[6]
+smlal2	v7.4s, v30.8h, v1.h[7]
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn2	v19.8h, v3.4s, #0xc
+sqrshrn	v28.4h, v4.4s, #0xc
+sqrshrn2	v28.8h, v5.4s, #0xc
+smull	v2.4s, v17.4h, v1.h[7]
+smlsl	v2.4s, v30.4h, v1.h[6]
+smull2	v3.4s, v17.8h, v1.h[7]
+smlsl2	v3.4s, v30.8h, v1.h[6]
+sqrshrn	v17.4h, v6.4s, #0xc
+sqrshrn2	v17.8h, v7.4s, #0xc
+sqrshrn	v30.4h, v2.4s, #0xc
+sqrshrn2	v30.8h, v3.4s, #0xc
+ld1	{ v0.8h }, [x16]
+sqsub	v2.8h, v16.8h, v23.8h
+sqadd	v16.8h, v16.8h, v23.8h
+sqsub	v3.8h, v31.8h, v24.8h
+sqadd	v31.8h, v31.8h, v24.8h
+sqadd	v23.8h, v18.8h, v21.8h
+sqsub	v18.8h, v18.8h, v21.8h
+sqadd	v24.8h, v29.8h, v26.8h
+sqsub	v29.8h, v29.8h, v26.8h
+sqadd	v21.8h, v20.8h, v19.8h
+sqsub	v20.8h, v20.8h, v19.8h
+sqadd	v26.8h, v27.8h, v28.8h
+sqsub	v27.8h, v27.8h, v28.8h
+sqadd	v19.8h, v22.8h, v17.8h
+sqsub	v22.8h, v22.8h, v17.8h
+sqadd	v28.8h, v25.8h, v30.8h
+sqsub	v25.8h, v25.8h, v30.8h
+smull	v4.4s, v2.4h, v0.h[5]
+smlal	v4.4s, v3.4h, v0.h[4]
+smull2	v5.4s, v2.8h, v0.h[5]
+smlal2	v5.4s, v3.8h, v0.h[4]
+smull	v6.4s, v2.4h, v0.h[4]
+smlsl	v6.4s, v3.4h, v0.h[5]
+smull2	v7.4s, v2.8h, v0.h[4]
+smlsl2	v7.4s, v3.8h, v0.h[5]
+smull	v2.4s, v18.4h, v0.h[7]
+smlal	v2.4s, v29.4h, v0.h[6]
+smull2	v3.4s, v18.8h, v0.h[7]
+smlal2	v3.4s, v29.8h, v0.h[6]
+sqrshrn	v17.4h, v4.4s, #0xc
+sqrshrn2	v17.8h, v5.4s, #0xc
+sqrshrn	v30.4h, v6.4s, #0xc
+sqrshrn2	v30.8h, v7.4s, #0xc
+smull	v4.4s, v18.4h, v0.h[6]
+smlsl	v4.4s, v29.4h, v0.h[7]
+smull2	v5.4s, v18.8h, v0.h[6]
+smlsl2	v5.4s, v29.8h, v0.h[7]
+smull	v6.4s, v27.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull2	v7.4s, v27.8h, v0.h[5]
+smlsl2	v7.4s, v20.8h, v0.h[4]
+sqrshrn	v18.4h, v2.4s, #0xc
+sqrshrn2	v18.8h, v3.4s, #0xc
+sqrshrn	v29.4h, v4.4s, #0xc
+sqrshrn2	v29.8h, v5.4s, #0xc
+smull	v2.4s, v27.4h, v0.h[4]
+smlal	v2.4s, v20.4h, v0.h[5]
+smull2	v3.4s, v27.8h, v0.h[4]
+smlal2	v3.4s, v20.8h, v0.h[5]
+smull	v4.4s, v25.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+smull2	v5.4s, v25.8h, v0.h[7]
+smlsl2	v5.4s, v22.8h, v0.h[6]
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn2	v27.8h, v7.4s, #0xc
+sqrshrn	v20.4h, v2.4s, #0xc
+sqrshrn2	v20.8h, v3.4s, #0xc
+smull	v6.4s, v25.4h, v0.h[6]
+smlal	v6.4s, v22.4h, v0.h[7]
+smull2	v7.4s, v25.8h, v0.h[6]
+smlal2	v7.4s, v22.8h, v0.h[7]
+sqrshrn	v25.4h, v4.4s, #0xc
+sqrshrn2	v25.8h, v5.4s, #0xc
+sqrshrn	v22.4h, v6.4s, #0xc
+sqrshrn2	v22.8h, v7.4s, #0xc
+sqsub	v2.8h, v16.8h, v21.8h
+sqadd	v16.8h, v16.8h, v21.8h
+sqsub	v3.8h, v31.8h, v26.8h
+sqadd	v31.8h, v31.8h, v26.8h
+sqadd	v21.8h, v23.8h, v19.8h
+sqsub	v23.8h, v23.8h, v19.8h
+sqadd	v26.8h, v24.8h, v28.8h
+sqsub	v24.8h, v24.8h, v28.8h
+sqadd	v19.8h, v17.8h, v27.8h
+sqsub	v17.8h, v17.8h, v27.8h
+sqadd	v28.8h, v30.8h, v20.8h
+sqsub	v30.8h, v30.8h, v20.8h
+sqadd	v27.8h, v18.8h, v25.8h
+sqsub	v18.8h, v18.8h, v25.8h
+sqadd	v20.8h, v29.8h, v22.8h
+sqsub	v29.8h, v29.8h, v22.8h
+smull	v4.4s, v2.4h, v0.h[3]
+smlal	v4.4s, v3.4h, v0.h[2]
+smull2	v5.4s, v2.8h, v0.h[3]
+smlal2	v5.4s, v3.8h, v0.h[2]
+smull	v6.4s, v2.4h, v0.h[2]
+smlsl	v6.4s, v3.4h, v0.h[3]
+smull2	v7.4s, v2.8h, v0.h[2]
+smlsl2	v7.4s, v3.8h, v0.h[3]
+smull	v2.4s, v24.4h, v0.h[3]
+smlsl	v2.4s, v23.4h, v0.h[2]
+smull2	v3.4s, v24.8h, v0.h[3]
+smlsl2	v3.4s, v23.8h, v0.h[2]
+sqrshrn	v22.4h, v4.4s, #0xc
+sqrshrn2	v22.8h, v5.4s, #0xc
+sqrshrn	v25.4h, v6.4s, #0xc
+sqrshrn2	v25.8h, v7.4s, #0xc
+smull	v4.4s, v24.4h, v0.h[2]
+smlal	v4.4s, v23.4h, v0.h[3]
+smull2	v5.4s, v24.8h, v0.h[2]
+smlal2	v5.4s, v23.8h, v0.h[3]
+smull	v6.4s, v17.4h, v0.h[3]
+smlal	v6.4s, v30.4h, v0.h[2]
+smull2	v7.4s, v17.8h, v0.h[3]
+smlal2	v7.4s, v30.8h, v0.h[2]
+sqrshrn	v24.4h, v2.4s, #0xc
+sqrshrn2	v24.8h, v3.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+sqrshrn2	v23.8h, v5.4s, #0xc
+smull	v2.4s, v17.4h, v0.h[2]
+smlsl	v2.4s, v30.4h, v0.h[3]
+smull2	v3.4s, v17.8h, v0.h[2]
+smlsl2	v3.4s, v30.8h, v0.h[3]
+smull	v4.4s, v29.4h, v0.h[3]
+smlsl	v4.4s, v18.4h, v0.h[2]
+smull2	v5.4s, v29.8h, v0.h[3]
+smlsl2	v5.4s, v18.8h, v0.h[2]
+sqrshrn	v17.4h, v6.4s, #0xc
+sqrshrn2	v17.8h, v7.4s, #0xc
+smull	v6.4s, v29.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+smull2	v7.4s, v29.8h, v0.h[2]
+smlal2	v7.4s, v18.8h, v0.h[3]
+sqrshrn	v29.4h, v2.4s, #0xc
+sqrshrn2	v29.8h, v3.4s, #0xc
+sqrshrn	v30.4h, v4.4s, #0xc
+sqrshrn2	v30.8h, v5.4s, #0xc
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn2	v18.8h, v7.4s, #0xc
+sqsub	v2.8h, v16.8h, v21.8h
+sqadd	v4.8h, v16.8h, v21.8h
+sqsub	v21.8h, v31.8h, v26.8h
+sqadd	v16.8h, v31.8h, v26.8h
+mov	v31.16b, v4.16b
+sqneg	v16.8h, v16.8h
+sqsub	v3.8h, v29.8h, v18.8h
+sqadd	v18.8h, v29.8h, v18.8h
+sqadd	v29.8h, v17.8h, v30.8h
+sqsub	v26.8h, v17.8h, v30.8h
+sqneg	v18.8h, v18.8h
+sqadd	v30.8h, v19.8h, v27.8h
+sqsub	v27.8h, v19.8h, v27.8h
+sqadd	v17.8h, v28.8h, v20.8h
+sqsub	v20.8h, v28.8h, v20.8h
+sqneg	v30.8h, v30.8h
+sqadd	v28.8h, v22.8h, v24.8h
+sqsub	v22.8h, v22.8h, v24.8h
+sqadd	v19.8h, v25.8h, v23.8h
+sqsub	v23.8h, v25.8h, v23.8h
+sqneg	v28.8h, v28.8h
+smull	v24.4s, v2.4h, v0.h[0]
+smlsl	v24.4s, v21.4h, v0.h[0]
+smull2	v25.4s, v2.8h, v0.h[0]
+smlsl2	v25.4s, v21.8h, v0.h[0]
+smull	v4.4s, v2.4h, v0.h[0]
+smlal	v4.4s, v21.4h, v0.h[0]
+smull2	v5.4s, v2.8h, v0.h[0]
+smlal2	v5.4s, v21.8h, v0.h[0]
+smull	v6.4s, v26.4h, v0.h[0]
+smlal	v6.4s, v3.4h, v0.h[0]
+smull2	v7.4s, v26.8h, v0.h[0]
+smlal2	v7.4s, v3.8h, v0.h[0]
+sqrshrn	v24.4h, v24.4s, #0xc
+sqrshrn2	v24.8h, v25.4s, #0xc
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn2	v4.8h, v5.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+sqrshrn2	v5.8h, v7.4s, #0xc
+smull	v6.4s, v26.4h, v0.h[0]
+smlsl	v6.4s, v3.4h, v0.h[0]
+smull2	v7.4s, v26.8h, v0.h[0]
+smlsl2	v7.4s, v3.8h, v0.h[0]
+smull	v2.4s, v22.4h, v0.h[0]
+smlal	v2.4s, v23.4h, v0.h[0]
+smull2	v3.4s, v22.8h, v0.h[0]
+smlal2	v3.4s, v23.8h, v0.h[0]
+sqrshrn	v26.4h, v6.4s, #0xc
+sqrshrn2	v26.8h, v7.4s, #0xc
+smull	v6.4s, v22.4h, v0.h[0]
+smlsl	v6.4s, v23.4h, v0.h[0]
+smull2	v7.4s, v22.8h, v0.h[0]
+smlsl2	v7.4s, v23.8h, v0.h[0]
+smull	v22.4s, v27.4h, v0.h[0]
+smlal	v22.4s, v20.4h, v0.h[0]
+smull2	v23.4s, v27.8h, v0.h[0]
+smlal2	v23.4s, v20.8h, v0.h[0]
+smull	v21.4s, v27.4h, v0.h[0]
+smlsl	v21.4s, v20.4h, v0.h[0]
+smull2	v25.4s, v27.8h, v0.h[0]
+smlsl2	v25.4s, v20.8h, v0.h[0]
+sqrshrn	v27.4h, v2.4s, #0xc
+sqrshrn2	v27.8h, v3.4s, #0xc
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn2	v6.8h, v7.4s, #0xc
+sqrshrn	v7.4h, v21.4s, #0xc
+sqrshrn2	v7.8h, v25.4s, #0xc
+sqrshrn	v25.4h, v22.4s, #0xc
+sqrshrn2	v25.8h, v23.4s, #0xc
+mov	v23.16b, v24.16b
+mov	v21.16b, v26.16b
+sqneg	v24.8h, v4.8h
+sqneg	v26.8h, v5.8h
+sqneg	v20.8h, v6.8h
+sqneg	v22.8h, v7.8h
 ret
-_inv_adst_4h_x16_neon:
-adrp	x16, inv_adst_4h_x16_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-adrp	x16, inv_adst_4h_x16_neon
-add	x16, x16, #0
-smull.4s	v2, v31, v0[0]
-smlal.4s	v2, v16, v0[1]
-smull.4s	v4, v31, v0[1]
-smlsl.4s	v4, v16, v0[0]
-smull.4s	v6, v29, v0[2]
-smlal.4s	v6, v18, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn.4h	v31, v4, #12
-smull.4s	v2, v29, v0[3]
-smlsl.4s	v2, v18, v0[2]
-smull.4s	v4, v27, v0[4]
-smlal.4s	v4, v20, v0[5]
-sqrshrn.4h	v18, v6, #12
-sqrshrn.4h	v29, v2, #12
-smull.4s	v6, v27, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull.4s	v2, v25, v0[6]
-smlal.4s	v2, v22, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn.4h	v27, v6, #12
-smull.4s	v4, v25, v0[7]
-smlsl.4s	v4, v22, v0[6]
-smull.4s	v6, v23, v1[0]
-smlal.4s	v6, v24, v1[1]
-sqrshrn.4h	v22, v2, #12
-sqrshrn.4h	v25, v4, #12
-smull.4s	v2, v23, v1[1]
-smlsl.4s	v2, v24, v1[0]
-smull.4s	v4, v21, v1[2]
-smlal.4s	v4, v26, v1[3]
-sqrshrn.4h	v23, v6, #12
-sqrshrn.4h	v24, v2, #12
-smull.4s	v6, v21, v1[3]
-smlsl.4s	v6, v26, v1[2]
-smull.4s	v2, v19, v1[4]
-smlal.4s	v2, v28, v1[5]
-sqrshrn.4h	v21, v4, #12
-sqrshrn.4h	v26, v6, #12
-smull.4s	v4, v19, v1[5]
-smlsl.4s	v4, v28, v1[4]
-smull.4s	v6, v17, v1[6]
-smlal.4s	v6, v30, v1[7]
-sqrshrn.4h	v19, v2, #12
-sqrshrn.4h	v28, v4, #12
-smull.4s	v2, v17, v1[7]
-smlsl.4s	v2, v30, v1[6]
-sqrshrn.4h	v17, v6, #12
-sqrshrn.4h	v30, v2, #12
-ld1.8h	{ v0 }, [x16]
-sqsub.4h	v2, v16, v23
-sqadd.4h	v16, v16, v23
-sqsub.4h	v3, v31, v24
-sqadd.4h	v31, v31, v24
-sqadd.4h	v23, v18, v21
-sqsub.4h	v18, v18, v21
-sqadd.4h	v24, v29, v26
-sqsub.4h	v29, v29, v26
-sqadd.4h	v21, v20, v19
-sqsub.4h	v20, v20, v19
-sqadd.4h	v26, v27, v28
-sqsub.4h	v27, v27, v28
-sqadd.4h	v19, v22, v17
-sqsub.4h	v22, v22, v17
-sqadd.4h	v28, v25, v30
-sqsub.4h	v25, v25, v30
-smull.4s	v4, v2, v0[5]
-smlal.4s	v4, v3, v0[4]
-smull.4s	v6, v2, v0[4]
-smlsl.4s	v6, v3, v0[5]
-smull.4s	v2, v18, v0[7]
-smlal.4s	v2, v29, v0[6]
-sqrshrn.4h	v17, v4, #12
-sqrshrn.4h	v30, v6, #12
-smull.4s	v4, v18, v0[6]
-smlsl.4s	v4, v29, v0[7]
-smull.4s	v6, v27, v0[5]
-smlsl.4s	v6, v20, v0[4]
-sqrshrn.4h	v18, v2, #12
-sqrshrn.4h	v29, v4, #12
-smull.4s	v2, v27, v0[4]
-smlal.4s	v2, v20, v0[5]
-smull.4s	v4, v25, v0[7]
-smlsl.4s	v4, v22, v0[6]
-sqrshrn.4h	v27, v6, #12
-sqrshrn.4h	v20, v2, #12
-smull.4s	v6, v25, v0[6]
-smlal.4s	v6, v22, v0[7]
-sqrshrn.4h	v25, v4, #12
-sqrshrn.4h	v22, v6, #12
-sqsub.4h	v2, v16, v21
-sqadd.4h	v16, v16, v21
-sqsub.4h	v3, v31, v26
-sqadd.4h	v31, v31, v26
-sqadd.4h	v21, v23, v19
-sqsub.4h	v23, v23, v19
-sqadd.4h	v26, v24, v28
-sqsub.4h	v24, v24, v28
-sqadd.4h	v19, v17, v27
-sqsub.4h	v17, v17, v27
-sqadd.4h	v28, v30, v20
-sqsub.4h	v30, v30, v20
-sqadd.4h	v27, v18, v25
-sqsub.4h	v18, v18, v25
-sqadd.4h	v20, v29, v22
-sqsub.4h	v29, v29, v22
-smull.4s	v4, v2, v0[3]
-smlal.4s	v4, v3, v0[2]
-smull.4s	v6, v2, v0[2]
-smlsl.4s	v6, v3, v0[3]
-smull.4s	v2, v24, v0[3]
-smlsl.4s	v2, v23, v0[2]
-sqrshrn.4h	v22, v4, #12
-sqrshrn.4h	v25, v6, #12
-smull.4s	v4, v24, v0[2]
-smlal.4s	v4, v23, v0[3]
-smull.4s	v6, v17, v0[3]
-smlal.4s	v6, v30, v0[2]
-sqrshrn.4h	v24, v2, #12
-sqrshrn.4h	v23, v4, #12
-smull.4s	v2, v17, v0[2]
-smlsl.4s	v2, v30, v0[3]
-smull.4s	v4, v29, v0[3]
-smlsl.4s	v4, v18, v0[2]
-sqrshrn.4h	v17, v6, #12
-smull.4s	v6, v29, v0[2]
-smlal.4s	v6, v18, v0[3]
-sqrshrn.4h	v29, v2, #12
-sqrshrn.4h	v30, v4, #12
-sqrshrn.4h	v18, v6, #12
-sqsub.4h	v2, v16, v21
-sqadd.4h	v16, v16, v21
-sqsub.4h	v21, v31, v26
-sqadd.4h	v31, v31, v26
-sqneg.4h	v31, v31
-sqsub.4h	v3, v29, v18
-sqadd.4h	v29, v29, v18
-sqadd.4h	v18, v17, v30
-sqsub.4h	v26, v17, v30
-sqneg.4h	v29, v29
-sqadd.4h	v17, v19, v27
-sqsub.4h	v27, v19, v27
-sqadd.4h	v30, v28, v20
-sqsub.4h	v20, v28, v20
-sqneg.4h	v17, v17
-sqadd.4h	v19, v22, v24
-sqsub.4h	v22, v22, v24
-sqadd.4h	v28, v25, v23
-sqsub.4h	v23, v25, v23
-sqneg.4h	v19, v19
-smull.4s	v24, v2, v0[0]
-smlsl.4s	v24, v21, v0[0]
-smull.4s	v4, v2, v0[0]
-smlal.4s	v4, v21, v0[0]
-smull.4s	v6, v26, v0[0]
-smlal.4s	v6, v3, v0[0]
-sqrshrn.4h	v24, v24, #12
-sqrshrn.4h	v4, v4, #12
-sqrshrn.4h	v5, v6, #12
-smull.4s	v6, v26, v0[0]
-smlsl.4s	v6, v3, v0[0]
-smull.4s	v2, v22, v0[0]
-smlal.4s	v2, v23, v0[0]
-sqrshrn.4h	v26, v6, #12
-smull.4s	v6, v22, v0[0]
-smlsl.4s	v6, v23, v0[0]
-smull.4s	v22, v27, v0[0]
-smlal.4s	v22, v20, v0[0]
-smull.4s	v21, v27, v0[0]
-smlsl.4s	v21, v20, v0[0]
-sqrshrn.4h	v20, v2, #12
-sqrshrn.4h	v6, v6, #12
-sqrshrn.4h	v7, v21, #12
-sqrshrn.4h	v22, v22, #12
-sqneg.4h	v23, v4
-sqneg.4h	v21, v5
-sqneg.4h	v27, v6
-sqneg.4h	v25, v7
+inv_adst_4h_x16_neon:
+adrp	x16, iadst16_coeffs
+add	x16, x16, :lo12:iadst16_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+smull	v2.4s, v31.4h, v0.h[0]
+smlal	v2.4s, v16.4h, v0.h[1]
+smull	v4.4s, v31.4h, v0.h[1]
+smlsl	v4.4s, v16.4h, v0.h[0]
+smull	v6.4s, v29.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn	v31.4h, v4.4s, #0xc
+smull	v2.4s, v29.4h, v0.h[3]
+smlsl	v2.4s, v18.4h, v0.h[2]
+smull	v4.4s, v27.4h, v0.h[4]
+smlal	v4.4s, v20.4h, v0.h[5]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn	v29.4h, v2.4s, #0xc
+smull	v6.4s, v27.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull	v2.4s, v25.4h, v0.h[6]
+smlal	v2.4s, v22.4h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+smull	v4.4s, v25.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+smull	v6.4s, v23.4h, v1.h[0]
+smlal	v6.4s, v24.4h, v1.h[1]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn	v25.4h, v4.4s, #0xc
+smull	v2.4s, v23.4h, v1.h[1]
+smlsl	v2.4s, v24.4h, v1.h[0]
+smull	v4.4s, v21.4h, v1.h[2]
+smlal	v4.4s, v26.4h, v1.h[3]
+sqrshrn	v23.4h, v6.4s, #0xc
+sqrshrn	v24.4h, v2.4s, #0xc
+smull	v6.4s, v21.4h, v1.h[3]
+smlsl	v6.4s, v26.4h, v1.h[2]
+smull	v2.4s, v19.4h, v1.h[4]
+smlal	v2.4s, v28.4h, v1.h[5]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn	v26.4h, v6.4s, #0xc
+smull	v4.4s, v19.4h, v1.h[5]
+smlsl	v4.4s, v28.4h, v1.h[4]
+smull	v6.4s, v17.4h, v1.h[6]
+smlal	v6.4s, v30.4h, v1.h[7]
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn	v28.4h, v4.4s, #0xc
+smull	v2.4s, v17.4h, v1.h[7]
+smlsl	v2.4s, v30.4h, v1.h[6]
+sqrshrn	v17.4h, v6.4s, #0xc
+sqrshrn	v30.4h, v2.4s, #0xc
+ld1	{ v0.8h }, [x16]
+sqsub	v2.4h, v16.4h, v23.4h
+sqadd	v16.4h, v16.4h, v23.4h
+sqsub	v3.4h, v31.4h, v24.4h
+sqadd	v31.4h, v31.4h, v24.4h
+sqadd	v23.4h, v18.4h, v21.4h
+sqsub	v18.4h, v18.4h, v21.4h
+sqadd	v24.4h, v29.4h, v26.4h
+sqsub	v29.4h, v29.4h, v26.4h
+sqadd	v21.4h, v20.4h, v19.4h
+sqsub	v20.4h, v20.4h, v19.4h
+sqadd	v26.4h, v27.4h, v28.4h
+sqsub	v27.4h, v27.4h, v28.4h
+sqadd	v19.4h, v22.4h, v17.4h
+sqsub	v22.4h, v22.4h, v17.4h
+sqadd	v28.4h, v25.4h, v30.4h
+sqsub	v25.4h, v25.4h, v30.4h
+smull	v4.4s, v2.4h, v0.h[5]
+smlal	v4.4s, v3.4h, v0.h[4]
+smull	v6.4s, v2.4h, v0.h[4]
+smlsl	v6.4s, v3.4h, v0.h[5]
+smull	v2.4s, v18.4h, v0.h[7]
+smlal	v2.4s, v29.4h, v0.h[6]
+sqrshrn	v17.4h, v4.4s, #0xc
+sqrshrn	v30.4h, v6.4s, #0xc
+smull	v4.4s, v18.4h, v0.h[6]
+smlsl	v4.4s, v29.4h, v0.h[7]
+smull	v6.4s, v27.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+sqrshrn	v18.4h, v2.4s, #0xc
+sqrshrn	v29.4h, v4.4s, #0xc
+smull	v2.4s, v27.4h, v0.h[4]
+smlal	v2.4s, v20.4h, v0.h[5]
+smull	v4.4s, v25.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn	v20.4h, v2.4s, #0xc
+smull	v6.4s, v25.4h, v0.h[6]
+smlal	v6.4s, v22.4h, v0.h[7]
+sqrshrn	v25.4h, v4.4s, #0xc
+sqrshrn	v22.4h, v6.4s, #0xc
+sqsub	v2.4h, v16.4h, v21.4h
+sqadd	v16.4h, v16.4h, v21.4h
+sqsub	v3.4h, v31.4h, v26.4h
+sqadd	v31.4h, v31.4h, v26.4h
+sqadd	v21.4h, v23.4h, v19.4h
+sqsub	v23.4h, v23.4h, v19.4h
+sqadd	v26.4h, v24.4h, v28.4h
+sqsub	v24.4h, v24.4h, v28.4h
+sqadd	v19.4h, v17.4h, v27.4h
+sqsub	v17.4h, v17.4h, v27.4h
+sqadd	v28.4h, v30.4h, v20.4h
+sqsub	v30.4h, v30.4h, v20.4h
+sqadd	v27.4h, v18.4h, v25.4h
+sqsub	v18.4h, v18.4h, v25.4h
+sqadd	v20.4h, v29.4h, v22.4h
+sqsub	v29.4h, v29.4h, v22.4h
+smull	v4.4s, v2.4h, v0.h[3]
+smlal	v4.4s, v3.4h, v0.h[2]
+smull	v6.4s, v2.4h, v0.h[2]
+smlsl	v6.4s, v3.4h, v0.h[3]
+smull	v2.4s, v24.4h, v0.h[3]
+smlsl	v2.4s, v23.4h, v0.h[2]
+sqrshrn	v22.4h, v4.4s, #0xc
+sqrshrn	v25.4h, v6.4s, #0xc
+smull	v4.4s, v24.4h, v0.h[2]
+smlal	v4.4s, v23.4h, v0.h[3]
+smull	v6.4s, v17.4h, v0.h[3]
+smlal	v6.4s, v30.4h, v0.h[2]
+sqrshrn	v24.4h, v2.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+smull	v2.4s, v17.4h, v0.h[2]
+smlsl	v2.4s, v30.4h, v0.h[3]
+smull	v4.4s, v29.4h, v0.h[3]
+smlsl	v4.4s, v18.4h, v0.h[2]
+sqrshrn	v17.4h, v6.4s, #0xc
+smull	v6.4s, v29.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+sqrshrn	v29.4h, v2.4s, #0xc
+sqrshrn	v30.4h, v4.4s, #0xc
+sqrshrn	v18.4h, v6.4s, #0xc
+sqsub	v2.4h, v16.4h, v21.4h
+sqadd	v16.4h, v16.4h, v21.4h
+sqsub	v21.4h, v31.4h, v26.4h
+sqadd	v31.4h, v31.4h, v26.4h
+sqneg	v31.4h, v31.4h
+sqsub	v3.4h, v29.4h, v18.4h
+sqadd	v29.4h, v29.4h, v18.4h
+sqadd	v18.4h, v17.4h, v30.4h
+sqsub	v26.4h, v17.4h, v30.4h
+sqneg	v29.4h, v29.4h
+sqadd	v17.4h, v19.4h, v27.4h
+sqsub	v27.4h, v19.4h, v27.4h
+sqadd	v30.4h, v28.4h, v20.4h
+sqsub	v20.4h, v28.4h, v20.4h
+sqneg	v17.4h, v17.4h
+sqadd	v19.4h, v22.4h, v24.4h
+sqsub	v22.4h, v22.4h, v24.4h
+sqadd	v28.4h, v25.4h, v23.4h
+sqsub	v23.4h, v25.4h, v23.4h
+sqneg	v19.4h, v19.4h
+smull	v24.4s, v2.4h, v0.h[0]
+smlsl	v24.4s, v21.4h, v0.h[0]
+smull	v4.4s, v2.4h, v0.h[0]
+smlal	v4.4s, v21.4h, v0.h[0]
+smull	v6.4s, v26.4h, v0.h[0]
+smlal	v6.4s, v3.4h, v0.h[0]
+sqrshrn	v24.4h, v24.4s, #0xc
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+smull	v6.4s, v26.4h, v0.h[0]
+smlsl	v6.4s, v3.4h, v0.h[0]
+smull	v2.4s, v22.4h, v0.h[0]
+smlal	v2.4s, v23.4h, v0.h[0]
+sqrshrn	v26.4h, v6.4s, #0xc
+smull	v6.4s, v22.4h, v0.h[0]
+smlsl	v6.4s, v23.4h, v0.h[0]
+smull	v22.4s, v27.4h, v0.h[0]
+smlal	v22.4s, v20.4h, v0.h[0]
+smull	v21.4s, v27.4h, v0.h[0]
+smlsl	v21.4s, v20.4h, v0.h[0]
+sqrshrn	v20.4h, v2.4s, #0xc
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn	v7.4h, v21.4s, #0xc
+sqrshrn	v22.4h, v22.4s, #0xc
+sqneg	v23.4h, v4.4h
+sqneg	v21.4h, v5.4h
+sqneg	v27.4h, v6.4h
+sqneg	v25.4h, v7.4h
 ret
-_inv_flipadst_4h_x16_neon:
-adrp	x16, inv_flipadst_4h_x16_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-adrp	x16, inv_flipadst_4h_x16_neon
-add	x16, x16, #0
-smull.4s	v2, v31, v0[0]
-smlal.4s	v2, v16, v0[1]
-smull.4s	v4, v31, v0[1]
-smlsl.4s	v4, v16, v0[0]
-smull.4s	v6, v29, v0[2]
-smlal.4s	v6, v18, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn.4h	v31, v4, #12
-smull.4s	v2, v29, v0[3]
-smlsl.4s	v2, v18, v0[2]
-smull.4s	v4, v27, v0[4]
-smlal.4s	v4, v20, v0[5]
-sqrshrn.4h	v18, v6, #12
-sqrshrn.4h	v29, v2, #12
-smull.4s	v6, v27, v0[5]
-smlsl.4s	v6, v20, v0[4]
-smull.4s	v2, v25, v0[6]
-smlal.4s	v2, v22, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn.4h	v27, v6, #12
-smull.4s	v4, v25, v0[7]
-smlsl.4s	v4, v22, v0[6]
-smull.4s	v6, v23, v1[0]
-smlal.4s	v6, v24, v1[1]
-sqrshrn.4h	v22, v2, #12
-sqrshrn.4h	v25, v4, #12
-smull.4s	v2, v23, v1[1]
-smlsl.4s	v2, v24, v1[0]
-smull.4s	v4, v21, v1[2]
-smlal.4s	v4, v26, v1[3]
-sqrshrn.4h	v23, v6, #12
-sqrshrn.4h	v24, v2, #12
-smull.4s	v6, v21, v1[3]
-smlsl.4s	v6, v26, v1[2]
-smull.4s	v2, v19, v1[4]
-smlal.4s	v2, v28, v1[5]
-sqrshrn.4h	v21, v4, #12
-sqrshrn.4h	v26, v6, #12
-smull.4s	v4, v19, v1[5]
-smlsl.4s	v4, v28, v1[4]
-smull.4s	v6, v17, v1[6]
-smlal.4s	v6, v30, v1[7]
-sqrshrn.4h	v19, v2, #12
-sqrshrn.4h	v28, v4, #12
-smull.4s	v2, v17, v1[7]
-smlsl.4s	v2, v30, v1[6]
-sqrshrn.4h	v17, v6, #12
-sqrshrn.4h	v30, v2, #12
-ld1.8h	{ v0 }, [x16]
-sqsub.4h	v2, v16, v23
-sqadd.4h	v16, v16, v23
-sqsub.4h	v3, v31, v24
-sqadd.4h	v31, v31, v24
-sqadd.4h	v23, v18, v21
-sqsub.4h	v18, v18, v21
-sqadd.4h	v24, v29, v26
-sqsub.4h	v29, v29, v26
-sqadd.4h	v21, v20, v19
-sqsub.4h	v20, v20, v19
-sqadd.4h	v26, v27, v28
-sqsub.4h	v27, v27, v28
-sqadd.4h	v19, v22, v17
-sqsub.4h	v22, v22, v17
-sqadd.4h	v28, v25, v30
-sqsub.4h	v25, v25, v30
-smull.4s	v4, v2, v0[5]
-smlal.4s	v4, v3, v0[4]
-smull.4s	v6, v2, v0[4]
-smlsl.4s	v6, v3, v0[5]
-smull.4s	v2, v18, v0[7]
-smlal.4s	v2, v29, v0[6]
-sqrshrn.4h	v17, v4, #12
-sqrshrn.4h	v30, v6, #12
-smull.4s	v4, v18, v0[6]
-smlsl.4s	v4, v29, v0[7]
-smull.4s	v6, v27, v0[5]
-smlsl.4s	v6, v20, v0[4]
-sqrshrn.4h	v18, v2, #12
-sqrshrn.4h	v29, v4, #12
-smull.4s	v2, v27, v0[4]
-smlal.4s	v2, v20, v0[5]
-smull.4s	v4, v25, v0[7]
-smlsl.4s	v4, v22, v0[6]
-sqrshrn.4h	v27, v6, #12
-sqrshrn.4h	v20, v2, #12
-smull.4s	v6, v25, v0[6]
-smlal.4s	v6, v22, v0[7]
-sqrshrn.4h	v25, v4, #12
-sqrshrn.4h	v22, v6, #12
-sqsub.4h	v2, v16, v21
-sqadd.4h	v16, v16, v21
-sqsub.4h	v3, v31, v26
-sqadd.4h	v31, v31, v26
-sqadd.4h	v21, v23, v19
-sqsub.4h	v23, v23, v19
-sqadd.4h	v26, v24, v28
-sqsub.4h	v24, v24, v28
-sqadd.4h	v19, v17, v27
-sqsub.4h	v17, v17, v27
-sqadd.4h	v28, v30, v20
-sqsub.4h	v30, v30, v20
-sqadd.4h	v27, v18, v25
-sqsub.4h	v18, v18, v25
-sqadd.4h	v20, v29, v22
-sqsub.4h	v29, v29, v22
-smull.4s	v4, v2, v0[3]
-smlal.4s	v4, v3, v0[2]
-smull.4s	v6, v2, v0[2]
-smlsl.4s	v6, v3, v0[3]
-smull.4s	v2, v24, v0[3]
-smlsl.4s	v2, v23, v0[2]
-sqrshrn.4h	v22, v4, #12
-sqrshrn.4h	v25, v6, #12
-smull.4s	v4, v24, v0[2]
-smlal.4s	v4, v23, v0[3]
-smull.4s	v6, v17, v0[3]
-smlal.4s	v6, v30, v0[2]
-sqrshrn.4h	v24, v2, #12
-sqrshrn.4h	v23, v4, #12
-smull.4s	v2, v17, v0[2]
-smlsl.4s	v2, v30, v0[3]
-smull.4s	v4, v29, v0[3]
-smlsl.4s	v4, v18, v0[2]
-sqrshrn.4h	v17, v6, #12
-smull.4s	v6, v29, v0[2]
-smlal.4s	v6, v18, v0[3]
-sqrshrn.4h	v29, v2, #12
-sqrshrn.4h	v30, v4, #12
-sqrshrn.4h	v18, v6, #12
-sqsub.4h	v2, v16, v21
-sqadd.4h	v4, v16, v21
-sqsub.4h	v21, v31, v26
-sqadd.4h	v16, v31, v26
-mov.8b	v31, v4
-sqneg.4h	v16, v16
-sqsub.4h	v3, v29, v18
-sqadd.4h	v18, v29, v18
-sqadd.4h	v29, v17, v30
-sqsub.4h	v26, v17, v30
-sqneg.4h	v18, v18
-sqadd.4h	v30, v19, v27
-sqsub.4h	v27, v19, v27
-sqadd.4h	v17, v28, v20
-sqsub.4h	v20, v28, v20
-sqneg.4h	v30, v30
-sqadd.4h	v28, v22, v24
-sqsub.4h	v22, v22, v24
-sqadd.4h	v19, v25, v23
-sqsub.4h	v23, v25, v23
-sqneg.4h	v28, v28
-smull.4s	v24, v2, v0[0]
-smlsl.4s	v24, v21, v0[0]
-smull.4s	v4, v2, v0[0]
-smlal.4s	v4, v21, v0[0]
-smull.4s	v6, v26, v0[0]
-smlal.4s	v6, v3, v0[0]
-sqrshrn.4h	v24, v24, #12
-sqrshrn.4h	v4, v4, #12
-sqrshrn.4h	v5, v6, #12
-smull.4s	v6, v26, v0[0]
-smlsl.4s	v6, v3, v0[0]
-smull.4s	v2, v22, v0[0]
-smlal.4s	v2, v23, v0[0]
-sqrshrn.4h	v26, v6, #12
-smull.4s	v6, v22, v0[0]
-smlsl.4s	v6, v23, v0[0]
-smull.4s	v22, v27, v0[0]
-smlal.4s	v22, v20, v0[0]
-smull.4s	v21, v27, v0[0]
-smlsl.4s	v21, v20, v0[0]
-sqrshrn.4h	v27, v2, #12
-sqrshrn.4h	v6, v6, #12
-sqrshrn.4h	v7, v21, #12
-sqrshrn.4h	v25, v22, #12
-mov.8b	v23, v24
-mov.8b	v21, v26
-sqneg.4h	v24, v4
-sqneg.4h	v26, v5
-sqneg.4h	v20, v6
-sqneg.4h	v22, v7
+inv_flipadst_4h_x16_neon:
+adrp	x16, iadst16_coeffs
+add	x16, x16, :lo12:iadst16_coeffs
+ld1	{ v0.8h, v1.8h }, [x16]
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+smull	v2.4s, v31.4h, v0.h[0]
+smlal	v2.4s, v16.4h, v0.h[1]
+smull	v4.4s, v31.4h, v0.h[1]
+smlsl	v4.4s, v16.4h, v0.h[0]
+smull	v6.4s, v29.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn	v31.4h, v4.4s, #0xc
+smull	v2.4s, v29.4h, v0.h[3]
+smlsl	v2.4s, v18.4h, v0.h[2]
+smull	v4.4s, v27.4h, v0.h[4]
+smlal	v4.4s, v20.4h, v0.h[5]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn	v29.4h, v2.4s, #0xc
+smull	v6.4s, v27.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+smull	v2.4s, v25.4h, v0.h[6]
+smlal	v2.4s, v22.4h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+smull	v4.4s, v25.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+smull	v6.4s, v23.4h, v1.h[0]
+smlal	v6.4s, v24.4h, v1.h[1]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn	v25.4h, v4.4s, #0xc
+smull	v2.4s, v23.4h, v1.h[1]
+smlsl	v2.4s, v24.4h, v1.h[0]
+smull	v4.4s, v21.4h, v1.h[2]
+smlal	v4.4s, v26.4h, v1.h[3]
+sqrshrn	v23.4h, v6.4s, #0xc
+sqrshrn	v24.4h, v2.4s, #0xc
+smull	v6.4s, v21.4h, v1.h[3]
+smlsl	v6.4s, v26.4h, v1.h[2]
+smull	v2.4s, v19.4h, v1.h[4]
+smlal	v2.4s, v28.4h, v1.h[5]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn	v26.4h, v6.4s, #0xc
+smull	v4.4s, v19.4h, v1.h[5]
+smlsl	v4.4s, v28.4h, v1.h[4]
+smull	v6.4s, v17.4h, v1.h[6]
+smlal	v6.4s, v30.4h, v1.h[7]
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn	v28.4h, v4.4s, #0xc
+smull	v2.4s, v17.4h, v1.h[7]
+smlsl	v2.4s, v30.4h, v1.h[6]
+sqrshrn	v17.4h, v6.4s, #0xc
+sqrshrn	v30.4h, v2.4s, #0xc
+ld1	{ v0.8h }, [x16]
+sqsub	v2.4h, v16.4h, v23.4h
+sqadd	v16.4h, v16.4h, v23.4h
+sqsub	v3.4h, v31.4h, v24.4h
+sqadd	v31.4h, v31.4h, v24.4h
+sqadd	v23.4h, v18.4h, v21.4h
+sqsub	v18.4h, v18.4h, v21.4h
+sqadd	v24.4h, v29.4h, v26.4h
+sqsub	v29.4h, v29.4h, v26.4h
+sqadd	v21.4h, v20.4h, v19.4h
+sqsub	v20.4h, v20.4h, v19.4h
+sqadd	v26.4h, v27.4h, v28.4h
+sqsub	v27.4h, v27.4h, v28.4h
+sqadd	v19.4h, v22.4h, v17.4h
+sqsub	v22.4h, v22.4h, v17.4h
+sqadd	v28.4h, v25.4h, v30.4h
+sqsub	v25.4h, v25.4h, v30.4h
+smull	v4.4s, v2.4h, v0.h[5]
+smlal	v4.4s, v3.4h, v0.h[4]
+smull	v6.4s, v2.4h, v0.h[4]
+smlsl	v6.4s, v3.4h, v0.h[5]
+smull	v2.4s, v18.4h, v0.h[7]
+smlal	v2.4s, v29.4h, v0.h[6]
+sqrshrn	v17.4h, v4.4s, #0xc
+sqrshrn	v30.4h, v6.4s, #0xc
+smull	v4.4s, v18.4h, v0.h[6]
+smlsl	v4.4s, v29.4h, v0.h[7]
+smull	v6.4s, v27.4h, v0.h[5]
+smlsl	v6.4s, v20.4h, v0.h[4]
+sqrshrn	v18.4h, v2.4s, #0xc
+sqrshrn	v29.4h, v4.4s, #0xc
+smull	v2.4s, v27.4h, v0.h[4]
+smlal	v2.4s, v20.4h, v0.h[5]
+smull	v4.4s, v25.4h, v0.h[7]
+smlsl	v4.4s, v22.4h, v0.h[6]
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn	v20.4h, v2.4s, #0xc
+smull	v6.4s, v25.4h, v0.h[6]
+smlal	v6.4s, v22.4h, v0.h[7]
+sqrshrn	v25.4h, v4.4s, #0xc
+sqrshrn	v22.4h, v6.4s, #0xc
+sqsub	v2.4h, v16.4h, v21.4h
+sqadd	v16.4h, v16.4h, v21.4h
+sqsub	v3.4h, v31.4h, v26.4h
+sqadd	v31.4h, v31.4h, v26.4h
+sqadd	v21.4h, v23.4h, v19.4h
+sqsub	v23.4h, v23.4h, v19.4h
+sqadd	v26.4h, v24.4h, v28.4h
+sqsub	v24.4h, v24.4h, v28.4h
+sqadd	v19.4h, v17.4h, v27.4h
+sqsub	v17.4h, v17.4h, v27.4h
+sqadd	v28.4h, v30.4h, v20.4h
+sqsub	v30.4h, v30.4h, v20.4h
+sqadd	v27.4h, v18.4h, v25.4h
+sqsub	v18.4h, v18.4h, v25.4h
+sqadd	v20.4h, v29.4h, v22.4h
+sqsub	v29.4h, v29.4h, v22.4h
+smull	v4.4s, v2.4h, v0.h[3]
+smlal	v4.4s, v3.4h, v0.h[2]
+smull	v6.4s, v2.4h, v0.h[2]
+smlsl	v6.4s, v3.4h, v0.h[3]
+smull	v2.4s, v24.4h, v0.h[3]
+smlsl	v2.4s, v23.4h, v0.h[2]
+sqrshrn	v22.4h, v4.4s, #0xc
+sqrshrn	v25.4h, v6.4s, #0xc
+smull	v4.4s, v24.4h, v0.h[2]
+smlal	v4.4s, v23.4h, v0.h[3]
+smull	v6.4s, v17.4h, v0.h[3]
+smlal	v6.4s, v30.4h, v0.h[2]
+sqrshrn	v24.4h, v2.4s, #0xc
+sqrshrn	v23.4h, v4.4s, #0xc
+smull	v2.4s, v17.4h, v0.h[2]
+smlsl	v2.4s, v30.4h, v0.h[3]
+smull	v4.4s, v29.4h, v0.h[3]
+smlsl	v4.4s, v18.4h, v0.h[2]
+sqrshrn	v17.4h, v6.4s, #0xc
+smull	v6.4s, v29.4h, v0.h[2]
+smlal	v6.4s, v18.4h, v0.h[3]
+sqrshrn	v29.4h, v2.4s, #0xc
+sqrshrn	v30.4h, v4.4s, #0xc
+sqrshrn	v18.4h, v6.4s, #0xc
+sqsub	v2.4h, v16.4h, v21.4h
+sqadd	v4.4h, v16.4h, v21.4h
+sqsub	v21.4h, v31.4h, v26.4h
+sqadd	v16.4h, v31.4h, v26.4h
+mov	v31.8b, v4.8b
+sqneg	v16.4h, v16.4h
+sqsub	v3.4h, v29.4h, v18.4h
+sqadd	v18.4h, v29.4h, v18.4h
+sqadd	v29.4h, v17.4h, v30.4h
+sqsub	v26.4h, v17.4h, v30.4h
+sqneg	v18.4h, v18.4h
+sqadd	v30.4h, v19.4h, v27.4h
+sqsub	v27.4h, v19.4h, v27.4h
+sqadd	v17.4h, v28.4h, v20.4h
+sqsub	v20.4h, v28.4h, v20.4h
+sqneg	v30.4h, v30.4h
+sqadd	v28.4h, v22.4h, v24.4h
+sqsub	v22.4h, v22.4h, v24.4h
+sqadd	v19.4h, v25.4h, v23.4h
+sqsub	v23.4h, v25.4h, v23.4h
+sqneg	v28.4h, v28.4h
+smull	v24.4s, v2.4h, v0.h[0]
+smlsl	v24.4s, v21.4h, v0.h[0]
+smull	v4.4s, v2.4h, v0.h[0]
+smlal	v4.4s, v21.4h, v0.h[0]
+smull	v6.4s, v26.4h, v0.h[0]
+smlal	v6.4s, v3.4h, v0.h[0]
+sqrshrn	v24.4h, v24.4s, #0xc
+sqrshrn	v4.4h, v4.4s, #0xc
+sqrshrn	v5.4h, v6.4s, #0xc
+smull	v6.4s, v26.4h, v0.h[0]
+smlsl	v6.4s, v3.4h, v0.h[0]
+smull	v2.4s, v22.4h, v0.h[0]
+smlal	v2.4s, v23.4h, v0.h[0]
+sqrshrn	v26.4h, v6.4s, #0xc
+smull	v6.4s, v22.4h, v0.h[0]
+smlsl	v6.4s, v23.4h, v0.h[0]
+smull	v22.4s, v27.4h, v0.h[0]
+smlal	v22.4s, v20.4h, v0.h[0]
+smull	v21.4s, v27.4h, v0.h[0]
+smlsl	v21.4s, v20.4h, v0.h[0]
+sqrshrn	v27.4h, v2.4s, #0xc
+sqrshrn	v6.4h, v6.4s, #0xc
+sqrshrn	v7.4h, v21.4s, #0xc
+sqrshrn	v25.4h, v22.4s, #0xc
+mov	v23.8b, v24.8b
+mov	v21.8b, v26.8b
+sqneg	v24.4h, v4.4h
+sqneg	v26.4h, v5.4h
+sqneg	v20.4h, v6.4h
+sqneg	v22.4h, v7.4h
 ret
-_inv_identity_8h_x16_neon:
-mov	w16, #27152
-dup.4h	v0, w16
-sqrdmulh.8h	v2, v16, v0[0]
-sqadd.8h	v16, v16, v16
-sqadd.8h	v16, v16, v2
-sqrdmulh.8h	v2, v17, v0[0]
-sqadd.8h	v17, v17, v17
-sqadd.8h	v17, v17, v2
-sqrdmulh.8h	v2, v18, v0[0]
-sqadd.8h	v18, v18, v18
-sqadd.8h	v18, v18, v2
-sqrdmulh.8h	v2, v19, v0[0]
-sqadd.8h	v19, v19, v19
-sqadd.8h	v19, v19, v2
-sqrdmulh.8h	v2, v20, v0[0]
-sqadd.8h	v20, v20, v20
-sqadd.8h	v20, v20, v2
-sqrdmulh.8h	v2, v21, v0[0]
-sqadd.8h	v21, v21, v21
-sqadd.8h	v21, v21, v2
-sqrdmulh.8h	v2, v22, v0[0]
-sqadd.8h	v22, v22, v22
-sqadd.8h	v22, v22, v2
-sqrdmulh.8h	v2, v23, v0[0]
-sqadd.8h	v23, v23, v23
-sqadd.8h	v23, v23, v2
-sqrdmulh.8h	v2, v24, v0[0]
-sqadd.8h	v24, v24, v24
-sqadd.8h	v24, v24, v2
-sqrdmulh.8h	v2, v25, v0[0]
-sqadd.8h	v25, v25, v25
-sqadd.8h	v25, v25, v2
-sqrdmulh.8h	v2, v26, v0[0]
-sqadd.8h	v26, v26, v26
-sqadd.8h	v26, v26, v2
-sqrdmulh.8h	v2, v27, v0[0]
-sqadd.8h	v27, v27, v27
-sqadd.8h	v27, v27, v2
-sqrdmulh.8h	v2, v28, v0[0]
-sqadd.8h	v28, v28, v28
-sqadd.8h	v28, v28, v2
-sqrdmulh.8h	v2, v29, v0[0]
-sqadd.8h	v29, v29, v29
-sqadd.8h	v29, v29, v2
-sqrdmulh.8h	v2, v30, v0[0]
-sqadd.8h	v30, v30, v30
-sqadd.8h	v30, v30, v2
-sqrdmulh.8h	v2, v31, v0[0]
-sqadd.8h	v31, v31, v31
-sqadd.8h	v31, v31, v2
+inv_identity_8h_x16_neon:
+mov	w16, #0x6a10
+dup	v0.4h, w16
+sqrdmulh	v2.8h, v16.8h, v0.h[0]
+sqadd	v16.8h, v16.8h, v16.8h
+sqadd	v16.8h, v16.8h, v2.8h
+sqrdmulh	v2.8h, v17.8h, v0.h[0]
+sqadd	v17.8h, v17.8h, v17.8h
+sqadd	v17.8h, v17.8h, v2.8h
+sqrdmulh	v2.8h, v18.8h, v0.h[0]
+sqadd	v18.8h, v18.8h, v18.8h
+sqadd	v18.8h, v18.8h, v2.8h
+sqrdmulh	v2.8h, v19.8h, v0.h[0]
+sqadd	v19.8h, v19.8h, v19.8h
+sqadd	v19.8h, v19.8h, v2.8h
+sqrdmulh	v2.8h, v20.8h, v0.h[0]
+sqadd	v20.8h, v20.8h, v20.8h
+sqadd	v20.8h, v20.8h, v2.8h
+sqrdmulh	v2.8h, v21.8h, v0.h[0]
+sqadd	v21.8h, v21.8h, v21.8h
+sqadd	v21.8h, v21.8h, v2.8h
+sqrdmulh	v2.8h, v22.8h, v0.h[0]
+sqadd	v22.8h, v22.8h, v22.8h
+sqadd	v22.8h, v22.8h, v2.8h
+sqrdmulh	v2.8h, v23.8h, v0.h[0]
+sqadd	v23.8h, v23.8h, v23.8h
+sqadd	v23.8h, v23.8h, v2.8h
+sqrdmulh	v2.8h, v24.8h, v0.h[0]
+sqadd	v24.8h, v24.8h, v24.8h
+sqadd	v24.8h, v24.8h, v2.8h
+sqrdmulh	v2.8h, v25.8h, v0.h[0]
+sqadd	v25.8h, v25.8h, v25.8h
+sqadd	v25.8h, v25.8h, v2.8h
+sqrdmulh	v2.8h, v26.8h, v0.h[0]
+sqadd	v26.8h, v26.8h, v26.8h
+sqadd	v26.8h, v26.8h, v2.8h
+sqrdmulh	v2.8h, v27.8h, v0.h[0]
+sqadd	v27.8h, v27.8h, v27.8h
+sqadd	v27.8h, v27.8h, v2.8h
+sqrdmulh	v2.8h, v28.8h, v0.h[0]
+sqadd	v28.8h, v28.8h, v28.8h
+sqadd	v28.8h, v28.8h, v2.8h
+sqrdmulh	v2.8h, v29.8h, v0.h[0]
+sqadd	v29.8h, v29.8h, v29.8h
+sqadd	v29.8h, v29.8h, v2.8h
+sqrdmulh	v2.8h, v30.8h, v0.h[0]
+sqadd	v30.8h, v30.8h, v30.8h
+sqadd	v30.8h, v30.8h, v2.8h
+sqrdmulh	v2.8h, v31.8h, v0.h[0]
+sqadd	v31.8h, v31.8h, v31.8h
+sqadd	v31.8h, v31.8h, v2.8h
 ret
-_inv_identity_4h_x16_neon:
-mov	w16, #27152
-dup.4h	v0, w16
-sqrdmulh.4h	v2, v16, v0[0]
-sqadd.4h	v16, v16, v16
-sqadd.4h	v16, v16, v2
-sqrdmulh.4h	v2, v17, v0[0]
-sqadd.4h	v17, v17, v17
-sqadd.4h	v17, v17, v2
-sqrdmulh.4h	v2, v18, v0[0]
-sqadd.4h	v18, v18, v18
-sqadd.4h	v18, v18, v2
-sqrdmulh.4h	v2, v19, v0[0]
-sqadd.4h	v19, v19, v19
-sqadd.4h	v19, v19, v2
-sqrdmulh.4h	v2, v20, v0[0]
-sqadd.4h	v20, v20, v20
-sqadd.4h	v20, v20, v2
-sqrdmulh.4h	v2, v21, v0[0]
-sqadd.4h	v21, v21, v21
-sqadd.4h	v21, v21, v2
-sqrdmulh.4h	v2, v22, v0[0]
-sqadd.4h	v22, v22, v22
-sqadd.4h	v22, v22, v2
-sqrdmulh.4h	v2, v23, v0[0]
-sqadd.4h	v23, v23, v23
-sqadd.4h	v23, v23, v2
-sqrdmulh.4h	v2, v24, v0[0]
-sqadd.4h	v24, v24, v24
-sqadd.4h	v24, v24, v2
-sqrdmulh.4h	v2, v25, v0[0]
-sqadd.4h	v25, v25, v25
-sqadd.4h	v25, v25, v2
-sqrdmulh.4h	v2, v26, v0[0]
-sqadd.4h	v26, v26, v26
-sqadd.4h	v26, v26, v2
-sqrdmulh.4h	v2, v27, v0[0]
-sqadd.4h	v27, v27, v27
-sqadd.4h	v27, v27, v2
-sqrdmulh.4h	v2, v28, v0[0]
-sqadd.4h	v28, v28, v28
-sqadd.4h	v28, v28, v2
-sqrdmulh.4h	v2, v29, v0[0]
-sqadd.4h	v29, v29, v29
-sqadd.4h	v29, v29, v2
-sqrdmulh.4h	v2, v30, v0[0]
-sqadd.4h	v30, v30, v30
-sqadd.4h	v30, v30, v2
-sqrdmulh.4h	v2, v31, v0[0]
-sqadd.4h	v31, v31, v31
-sqadd.4h	v31, v31, v2
+inv_identity_4h_x16_neon:
+mov	w16, #0x6a10
+dup	v0.4h, w16
+sqrdmulh	v2.4h, v16.4h, v0.h[0]
+sqadd	v16.4h, v16.4h, v16.4h
+sqadd	v16.4h, v16.4h, v2.4h
+sqrdmulh	v2.4h, v17.4h, v0.h[0]
+sqadd	v17.4h, v17.4h, v17.4h
+sqadd	v17.4h, v17.4h, v2.4h
+sqrdmulh	v2.4h, v18.4h, v0.h[0]
+sqadd	v18.4h, v18.4h, v18.4h
+sqadd	v18.4h, v18.4h, v2.4h
+sqrdmulh	v2.4h, v19.4h, v0.h[0]
+sqadd	v19.4h, v19.4h, v19.4h
+sqadd	v19.4h, v19.4h, v2.4h
+sqrdmulh	v2.4h, v20.4h, v0.h[0]
+sqadd	v20.4h, v20.4h, v20.4h
+sqadd	v20.4h, v20.4h, v2.4h
+sqrdmulh	v2.4h, v21.4h, v0.h[0]
+sqadd	v21.4h, v21.4h, v21.4h
+sqadd	v21.4h, v21.4h, v2.4h
+sqrdmulh	v2.4h, v22.4h, v0.h[0]
+sqadd	v22.4h, v22.4h, v22.4h
+sqadd	v22.4h, v22.4h, v2.4h
+sqrdmulh	v2.4h, v23.4h, v0.h[0]
+sqadd	v23.4h, v23.4h, v23.4h
+sqadd	v23.4h, v23.4h, v2.4h
+sqrdmulh	v2.4h, v24.4h, v0.h[0]
+sqadd	v24.4h, v24.4h, v24.4h
+sqadd	v24.4h, v24.4h, v2.4h
+sqrdmulh	v2.4h, v25.4h, v0.h[0]
+sqadd	v25.4h, v25.4h, v25.4h
+sqadd	v25.4h, v25.4h, v2.4h
+sqrdmulh	v2.4h, v26.4h, v0.h[0]
+sqadd	v26.4h, v26.4h, v26.4h
+sqadd	v26.4h, v26.4h, v2.4h
+sqrdmulh	v2.4h, v27.4h, v0.h[0]
+sqadd	v27.4h, v27.4h, v27.4h
+sqadd	v27.4h, v27.4h, v2.4h
+sqrdmulh	v2.4h, v28.4h, v0.h[0]
+sqadd	v28.4h, v28.4h, v28.4h
+sqadd	v28.4h, v28.4h, v2.4h
+sqrdmulh	v2.4h, v29.4h, v0.h[0]
+sqadd	v29.4h, v29.4h, v29.4h
+sqadd	v29.4h, v29.4h, v2.4h
+sqrdmulh	v2.4h, v30.4h, v0.h[0]
+sqadd	v30.4h, v30.4h, v30.4h
+sqadd	v30.4h, v30.4h, v2.4h
+sqrdmulh	v2.4h, v31.4h, v0.h[0]
+sqadd	v31.4h, v31.4h, v31.4h
+sqadd	v31.4h, v31.4h, v2.4h
 ret
-_inv_txfm_horz_scale_16x8_neon:
+inv_txfm_horz_scale_16x8_neon:
 mov	x14, x30
-movi.8h	v7, #0
-mov	w16, #23168
-dup.4h	v0, w16
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v24 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v25 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v26 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v27 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v28 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v29 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v30 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v31 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
-sqrdmulh.8h	v24, v24, v0[0]
-sqrdmulh.8h	v25, v25, v0[0]
-sqrdmulh.8h	v26, v26, v0[0]
-sqrdmulh.8h	v27, v27, v0[0]
-sqrdmulh.8h	v28, v28, v0[0]
-sqrdmulh.8h	v29, v29, v0[0]
-sqrdmulh.8h	v30, v30, v0[0]
-sqrdmulh.8h	v31, v31, v0[0]
+movi	v7.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v24.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v25.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v26.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v27.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v28.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v29.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v30.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v31.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
+sqrdmulh	v24.8h, v24.8h, v0.h[0]
+sqrdmulh	v25.8h, v25.8h, v0.h[0]
+sqrdmulh	v26.8h, v26.8h, v0.h[0]
+sqrdmulh	v27.8h, v27.8h, v0.h[0]
+sqrdmulh	v28.8h, v28.8h, v0.h[0]
+sqrdmulh	v29.8h, v29.8h, v0.h[0]
+sqrdmulh	v30.8h, v30.8h, v0.h[0]
+sqrdmulh	v31.8h, v31.8h, v0.h[0]
 blr	x4
-srshr.8h	v16, v16, #1
-srshr.8h	v17, v17, #1
-srshr.8h	v18, v18, #1
-srshr.8h	v19, v19, #1
-srshr.8h	v20, v20, #1
-srshr.8h	v21, v21, #1
-srshr.8h	v22, v22, #1
-srshr.8h	v23, v23, #1
-srshr.8h	v24, v24, #1
-srshr.8h	v25, v25, #1
-srshr.8h	v26, v26, #1
-srshr.8h	v27, v27, #1
-srshr.8h	v28, v28, #1
-srshr.8h	v29, v29, #1
-srshr.8h	v30, v30, #1
-srshr.8h	v31, v31, #1
-b	inv_txfm_horz_16x8_neon
-_inv_txfm_horz_identity_16x8_neon:
+srshr	v16.8h, v16.8h, #0x1
+srshr	v17.8h, v17.8h, #0x1
+srshr	v18.8h, v18.8h, #0x1
+srshr	v19.8h, v19.8h, #0x1
+srshr	v20.8h, v20.8h, #0x1
+srshr	v21.8h, v21.8h, #0x1
+srshr	v22.8h, v22.8h, #0x1
+srshr	v23.8h, v23.8h, #0x1
+srshr	v24.8h, v24.8h, #0x1
+srshr	v25.8h, v25.8h, #0x1
+srshr	v26.8h, v26.8h, #0x1
+srshr	v27.8h, v27.8h, #0x1
+srshr	v28.8h, v28.8h, #0x1
+srshr	v29.8h, v29.8h, #0x1
+srshr	v30.8h, v30.8h, #0x1
+srshr	v31.8h, v31.8h, #0x1
+b	L_2fd4
+inv_txfm_horz_identity_16x8_neon:
 mov	x14, x30
-movi.8h	v7, #0
-mov	w16, #27152
-dup.4h	v0, w16
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v24 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v25 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v26 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v27 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v28 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v29 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v30 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v31 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-sqrdmulh.8h	v2, v16, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v16, v16, v2
-sqrdmulh.8h	v2, v17, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v17, v17, v2
-sqrdmulh.8h	v2, v18, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v18, v18, v2
-sqrdmulh.8h	v2, v19, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v19, v19, v2
-sqrdmulh.8h	v2, v20, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v20, v20, v2
-sqrdmulh.8h	v2, v21, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v21, v21, v2
-sqrdmulh.8h	v2, v22, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v22, v22, v2
-sqrdmulh.8h	v2, v23, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v23, v23, v2
-sqrdmulh.8h	v2, v24, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v24, v24, v2
-sqrdmulh.8h	v2, v25, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v25, v25, v2
-sqrdmulh.8h	v2, v26, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v26, v26, v2
-sqrdmulh.8h	v2, v27, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v27, v27, v2
-sqrdmulh.8h	v2, v28, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v28, v28, v2
-sqrdmulh.8h	v2, v29, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v29, v29, v2
-sqrdmulh.8h	v2, v30, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v30, v30, v2
-sqrdmulh.8h	v2, v31, v0[0]
-sshr.8h	v2, v2, #1
-srhadd.8h	v31, v31, v2
-b	inv_txfm_horz_16x8_neon
-_inv_txfm_horz_16x8_neon:
+movi	v7.8h, #0x0
+mov	w16, #0x6a10
+dup	v0.4h, w16
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v24.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v25.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v26.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v27.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v28.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v29.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v30.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v31.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+sqrdmulh	v2.8h, v16.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v16.8h, v16.8h, v2.8h
+sqrdmulh	v2.8h, v17.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v17.8h, v17.8h, v2.8h
+sqrdmulh	v2.8h, v18.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v18.8h, v18.8h, v2.8h
+sqrdmulh	v2.8h, v19.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v19.8h, v19.8h, v2.8h
+sqrdmulh	v2.8h, v20.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v20.8h, v20.8h, v2.8h
+sqrdmulh	v2.8h, v21.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v21.8h, v21.8h, v2.8h
+sqrdmulh	v2.8h, v22.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v22.8h, v22.8h, v2.8h
+sqrdmulh	v2.8h, v23.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v23.8h, v23.8h, v2.8h
+sqrdmulh	v2.8h, v24.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v24.8h, v24.8h, v2.8h
+sqrdmulh	v2.8h, v25.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v25.8h, v25.8h, v2.8h
+sqrdmulh	v2.8h, v26.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v26.8h, v26.8h, v2.8h
+sqrdmulh	v2.8h, v27.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v27.8h, v27.8h, v2.8h
+sqrdmulh	v2.8h, v28.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v28.8h, v28.8h, v2.8h
+sqrdmulh	v2.8h, v29.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v29.8h, v29.8h, v2.8h
+sqrdmulh	v2.8h, v30.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v30.8h, v30.8h, v2.8h
+sqrdmulh	v2.8h, v31.8h, v0.h[0]
+sshr	v2.8h, v2.8h, #0x1
+srhadd	v31.8h, v31.8h, v2.8h
+b	L_2fd4
+inv_txfm_horz_16x8_neon:
 mov	x14, x30
-movi.8h	v7, #0
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v24 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v25 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v26 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v27 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v28 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v29 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v30 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v31 }, [x7]
-st1.8h	{ v7 }, [x7], x8
+movi	v7.8h, #0x0
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v24.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v25.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v26.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v27.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v28.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v29.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v30.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v31.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
 blr	x4
-srshr.8h	v16, v16, #2
-srshr.8h	v17, v17, #2
-srshr.8h	v18, v18, #2
-srshr.8h	v19, v19, #2
-srshr.8h	v20, v20, #2
-srshr.8h	v21, v21, #2
-srshr.8h	v22, v22, #2
-srshr.8h	v23, v23, #2
-srshr.8h	v24, v24, #2
-srshr.8h	v25, v25, #2
-srshr.8h	v26, v26, #2
-srshr.8h	v27, v27, #2
-srshr.8h	v28, v28, #2
-srshr.8h	v29, v29, #2
-srshr.8h	v30, v30, #2
-srshr.8h	v31, v31, #2
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
-trn1.8h	v4, v24, v25
-trn2.8h	v5, v24, v25
-trn1.8h	v25, v26, v27
-trn2.8h	v27, v26, v27
-trn1.8h	v24, v28, v29
-trn2.8h	v29, v28, v29
-trn1.8h	v26, v30, v31
-trn2.8h	v31, v30, v31
-trn1.4s	v28, v24, v26
-trn2.4s	v26, v24, v26
-trn1.4s	v30, v29, v31
-trn2.4s	v31, v29, v31
-trn1.4s	v29, v5, v27
-trn2.4s	v5, v5, v27
-trn1.4s	v27, v4, v25
-trn2.4s	v4, v4, v25
-trn1.2d	v24, v27, v28
-trn2.2d	v28, v27, v28
-trn1.2d	v25, v29, v30
-trn2.2d	v29, v29, v30
-trn2.2d	v30, v4, v26
-trn1.2d	v26, v4, v26
-trn1.2d	v27, v5, v31
-trn2.2d	v31, v5, v31
-st1.8h	{ v16 }, [x6], #16
-st1.8h	{ v24 }, [x6], #16
-st1.8h	{ v17 }, [x6], #16
-st1.8h	{ v25 }, [x6], #16
-st1.8h	{ v18 }, [x6], #16
-st1.8h	{ v26 }, [x6], #16
-st1.8h	{ v19 }, [x6], #16
-st1.8h	{ v27 }, [x6], #16
-st1.8h	{ v20 }, [x6], #16
-st1.8h	{ v28 }, [x6], #16
-st1.8h	{ v21 }, [x6], #16
-st1.8h	{ v29 }, [x6], #16
-st1.8h	{ v22 }, [x6], #16
-st1.8h	{ v30 }, [x6], #16
-st1.8h	{ v23 }, [x6], #16
-st1.8h	{ v31 }, [x6], #16
+srshr	v16.8h, v16.8h, #0x2
+srshr	v17.8h, v17.8h, #0x2
+srshr	v18.8h, v18.8h, #0x2
+srshr	v19.8h, v19.8h, #0x2
+srshr	v20.8h, v20.8h, #0x2
+srshr	v21.8h, v21.8h, #0x2
+srshr	v22.8h, v22.8h, #0x2
+srshr	v23.8h, v23.8h, #0x2
+srshr	v24.8h, v24.8h, #0x2
+srshr	v25.8h, v25.8h, #0x2
+srshr	v26.8h, v26.8h, #0x2
+srshr	v27.8h, v27.8h, #0x2
+srshr	v28.8h, v28.8h, #0x2
+srshr	v29.8h, v29.8h, #0x2
+srshr	v30.8h, v30.8h, #0x2
+srshr	v31.8h, v31.8h, #0x2
+L_2fd4:
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
+trn1	v4.8h, v24.8h, v25.8h
+trn2	v5.8h, v24.8h, v25.8h
+trn1	v25.8h, v26.8h, v27.8h
+trn2	v27.8h, v26.8h, v27.8h
+trn1	v24.8h, v28.8h, v29.8h
+trn2	v29.8h, v28.8h, v29.8h
+trn1	v26.8h, v30.8h, v31.8h
+trn2	v31.8h, v30.8h, v31.8h
+trn1	v28.4s, v24.4s, v26.4s
+trn2	v26.4s, v24.4s, v26.4s
+trn1	v30.4s, v29.4s, v31.4s
+trn2	v31.4s, v29.4s, v31.4s
+trn1	v29.4s, v5.4s, v27.4s
+trn2	v5.4s, v5.4s, v27.4s
+trn1	v27.4s, v4.4s, v25.4s
+trn2	v4.4s, v4.4s, v25.4s
+trn1	v24.2d, v27.2d, v28.2d
+trn2	v28.2d, v27.2d, v28.2d
+trn1	v25.2d, v29.2d, v30.2d
+trn2	v29.2d, v29.2d, v30.2d
+trn2	v30.2d, v4.2d, v26.2d
+trn1	v26.2d, v4.2d, v26.2d
+trn1	v27.2d, v5.2d, v31.2d
+trn2	v31.2d, v5.2d, v31.2d
+st1	{ v16.8h }, [x6], #16
+st1	{ v24.8h }, [x6], #16
+st1	{ v17.8h }, [x6], #16
+st1	{ v25.8h }, [x6], #16
+st1	{ v18.8h }, [x6], #16
+st1	{ v26.8h }, [x6], #16
+st1	{ v19.8h }, [x6], #16
+st1	{ v27.8h }, [x6], #16
+st1	{ v20.8h }, [x6], #16
+st1	{ v28.8h }, [x6], #16
+st1	{ v21.8h }, [x6], #16
+st1	{ v29.8h }, [x6], #16
+st1	{ v22.8h }, [x6], #16
+st1	{ v30.8h }, [x6], #16
+st1	{ v23.8h }, [x6], #16
+st1	{ v31.8h }, [x6], #16
 ret	x14
-_inv_txfm_add_vert_8x16_neon:
+inv_txfm_add_vert_8x16_neon:
 mov	x14, x30
-ld1.8h	{ v16 }, [x7], x8
-ld1.8h	{ v17 }, [x7], x8
-ld1.8h	{ v18 }, [x7], x8
-ld1.8h	{ v19 }, [x7], x8
-ld1.8h	{ v20 }, [x7], x8
-ld1.8h	{ v21 }, [x7], x8
-ld1.8h	{ v22 }, [x7], x8
-ld1.8h	{ v23 }, [x7], x8
-ld1.8h	{ v24 }, [x7], x8
-ld1.8h	{ v25 }, [x7], x8
-ld1.8h	{ v26 }, [x7], x8
-ld1.8h	{ v27 }, [x7], x8
-ld1.8h	{ v28 }, [x7], x8
-ld1.8h	{ v29 }, [x7], x8
-ld1.8h	{ v30 }, [x7], x8
-ld1.8h	{ v31 }, [x7], x8
+ld1	{ v16.8h }, [x7], x8
+ld1	{ v17.8h }, [x7], x8
+ld1	{ v18.8h }, [x7], x8
+ld1	{ v19.8h }, [x7], x8
+ld1	{ v20.8h }, [x7], x8
+ld1	{ v21.8h }, [x7], x8
+ld1	{ v22.8h }, [x7], x8
+ld1	{ v23.8h }, [x7], x8
+ld1	{ v24.8h }, [x7], x8
+ld1	{ v25.8h }, [x7], x8
+ld1	{ v26.8h }, [x7], x8
+ld1	{ v27.8h }, [x7], x8
+ld1	{ v28.8h }, [x7], x8
+ld1	{ v29.8h }, [x7], x8
+ld1	{ v30.8h }, [x7], x8
+ld1	{ v31.8h }, [x7], x8
 blr	x5
 mov	x7, x6
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #4
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #4
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x6], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #4
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x6], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #4
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x6], x1
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v24, v24, #4
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x6], x1
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v25, v25, #4
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x6], x1
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v26, v26, #4
-uaddw.8h	v24, v24, v4
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v27, v27, #4
-uaddw.8h	v25, v25, v5
-sqxtun.8b	v4, v24
-st1.8b	{ v3 }, [x6], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v28, v28, #4
-uaddw.8h	v26, v26, v6
-sqxtun.8b	v5, v25
-st1.8b	{ v4 }, [x6], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v29, v29, #4
-uaddw.8h	v27, v27, v7
-sqxtun.8b	v6, v26
-st1.8b	{ v5 }, [x6], x1
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v30, v30, #4
-uaddw.8h	v28, v28, v2
-sqxtun.8b	v7, v27
-st1.8b	{ v6 }, [x6], x1
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v31, v31, #4
-uaddw.8h	v29, v29, v3
-sqxtun.8b	v2, v28
-st1.8b	{ v7 }, [x6], x1
-uaddw.8h	v30, v30, v4
-sqxtun.8b	v3, v29
-st1.8b	{ v2 }, [x6], x1
-uaddw.8h	v31, v31, v5
-sqxtun.8b	v4, v30
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v5, v31
-st1.8b	{ v4 }, [x6], x1
-st1.8b	{ v5 }, [x6], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x4
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x4
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x6], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x4
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x6], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x4
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x6], x1
+ld1	{ v4.8b }, [x7], x1
+srshr	v24.8h, v24.8h, #0x4
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x6], x1
+ld1	{ v5.8b }, [x7], x1
+srshr	v25.8h, v25.8h, #0x4
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x6], x1
+ld1	{ v6.8b }, [x7], x1
+srshr	v26.8h, v26.8h, #0x4
+uaddw	v24.8h, v24.8h, v4.8b
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v27.8h, v27.8h, #0x4
+uaddw	v25.8h, v25.8h, v5.8b
+sqxtun	v4.8b, v24.8h
+st1	{ v3.8b }, [x6], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v28.8h, v28.8h, #0x4
+uaddw	v26.8h, v26.8h, v6.8b
+sqxtun	v5.8b, v25.8h
+st1	{ v4.8b }, [x6], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v29.8h, v29.8h, #0x4
+uaddw	v27.8h, v27.8h, v7.8b
+sqxtun	v6.8b, v26.8h
+st1	{ v5.8b }, [x6], x1
+ld1	{ v4.8b }, [x7], x1
+srshr	v30.8h, v30.8h, #0x4
+uaddw	v28.8h, v28.8h, v2.8b
+sqxtun	v7.8b, v27.8h
+st1	{ v6.8b }, [x6], x1
+ld1	{ v5.8b }, [x7], x1
+srshr	v31.8h, v31.8h, #0x4
+uaddw	v29.8h, v29.8h, v3.8b
+sqxtun	v2.8b, v28.8h
+st1	{ v7.8b }, [x6], x1
+uaddw	v30.8h, v30.8h, v4.8b
+sqxtun	v3.8b, v29.8h
+st1	{ v2.8b }, [x6], x1
+uaddw	v31.8h, v31.8h, v5.8b
+sqxtun	v4.8b, v30.8h
+st1	{ v3.8b }, [x6], x1
+sqxtun	v5.8b, v31.8h
+st1	{ v4.8b }, [x6], x1
+st1	{ v5.8b }, [x6], x1
 ret	x14
-_inv_txfm_add_16x16_neon:
+inv_txfm_add_16x16_neon:
 mov	x15, x30
-sub	sp, sp, #512
-mov	x8, #32
+sub	sp, sp, #0x200
+mov	x8, #0x20
 mov	x6, sp
-add	x7, x2, #0
+add	x7, x2, #0x0
 blr	x9
-add	x6, sp, #256
+add	x6, sp, #0x100
 cmp	w3, w13
-b.lt	inv_txfm_add_16x16_neon
-add	x7, x2, #16
+b.lt	L_3298
+add	x7, x2, #0x10
 blr	x9
-b	inv_txfm_add_16x16_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-add	x6, x0, #0
+b	L_32b8
+L_3298:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+L_32b8:
+add	x6, x0, #0x0
 mov	x7, sp
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #8
-add	x7, sp, #16
+add	x6, x0, #0x8
+add	x7, sp, #0x10
 bl	inv_txfm_add_vert_8x16_neon
-add	sp, sp, #512
+add	sp, sp, #0x200
 ret	x15
-_inv_txfm_add_dct_dct_16x16_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_16x16_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_16x16_8bpc_neon:
+cbnz	w3, L_3304
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #2
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #16
+srshr	v16.8h, v16.8h, #0x2
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x10
 b	idct_dc_w16_neon
-adr	x9, #-1020
-adr	x4, #-7360
-adr	x5, #-7364
-mov	x13, #36
+L_3304:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_dct_8h_x16_neon
+adr	x5, inv_dct_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_identity_identity_16x16_8bpc_neon:
-adr	x9, #-1380
-adr	x5, #-2072
-mov	x13, #36
+inv_txfm_add_identity_identity_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_identity_16x8_neon
+adr	x5, inv_identity_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_dct_adst_16x16_8bpc_neon:
-adr	x9, #-1056
-adr	x4, #-7396
-adr	x5, #-6004
-mov	x13, #36
+inv_txfm_add_dct_adst_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_dct_8h_x16_neon
+adr	x5, inv_adst_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_dct_flipadst_16x16_8bpc_neon:
-adr	x9, #-1076
-adr	x4, #-7416
-adr	x5, #-4812
-mov	x13, #36
+inv_txfm_add_dct_flipadst_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_dct_8h_x16_neon
+adr	x5, inv_flipadst_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_dct_identity_16x16_8bpc_neon:
-adr	x9, #-1096
-adr	x4, #-7436
-adr	x5, #-2132
-mov	x13, #8
+inv_txfm_add_dct_identity_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_dct_8h_x16_neon
+adr	x5, inv_identity_8h_x16_neon
+mov	x13, #0x8
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_adst_dct_16x16_8bpc_neon:
-adr	x9, #-1116
-adr	x4, #-6060
-adr	x5, #-7460
-mov	x13, #36
+inv_txfm_add_adst_dct_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_adst_8h_x16_neon
+adr	x5, inv_dct_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_adst_adst_16x16_8bpc_neon:
-adr	x9, #-1136
-adr	x4, #-6080
-adr	x5, #-6084
-mov	x13, #36
+inv_txfm_add_adst_adst_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_adst_8h_x16_neon
+adr	x5, inv_adst_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_adst_flipadst_16x16_8bpc_neon:
-adr	x9, #-1156
-adr	x4, #-6100
-adr	x5, #-4892
-mov	x13, #36
+inv_txfm_add_adst_flipadst_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_adst_8h_x16_neon
+adr	x5, inv_flipadst_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_flipadst_dct_16x16_8bpc_neon:
-adr	x9, #-1176
-adr	x4, #-4908
-adr	x5, #-7520
-mov	x13, #36
+inv_txfm_add_flipadst_dct_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_flipadst_8h_x16_neon
+adr	x5, inv_dct_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_flipadst_adst_16x16_8bpc_neon:
-adr	x9, #-1196
-adr	x4, #-4928
-adr	x5, #-6144
-mov	x13, #36
+inv_txfm_add_flipadst_adst_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_flipadst_8h_x16_neon
+adr	x5, inv_adst_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_flipadst_flipadst_16x16_8bpc_neon:
-adr	x9, #-1216
-adr	x4, #-4948
-adr	x5, #-4952
-mov	x13, #36
+inv_txfm_add_flipadst_flipadst_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_16x8_neon
+adr	x4, inv_flipadst_8h_x16_neon
+adr	x5, inv_flipadst_8h_x16_neon
+mov	x13, #0x24
 b	inv_txfm_add_16x16_neon
-_inv_txfm_add_identity_dct_16x16_8bpc_neon:
-adr	x9, #-1576
-adr	x5, #-7576
-mov	x13, #8
+inv_txfm_add_identity_dct_16x16_8bpc_neon:
+adr	x9, inv_txfm_horz_identity_16x8_neon
+adr	x5, inv_dct_8h_x16_neon
+mov	x13, #0x8
 b	inv_txfm_add_16x16_neon
-_inv_txfm_identity_add_16x4_neon:
+inv_txfm_identity_add_16x4_neon:
 mov	x15, x30
-movi.8h	v4, #0
-ld1.4h	{ v16 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v17 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v18 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v19 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.d	{ v16 }[1], [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.d	{ v17 }[1], [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.d	{ v18 }[1], [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.d	{ v19 }[1], [x2]
-st1.4h	{ v4 }, [x2], #8
-mov	w16, #27152
-dup.4h	v0, w16
-ld1.4h	{ v20 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v21 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v22 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v23 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.d	{ v20 }[1], [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.d	{ v21 }[1], [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.d	{ v22 }[1], [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.d	{ v23 }[1], [x2]
-st1.4h	{ v4 }, [x2], #8
-sqrdmulh.8h	v2, v16, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v16, v16, v2
-sqrdmulh.8h	v2, v17, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v17, v17, v2
-sqrdmulh.8h	v2, v18, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v18, v18, v2
-sqrdmulh.8h	v2, v19, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v19, v19, v2
-sqrdmulh.8h	v2, v20, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v20, v20, v2
-sqrdmulh.8h	v2, v21, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v21, v21, v2
-sqrdmulh.8h	v2, v22, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v22, v22, v2
-sqrdmulh.8h	v2, v23, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v23, v23, v2
-sqrdmulh.8h	v2, v24, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v24, v24, v2
-sqrdmulh.8h	v2, v25, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v25, v25, v2
-sqrdmulh.8h	v2, v26, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v26, v26, v2
-sqrdmulh.8h	v2, v27, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v27, v27, v2
-sqrdmulh.8h	v2, v28, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v28, v28, v2
-sqrdmulh.8h	v2, v29, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v29, v29, v2
-sqrdmulh.8h	v2, v30, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v30, v30, v2
-sqrdmulh.8h	v2, v31, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v31, v31, v2
-b	inv_txfm_add_16x4_neon
-_inv_txfm_identity_add_4x16_neon:
+movi	v4.8h, #0x0
+ld1	{ v16.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v17.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v18.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v19.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v16.d }[1], [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v17.d }[1], [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v18.d }[1], [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v19.d }[1], [x2]
+st1	{ v4.4h }, [x2], #8
+mov	w16, #0x6a10
+dup	v0.4h, w16
+ld1	{ v20.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v21.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v22.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v23.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v20.d }[1], [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v21.d }[1], [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v22.d }[1], [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v23.d }[1], [x2]
+st1	{ v4.4h }, [x2], #8
+sqrdmulh	v2.8h, v16.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v16.8h, v16.8h, v2.8h
+sqrdmulh	v2.8h, v17.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v17.8h, v17.8h, v2.8h
+sqrdmulh	v2.8h, v18.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v18.8h, v18.8h, v2.8h
+sqrdmulh	v2.8h, v19.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v19.8h, v19.8h, v2.8h
+sqrdmulh	v2.8h, v20.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v20.8h, v20.8h, v2.8h
+sqrdmulh	v2.8h, v21.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v21.8h, v21.8h, v2.8h
+sqrdmulh	v2.8h, v22.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v22.8h, v22.8h, v2.8h
+sqrdmulh	v2.8h, v23.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v23.8h, v23.8h, v2.8h
+sqrdmulh	v2.8h, v24.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v24.8h, v24.8h, v2.8h
+sqrdmulh	v2.8h, v25.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v25.8h, v25.8h, v2.8h
+sqrdmulh	v2.8h, v26.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v26.8h, v26.8h, v2.8h
+sqrdmulh	v2.8h, v27.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v27.8h, v27.8h, v2.8h
+sqrdmulh	v2.8h, v28.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v28.8h, v28.8h, v2.8h
+sqrdmulh	v2.8h, v29.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v29.8h, v29.8h, v2.8h
+sqrdmulh	v2.8h, v30.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v30.8h, v30.8h, v2.8h
+sqrdmulh	v2.8h, v31.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v31.8h, v31.8h, v2.8h
+b	L_3710
+inv_txfm_identity_add_4x16_neon:
 mov	x15, x30
-movi.8h	v2, #0
-mov	x11, #32
+movi	v2.8h, #0x0
+mov	x11, #0x20
 cmp	w3, w13
-b.lt	inv_txfm_identity_add_4x16_neon
-add	x6, x2, #16
-ld1.8h	{ v24 }, [x6]
-st1.8h	{ v2 }, [x6], x11
-ld1.8h	{ v25 }, [x6]
-st1.8h	{ v2 }, [x6], x11
-ld1.8h	{ v26 }, [x6]
-st1.8h	{ v2 }, [x6], x11
-ld1.8h	{ v27 }, [x6]
-st1.8h	{ v2 }, [x6], x11
-mov	w16, #13576
-dup.4h	v0, w16
-sqrdmulh.8h	v2, v24, v0[0]
-srhadd.8h	v24, v24, v2
-sqrdmulh.8h	v2, v25, v0[0]
-srhadd.8h	v25, v25, v2
-sqrdmulh.8h	v2, v26, v0[0]
-srhadd.8h	v26, v26, v2
-sqrdmulh.8h	v2, v27, v0[0]
-srhadd.8h	v27, v27, v2
-trn1.8h	v4, v24, v25
-trn2.8h	v5, v24, v25
-trn1.8h	v6, v26, v27
-trn2.8h	v7, v26, v27
-trn1.4s	v24, v4, v6
-trn2.4s	v26, v4, v6
-trn1.4s	v25, v5, v7
-trn2.4s	v27, v5, v7
-mov.d	v28[0], v24[1]
-mov.d	v29[0], v25[1]
-mov.d	v30[0], v26[1]
-mov.d	v31[0], v27[1]
-b	inv_txfm_identity_add_4x16_neon
-movi.4h	v24, #0
-movi.4h	v25, #0
-movi.4h	v26, #0
-movi.4h	v27, #0
-movi.4h	v28, #0
-movi.4h	v29, #0
-movi.4h	v30, #0
-movi.4h	v31, #0
-movi.8h	v2, #0
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v2 }, [x2], x11
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v2 }, [x2], x11
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v2 }, [x2], x11
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v2 }, [x2], x11
-mov	w16, #13576
-dup.4h	v0, w16
-sqrdmulh.8h	v2, v16, v0[0]
-srhadd.8h	v16, v16, v2
-sqrdmulh.8h	v2, v17, v0[0]
-srhadd.8h	v17, v17, v2
-sqrdmulh.8h	v2, v18, v0[0]
-srhadd.8h	v18, v18, v2
-sqrdmulh.8h	v2, v19, v0[0]
-srhadd.8h	v19, v19, v2
-b	inv_txfm_add_4x16_neon
-_inv_txfm_add_16x4_neon:
+b.lt	L_35d4
+add	x6, x2, #0x10
+ld1	{ v24.8h }, [x6]
+st1	{ v2.8h }, [x6], x11
+ld1	{ v25.8h }, [x6]
+st1	{ v2.8h }, [x6], x11
+ld1	{ v26.8h }, [x6]
+st1	{ v2.8h }, [x6], x11
+ld1	{ v27.8h }, [x6]
+st1	{ v2.8h }, [x6], x11
+mov	w16, #0x3508
+dup	v0.4h, w16
+sqrdmulh	v2.8h, v24.8h, v0.h[0]
+srhadd	v24.8h, v24.8h, v2.8h
+sqrdmulh	v2.8h, v25.8h, v0.h[0]
+srhadd	v25.8h, v25.8h, v2.8h
+sqrdmulh	v2.8h, v26.8h, v0.h[0]
+srhadd	v26.8h, v26.8h, v2.8h
+sqrdmulh	v2.8h, v27.8h, v0.h[0]
+srhadd	v27.8h, v27.8h, v2.8h
+trn1	v4.8h, v24.8h, v25.8h
+trn2	v5.8h, v24.8h, v25.8h
+trn1	v6.8h, v26.8h, v27.8h
+trn2	v7.8h, v26.8h, v27.8h
+trn1	v24.4s, v4.4s, v6.4s
+trn2	v26.4s, v4.4s, v6.4s
+trn1	v25.4s, v5.4s, v7.4s
+trn2	v27.4s, v5.4s, v7.4s
+mov	v28.d[0], v24.d[1]
+mov	v29.d[0], v25.d[1]
+mov	v30.d[0], v26.d[1]
+mov	v31.d[0], v27.d[1]
+b	L_35f4
+L_35d4:
+movi	v24.4h, #0x0
+movi	v25.4h, #0x0
+movi	v26.4h, #0x0
+movi	v27.4h, #0x0
+movi	v28.4h, #0x0
+movi	v29.4h, #0x0
+movi	v30.4h, #0x0
+movi	v31.4h, #0x0
+L_35f4:
+movi	v2.8h, #0x0
+ld1	{ v16.8h }, [x2]
+st1	{ v2.8h }, [x2], x11
+ld1	{ v17.8h }, [x2]
+st1	{ v2.8h }, [x2], x11
+ld1	{ v18.8h }, [x2]
+st1	{ v2.8h }, [x2], x11
+ld1	{ v19.8h }, [x2]
+st1	{ v2.8h }, [x2], x11
+mov	w16, #0x3508
+dup	v0.4h, w16
+sqrdmulh	v2.8h, v16.8h, v0.h[0]
+srhadd	v16.8h, v16.8h, v2.8h
+sqrdmulh	v2.8h, v17.8h, v0.h[0]
+srhadd	v17.8h, v17.8h, v2.8h
+sqrdmulh	v2.8h, v18.8h, v0.h[0]
+srhadd	v18.8h, v18.8h, v2.8h
+sqrdmulh	v2.8h, v19.8h, v0.h[0]
+srhadd	v19.8h, v19.8h, v2.8h
+b	L_38e4
+inv_txfm_add_16x4_neon:
 mov	x15, x30
-movi.8h	v4, #0
-ld1.4h	{ v16 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v17 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v18 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v19 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v20 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v21 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v22 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v23 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v24 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v25 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v26 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v27 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v28 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v29 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v30 }, [x2]
-st1.4h	{ v4 }, [x2], #8
-ld1.4h	{ v31 }, [x2]
-st1.4h	{ v4 }, [x2], #8
+movi	v4.8h, #0x0
+ld1	{ v16.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v17.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v18.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v19.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v20.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v21.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v22.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v23.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v24.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v25.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v26.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v27.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v28.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v29.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v30.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
+ld1	{ v31.4h }, [x2]
+st1	{ v4.4h }, [x2], #8
 blr	x4
-mov.d	v16[1], v20[0]
-mov.d	v17[1], v21[0]
-mov.d	v18[1], v22[0]
-mov.d	v19[1], v23[0]
-srshr.8h	v16, v16, #1
-srshr.8h	v17, v17, #1
-srshr.8h	v18, v18, #1
-srshr.8h	v19, v19, #1
-mov.d	v24[1], v28[0]
-mov.d	v25[1], v29[0]
-mov.d	v26[1], v30[0]
-mov.d	v27[1], v31[0]
-srshr.8h	v20, v24, #1
-srshr.8h	v21, v25, #1
-srshr.8h	v22, v26, #1
-srshr.8h	v23, v27, #1
-trn1.8h	v2, v16, v17
-trn2.8h	v3, v16, v17
-trn1.8h	v4, v18, v19
-trn2.8h	v5, v18, v19
-trn1.4s	v16, v2, v4
-trn2.4s	v18, v2, v4
-trn1.4s	v17, v3, v5
-trn2.4s	v19, v3, v5
+mov	v16.d[1], v20.d[0]
+mov	v17.d[1], v21.d[0]
+mov	v18.d[1], v22.d[0]
+mov	v19.d[1], v23.d[0]
+srshr	v16.8h, v16.8h, #0x1
+srshr	v17.8h, v17.8h, #0x1
+srshr	v18.8h, v18.8h, #0x1
+srshr	v19.8h, v19.8h, #0x1
+mov	v24.d[1], v28.d[0]
+mov	v25.d[1], v29.d[0]
+mov	v26.d[1], v30.d[0]
+mov	v27.d[1], v31.d[0]
+srshr	v20.8h, v24.8h, #0x1
+srshr	v21.8h, v25.8h, #0x1
+srshr	v22.8h, v26.8h, #0x1
+srshr	v23.8h, v27.8h, #0x1
+L_3710:
+trn1	v2.8h, v16.8h, v17.8h
+trn2	v3.8h, v16.8h, v17.8h
+trn1	v4.8h, v18.8h, v19.8h
+trn2	v5.8h, v18.8h, v19.8h
+trn1	v16.4s, v2.4s, v4.4s
+trn2	v18.4s, v2.4s, v4.4s
+trn1	v17.4s, v3.4s, v5.4s
+trn2	v19.4s, v3.4s, v5.4s
 blr	x5
 mov	x6, x0
 mov	x7, x6
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x6], x1
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x6], x1
-st1.8b	{ v5 }, [x6], x1
-trn1.8h	v2, v20, v21
-trn2.8h	v3, v20, v21
-trn1.8h	v4, v22, v23
-trn2.8h	v5, v22, v23
-trn1.4s	v16, v2, v4
-trn2.4s	v18, v2, v4
-trn1.4s	v17, v3, v5
-trn2.4s	v19, v3, v5
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x6], x1
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x6], x1
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x6], x1
+st1	{ v5.8b }, [x6], x1
+trn1	v2.8h, v20.8h, v21.8h
+trn2	v3.8h, v20.8h, v21.8h
+trn1	v4.8h, v22.8h, v23.8h
+trn2	v5.8h, v22.8h, v23.8h
+trn1	v16.4s, v2.4s, v4.4s
+trn2	v18.4s, v2.4s, v4.4s
+trn1	v17.4s, v3.4s, v5.4s
+trn2	v19.4s, v3.4s, v5.4s
 blr	x5
-add	x6, x0, #8
+add	x6, x0, #0x8
 mov	x7, x6
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x6], x1
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x6], x1
-st1.8b	{ v5 }, [x6], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x6], x1
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x6], x1
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x6], x1
+st1	{ v5.8b }, [x6], x1
 ret	x15
-_inv_txfm_add_4x16_neon:
+inv_txfm_add_4x16_neon:
 mov	x15, x30
-movi.8h	v2, #0
-mov	x11, #32
+movi	v2.8h, #0x0
+mov	x11, #0x20
 cmp	w3, w13
-b.lt	inv_txfm_add_4x16_neon
-add	x6, x2, #16
-ld1.8h	{ v16 }, [x6]
-st1.8h	{ v2 }, [x6], x11
-ld1.8h	{ v17 }, [x6]
-st1.8h	{ v2 }, [x6], x11
-ld1.8h	{ v18 }, [x6]
-st1.8h	{ v2 }, [x6], x11
-ld1.8h	{ v19 }, [x6]
-st1.8h	{ v2 }, [x6], x11
+b.lt	L_388c
+add	x6, x2, #0x10
+ld1	{ v16.8h }, [x6]
+st1	{ v2.8h }, [x6], x11
+ld1	{ v17.8h }, [x6]
+st1	{ v2.8h }, [x6], x11
+ld1	{ v18.8h }, [x6]
+st1	{ v2.8h }, [x6], x11
+ld1	{ v19.8h }, [x6]
+st1	{ v2.8h }, [x6], x11
 blr	x4
-srshr.8h	v24, v16, #1
-srshr.8h	v25, v17, #1
-srshr.8h	v26, v18, #1
-srshr.8h	v27, v19, #1
-trn1.8h	v4, v24, v25
-trn2.8h	v5, v24, v25
-trn1.8h	v6, v26, v27
-trn2.8h	v7, v26, v27
-trn1.4s	v24, v4, v6
-trn2.4s	v26, v4, v6
-trn1.4s	v25, v5, v7
-trn2.4s	v27, v5, v7
-mov.d	v28[0], v24[1]
-mov.d	v29[0], v25[1]
-mov.d	v30[0], v26[1]
-mov.d	v31[0], v27[1]
-b	inv_txfm_add_4x16_neon
-movi.4h	v24, #0
-movi.4h	v25, #0
-movi.4h	v26, #0
-movi.4h	v27, #0
-movi.4h	v28, #0
-movi.4h	v29, #0
-movi.4h	v30, #0
-movi.4h	v31, #0
-movi.8h	v2, #0
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v2 }, [x2], x11
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v2 }, [x2], x11
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v2 }, [x2], x11
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v2 }, [x2], x11
+srshr	v24.8h, v16.8h, #0x1
+srshr	v25.8h, v17.8h, #0x1
+srshr	v26.8h, v18.8h, #0x1
+srshr	v27.8h, v19.8h, #0x1
+trn1	v4.8h, v24.8h, v25.8h
+trn2	v5.8h, v24.8h, v25.8h
+trn1	v6.8h, v26.8h, v27.8h
+trn2	v7.8h, v26.8h, v27.8h
+trn1	v24.4s, v4.4s, v6.4s
+trn2	v26.4s, v4.4s, v6.4s
+trn1	v25.4s, v5.4s, v7.4s
+trn2	v27.4s, v5.4s, v7.4s
+mov	v28.d[0], v24.d[1]
+mov	v29.d[0], v25.d[1]
+mov	v30.d[0], v26.d[1]
+mov	v31.d[0], v27.d[1]
+b	L_38ac
+L_388c:
+movi	v24.4h, #0x0
+movi	v25.4h, #0x0
+movi	v26.4h, #0x0
+movi	v27.4h, #0x0
+movi	v28.4h, #0x0
+movi	v29.4h, #0x0
+movi	v30.4h, #0x0
+movi	v31.4h, #0x0
+L_38ac:
+movi	v2.8h, #0x0
+ld1	{ v16.8h }, [x2]
+st1	{ v2.8h }, [x2], x11
+ld1	{ v17.8h }, [x2]
+st1	{ v2.8h }, [x2], x11
+ld1	{ v18.8h }, [x2]
+st1	{ v2.8h }, [x2], x11
+ld1	{ v19.8h }, [x2]
+st1	{ v2.8h }, [x2], x11
 blr	x4
-srshr.8h	v16, v16, #1
-srshr.8h	v17, v17, #1
-srshr.8h	v18, v18, #1
-srshr.8h	v19, v19, #1
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v6, v18, v19
-trn2.8h	v7, v18, v19
-trn1.4s	v16, v4, v6
-trn2.4s	v18, v4, v6
-trn1.4s	v17, v5, v7
-trn2.4s	v19, v5, v7
-mov.d	v20[0], v16[1]
-mov.d	v21[0], v17[1]
-mov.d	v22[0], v18[1]
-mov.d	v23[0], v19[1]
+srshr	v16.8h, v16.8h, #0x1
+srshr	v17.8h, v17.8h, #0x1
+srshr	v18.8h, v18.8h, #0x1
+srshr	v19.8h, v19.8h, #0x1
+L_38e4:
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v6.8h, v18.8h, v19.8h
+trn2	v7.8h, v18.8h, v19.8h
+trn1	v16.4s, v4.4s, v6.4s
+trn2	v18.4s, v4.4s, v6.4s
+trn1	v17.4s, v5.4s, v7.4s
+trn2	v19.4s, v5.4s, v7.4s
+mov	v20.d[0], v16.d[1]
+mov	v21.d[0], v17.d[1]
+mov	v22.d[0], v18.d[1]
+mov	v23.d[0], v19.d[1]
 blr	x5
 mov	x6, x0
-ld1.s	{ v0 }[0], [x6], x1
-mov.d	v16[1], v17[0]
-ld1.s	{ v0 }[1], [x6], x1
-ld1.s	{ v1 }[0], [x6], x1
-mov.d	v18[1], v19[0]
-ld1.s	{ v1 }[1], [x6], x1
-ld1.s	{ v2 }[0], [x6], x1
-mov.d	v20[1], v21[0]
-srshr.8h	v16, v16, #4
-ld1.s	{ v2 }[1], [x6], x1
-ld1.s	{ v3 }[0], [x6], x1
-mov.d	v22[1], v23[0]
-srshr.8h	v18, v18, #4
-ld1.s	{ v3 }[1], [x6], x1
-uaddw.8h	v16, v16, v0
-ld1.s	{ v4 }[0], [x6], x1
-mov.d	v24[1], v25[0]
-srshr.8h	v20, v20, #4
-ld1.s	{ v4 }[1], [x6], x1
-uaddw.8h	v18, v18, v1
-sqxtun.8b	v0, v16
-ld1.s	{ v5 }[0], [x6], x1
-mov.d	v26[1], v27[0]
-srshr.8h	v22, v22, #4
-ld1.s	{ v5 }[1], [x6], x1
-uaddw.8h	v20, v20, v2
-st1.s	{ v0 }[0], [x0], x1
-sqxtun.8b	v1, v18
-st1.s	{ v0 }[1], [x0], x1
-ld1.s	{ v6 }[0], [x6], x1
-mov.d	v28[1], v29[0]
-srshr.8h	v24, v24, #4
-ld1.s	{ v6 }[1], [x6], x1
-uaddw.8h	v22, v22, v3
-st1.s	{ v1 }[0], [x0], x1
-sqxtun.8b	v2, v20
-st1.s	{ v1 }[1], [x0], x1
-ld1.s	{ v7 }[0], [x6], x1
-mov.d	v30[1], v31[0]
-srshr.8h	v26, v26, #4
-ld1.s	{ v7 }[1], [x6], x1
-uaddw.8h	v24, v24, v4
-st1.s	{ v2 }[0], [x0], x1
-sqxtun.8b	v3, v22
-st1.s	{ v2 }[1], [x0], x1
-srshr.8h	v28, v28, #4
-uaddw.8h	v26, v26, v5
-st1.s	{ v3 }[0], [x0], x1
-sqxtun.8b	v4, v24
-st1.s	{ v3 }[1], [x0], x1
-srshr.8h	v30, v30, #4
-uaddw.8h	v28, v28, v6
-st1.s	{ v4 }[0], [x0], x1
-sqxtun.8b	v5, v26
-st1.s	{ v4 }[1], [x0], x1
-uaddw.8h	v30, v30, v7
-st1.s	{ v5 }[0], [x0], x1
-sqxtun.8b	v6, v28
-st1.s	{ v5 }[1], [x0], x1
-st1.s	{ v6 }[0], [x0], x1
-sqxtun.8b	v7, v30
-st1.s	{ v6 }[1], [x0], x1
-st1.s	{ v7 }[0], [x0], x1
-st1.s	{ v7 }[1], [x0], x1
+ld1	{ v0.s }[0], [x6], x1
+mov	v16.d[1], v17.d[0]
+ld1	{ v0.s }[1], [x6], x1
+ld1	{ v1.s }[0], [x6], x1
+mov	v18.d[1], v19.d[0]
+ld1	{ v1.s }[1], [x6], x1
+ld1	{ v2.s }[0], [x6], x1
+mov	v20.d[1], v21.d[0]
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v2.s }[1], [x6], x1
+ld1	{ v3.s }[0], [x6], x1
+mov	v22.d[1], v23.d[0]
+srshr	v18.8h, v18.8h, #0x4
+ld1	{ v3.s }[1], [x6], x1
+uaddw	v16.8h, v16.8h, v0.8b
+ld1	{ v4.s }[0], [x6], x1
+mov	v24.d[1], v25.d[0]
+srshr	v20.8h, v20.8h, #0x4
+ld1	{ v4.s }[1], [x6], x1
+uaddw	v18.8h, v18.8h, v1.8b
+sqxtun	v0.8b, v16.8h
+ld1	{ v5.s }[0], [x6], x1
+mov	v26.d[1], v27.d[0]
+srshr	v22.8h, v22.8h, #0x4
+ld1	{ v5.s }[1], [x6], x1
+uaddw	v20.8h, v20.8h, v2.8b
+st1	{ v0.s }[0], [x0], x1
+sqxtun	v1.8b, v18.8h
+st1	{ v0.s }[1], [x0], x1
+ld1	{ v6.s }[0], [x6], x1
+mov	v28.d[1], v29.d[0]
+srshr	v24.8h, v24.8h, #0x4
+ld1	{ v6.s }[1], [x6], x1
+uaddw	v22.8h, v22.8h, v3.8b
+st1	{ v1.s }[0], [x0], x1
+sqxtun	v2.8b, v20.8h
+st1	{ v1.s }[1], [x0], x1
+ld1	{ v7.s }[0], [x6], x1
+mov	v30.d[1], v31.d[0]
+srshr	v26.8h, v26.8h, #0x4
+ld1	{ v7.s }[1], [x6], x1
+uaddw	v24.8h, v24.8h, v4.8b
+st1	{ v2.s }[0], [x0], x1
+sqxtun	v3.8b, v22.8h
+st1	{ v2.s }[1], [x0], x1
+srshr	v28.8h, v28.8h, #0x4
+uaddw	v26.8h, v26.8h, v5.8b
+st1	{ v3.s }[0], [x0], x1
+sqxtun	v4.8b, v24.8h
+st1	{ v3.s }[1], [x0], x1
+srshr	v30.8h, v30.8h, #0x4
+uaddw	v28.8h, v28.8h, v6.8b
+st1	{ v4.s }[0], [x0], x1
+sqxtun	v5.8b, v26.8h
+st1	{ v4.s }[1], [x0], x1
+uaddw	v30.8h, v30.8h, v7.8b
+st1	{ v5.s }[0], [x0], x1
+sqxtun	v6.8b, v28.8h
+st1	{ v5.s }[1], [x0], x1
+st1	{ v6.s }[0], [x0], x1
+sqxtun	v7.8b, v30.8h
+st1	{ v6.s }[1], [x0], x1
+st1	{ v7.s }[0], [x0], x1
+st1	{ v7.s }[1], [x0], x1
 ret	x15
-_inv_txfm_add_dct_dct_4x16_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_4x16_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_4x16_8bpc_neon:
+cbnz	w3, L_3a4c
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #16
-b	ltmp0
-adr	x4, #-14408
-adr	x5, #-8368
-mov	w13, #29
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x10
+b	idct_dc_w4_neon
+L_3a4c:
+adr	x4, inv_dct_8h_x4_neon
+adr	x5, inv_dct_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_identity_identity_4x16_8bpc_neon:
-adr	x5, #-3724
-mov	w13, #29
+inv_txfm_add_identity_identity_4x16_8bpc_neon:
+adr	x5, inv_identity_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_identity_add_4x16_neon
-_inv_txfm_add_dct_adst_4x16_8bpc_neon:
-adr	x4, #-14436
-adr	x5, #-5420
-mov	w13, #29
+inv_txfm_add_dct_adst_4x16_8bpc_neon:
+adr	x4, inv_dct_8h_x4_neon
+adr	x5, inv_adst_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_dct_flipadst_4x16_8bpc_neon:
-adr	x4, #-14452
-adr	x5, #-4704
-mov	w13, #29
+inv_txfm_add_dct_flipadst_4x16_8bpc_neon:
+adr	x4, inv_dct_8h_x4_neon
+adr	x5, inv_flipadst_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_dct_identity_4x16_8bpc_neon:
-adr	x4, #-14468
-adr	x5, #-3772
-mov	w13, #8
+inv_txfm_add_dct_identity_4x16_8bpc_neon:
+adr	x4, inv_dct_8h_x4_neon
+adr	x5, inv_identity_4h_x16_neon
+mov	w13, #0x8
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_adst_dct_4x16_8bpc_neon:
-adr	x4, #-14180
-adr	x5, #-8444
-mov	w13, #29
+inv_txfm_add_adst_dct_4x16_8bpc_neon:
+adr	x4, inv_adst_8h_x4_neon
+adr	x5, inv_dct_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_adst_adst_4x16_8bpc_neon:
-adr	x4, #-14196
-adr	x5, #-5484
-mov	w13, #29
+inv_txfm_add_adst_adst_4x16_8bpc_neon:
+adr	x4, inv_adst_8h_x4_neon
+adr	x5, inv_adst_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_adst_flipadst_4x16_8bpc_neon:
-adr	x4, #-14212
-adr	x5, #-4768
-mov	w13, #29
+inv_txfm_add_adst_flipadst_4x16_8bpc_neon:
+adr	x4, inv_adst_8h_x4_neon
+adr	x5, inv_flipadst_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_flipadst_dct_4x16_8bpc_neon:
-adr	x4, #-14068
-adr	x5, #-8492
-mov	w13, #29
+inv_txfm_add_flipadst_dct_4x16_8bpc_neon:
+adr	x4, inv_flipadst_8h_x4_neon
+adr	x5, inv_dct_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_flipadst_adst_4x16_8bpc_neon:
-adr	x4, #-14084
-adr	x5, #-5532
-mov	w13, #29
+inv_txfm_add_flipadst_adst_4x16_8bpc_neon:
+adr	x4, inv_flipadst_8h_x4_neon
+adr	x5, inv_adst_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_flipadst_flipadst_4x16_8bpc_neon:
-adr	x4, #-14100
-adr	x5, #-4816
-mov	w13, #29
+inv_txfm_add_flipadst_flipadst_4x16_8bpc_neon:
+adr	x4, inv_flipadst_8h_x4_neon
+adr	x5, inv_flipadst_4h_x16_neon
+mov	w13, #0x1d
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_identity_dct_4x16_8bpc_neon:
-adr	x5, #-8536
-mov	w13, #32
+inv_txfm_add_identity_dct_4x16_8bpc_neon:
+adr	x5, inv_dct_4h_x16_neon
+mov	w13, #0x20
 b	inv_txfm_identity_add_4x16_neon
-_inv_txfm_add_adst_identity_4x16_8bpc_neon:
-adr	x4, #-14288
-adr	x5, #-3896
-mov	w13, #8
+inv_txfm_add_adst_identity_4x16_8bpc_neon:
+adr	x4, inv_adst_8h_x4_neon
+adr	x5, inv_identity_4h_x16_neon
+mov	w13, #0x8
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_flipadst_identity_4x16_8bpc_neon:
-adr	x4, #-14144
-adr	x5, #-3912
-mov	w13, #8
+inv_txfm_add_flipadst_identity_4x16_8bpc_neon:
+adr	x4, inv_flipadst_8h_x4_neon
+adr	x5, inv_identity_4h_x16_neon
+mov	w13, #0x8
 b	inv_txfm_add_4x16_neon
-_inv_txfm_add_identity_adst_4x16_8bpc_neon:
-adr	x5, #-5604
-mov	w13, #32
+inv_txfm_add_identity_adst_4x16_8bpc_neon:
+adr	x5, inv_adst_4h_x16_neon
+mov	w13, #0x20
 b	inv_txfm_identity_add_4x16_neon
-_inv_txfm_add_identity_flipadst_4x16_8bpc_neon:
-adr	x5, #-4884
-mov	w13, #32
+inv_txfm_add_identity_flipadst_4x16_8bpc_neon:
+adr	x5, inv_flipadst_4h_x16_neon
+mov	w13, #0x20
 b	inv_txfm_identity_add_4x16_neon
-_inv_txfm_add_dct_dct_16x4_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_16x4_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_16x4_8bpc_neon:
+cbnz	w3, L_3b68
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #4
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x4
 b	idct_dc_w16_neon
-adr	x4, #-8648
-adr	x5, #-14696
+L_3b68:
+adr	x4, inv_dct_4h_x16_neon
+adr	x5, inv_dct_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_identity_identity_16x4_8bpc_neon:
-adr	x5, #-14032
+inv_txfm_add_identity_identity_16x4_8bpc_neon:
+adr	x5, inv_identity_8h_x4_neon
 b	inv_txfm_identity_add_16x4_neon
-_inv_txfm_add_dct_adst_16x4_8bpc_neon:
-adr	x4, #-8668
-adr	x5, #-14412
+inv_txfm_add_dct_adst_16x4_8bpc_neon:
+adr	x4, inv_dct_4h_x16_neon
+adr	x5, inv_adst_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_dct_flipadst_16x4_8bpc_neon:
-adr	x4, #-8680
-adr	x5, #-14264
+inv_txfm_add_dct_flipadst_16x4_8bpc_neon:
+adr	x4, inv_dct_4h_x16_neon
+adr	x5, inv_flipadst_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_dct_identity_16x4_8bpc_neon:
-adr	x4, #-8692
-adr	x5, #-14068
+inv_txfm_add_dct_identity_16x4_8bpc_neon:
+adr	x4, inv_dct_4h_x16_neon
+adr	x5, inv_identity_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_adst_dct_16x4_8bpc_neon:
-adr	x4, #-5728
-adr	x5, #-14752
+inv_txfm_add_adst_dct_16x4_8bpc_neon:
+adr	x4, inv_adst_4h_x16_neon
+adr	x5, inv_dct_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_adst_adst_16x4_8bpc_neon:
-adr	x4, #-5740
-adr	x5, #-14460
+inv_txfm_add_adst_adst_16x4_8bpc_neon:
+adr	x4, inv_adst_4h_x16_neon
+adr	x5, inv_adst_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_adst_flipadst_16x4_8bpc_neon:
-adr	x4, #-5752
-adr	x5, #-14312
+inv_txfm_add_adst_flipadst_16x4_8bpc_neon:
+adr	x4, inv_adst_4h_x16_neon
+adr	x5, inv_flipadst_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_flipadst_dct_16x4_8bpc_neon:
-adr	x4, #-5032
-adr	x5, #-14788
+inv_txfm_add_flipadst_dct_16x4_8bpc_neon:
+adr	x4, inv_flipadst_4h_x16_neon
+adr	x5, inv_dct_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_flipadst_adst_16x4_8bpc_neon:
-adr	x4, #-5044
-adr	x5, #-14496
+inv_txfm_add_flipadst_adst_16x4_8bpc_neon:
+adr	x4, inv_flipadst_4h_x16_neon
+adr	x5, inv_adst_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_flipadst_flipadst_16x4_8bpc_neon:
-adr	x4, #-5056
-adr	x5, #-14348
+inv_txfm_add_flipadst_flipadst_16x4_8bpc_neon:
+adr	x4, inv_flipadst_4h_x16_neon
+adr	x5, inv_flipadst_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_identity_dct_16x4_8bpc_neon:
-adr	x5, #-14820
+inv_txfm_add_identity_dct_16x4_8bpc_neon:
+adr	x5, inv_dct_8h_x4_neon
 b	inv_txfm_identity_add_16x4_neon
-_inv_txfm_add_adst_identity_16x4_8bpc_neon:
-adr	x4, #-5808
-adr	x5, #-14160
+inv_txfm_add_adst_identity_16x4_8bpc_neon:
+adr	x4, inv_adst_4h_x16_neon
+adr	x5, inv_identity_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_flipadst_identity_16x4_8bpc_neon:
-adr	x4, #-5088
-adr	x5, #-14172
+inv_txfm_add_flipadst_identity_16x4_8bpc_neon:
+adr	x4, inv_flipadst_4h_x16_neon
+adr	x5, inv_identity_8h_x4_neon
 b	inv_txfm_add_16x4_neon
-_inv_txfm_add_identity_adst_16x4_8bpc_neon:
-adr	x5, #-14548
+inv_txfm_add_identity_adst_16x4_8bpc_neon:
+adr	x5, inv_adst_8h_x4_neon
 b	inv_txfm_identity_add_16x4_neon
-_inv_txfm_add_identity_flipadst_16x4_8bpc_neon:
-adr	x5, #-14396
+inv_txfm_add_identity_flipadst_16x4_8bpc_neon:
+adr	x5, inv_flipadst_8h_x4_neon
 b	inv_txfm_identity_add_16x4_neon
-_inv_txfm_identity_add_16x8_neon:
+inv_txfm_identity_add_16x8_neon:
 mov	x15, x30
-movi.8h	v4, #0
-mov	w16, #23168
-dup.4h	v0, w16
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v24 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v25 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v26 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v27 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v28 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v29 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v30 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v31 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
-sqrdmulh.8h	v24, v24, v0[0]
-sqrdmulh.8h	v25, v25, v0[0]
-sqrdmulh.8h	v26, v26, v0[0]
-sqrdmulh.8h	v27, v27, v0[0]
-sqrdmulh.8h	v28, v28, v0[0]
-sqrdmulh.8h	v29, v29, v0[0]
-sqrdmulh.8h	v30, v30, v0[0]
-sqrdmulh.8h	v31, v31, v0[0]
-mov	w16, #27152
-dup.4h	v0, w16
-sqrdmulh.8h	v2, v16, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v16, v16, v2
-sqrdmulh.8h	v2, v17, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v17, v17, v2
-sqrdmulh.8h	v2, v18, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v18, v18, v2
-sqrdmulh.8h	v2, v19, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v19, v19, v2
-sqrdmulh.8h	v2, v20, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v20, v20, v2
-sqrdmulh.8h	v2, v21, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v21, v21, v2
-sqrdmulh.8h	v2, v22, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v22, v22, v2
-sqrdmulh.8h	v2, v23, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v23, v23, v2
-sqrdmulh.8h	v2, v24, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v24, v24, v2
-sqrdmulh.8h	v2, v25, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v25, v25, v2
-sqrdmulh.8h	v2, v26, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v26, v26, v2
-sqrdmulh.8h	v2, v27, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v27, v27, v2
-sqrdmulh.8h	v2, v28, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v28, v28, v2
-sqrdmulh.8h	v2, v29, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v29, v29, v2
-sqrdmulh.8h	v2, v30, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v30, v30, v2
-sqrdmulh.8h	v2, v31, v0[0]
-srshr.8h	v2, v2, #1
-sqadd.8h	v31, v31, v2
-b	inv_txfm_add_16x8_neon
-_inv_txfm_identity_add_8x16_neon:
+movi	v4.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+ld1	{ v16.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v17.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v18.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v19.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v20.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v21.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v22.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v23.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v24.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v25.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v26.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v27.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v28.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v29.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v30.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v31.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
+sqrdmulh	v24.8h, v24.8h, v0.h[0]
+sqrdmulh	v25.8h, v25.8h, v0.h[0]
+sqrdmulh	v26.8h, v26.8h, v0.h[0]
+sqrdmulh	v27.8h, v27.8h, v0.h[0]
+sqrdmulh	v28.8h, v28.8h, v0.h[0]
+sqrdmulh	v29.8h, v29.8h, v0.h[0]
+sqrdmulh	v30.8h, v30.8h, v0.h[0]
+sqrdmulh	v31.8h, v31.8h, v0.h[0]
+mov	w16, #0x6a10
+dup	v0.4h, w16
+sqrdmulh	v2.8h, v16.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v16.8h, v16.8h, v2.8h
+sqrdmulh	v2.8h, v17.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v17.8h, v17.8h, v2.8h
+sqrdmulh	v2.8h, v18.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v18.8h, v18.8h, v2.8h
+sqrdmulh	v2.8h, v19.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v19.8h, v19.8h, v2.8h
+sqrdmulh	v2.8h, v20.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v20.8h, v20.8h, v2.8h
+sqrdmulh	v2.8h, v21.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v21.8h, v21.8h, v2.8h
+sqrdmulh	v2.8h, v22.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v22.8h, v22.8h, v2.8h
+sqrdmulh	v2.8h, v23.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v23.8h, v23.8h, v2.8h
+sqrdmulh	v2.8h, v24.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v24.8h, v24.8h, v2.8h
+sqrdmulh	v2.8h, v25.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v25.8h, v25.8h, v2.8h
+sqrdmulh	v2.8h, v26.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v26.8h, v26.8h, v2.8h
+sqrdmulh	v2.8h, v27.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v27.8h, v27.8h, v2.8h
+sqrdmulh	v2.8h, v28.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v28.8h, v28.8h, v2.8h
+sqrdmulh	v2.8h, v29.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v29.8h, v29.8h, v2.8h
+sqrdmulh	v2.8h, v30.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v30.8h, v30.8h, v2.8h
+sqrdmulh	v2.8h, v31.8h, v0.h[0]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v31.8h, v31.8h, v2.8h
+b	L_403c
+inv_txfm_identity_add_8x16_neon:
 mov	x15, x30
-movi.8h	v4, #0
-mov	w16, #23168
-dup.4h	v0, w16
-mov	x11, #32
+movi	v4.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+mov	x11, #0x20
 cmp	w3, w13
-b.lt	inv_txfm_identity_add_8x16_neon
-add	x6, x2, #16
-ld1.8h	{ v24 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v25 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v26 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v27 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v28 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v29 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v30 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v31 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-sqrdmulh.8h	v24, v24, v0[0]
-sqrdmulh.8h	v25, v25, v0[0]
-sqrdmulh.8h	v26, v26, v0[0]
-sqrdmulh.8h	v27, v27, v0[0]
-sqrdmulh.8h	v28, v28, v0[0]
-sqrdmulh.8h	v29, v29, v0[0]
-sqrdmulh.8h	v30, v30, v0[0]
-sqrdmulh.8h	v31, v31, v0[0]
-trn1.8h	v2, v24, v25
-trn2.8h	v3, v24, v25
-trn1.8h	v25, v26, v27
-trn2.8h	v27, v26, v27
-trn1.8h	v24, v28, v29
-trn2.8h	v29, v28, v29
-trn1.8h	v26, v30, v31
-trn2.8h	v31, v30, v31
-trn1.4s	v28, v24, v26
-trn2.4s	v26, v24, v26
-trn1.4s	v30, v29, v31
-trn2.4s	v31, v29, v31
-trn1.4s	v29, v3, v27
-trn2.4s	v3, v3, v27
-trn1.4s	v27, v2, v25
-trn2.4s	v2, v2, v25
-trn1.2d	v24, v27, v28
-trn2.2d	v28, v27, v28
-trn1.2d	v25, v29, v30
-trn2.2d	v29, v29, v30
-trn2.2d	v30, v2, v26
-trn1.2d	v26, v2, v26
-trn1.2d	v27, v3, v31
-trn2.2d	v31, v3, v31
-b	inv_txfm_identity_add_8x16_neon
-movi.8h	v24, #0
-movi.8h	v25, #0
-movi.8h	v26, #0
-movi.8h	v27, #0
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
-movi.8h	v4, #0
-mov	w16, #23168
-dup.4h	v0, w16
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
-b	inv_txfm_add_8x16_neon
-_inv_txfm_add_16x8_neon:
+b.lt	L_3e98
+add	x6, x2, #0x10
+ld1	{ v24.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v25.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v26.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v27.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v28.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v29.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v30.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v31.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+sqrdmulh	v24.8h, v24.8h, v0.h[0]
+sqrdmulh	v25.8h, v25.8h, v0.h[0]
+sqrdmulh	v26.8h, v26.8h, v0.h[0]
+sqrdmulh	v27.8h, v27.8h, v0.h[0]
+sqrdmulh	v28.8h, v28.8h, v0.h[0]
+sqrdmulh	v29.8h, v29.8h, v0.h[0]
+sqrdmulh	v30.8h, v30.8h, v0.h[0]
+sqrdmulh	v31.8h, v31.8h, v0.h[0]
+trn1	v2.8h, v24.8h, v25.8h
+trn2	v3.8h, v24.8h, v25.8h
+trn1	v25.8h, v26.8h, v27.8h
+trn2	v27.8h, v26.8h, v27.8h
+trn1	v24.8h, v28.8h, v29.8h
+trn2	v29.8h, v28.8h, v29.8h
+trn1	v26.8h, v30.8h, v31.8h
+trn2	v31.8h, v30.8h, v31.8h
+trn1	v28.4s, v24.4s, v26.4s
+trn2	v26.4s, v24.4s, v26.4s
+trn1	v30.4s, v29.4s, v31.4s
+trn2	v31.4s, v29.4s, v31.4s
+trn1	v29.4s, v3.4s, v27.4s
+trn2	v3.4s, v3.4s, v27.4s
+trn1	v27.4s, v2.4s, v25.4s
+trn2	v2.4s, v2.4s, v25.4s
+trn1	v24.2d, v27.2d, v28.2d
+trn2	v28.2d, v27.2d, v28.2d
+trn1	v25.2d, v29.2d, v30.2d
+trn2	v29.2d, v29.2d, v30.2d
+trn2	v30.2d, v2.2d, v26.2d
+trn1	v26.2d, v2.2d, v26.2d
+trn1	v27.2d, v3.2d, v31.2d
+trn2	v31.2d, v3.2d, v31.2d
+b	L_3eb8
+L_3e98:
+movi	v24.8h, #0x0
+movi	v25.8h, #0x0
+movi	v26.8h, #0x0
+movi	v27.8h, #0x0
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+L_3eb8:
+movi	v4.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+ld1	{ v16.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v17.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v18.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v19.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v20.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v21.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v22.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v23.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
+b	L_4410
+inv_txfm_add_16x8_neon:
 mov	x15, x30
-movi.8h	v4, #0
-mov	w16, #23168
-dup.4h	v0, w16
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v24 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v25 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v26 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v27 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v28 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v29 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v30 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-ld1.8h	{ v31 }, [x2]
-st1.8h	{ v4 }, [x2], #16
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
-sqrdmulh.8h	v24, v24, v0[0]
-sqrdmulh.8h	v25, v25, v0[0]
-sqrdmulh.8h	v26, v26, v0[0]
-sqrdmulh.8h	v27, v27, v0[0]
-sqrdmulh.8h	v28, v28, v0[0]
-sqrdmulh.8h	v29, v29, v0[0]
-sqrdmulh.8h	v30, v30, v0[0]
-sqrdmulh.8h	v31, v31, v0[0]
+movi	v4.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+ld1	{ v16.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v17.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v18.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v19.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v20.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v21.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v22.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v23.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v24.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v25.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v26.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v27.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v28.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v29.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v30.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+ld1	{ v31.8h }, [x2]
+st1	{ v4.8h }, [x2], #16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
+sqrdmulh	v24.8h, v24.8h, v0.h[0]
+sqrdmulh	v25.8h, v25.8h, v0.h[0]
+sqrdmulh	v26.8h, v26.8h, v0.h[0]
+sqrdmulh	v27.8h, v27.8h, v0.h[0]
+sqrdmulh	v28.8h, v28.8h, v0.h[0]
+sqrdmulh	v29.8h, v29.8h, v0.h[0]
+sqrdmulh	v30.8h, v30.8h, v0.h[0]
+sqrdmulh	v31.8h, v31.8h, v0.h[0]
 blr	x4
-srshr.8h	v16, v16, #1
-srshr.8h	v17, v17, #1
-srshr.8h	v18, v18, #1
-srshr.8h	v19, v19, #1
-srshr.8h	v20, v20, #1
-srshr.8h	v21, v21, #1
-srshr.8h	v22, v22, #1
-srshr.8h	v23, v23, #1
-srshr.8h	v24, v24, #1
-srshr.8h	v25, v25, #1
-srshr.8h	v26, v26, #1
-srshr.8h	v27, v27, #1
-srshr.8h	v28, v28, #1
-srshr.8h	v29, v29, #1
-srshr.8h	v30, v30, #1
-srshr.8h	v31, v31, #1
-trn1.8h	v2, v16, v17
-trn2.8h	v3, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v3, v19
-trn2.4s	v3, v3, v19
-trn1.4s	v19, v2, v17
-trn2.4s	v2, v2, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v2, v18
-trn1.2d	v18, v2, v18
-trn1.2d	v19, v3, v23
-trn2.2d	v23, v3, v23
+srshr	v16.8h, v16.8h, #0x1
+srshr	v17.8h, v17.8h, #0x1
+srshr	v18.8h, v18.8h, #0x1
+srshr	v19.8h, v19.8h, #0x1
+srshr	v20.8h, v20.8h, #0x1
+srshr	v21.8h, v21.8h, #0x1
+srshr	v22.8h, v22.8h, #0x1
+srshr	v23.8h, v23.8h, #0x1
+srshr	v24.8h, v24.8h, #0x1
+srshr	v25.8h, v25.8h, #0x1
+srshr	v26.8h, v26.8h, #0x1
+srshr	v27.8h, v27.8h, #0x1
+srshr	v28.8h, v28.8h, #0x1
+srshr	v29.8h, v29.8h, #0x1
+srshr	v30.8h, v30.8h, #0x1
+srshr	v31.8h, v31.8h, #0x1
+L_403c:
+trn1	v2.8h, v16.8h, v17.8h
+trn2	v3.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v3.4s, v19.4s
+trn2	v3.4s, v3.4s, v19.4s
+trn1	v19.4s, v2.4s, v17.4s
+trn2	v2.4s, v2.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v2.2d, v18.2d
+trn1	v18.2d, v2.2d, v18.2d
+trn1	v19.2d, v3.2d, v23.2d
+trn2	v23.2d, v3.2d, v23.2d
 blr	x5
 mov	x6, x0
 mov	x7, x6
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #4
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #4
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x6], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #4
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x6], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #4
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x6], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x6], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x6], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x6], x1
-st1.8b	{ v3 }, [x6], x1
-trn1.8h	v2, v24, v25
-trn2.8h	v3, v24, v25
-trn1.8h	v25, v26, v27
-trn2.8h	v27, v26, v27
-trn1.8h	v24, v28, v29
-trn2.8h	v29, v28, v29
-trn1.8h	v26, v30, v31
-trn2.8h	v31, v30, v31
-trn1.4s	v28, v24, v26
-trn2.4s	v26, v24, v26
-trn1.4s	v30, v29, v31
-trn2.4s	v31, v29, v31
-trn1.4s	v29, v3, v27
-trn2.4s	v3, v3, v27
-trn1.4s	v27, v2, v25
-trn2.4s	v2, v2, v25
-trn1.2d	v16, v27, v28
-trn2.2d	v20, v27, v28
-trn1.2d	v17, v29, v30
-trn2.2d	v21, v29, v30
-trn2.2d	v22, v2, v26
-trn1.2d	v18, v2, v26
-trn1.2d	v19, v3, v31
-trn2.2d	v23, v3, v31
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x4
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x4
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x6], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x4
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x6], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x4
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x6], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x6], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x6], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x6], x1
+st1	{ v3.8b }, [x6], x1
+trn1	v2.8h, v24.8h, v25.8h
+trn2	v3.8h, v24.8h, v25.8h
+trn1	v25.8h, v26.8h, v27.8h
+trn2	v27.8h, v26.8h, v27.8h
+trn1	v24.8h, v28.8h, v29.8h
+trn2	v29.8h, v28.8h, v29.8h
+trn1	v26.8h, v30.8h, v31.8h
+trn2	v31.8h, v30.8h, v31.8h
+trn1	v28.4s, v24.4s, v26.4s
+trn2	v26.4s, v24.4s, v26.4s
+trn1	v30.4s, v29.4s, v31.4s
+trn2	v31.4s, v29.4s, v31.4s
+trn1	v29.4s, v3.4s, v27.4s
+trn2	v3.4s, v3.4s, v27.4s
+trn1	v27.4s, v2.4s, v25.4s
+trn2	v2.4s, v2.4s, v25.4s
+trn1	v16.2d, v27.2d, v28.2d
+trn2	v20.2d, v27.2d, v28.2d
+trn1	v17.2d, v29.2d, v30.2d
+trn2	v21.2d, v29.2d, v30.2d
+trn2	v22.2d, v2.2d, v26.2d
+trn1	v18.2d, v2.2d, v26.2d
+trn1	v19.2d, v3.2d, v31.2d
+trn2	v23.2d, v3.2d, v31.2d
 blr	x5
-add	x0, x0, #8
+add	x0, x0, #0x8
 mov	x7, x0
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #4
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #4
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #4
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #4
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x0], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x0], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x0], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-st1.8b	{ v3 }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x4
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x4
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x4
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x4
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x0], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x0], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x0], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+st1	{ v3.8b }, [x0], x1
 ret	x15
-_inv_txfm_add_8x16_neon:
+inv_txfm_add_8x16_neon:
 mov	x15, x30
-movi.8h	v4, #0
-mov	w16, #23168
-dup.4h	v0, w16
-mov	x11, #32
+movi	v4.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+mov	x11, #0x20
 cmp	w3, w13
-b.lt	inv_txfm_add_8x16_neon
-add	x6, x2, #16
-ld1.8h	{ v16 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v17 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v18 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v19 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v20 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v21 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v22 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-ld1.8h	{ v23 }, [x6]
-st1.8h	{ v4 }, [x6], x11
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
+b.lt	L_4360
+add	x6, x2, #0x10
+ld1	{ v16.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v17.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v18.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v19.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v20.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v21.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v22.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+ld1	{ v23.8h }, [x6]
+st1	{ v4.8h }, [x6], x11
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
 blr	x4
-srshr.8h	v24, v16, #1
-srshr.8h	v25, v17, #1
-srshr.8h	v26, v18, #1
-srshr.8h	v27, v19, #1
-srshr.8h	v28, v20, #1
-srshr.8h	v29, v21, #1
-srshr.8h	v30, v22, #1
-srshr.8h	v31, v23, #1
-trn1.8h	v2, v24, v25
-trn2.8h	v3, v24, v25
-trn1.8h	v25, v26, v27
-trn2.8h	v27, v26, v27
-trn1.8h	v24, v28, v29
-trn2.8h	v29, v28, v29
-trn1.8h	v26, v30, v31
-trn2.8h	v31, v30, v31
-trn1.4s	v28, v24, v26
-trn2.4s	v26, v24, v26
-trn1.4s	v30, v29, v31
-trn2.4s	v31, v29, v31
-trn1.4s	v29, v3, v27
-trn2.4s	v3, v3, v27
-trn1.4s	v27, v2, v25
-trn2.4s	v2, v2, v25
-trn1.2d	v24, v27, v28
-trn2.2d	v28, v27, v28
-trn1.2d	v25, v29, v30
-trn2.2d	v29, v29, v30
-trn2.2d	v30, v2, v26
-trn1.2d	v26, v2, v26
-trn1.2d	v27, v3, v31
-trn2.2d	v31, v3, v31
-b	inv_txfm_add_8x16_neon
-movi.8h	v24, #0
-movi.8h	v25, #0
-movi.8h	v26, #0
-movi.8h	v27, #0
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
-movi.8h	v4, #0
-mov	w16, #23168
-dup.4h	v0, w16
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v4 }, [x2], x11
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
+srshr	v24.8h, v16.8h, #0x1
+srshr	v25.8h, v17.8h, #0x1
+srshr	v26.8h, v18.8h, #0x1
+srshr	v27.8h, v19.8h, #0x1
+srshr	v28.8h, v20.8h, #0x1
+srshr	v29.8h, v21.8h, #0x1
+srshr	v30.8h, v22.8h, #0x1
+srshr	v31.8h, v23.8h, #0x1
+trn1	v2.8h, v24.8h, v25.8h
+trn2	v3.8h, v24.8h, v25.8h
+trn1	v25.8h, v26.8h, v27.8h
+trn2	v27.8h, v26.8h, v27.8h
+trn1	v24.8h, v28.8h, v29.8h
+trn2	v29.8h, v28.8h, v29.8h
+trn1	v26.8h, v30.8h, v31.8h
+trn2	v31.8h, v30.8h, v31.8h
+trn1	v28.4s, v24.4s, v26.4s
+trn2	v26.4s, v24.4s, v26.4s
+trn1	v30.4s, v29.4s, v31.4s
+trn2	v31.4s, v29.4s, v31.4s
+trn1	v29.4s, v3.4s, v27.4s
+trn2	v3.4s, v3.4s, v27.4s
+trn1	v27.4s, v2.4s, v25.4s
+trn2	v2.4s, v2.4s, v25.4s
+trn1	v24.2d, v27.2d, v28.2d
+trn2	v28.2d, v27.2d, v28.2d
+trn1	v25.2d, v29.2d, v30.2d
+trn2	v29.2d, v29.2d, v30.2d
+trn2	v30.2d, v2.2d, v26.2d
+trn1	v26.2d, v2.2d, v26.2d
+trn1	v27.2d, v3.2d, v31.2d
+trn2	v31.2d, v3.2d, v31.2d
+b	L_4380
+L_4360:
+movi	v24.8h, #0x0
+movi	v25.8h, #0x0
+movi	v26.8h, #0x0
+movi	v27.8h, #0x0
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+L_4380:
+movi	v4.8h, #0x0
+mov	w16, #0x5a80
+dup	v0.4h, w16
+ld1	{ v16.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v17.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v18.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v19.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v20.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v21.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v22.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+ld1	{ v23.8h }, [x2]
+st1	{ v4.8h }, [x2], x11
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
 blr	x4
-srshr.8h	v16, v16, #1
-srshr.8h	v17, v17, #1
-srshr.8h	v18, v18, #1
-srshr.8h	v19, v19, #1
-srshr.8h	v20, v20, #1
-srshr.8h	v21, v21, #1
-srshr.8h	v22, v22, #1
-srshr.8h	v23, v23, #1
-trn1.8h	v2, v16, v17
-trn2.8h	v3, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v3, v19
-trn2.4s	v3, v3, v19
-trn1.4s	v19, v2, v17
-trn2.4s	v2, v2, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v2, v18
-trn1.2d	v18, v2, v18
-trn1.2d	v19, v3, v23
-trn2.2d	v23, v3, v23
+srshr	v16.8h, v16.8h, #0x1
+srshr	v17.8h, v17.8h, #0x1
+srshr	v18.8h, v18.8h, #0x1
+srshr	v19.8h, v19.8h, #0x1
+srshr	v20.8h, v20.8h, #0x1
+srshr	v21.8h, v21.8h, #0x1
+srshr	v22.8h, v22.8h, #0x1
+srshr	v23.8h, v23.8h, #0x1
+L_4410:
+trn1	v2.8h, v16.8h, v17.8h
+trn2	v3.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v3.4s, v19.4s
+trn2	v3.4s, v3.4s, v19.4s
+trn1	v19.4s, v2.4s, v17.4s
+trn2	v2.4s, v2.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v2.2d, v18.2d
+trn1	v18.2d, v2.2d, v18.2d
+trn1	v19.2d, v3.2d, v23.2d
+trn2	v23.2d, v3.2d, v23.2d
 blr	x5
 mov	x6, x0
-ld1.8b	{ v2 }, [x6], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x6], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x6], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x6], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x6], x1
-srshr.8h	v20, v20, #4
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x6], x1
-srshr.8h	v21, v21, #4
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x6], x1
-srshr.8h	v22, v22, #4
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x6], x1
-srshr.8h	v23, v23, #4
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x0], x1
-ld1.8b	{ v4 }, [x6], x1
-srshr.8h	v24, v24, #4
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x0], x1
-ld1.8b	{ v5 }, [x6], x1
-srshr.8h	v25, v25, #4
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x0], x1
-ld1.8b	{ v6 }, [x6], x1
-srshr.8h	v26, v26, #4
-uaddw.8h	v24, v24, v4
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x6], x1
-srshr.8h	v27, v27, #4
-uaddw.8h	v25, v25, v5
-sqxtun.8b	v4, v24
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x6], x1
-srshr.8h	v28, v28, #4
-uaddw.8h	v26, v26, v6
-sqxtun.8b	v5, v25
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x6], x1
-srshr.8h	v29, v29, #4
-uaddw.8h	v27, v27, v7
-sqxtun.8b	v6, v26
-st1.8b	{ v5 }, [x0], x1
-ld1.8b	{ v4 }, [x6], x1
-srshr.8h	v30, v30, #4
-uaddw.8h	v28, v28, v2
-sqxtun.8b	v7, v27
-st1.8b	{ v6 }, [x0], x1
-ld1.8b	{ v5 }, [x6], x1
-srshr.8h	v31, v31, #4
-uaddw.8h	v29, v29, v3
-sqxtun.8b	v2, v28
-st1.8b	{ v7 }, [x0], x1
-uaddw.8h	v30, v30, v4
-sqxtun.8b	v3, v29
-st1.8b	{ v2 }, [x0], x1
-uaddw.8h	v31, v31, v5
-sqxtun.8b	v4, v30
-st1.8b	{ v3 }, [x0], x1
-sqxtun.8b	v5, v31
-st1.8b	{ v4 }, [x0], x1
-st1.8b	{ v5 }, [x0], x1
+ld1	{ v2.8b }, [x6], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x6], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x6], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x6], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x6], x1
+srshr	v20.8h, v20.8h, #0x4
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x6], x1
+srshr	v21.8h, v21.8h, #0x4
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x6], x1
+srshr	v22.8h, v22.8h, #0x4
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x6], x1
+srshr	v23.8h, v23.8h, #0x4
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x0], x1
+ld1	{ v4.8b }, [x6], x1
+srshr	v24.8h, v24.8h, #0x4
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x0], x1
+ld1	{ v5.8b }, [x6], x1
+srshr	v25.8h, v25.8h, #0x4
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x0], x1
+ld1	{ v6.8b }, [x6], x1
+srshr	v26.8h, v26.8h, #0x4
+uaddw	v24.8h, v24.8h, v4.8b
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x6], x1
+srshr	v27.8h, v27.8h, #0x4
+uaddw	v25.8h, v25.8h, v5.8b
+sqxtun	v4.8b, v24.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x6], x1
+srshr	v28.8h, v28.8h, #0x4
+uaddw	v26.8h, v26.8h, v6.8b
+sqxtun	v5.8b, v25.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x6], x1
+srshr	v29.8h, v29.8h, #0x4
+uaddw	v27.8h, v27.8h, v7.8b
+sqxtun	v6.8b, v26.8h
+st1	{ v5.8b }, [x0], x1
+ld1	{ v4.8b }, [x6], x1
+srshr	v30.8h, v30.8h, #0x4
+uaddw	v28.8h, v28.8h, v2.8b
+sqxtun	v7.8b, v27.8h
+st1	{ v6.8b }, [x0], x1
+ld1	{ v5.8b }, [x6], x1
+srshr	v31.8h, v31.8h, #0x4
+uaddw	v29.8h, v29.8h, v3.8b
+sqxtun	v2.8b, v28.8h
+st1	{ v7.8b }, [x0], x1
+uaddw	v30.8h, v30.8h, v4.8b
+sqxtun	v3.8b, v29.8h
+st1	{ v2.8b }, [x0], x1
+uaddw	v31.8h, v31.8h, v5.8b
+sqxtun	v4.8b, v30.8h
+st1	{ v3.8b }, [x0], x1
+sqxtun	v5.8b, v31.8h
+st1	{ v4.8b }, [x0], x1
+st1	{ v5.8b }, [x0], x1
 ret	x15
-_inv_txfm_add_dct_dct_8x16_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_8x16_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_8x16_8bpc_neon:
+cbnz	w3, L_45ec
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x10
 b	idct_dc_w8_neon
-adr	x4, #-16068
-adr	x5, #-12200
-mov	x13, #43
+L_45ec:
+adr	x4, inv_dct_8h_x8_neon
+adr	x5, inv_dct_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_identity_identity_8x16_8bpc_neon:
-adr	x5, #-6904
-mov	x13, #43
+inv_txfm_add_identity_identity_8x16_8bpc_neon:
+adr	x5, inv_identity_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_identity_add_8x16_neon
-_inv_txfm_add_dct_adst_8x16_8bpc_neon:
-adr	x4, #-16096
-adr	x5, #-10832
-mov	x13, #43
+inv_txfm_add_dct_adst_8x16_8bpc_neon:
+adr	x4, inv_dct_8h_x8_neon
+adr	x5, inv_adst_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_dct_flipadst_8x16_8bpc_neon:
-adr	x4, #-16112
-adr	x5, #-9636
-mov	x13, #43
+inv_txfm_add_dct_flipadst_8x16_8bpc_neon:
+adr	x4, inv_dct_8h_x8_neon
+adr	x5, inv_flipadst_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_dct_identity_8x16_8bpc_neon:
-adr	x4, #-16128
-adr	x5, #-6952
-mov	x13, #8
+inv_txfm_add_dct_identity_8x16_8bpc_neon:
+adr	x4, inv_dct_8h_x8_neon
+adr	x5, inv_identity_8h_x16_neon
+mov	x13, #0x8
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_adst_dct_8x16_8bpc_neon:
-adr	x4, #-15616
-adr	x5, #-12276
-mov	x13, #43
+inv_txfm_add_adst_dct_8x16_8bpc_neon:
+adr	x4, inv_adst_8h_x8_neon
+adr	x5, inv_dct_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_adst_adst_8x16_8bpc_neon:
-adr	x4, #-15632
-adr	x5, #-10896
-mov	x13, #43
+inv_txfm_add_adst_adst_8x16_8bpc_neon:
+adr	x4, inv_adst_8h_x8_neon
+adr	x5, inv_adst_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_adst_flipadst_8x16_8bpc_neon:
-adr	x4, #-15648
-adr	x5, #-9700
-mov	x13, #43
+inv_txfm_add_adst_flipadst_8x16_8bpc_neon:
+adr	x4, inv_adst_8h_x8_neon
+adr	x5, inv_flipadst_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_flipadst_dct_8x16_8bpc_neon:
-adr	x4, #-15184
-adr	x5, #-12324
-mov	x13, #43
+inv_txfm_add_flipadst_dct_8x16_8bpc_neon:
+adr	x4, inv_flipadst_8h_x8_neon
+adr	x5, inv_dct_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_flipadst_adst_8x16_8bpc_neon:
-adr	x4, #-15200
-adr	x5, #-10944
-mov	x13, #43
+inv_txfm_add_flipadst_adst_8x16_8bpc_neon:
+adr	x4, inv_flipadst_8h_x8_neon
+adr	x5, inv_adst_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_flipadst_flipadst_8x16_8bpc_neon:
-adr	x4, #-15216
-adr	x5, #-9748
-mov	x13, #43
+inv_txfm_add_flipadst_flipadst_8x16_8bpc_neon:
+adr	x4, inv_flipadst_8h_x8_neon
+adr	x5, inv_flipadst_8h_x16_neon
+mov	x13, #0x2b
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_identity_dct_8x16_8bpc_neon:
-adr	x5, #-12368
-mov	x13, #64
+inv_txfm_add_identity_dct_8x16_8bpc_neon:
+adr	x5, inv_dct_8h_x16_neon
+mov	x13, #0x40
 b	inv_txfm_identity_add_8x16_neon
-_inv_txfm_add_adst_identity_8x16_8bpc_neon:
-adr	x4, #-15724
-adr	x5, #-7076
-mov	x13, #8
+inv_txfm_add_adst_identity_8x16_8bpc_neon:
+adr	x4, inv_adst_8h_x8_neon
+adr	x5, inv_identity_8h_x16_neon
+mov	x13, #0x8
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_flipadst_identity_8x16_8bpc_neon:
-adr	x4, #-15260
-adr	x5, #-7092
-mov	x13, #8
+inv_txfm_add_flipadst_identity_8x16_8bpc_neon:
+adr	x4, inv_flipadst_8h_x8_neon
+adr	x5, inv_identity_8h_x16_neon
+mov	x13, #0x8
 b	inv_txfm_add_8x16_neon
-_inv_txfm_add_identity_adst_8x16_8bpc_neon:
-adr	x5, #-11016
-mov	x13, #64
+inv_txfm_add_identity_adst_8x16_8bpc_neon:
+adr	x5, inv_adst_8h_x16_neon
+mov	x13, #0x40
 b	inv_txfm_identity_add_8x16_neon
-_inv_txfm_add_identity_flipadst_8x16_8bpc_neon:
-adr	x5, #-9816
-mov	x13, #64
+inv_txfm_add_identity_flipadst_8x16_8bpc_neon:
+adr	x5, inv_flipadst_8h_x16_neon
+mov	x13, #0x40
 b	inv_txfm_identity_add_8x16_neon
-_inv_txfm_add_dct_dct_16x8_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_16x8_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_16x8_8bpc_neon:
+cbnz	w3, L_470c
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #8
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x8
 b	idct_dc_w16_neon
-adr	x4, #-12484
-adr	x5, #-16360
+L_470c:
+adr	x4, inv_dct_8h_x16_neon
+adr	x5, inv_dct_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_identity_identity_16x8_8bpc_neon:
-adr	x5, #-14304
+inv_txfm_add_identity_identity_16x8_8bpc_neon:
+adr	x5, inv_identity_8h_x8_neon
 b	inv_txfm_identity_add_16x8_neon
-_inv_txfm_add_dct_adst_16x8_8bpc_neon:
-adr	x4, #-12504
-adr	x5, #-15852
+inv_txfm_add_dct_adst_16x8_8bpc_neon:
+adr	x4, inv_dct_8h_x16_neon
+adr	x5, inv_adst_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_dct_flipadst_16x8_8bpc_neon:
-adr	x4, #-12516
-adr	x5, #-15384
+inv_txfm_add_dct_flipadst_16x8_8bpc_neon:
+adr	x4, inv_dct_8h_x16_neon
+adr	x5, inv_flipadst_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_dct_identity_16x8_8bpc_neon:
-adr	x4, #-12528
-adr	x5, #-14340
+inv_txfm_add_dct_identity_16x8_8bpc_neon:
+adr	x4, inv_dct_8h_x16_neon
+adr	x5, inv_identity_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_adst_dct_16x8_8bpc_neon:
-adr	x4, #-11144
-adr	x5, #-16416
+inv_txfm_add_adst_dct_16x8_8bpc_neon:
+adr	x4, inv_adst_8h_x16_neon
+adr	x5, inv_dct_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_adst_adst_16x8_8bpc_neon:
-adr	x4, #-11156
-adr	x5, #-15900
+inv_txfm_add_adst_adst_16x8_8bpc_neon:
+adr	x4, inv_adst_8h_x16_neon
+adr	x5, inv_adst_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_adst_flipadst_16x8_8bpc_neon:
-adr	x4, #-11168
-adr	x5, #-15432
+inv_txfm_add_adst_flipadst_16x8_8bpc_neon:
+adr	x4, inv_adst_8h_x16_neon
+adr	x5, inv_flipadst_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_flipadst_dct_16x8_8bpc_neon:
-adr	x4, #-9968
-adr	x5, #-16452
+inv_txfm_add_flipadst_dct_16x8_8bpc_neon:
+adr	x4, inv_flipadst_8h_x16_neon
+adr	x5, inv_dct_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_flipadst_adst_16x8_8bpc_neon:
-adr	x4, #-9980
-adr	x5, #-15936
+inv_txfm_add_flipadst_adst_16x8_8bpc_neon:
+adr	x4, inv_flipadst_8h_x16_neon
+adr	x5, inv_adst_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_flipadst_flipadst_16x8_8bpc_neon:
-adr	x4, #-9992
-adr	x5, #-15468
+inv_txfm_add_flipadst_flipadst_16x8_8bpc_neon:
+adr	x4, inv_flipadst_8h_x16_neon
+adr	x5, inv_flipadst_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_identity_dct_16x8_8bpc_neon:
-adr	x5, #-16484
+inv_txfm_add_identity_dct_16x8_8bpc_neon:
+adr	x5, inv_dct_8h_x8_neon
 b	inv_txfm_identity_add_16x8_neon
-_inv_txfm_add_adst_identity_16x8_8bpc_neon:
-adr	x4, #-11224
-adr	x5, #-14432
+inv_txfm_add_adst_identity_16x8_8bpc_neon:
+adr	x4, inv_adst_8h_x16_neon
+adr	x5, inv_identity_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_flipadst_identity_16x8_8bpc_neon:
-adr	x4, #-10024
-adr	x5, #-14444
+inv_txfm_add_flipadst_identity_16x8_8bpc_neon:
+adr	x4, inv_flipadst_8h_x16_neon
+adr	x5, inv_identity_8h_x8_neon
 b	inv_txfm_add_16x8_neon
-_inv_txfm_add_identity_adst_16x8_8bpc_neon:
-adr	x5, #-15988
+inv_txfm_add_identity_adst_16x8_8bpc_neon:
+adr	x5, inv_adst_8h_x8_neon
 b	inv_txfm_identity_add_16x8_neon
-_inv_txfm_add_identity_flipadst_16x8_8bpc_neon:
-adr	x5, #-15516
+inv_txfm_add_identity_flipadst_16x8_8bpc_neon:
+adr	x5, inv_flipadst_8h_x8_neon
 b	inv_txfm_identity_add_16x8_neon
-_inv_dct32_odd_8h_x16_neon:
-adrp	x16, inv_dct32_odd_8h_x16_neon
-add	x16, x16, #0
-ld1.8h	{ v0, v1 }, [x16]
-sub	x16, x16, #32
-smull.4s	v2, v16, v0[0]
-smlsl.4s	v2, v31, v0[1]
-smull2.4s	v3, v16, v0[0]
-smlsl2.4s	v3, v31, v0[1]
-smull.4s	v4, v16, v0[1]
-smlal.4s	v4, v31, v0[0]
-smull2.4s	v5, v16, v0[1]
-smlal2.4s	v5, v31, v0[0]
-smull.4s	v6, v24, v0[2]
-smlsl.4s	v6, v23, v0[3]
-smull2.4s	v7, v24, v0[2]
-smlsl2.4s	v7, v23, v0[3]
-sqrshrn.4h	v16, v2, #12
-sqrshrn2.8h	v16, v3, #12
-sqrshrn.4h	v31, v4, #12
-sqrshrn2.8h	v31, v5, #12
-smull.4s	v2, v24, v0[3]
-smlal.4s	v2, v23, v0[2]
-smull2.4s	v3, v24, v0[3]
-smlal2.4s	v3, v23, v0[2]
-smull.4s	v4, v20, v0[4]
-smlsl.4s	v4, v27, v0[5]
-smull2.4s	v5, v20, v0[4]
-smlsl2.4s	v5, v27, v0[5]
-sqrshrn.4h	v24, v6, #12
-sqrshrn2.8h	v24, v7, #12
-sqrshrn.4h	v23, v2, #12
-sqrshrn2.8h	v23, v3, #12
-smull.4s	v6, v20, v0[5]
-smlal.4s	v6, v27, v0[4]
-smull2.4s	v7, v20, v0[5]
-smlal2.4s	v7, v27, v0[4]
-smull.4s	v2, v28, v0[6]
-smlsl.4s	v2, v19, v0[7]
-smull2.4s	v3, v28, v0[6]
-smlsl2.4s	v3, v19, v0[7]
-sqrshrn.4h	v20, v4, #12
-sqrshrn2.8h	v20, v5, #12
-sqrshrn.4h	v27, v6, #12
-sqrshrn2.8h	v27, v7, #12
-smull.4s	v4, v28, v0[7]
-smlal.4s	v4, v19, v0[6]
-smull2.4s	v5, v28, v0[7]
-smlal2.4s	v5, v19, v0[6]
-smull.4s	v6, v18, v1[0]
-smlsl.4s	v6, v29, v1[1]
-smull2.4s	v7, v18, v1[0]
-smlsl2.4s	v7, v29, v1[1]
-sqrshrn.4h	v28, v2, #12
-sqrshrn2.8h	v28, v3, #12
-sqrshrn.4h	v19, v4, #12
-sqrshrn2.8h	v19, v5, #12
-smull.4s	v2, v18, v1[1]
-smlal.4s	v2, v29, v1[0]
-smull2.4s	v3, v18, v1[1]
-smlal2.4s	v3, v29, v1[0]
-smull.4s	v4, v26, v1[2]
-smlsl.4s	v4, v21, v1[3]
-smull2.4s	v5, v26, v1[2]
-smlsl2.4s	v5, v21, v1[3]
-sqrshrn.4h	v18, v6, #12
-sqrshrn2.8h	v18, v7, #12
-sqrshrn.4h	v29, v2, #12
-sqrshrn2.8h	v29, v3, #12
-smull.4s	v6, v26, v1[3]
-smlal.4s	v6, v21, v1[2]
-smull2.4s	v7, v26, v1[3]
-smlal2.4s	v7, v21, v1[2]
-smull.4s	v2, v22, v1[4]
-smlsl.4s	v2, v25, v1[5]
-smull2.4s	v3, v22, v1[4]
-smlsl2.4s	v3, v25, v1[5]
-sqrshrn.4h	v26, v4, #12
-sqrshrn2.8h	v26, v5, #12
-sqrshrn.4h	v21, v6, #12
-sqrshrn2.8h	v21, v7, #12
-smull.4s	v4, v22, v1[5]
-smlal.4s	v4, v25, v1[4]
-smull2.4s	v5, v22, v1[5]
-smlal2.4s	v5, v25, v1[4]
-smull.4s	v6, v30, v1[6]
-smlsl.4s	v6, v17, v1[7]
-smull2.4s	v7, v30, v1[6]
-smlsl2.4s	v7, v17, v1[7]
-sqrshrn.4h	v22, v2, #12
-sqrshrn2.8h	v22, v3, #12
-sqrshrn.4h	v25, v4, #12
-sqrshrn2.8h	v25, v5, #12
-smull.4s	v2, v30, v1[7]
-smlal.4s	v2, v17, v1[6]
-smull2.4s	v3, v30, v1[7]
-smlal2.4s	v3, v17, v1[6]
-sqrshrn.4h	v30, v6, #12
-sqrshrn2.8h	v30, v7, #12
-sqrshrn.4h	v17, v2, #12
-sqrshrn2.8h	v17, v3, #12
-ld1.8h	{ v0 }, [x16]
-sqsub.8h	v2, v16, v24
-sqadd.8h	v16, v16, v24
-sqsub.8h	v3, v31, v23
-sqadd.8h	v31, v31, v23
-sqsub.8h	v24, v28, v20
-sqadd.8h	v28, v28, v20
-sqadd.8h	v23, v18, v26
-sqsub.8h	v18, v18, v26
-sqsub.8h	v20, v30, v22
-sqadd.8h	v30, v30, v22
-sqadd.8h	v26, v17, v25
-sqsub.8h	v17, v17, v25
-sqsub.8h	v22, v29, v21
-sqadd.8h	v29, v29, v21
-sqadd.8h	v25, v19, v27
-sqsub.8h	v19, v19, v27
-smull.4s	v4, v3, v0[4]
-smlsl.4s	v4, v2, v0[5]
-smull2.4s	v5, v3, v0[4]
-smlsl2.4s	v5, v2, v0[5]
-smull.4s	v6, v3, v0[5]
-smlal.4s	v6, v2, v0[4]
-smull2.4s	v7, v3, v0[5]
-smlal2.4s	v7, v2, v0[4]
-smull.4s	v2, v19, v0[5]
-smlal.4s	v2, v24, v0[4]
-smull2.4s	v3, v19, v0[5]
-smlal2.4s	v3, v24, v0[4]
-sqrshrn.4h	v21, v4, #12
-sqrshrn2.8h	v21, v5, #12
-sqrshrn.4h	v27, v6, #12
-sqrshrn2.8h	v27, v7, #12
-neg.4s	v2, v2
-neg.4s	v3, v3
-smull.4s	v4, v19, v0[4]
-smlsl.4s	v4, v24, v0[5]
-smull2.4s	v5, v19, v0[4]
-smlsl2.4s	v5, v24, v0[5]
-smull.4s	v6, v22, v0[6]
-smlsl.4s	v6, v18, v0[7]
-smull2.4s	v7, v22, v0[6]
-smlsl2.4s	v7, v18, v0[7]
-sqrshrn.4h	v19, v2, #12
-sqrshrn2.8h	v19, v3, #12
-sqrshrn.4h	v24, v4, #12
-sqrshrn2.8h	v24, v5, #12
-smull.4s	v2, v22, v0[7]
-smlal.4s	v2, v18, v0[6]
-smull2.4s	v3, v22, v0[7]
-smlal2.4s	v3, v18, v0[6]
-smull.4s	v4, v17, v0[7]
-smlal.4s	v4, v20, v0[6]
-smull2.4s	v5, v17, v0[7]
-smlal2.4s	v5, v20, v0[6]
-sqrshrn.4h	v22, v6, #12
-sqrshrn2.8h	v22, v7, #12
-sqrshrn.4h	v18, v2, #12
-sqrshrn2.8h	v18, v3, #12
-neg.4s	v4, v4
-neg.4s	v5, v5
-smull.4s	v6, v17, v0[6]
-smlsl.4s	v6, v20, v0[7]
-smull2.4s	v7, v17, v0[6]
-smlsl2.4s	v7, v20, v0[7]
-sqrshrn.4h	v17, v4, #12
-sqrshrn2.8h	v17, v5, #12
-sqrshrn.4h	v20, v6, #12
-sqrshrn2.8h	v20, v7, #12
-sqsub.8h	v2, v27, v24
-sqadd.8h	v27, v27, v24
-sqsub.8h	v3, v21, v19
-sqadd.8h	v21, v21, v19
-sqsub.8h	v24, v16, v28
-sqadd.8h	v16, v16, v28
-sqsub.8h	v19, v30, v23
-sqadd.8h	v30, v30, v23
-sqsub.8h	v28, v17, v22
-sqadd.8h	v17, v17, v22
-sqadd.8h	v23, v26, v29
-sqsub.8h	v26, v26, v29
-sqadd.8h	v22, v20, v18
-sqsub.8h	v20, v20, v18
-sqsub.8h	v29, v31, v25
-sqadd.8h	v31, v31, v25
-smull.4s	v4, v2, v0[2]
-smlsl.4s	v4, v3, v0[3]
-smull2.4s	v5, v2, v0[2]
-smlsl2.4s	v5, v3, v0[3]
-smull.4s	v6, v2, v0[3]
-smlal.4s	v6, v3, v0[2]
-smull2.4s	v7, v2, v0[3]
-smlal2.4s	v7, v3, v0[2]
-smull.4s	v2, v29, v0[2]
-smlsl.4s	v2, v24, v0[3]
-smull2.4s	v3, v29, v0[2]
-smlsl2.4s	v3, v24, v0[3]
-sqrshrn.4h	v18, v4, #12
-sqrshrn2.8h	v18, v5, #12
-sqrshrn.4h	v25, v6, #12
-sqrshrn2.8h	v25, v7, #12
-smull.4s	v4, v29, v0[3]
-smlal.4s	v4, v24, v0[2]
-smull2.4s	v5, v29, v0[3]
-smlal2.4s	v5, v24, v0[2]
-smull.4s	v6, v26, v0[3]
-smlal.4s	v6, v19, v0[2]
-smull2.4s	v7, v26, v0[3]
-smlal2.4s	v7, v19, v0[2]
-sqrshrn.4h	v29, v2, #12
-sqrshrn2.8h	v29, v3, #12
-sqrshrn.4h	v24, v4, #12
-sqrshrn2.8h	v24, v5, #12
-neg.4s	v6, v6
-neg.4s	v7, v7
-smull.4s	v2, v26, v0[2]
-smlsl.4s	v2, v19, v0[3]
-smull2.4s	v3, v26, v0[2]
-smlsl2.4s	v3, v19, v0[3]
-smull.4s	v4, v20, v0[3]
-smlal.4s	v4, v28, v0[2]
-smull2.4s	v5, v20, v0[3]
-smlal2.4s	v5, v28, v0[2]
-sqrshrn.4h	v26, v6, #12
-sqrshrn2.8h	v26, v7, #12
-sqrshrn.4h	v19, v2, #12
-sqrshrn2.8h	v19, v3, #12
-neg.4s	v4, v4
-neg.4s	v5, v5
-smull.4s	v6, v20, v0[2]
-smlsl.4s	v6, v28, v0[3]
-smull2.4s	v7, v20, v0[2]
-smlsl2.4s	v7, v28, v0[3]
-sqrshrn.4h	v20, v4, #12
-sqrshrn2.8h	v20, v5, #12
-sqrshrn.4h	v28, v6, #12
-sqrshrn2.8h	v28, v7, #12
-sqsub.8h	v2, v16, v30
-sqadd.8h	v16, v16, v30
-sqsub.8h	v3, v31, v23
-sqadd.8h	v31, v31, v23
-sqsub.8h	v23, v21, v17
-sqadd.8h	v17, v21, v17
-sqadd.8h	v30, v27, v22
-sqsub.8h	v21, v27, v22
-sqsub.8h	v27, v18, v20
-sqadd.8h	v18, v18, v20
-sqadd.8h	v4, v29, v26
-sqsub.8h	v26, v29, v26
-sqadd.8h	v29, v25, v28
-sqsub.8h	v25, v25, v28
-sqadd.8h	v28, v24, v19
-sqsub.8h	v24, v24, v19
-mov.16b	v19, v4
-smull.4s	v4, v24, v0[0]
-smlsl.4s	v4, v26, v0[0]
-smull2.4s	v5, v24, v0[0]
-smlsl2.4s	v5, v26, v0[0]
-smull.4s	v6, v24, v0[0]
-smlal.4s	v6, v26, v0[0]
-smull2.4s	v7, v24, v0[0]
-smlal2.4s	v7, v26, v0[0]
-sqrshrn.4h	v20, v4, #12
-sqrshrn2.8h	v20, v5, #12
-sqrshrn.4h	v22, v6, #12
-sqrshrn2.8h	v22, v7, #12
-smull.4s	v4, v25, v0[0]
-smlal.4s	v4, v27, v0[0]
-smull2.4s	v5, v25, v0[0]
-smlal2.4s	v5, v27, v0[0]
-smull.4s	v6, v25, v0[0]
-smlsl.4s	v6, v27, v0[0]
-smull2.4s	v7, v25, v0[0]
-smlsl2.4s	v7, v27, v0[0]
-mov.16b	v27, v22
-sqrshrn.4h	v26, v4, #12
-sqrshrn2.8h	v26, v5, #12
-smull.4s	v24, v21, v0[0]
-smlsl.4s	v24, v23, v0[0]
-smull2.4s	v25, v21, v0[0]
-smlsl2.4s	v25, v23, v0[0]
-smull.4s	v4, v21, v0[0]
-smlal.4s	v4, v23, v0[0]
-smull2.4s	v5, v21, v0[0]
-smlal2.4s	v5, v23, v0[0]
-sqrshrn.4h	v21, v6, #12
-sqrshrn2.8h	v21, v7, #12
-sqrshrn.4h	v22, v24, #12
-sqrshrn2.8h	v22, v25, #12
-sqrshrn.4h	v25, v4, #12
-sqrshrn2.8h	v25, v5, #12
-smull.4s	v4, v3, v0[0]
-smlsl.4s	v4, v2, v0[0]
-smull2.4s	v5, v3, v0[0]
-smlsl2.4s	v5, v2, v0[0]
-smull.4s	v6, v3, v0[0]
-smlal.4s	v6, v2, v0[0]
-smull2.4s	v7, v3, v0[0]
-smlal2.4s	v7, v2, v0[0]
-sqrshrn.4h	v23, v4, #12
-sqrshrn2.8h	v23, v5, #12
-sqrshrn.4h	v24, v6, #12
-sqrshrn2.8h	v24, v7, #12
+inv_dct32_odd_8h_x16_neon:
+adrp	x16, idct_coeffs+32
+add	x16, x16, :lo12:idct_coeffs+32
+ld1	{ v0.8h, v1.8h }, [x16]
+sub	x16, x16, #0x20
+smull	v2.4s, v16.4h, v0.h[0]
+smlsl	v2.4s, v31.4h, v0.h[1]
+smull2	v3.4s, v16.8h, v0.h[0]
+smlsl2	v3.4s, v31.8h, v0.h[1]
+smull	v4.4s, v16.4h, v0.h[1]
+smlal	v4.4s, v31.4h, v0.h[0]
+smull2	v5.4s, v16.8h, v0.h[1]
+smlal2	v5.4s, v31.8h, v0.h[0]
+smull	v6.4s, v24.4h, v0.h[2]
+smlsl	v6.4s, v23.4h, v0.h[3]
+smull2	v7.4s, v24.8h, v0.h[2]
+smlsl2	v7.4s, v23.8h, v0.h[3]
+sqrshrn	v16.4h, v2.4s, #0xc
+sqrshrn2	v16.8h, v3.4s, #0xc
+sqrshrn	v31.4h, v4.4s, #0xc
+sqrshrn2	v31.8h, v5.4s, #0xc
+smull	v2.4s, v24.4h, v0.h[3]
+smlal	v2.4s, v23.4h, v0.h[2]
+smull2	v3.4s, v24.8h, v0.h[3]
+smlal2	v3.4s, v23.8h, v0.h[2]
+smull	v4.4s, v20.4h, v0.h[4]
+smlsl	v4.4s, v27.4h, v0.h[5]
+smull2	v5.4s, v20.8h, v0.h[4]
+smlsl2	v5.4s, v27.8h, v0.h[5]
+sqrshrn	v24.4h, v6.4s, #0xc
+sqrshrn2	v24.8h, v7.4s, #0xc
+sqrshrn	v23.4h, v2.4s, #0xc
+sqrshrn2	v23.8h, v3.4s, #0xc
+smull	v6.4s, v20.4h, v0.h[5]
+smlal	v6.4s, v27.4h, v0.h[4]
+smull2	v7.4s, v20.8h, v0.h[5]
+smlal2	v7.4s, v27.8h, v0.h[4]
+smull	v2.4s, v28.4h, v0.h[6]
+smlsl	v2.4s, v19.4h, v0.h[7]
+smull2	v3.4s, v28.8h, v0.h[6]
+smlsl2	v3.4s, v19.8h, v0.h[7]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn2	v20.8h, v5.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn2	v27.8h, v7.4s, #0xc
+smull	v4.4s, v28.4h, v0.h[7]
+smlal	v4.4s, v19.4h, v0.h[6]
+smull2	v5.4s, v28.8h, v0.h[7]
+smlal2	v5.4s, v19.8h, v0.h[6]
+smull	v6.4s, v18.4h, v1.h[0]
+smlsl	v6.4s, v29.4h, v1.h[1]
+smull2	v7.4s, v18.8h, v1.h[0]
+smlsl2	v7.4s, v29.8h, v1.h[1]
+sqrshrn	v28.4h, v2.4s, #0xc
+sqrshrn2	v28.8h, v3.4s, #0xc
+sqrshrn	v19.4h, v4.4s, #0xc
+sqrshrn2	v19.8h, v5.4s, #0xc
+smull	v2.4s, v18.4h, v1.h[1]
+smlal	v2.4s, v29.4h, v1.h[0]
+smull2	v3.4s, v18.8h, v1.h[1]
+smlal2	v3.4s, v29.8h, v1.h[0]
+smull	v4.4s, v26.4h, v1.h[2]
+smlsl	v4.4s, v21.4h, v1.h[3]
+smull2	v5.4s, v26.8h, v1.h[2]
+smlsl2	v5.4s, v21.8h, v1.h[3]
+sqrshrn	v18.4h, v6.4s, #0xc
+sqrshrn2	v18.8h, v7.4s, #0xc
+sqrshrn	v29.4h, v2.4s, #0xc
+sqrshrn2	v29.8h, v3.4s, #0xc
+smull	v6.4s, v26.4h, v1.h[3]
+smlal	v6.4s, v21.4h, v1.h[2]
+smull2	v7.4s, v26.8h, v1.h[3]
+smlal2	v7.4s, v21.8h, v1.h[2]
+smull	v2.4s, v22.4h, v1.h[4]
+smlsl	v2.4s, v25.4h, v1.h[5]
+smull2	v3.4s, v22.8h, v1.h[4]
+smlsl2	v3.4s, v25.8h, v1.h[5]
+sqrshrn	v26.4h, v4.4s, #0xc
+sqrshrn2	v26.8h, v5.4s, #0xc
+sqrshrn	v21.4h, v6.4s, #0xc
+sqrshrn2	v21.8h, v7.4s, #0xc
+smull	v4.4s, v22.4h, v1.h[5]
+smlal	v4.4s, v25.4h, v1.h[4]
+smull2	v5.4s, v22.8h, v1.h[5]
+smlal2	v5.4s, v25.8h, v1.h[4]
+smull	v6.4s, v30.4h, v1.h[6]
+smlsl	v6.4s, v17.4h, v1.h[7]
+smull2	v7.4s, v30.8h, v1.h[6]
+smlsl2	v7.4s, v17.8h, v1.h[7]
+sqrshrn	v22.4h, v2.4s, #0xc
+sqrshrn2	v22.8h, v3.4s, #0xc
+sqrshrn	v25.4h, v4.4s, #0xc
+sqrshrn2	v25.8h, v5.4s, #0xc
+smull	v2.4s, v30.4h, v1.h[7]
+smlal	v2.4s, v17.4h, v1.h[6]
+smull2	v3.4s, v30.8h, v1.h[7]
+smlal2	v3.4s, v17.8h, v1.h[6]
+sqrshrn	v30.4h, v6.4s, #0xc
+sqrshrn2	v30.8h, v7.4s, #0xc
+sqrshrn	v17.4h, v2.4s, #0xc
+sqrshrn2	v17.8h, v3.4s, #0xc
+ld1	{ v0.8h }, [x16]
+sqsub	v2.8h, v16.8h, v24.8h
+sqadd	v16.8h, v16.8h, v24.8h
+sqsub	v3.8h, v31.8h, v23.8h
+sqadd	v31.8h, v31.8h, v23.8h
+sqsub	v24.8h, v28.8h, v20.8h
+sqadd	v28.8h, v28.8h, v20.8h
+sqadd	v23.8h, v18.8h, v26.8h
+sqsub	v18.8h, v18.8h, v26.8h
+sqsub	v20.8h, v30.8h, v22.8h
+sqadd	v30.8h, v30.8h, v22.8h
+sqadd	v26.8h, v17.8h, v25.8h
+sqsub	v17.8h, v17.8h, v25.8h
+sqsub	v22.8h, v29.8h, v21.8h
+sqadd	v29.8h, v29.8h, v21.8h
+sqadd	v25.8h, v19.8h, v27.8h
+sqsub	v19.8h, v19.8h, v27.8h
+smull	v4.4s, v3.4h, v0.h[4]
+smlsl	v4.4s, v2.4h, v0.h[5]
+smull2	v5.4s, v3.8h, v0.h[4]
+smlsl2	v5.4s, v2.8h, v0.h[5]
+smull	v6.4s, v3.4h, v0.h[5]
+smlal	v6.4s, v2.4h, v0.h[4]
+smull2	v7.4s, v3.8h, v0.h[5]
+smlal2	v7.4s, v2.8h, v0.h[4]
+smull	v2.4s, v19.4h, v0.h[5]
+smlal	v2.4s, v24.4h, v0.h[4]
+smull2	v3.4s, v19.8h, v0.h[5]
+smlal2	v3.4s, v24.8h, v0.h[4]
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn2	v21.8h, v5.4s, #0xc
+sqrshrn	v27.4h, v6.4s, #0xc
+sqrshrn2	v27.8h, v7.4s, #0xc
+neg	v2.4s, v2.4s
+neg	v3.4s, v3.4s
+smull	v4.4s, v19.4h, v0.h[4]
+smlsl	v4.4s, v24.4h, v0.h[5]
+smull2	v5.4s, v19.8h, v0.h[4]
+smlsl2	v5.4s, v24.8h, v0.h[5]
+smull	v6.4s, v22.4h, v0.h[6]
+smlsl	v6.4s, v18.4h, v0.h[7]
+smull2	v7.4s, v22.8h, v0.h[6]
+smlsl2	v7.4s, v18.8h, v0.h[7]
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn2	v19.8h, v3.4s, #0xc
+sqrshrn	v24.4h, v4.4s, #0xc
+sqrshrn2	v24.8h, v5.4s, #0xc
+smull	v2.4s, v22.4h, v0.h[7]
+smlal	v2.4s, v18.4h, v0.h[6]
+smull2	v3.4s, v22.8h, v0.h[7]
+smlal2	v3.4s, v18.8h, v0.h[6]
+smull	v4.4s, v17.4h, v0.h[7]
+smlal	v4.4s, v20.4h, v0.h[6]
+smull2	v5.4s, v17.8h, v0.h[7]
+smlal2	v5.4s, v20.8h, v0.h[6]
+sqrshrn	v22.4h, v6.4s, #0xc
+sqrshrn2	v22.8h, v7.4s, #0xc
+sqrshrn	v18.4h, v2.4s, #0xc
+sqrshrn2	v18.8h, v3.4s, #0xc
+neg	v4.4s, v4.4s
+neg	v5.4s, v5.4s
+smull	v6.4s, v17.4h, v0.h[6]
+smlsl	v6.4s, v20.4h, v0.h[7]
+smull2	v7.4s, v17.8h, v0.h[6]
+smlsl2	v7.4s, v20.8h, v0.h[7]
+sqrshrn	v17.4h, v4.4s, #0xc
+sqrshrn2	v17.8h, v5.4s, #0xc
+sqrshrn	v20.4h, v6.4s, #0xc
+sqrshrn2	v20.8h, v7.4s, #0xc
+sqsub	v2.8h, v27.8h, v24.8h
+sqadd	v27.8h, v27.8h, v24.8h
+sqsub	v3.8h, v21.8h, v19.8h
+sqadd	v21.8h, v21.8h, v19.8h
+sqsub	v24.8h, v16.8h, v28.8h
+sqadd	v16.8h, v16.8h, v28.8h
+sqsub	v19.8h, v30.8h, v23.8h
+sqadd	v30.8h, v30.8h, v23.8h
+sqsub	v28.8h, v17.8h, v22.8h
+sqadd	v17.8h, v17.8h, v22.8h
+sqadd	v23.8h, v26.8h, v29.8h
+sqsub	v26.8h, v26.8h, v29.8h
+sqadd	v22.8h, v20.8h, v18.8h
+sqsub	v20.8h, v20.8h, v18.8h
+sqsub	v29.8h, v31.8h, v25.8h
+sqadd	v31.8h, v31.8h, v25.8h
+smull	v4.4s, v2.4h, v0.h[2]
+smlsl	v4.4s, v3.4h, v0.h[3]
+smull2	v5.4s, v2.8h, v0.h[2]
+smlsl2	v5.4s, v3.8h, v0.h[3]
+smull	v6.4s, v2.4h, v0.h[3]
+smlal	v6.4s, v3.4h, v0.h[2]
+smull2	v7.4s, v2.8h, v0.h[3]
+smlal2	v7.4s, v3.8h, v0.h[2]
+smull	v2.4s, v29.4h, v0.h[2]
+smlsl	v2.4s, v24.4h, v0.h[3]
+smull2	v3.4s, v29.8h, v0.h[2]
+smlsl2	v3.4s, v24.8h, v0.h[3]
+sqrshrn	v18.4h, v4.4s, #0xc
+sqrshrn2	v18.8h, v5.4s, #0xc
+sqrshrn	v25.4h, v6.4s, #0xc
+sqrshrn2	v25.8h, v7.4s, #0xc
+smull	v4.4s, v29.4h, v0.h[3]
+smlal	v4.4s, v24.4h, v0.h[2]
+smull2	v5.4s, v29.8h, v0.h[3]
+smlal2	v5.4s, v24.8h, v0.h[2]
+smull	v6.4s, v26.4h, v0.h[3]
+smlal	v6.4s, v19.4h, v0.h[2]
+smull2	v7.4s, v26.8h, v0.h[3]
+smlal2	v7.4s, v19.8h, v0.h[2]
+sqrshrn	v29.4h, v2.4s, #0xc
+sqrshrn2	v29.8h, v3.4s, #0xc
+sqrshrn	v24.4h, v4.4s, #0xc
+sqrshrn2	v24.8h, v5.4s, #0xc
+neg	v6.4s, v6.4s
+neg	v7.4s, v7.4s
+smull	v2.4s, v26.4h, v0.h[2]
+smlsl	v2.4s, v19.4h, v0.h[3]
+smull2	v3.4s, v26.8h, v0.h[2]
+smlsl2	v3.4s, v19.8h, v0.h[3]
+smull	v4.4s, v20.4h, v0.h[3]
+smlal	v4.4s, v28.4h, v0.h[2]
+smull2	v5.4s, v20.8h, v0.h[3]
+smlal2	v5.4s, v28.8h, v0.h[2]
+sqrshrn	v26.4h, v6.4s, #0xc
+sqrshrn2	v26.8h, v7.4s, #0xc
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn2	v19.8h, v3.4s, #0xc
+neg	v4.4s, v4.4s
+neg	v5.4s, v5.4s
+smull	v6.4s, v20.4h, v0.h[2]
+smlsl	v6.4s, v28.4h, v0.h[3]
+smull2	v7.4s, v20.8h, v0.h[2]
+smlsl2	v7.4s, v28.8h, v0.h[3]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn2	v20.8h, v5.4s, #0xc
+sqrshrn	v28.4h, v6.4s, #0xc
+sqrshrn2	v28.8h, v7.4s, #0xc
+sqsub	v2.8h, v16.8h, v30.8h
+sqadd	v16.8h, v16.8h, v30.8h
+sqsub	v3.8h, v31.8h, v23.8h
+sqadd	v31.8h, v31.8h, v23.8h
+sqsub	v23.8h, v21.8h, v17.8h
+sqadd	v17.8h, v21.8h, v17.8h
+sqadd	v30.8h, v27.8h, v22.8h
+sqsub	v21.8h, v27.8h, v22.8h
+sqsub	v27.8h, v18.8h, v20.8h
+sqadd	v18.8h, v18.8h, v20.8h
+sqadd	v4.8h, v29.8h, v26.8h
+sqsub	v26.8h, v29.8h, v26.8h
+sqadd	v29.8h, v25.8h, v28.8h
+sqsub	v25.8h, v25.8h, v28.8h
+sqadd	v28.8h, v24.8h, v19.8h
+sqsub	v24.8h, v24.8h, v19.8h
+mov	v19.16b, v4.16b
+smull	v4.4s, v24.4h, v0.h[0]
+smlsl	v4.4s, v26.4h, v0.h[0]
+smull2	v5.4s, v24.8h, v0.h[0]
+smlsl2	v5.4s, v26.8h, v0.h[0]
+smull	v6.4s, v24.4h, v0.h[0]
+smlal	v6.4s, v26.4h, v0.h[0]
+smull2	v7.4s, v24.8h, v0.h[0]
+smlal2	v7.4s, v26.8h, v0.h[0]
+sqrshrn	v20.4h, v4.4s, #0xc
+sqrshrn2	v20.8h, v5.4s, #0xc
+sqrshrn	v22.4h, v6.4s, #0xc
+sqrshrn2	v22.8h, v7.4s, #0xc
+smull	v4.4s, v25.4h, v0.h[0]
+smlal	v4.4s, v27.4h, v0.h[0]
+smull2	v5.4s, v25.8h, v0.h[0]
+smlal2	v5.4s, v27.8h, v0.h[0]
+smull	v6.4s, v25.4h, v0.h[0]
+smlsl	v6.4s, v27.4h, v0.h[0]
+smull2	v7.4s, v25.8h, v0.h[0]
+smlsl2	v7.4s, v27.8h, v0.h[0]
+mov	v27.16b, v22.16b
+sqrshrn	v26.4h, v4.4s, #0xc
+sqrshrn2	v26.8h, v5.4s, #0xc
+smull	v24.4s, v21.4h, v0.h[0]
+smlsl	v24.4s, v23.4h, v0.h[0]
+smull2	v25.4s, v21.8h, v0.h[0]
+smlsl2	v25.4s, v23.8h, v0.h[0]
+smull	v4.4s, v21.4h, v0.h[0]
+smlal	v4.4s, v23.4h, v0.h[0]
+smull2	v5.4s, v21.8h, v0.h[0]
+smlal2	v5.4s, v23.8h, v0.h[0]
+sqrshrn	v21.4h, v6.4s, #0xc
+sqrshrn2	v21.8h, v7.4s, #0xc
+sqrshrn	v22.4h, v24.4s, #0xc
+sqrshrn2	v22.8h, v25.4s, #0xc
+sqrshrn	v25.4h, v4.4s, #0xc
+sqrshrn2	v25.8h, v5.4s, #0xc
+smull	v4.4s, v3.4h, v0.h[0]
+smlsl	v4.4s, v2.4h, v0.h[0]
+smull2	v5.4s, v3.8h, v0.h[0]
+smlsl2	v5.4s, v2.8h, v0.h[0]
+smull	v6.4s, v3.4h, v0.h[0]
+smlal	v6.4s, v2.4h, v0.h[0]
+smull2	v7.4s, v3.8h, v0.h[0]
+smlal2	v7.4s, v2.8h, v0.h[0]
+sqrshrn	v23.4h, v4.4s, #0xc
+sqrshrn2	v23.8h, v5.4s, #0xc
+sqrshrn	v24.4h, v6.4s, #0xc
+sqrshrn2	v24.8h, v7.4s, #0xc
 ret
-_inv_txfm_horz_dct_32x8_neon:
+inv_txfm_horz_dct_32x8_neon:
 mov	x14, x30
-movi.8h	v7, #0
+movi	v7.8h, #0x0
 lsl	x8, x8, #1
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v24 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v25 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v26 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v27 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v28 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v29 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v30 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v31 }, [x7]
-st1.8h	{ v7 }, [x7], x8
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v24.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v25.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v26.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v27.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v28.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v29.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v30.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v31.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
 sub	x7, x7, x8, lsl #4
 add	x7, x7, x8, lsr #1
 bl	inv_dct_8h_x16_neon
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
-trn1.8h	v4, v24, v25
-trn2.8h	v5, v24, v25
-trn1.8h	v25, v26, v27
-trn2.8h	v27, v26, v27
-trn1.8h	v24, v28, v29
-trn2.8h	v29, v28, v29
-trn1.8h	v26, v30, v31
-trn2.8h	v31, v30, v31
-trn1.4s	v28, v24, v26
-trn2.4s	v26, v24, v26
-trn1.4s	v30, v29, v31
-trn2.4s	v31, v29, v31
-trn1.4s	v29, v5, v27
-trn2.4s	v5, v5, v27
-trn1.4s	v27, v4, v25
-trn2.4s	v4, v4, v25
-trn1.2d	v24, v27, v28
-trn2.2d	v28, v27, v28
-trn1.2d	v25, v29, v30
-trn2.2d	v29, v29, v30
-trn2.2d	v30, v4, v26
-trn1.2d	v26, v4, v26
-trn1.2d	v27, v5, v31
-trn2.2d	v31, v5, v31
-st1.8h	{ v16 }, [x6], #16
-st1.8h	{ v24 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v17 }, [x6], #16
-st1.8h	{ v25 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v18 }, [x6], #16
-st1.8h	{ v26 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v19 }, [x6], #16
-st1.8h	{ v27 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v20 }, [x6], #16
-st1.8h	{ v28 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v21 }, [x6], #16
-st1.8h	{ v29 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v22 }, [x6], #16
-st1.8h	{ v30 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v23 }, [x6], #16
-st1.8h	{ v31 }, [x6], #16
-add	x6, x6, #32
-sub	x6, x6, #512
-movi.8h	v7, #0
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v24 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v25 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v26 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v27 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v28 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v29 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v30 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v31 }, [x7]
-st1.8h	{ v7 }, [x7], x8
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
+trn1	v4.8h, v24.8h, v25.8h
+trn2	v5.8h, v24.8h, v25.8h
+trn1	v25.8h, v26.8h, v27.8h
+trn2	v27.8h, v26.8h, v27.8h
+trn1	v24.8h, v28.8h, v29.8h
+trn2	v29.8h, v28.8h, v29.8h
+trn1	v26.8h, v30.8h, v31.8h
+trn2	v31.8h, v30.8h, v31.8h
+trn1	v28.4s, v24.4s, v26.4s
+trn2	v26.4s, v24.4s, v26.4s
+trn1	v30.4s, v29.4s, v31.4s
+trn2	v31.4s, v29.4s, v31.4s
+trn1	v29.4s, v5.4s, v27.4s
+trn2	v5.4s, v5.4s, v27.4s
+trn1	v27.4s, v4.4s, v25.4s
+trn2	v4.4s, v4.4s, v25.4s
+trn1	v24.2d, v27.2d, v28.2d
+trn2	v28.2d, v27.2d, v28.2d
+trn1	v25.2d, v29.2d, v30.2d
+trn2	v29.2d, v29.2d, v30.2d
+trn2	v30.2d, v4.2d, v26.2d
+trn1	v26.2d, v4.2d, v26.2d
+trn1	v27.2d, v5.2d, v31.2d
+trn2	v31.2d, v5.2d, v31.2d
+st1	{ v16.8h }, [x6], #16
+st1	{ v24.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v17.8h }, [x6], #16
+st1	{ v25.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v18.8h }, [x6], #16
+st1	{ v26.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v19.8h }, [x6], #16
+st1	{ v27.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v20.8h }, [x6], #16
+st1	{ v28.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v21.8h }, [x6], #16
+st1	{ v29.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v22.8h }, [x6], #16
+st1	{ v30.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v23.8h }, [x6], #16
+st1	{ v31.8h }, [x6], #16
+add	x6, x6, #0x20
+sub	x6, x6, #0x200
+movi	v7.8h, #0x0
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v24.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v25.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v26.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v27.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v28.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v29.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v30.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v31.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
 bl	inv_dct32_odd_8h_x16_neon
-trn1.8h	v4, v31, v30
-trn2.8h	v5, v31, v30
-trn1.8h	v30, v29, v28
-trn2.8h	v28, v29, v28
-trn1.8h	v31, v27, v26
-trn2.8h	v26, v27, v26
-trn1.8h	v29, v25, v24
-trn2.8h	v24, v25, v24
-trn1.4s	v27, v31, v29
-trn2.4s	v29, v31, v29
-trn1.4s	v25, v26, v24
-trn2.4s	v24, v26, v24
-trn1.4s	v26, v5, v28
-trn2.4s	v5, v5, v28
-trn1.4s	v28, v4, v30
-trn2.4s	v4, v4, v30
-trn1.2d	v31, v28, v27
-trn2.2d	v27, v28, v27
-trn1.2d	v30, v26, v25
-trn2.2d	v26, v26, v25
-trn2.2d	v25, v4, v29
-trn1.2d	v29, v4, v29
-trn1.2d	v28, v5, v24
-trn2.2d	v24, v5, v24
-trn1.8h	v4, v23, v22
-trn2.8h	v5, v23, v22
-trn1.8h	v22, v21, v20
-trn2.8h	v20, v21, v20
-trn1.8h	v23, v19, v18
-trn2.8h	v18, v19, v18
-trn1.8h	v21, v17, v16
-trn2.8h	v16, v17, v16
-trn1.4s	v19, v23, v21
-trn2.4s	v21, v23, v21
-trn1.4s	v17, v18, v16
-trn2.4s	v16, v18, v16
-trn1.4s	v18, v5, v20
-trn2.4s	v5, v5, v20
-trn1.4s	v20, v4, v22
-trn2.4s	v4, v4, v22
-trn1.2d	v23, v20, v19
-trn2.2d	v19, v20, v19
-trn1.2d	v22, v18, v17
-trn2.2d	v18, v18, v17
-trn2.2d	v17, v4, v21
-trn1.2d	v21, v4, v21
-trn1.2d	v20, v5, v16
-trn2.2d	v16, v5, v16
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v31
-sqsub.8h	v6, v5, v23
-sqadd.8h	v4, v4, v31
-sqadd.8h	v5, v5, v23
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #2
-srshr.8h	v5, v5, #2
-srshr.8h	v6, v6, #2
-srshr.8h	v7, v7, #2
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v30
-sqsub.8h	v6, v5, v22
-sqadd.8h	v4, v4, v30
-sqadd.8h	v5, v5, v22
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #2
-srshr.8h	v5, v5, #2
-srshr.8h	v6, v6, #2
-srshr.8h	v7, v7, #2
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v29
-sqsub.8h	v6, v5, v21
-sqadd.8h	v4, v4, v29
-sqadd.8h	v5, v5, v21
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #2
-srshr.8h	v5, v5, #2
-srshr.8h	v6, v6, #2
-srshr.8h	v7, v7, #2
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v28
-sqsub.8h	v6, v5, v20
-sqadd.8h	v4, v4, v28
-sqadd.8h	v5, v5, v20
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #2
-srshr.8h	v5, v5, #2
-srshr.8h	v6, v6, #2
-srshr.8h	v7, v7, #2
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v27
-sqsub.8h	v6, v5, v19
-sqadd.8h	v4, v4, v27
-sqadd.8h	v5, v5, v19
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #2
-srshr.8h	v5, v5, #2
-srshr.8h	v6, v6, #2
-srshr.8h	v7, v7, #2
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v26
-sqsub.8h	v6, v5, v18
-sqadd.8h	v4, v4, v26
-sqadd.8h	v5, v5, v18
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #2
-srshr.8h	v5, v5, #2
-srshr.8h	v6, v6, #2
-srshr.8h	v7, v7, #2
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v25
-sqsub.8h	v6, v5, v17
-sqadd.8h	v4, v4, v25
-sqadd.8h	v5, v5, v17
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #2
-srshr.8h	v5, v5, #2
-srshr.8h	v6, v6, #2
-srshr.8h	v7, v7, #2
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v24
-sqsub.8h	v6, v5, v16
-sqadd.8h	v4, v4, v24
-sqadd.8h	v5, v5, v16
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #2
-srshr.8h	v5, v5, #2
-srshr.8h	v6, v6, #2
-srshr.8h	v7, v7, #2
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
+trn1	v4.8h, v31.8h, v30.8h
+trn2	v5.8h, v31.8h, v30.8h
+trn1	v30.8h, v29.8h, v28.8h
+trn2	v28.8h, v29.8h, v28.8h
+trn1	v31.8h, v27.8h, v26.8h
+trn2	v26.8h, v27.8h, v26.8h
+trn1	v29.8h, v25.8h, v24.8h
+trn2	v24.8h, v25.8h, v24.8h
+trn1	v27.4s, v31.4s, v29.4s
+trn2	v29.4s, v31.4s, v29.4s
+trn1	v25.4s, v26.4s, v24.4s
+trn2	v24.4s, v26.4s, v24.4s
+trn1	v26.4s, v5.4s, v28.4s
+trn2	v5.4s, v5.4s, v28.4s
+trn1	v28.4s, v4.4s, v30.4s
+trn2	v4.4s, v4.4s, v30.4s
+trn1	v31.2d, v28.2d, v27.2d
+trn2	v27.2d, v28.2d, v27.2d
+trn1	v30.2d, v26.2d, v25.2d
+trn2	v26.2d, v26.2d, v25.2d
+trn2	v25.2d, v4.2d, v29.2d
+trn1	v29.2d, v4.2d, v29.2d
+trn1	v28.2d, v5.2d, v24.2d
+trn2	v24.2d, v5.2d, v24.2d
+trn1	v4.8h, v23.8h, v22.8h
+trn2	v5.8h, v23.8h, v22.8h
+trn1	v22.8h, v21.8h, v20.8h
+trn2	v20.8h, v21.8h, v20.8h
+trn1	v23.8h, v19.8h, v18.8h
+trn2	v18.8h, v19.8h, v18.8h
+trn1	v21.8h, v17.8h, v16.8h
+trn2	v16.8h, v17.8h, v16.8h
+trn1	v19.4s, v23.4s, v21.4s
+trn2	v21.4s, v23.4s, v21.4s
+trn1	v17.4s, v18.4s, v16.4s
+trn2	v16.4s, v18.4s, v16.4s
+trn1	v18.4s, v5.4s, v20.4s
+trn2	v5.4s, v5.4s, v20.4s
+trn1	v20.4s, v4.4s, v22.4s
+trn2	v4.4s, v4.4s, v22.4s
+trn1	v23.2d, v20.2d, v19.2d
+trn2	v19.2d, v20.2d, v19.2d
+trn1	v22.2d, v18.2d, v17.2d
+trn2	v18.2d, v18.2d, v17.2d
+trn2	v17.2d, v4.2d, v21.2d
+trn1	v21.2d, v4.2d, v21.2d
+trn1	v20.2d, v5.2d, v16.2d
+trn2	v16.2d, v5.2d, v16.2d
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v31.8h
+sqsub	v6.8h, v5.8h, v23.8h
+sqadd	v4.8h, v4.8h, v31.8h
+sqadd	v5.8h, v5.8h, v23.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x2
+srshr	v5.8h, v5.8h, #0x2
+srshr	v6.8h, v6.8h, #0x2
+srshr	v7.8h, v7.8h, #0x2
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v30.8h
+sqsub	v6.8h, v5.8h, v22.8h
+sqadd	v4.8h, v4.8h, v30.8h
+sqadd	v5.8h, v5.8h, v22.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x2
+srshr	v5.8h, v5.8h, #0x2
+srshr	v6.8h, v6.8h, #0x2
+srshr	v7.8h, v7.8h, #0x2
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v29.8h
+sqsub	v6.8h, v5.8h, v21.8h
+sqadd	v4.8h, v4.8h, v29.8h
+sqadd	v5.8h, v5.8h, v21.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x2
+srshr	v5.8h, v5.8h, #0x2
+srshr	v6.8h, v6.8h, #0x2
+srshr	v7.8h, v7.8h, #0x2
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v28.8h
+sqsub	v6.8h, v5.8h, v20.8h
+sqadd	v4.8h, v4.8h, v28.8h
+sqadd	v5.8h, v5.8h, v20.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x2
+srshr	v5.8h, v5.8h, #0x2
+srshr	v6.8h, v6.8h, #0x2
+srshr	v7.8h, v7.8h, #0x2
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v27.8h
+sqsub	v6.8h, v5.8h, v19.8h
+sqadd	v4.8h, v4.8h, v27.8h
+sqadd	v5.8h, v5.8h, v19.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x2
+srshr	v5.8h, v5.8h, #0x2
+srshr	v6.8h, v6.8h, #0x2
+srshr	v7.8h, v7.8h, #0x2
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v26.8h
+sqsub	v6.8h, v5.8h, v18.8h
+sqadd	v4.8h, v4.8h, v26.8h
+sqadd	v5.8h, v5.8h, v18.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x2
+srshr	v5.8h, v5.8h, #0x2
+srshr	v6.8h, v6.8h, #0x2
+srshr	v7.8h, v7.8h, #0x2
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v25.8h
+sqsub	v6.8h, v5.8h, v17.8h
+sqadd	v4.8h, v4.8h, v25.8h
+sqadd	v5.8h, v5.8h, v17.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x2
+srshr	v5.8h, v5.8h, #0x2
+srshr	v6.8h, v6.8h, #0x2
+srshr	v7.8h, v7.8h, #0x2
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v24.8h
+sqsub	v6.8h, v5.8h, v16.8h
+sqadd	v4.8h, v4.8h, v24.8h
+sqadd	v5.8h, v5.8h, v16.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x2
+srshr	v5.8h, v5.8h, #0x2
+srshr	v6.8h, v6.8h, #0x2
+srshr	v7.8h, v7.8h, #0x2
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
 ret	x14
-_inv_txfm_horz_scale_dct_32x8_neon:
+inv_txfm_horz_scale_dct_32x8_neon:
 mov	x14, x30
-movi.8h	v7, #0
+movi	v7.8h, #0x0
 lsl	x8, x8, #1
-mov	w16, #23168
-dup.4h	v0, w16
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v24 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v25 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v26 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v27 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v28 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v29 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v30 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v31 }, [x7]
-st1.8h	{ v7 }, [x7], x8
+mov	w16, #0x5a80
+dup	v0.4h, w16
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v24.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v25.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v26.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v27.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v28.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v29.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v30.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v31.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
 sub	x7, x7, x8, lsl #4
 add	x7, x7, x8, lsr #1
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
-sqrdmulh.8h	v24, v24, v0[0]
-sqrdmulh.8h	v25, v25, v0[0]
-sqrdmulh.8h	v26, v26, v0[0]
-sqrdmulh.8h	v27, v27, v0[0]
-sqrdmulh.8h	v28, v28, v0[0]
-sqrdmulh.8h	v29, v29, v0[0]
-sqrdmulh.8h	v30, v30, v0[0]
-sqrdmulh.8h	v31, v31, v0[0]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
+sqrdmulh	v24.8h, v24.8h, v0.h[0]
+sqrdmulh	v25.8h, v25.8h, v0.h[0]
+sqrdmulh	v26.8h, v26.8h, v0.h[0]
+sqrdmulh	v27.8h, v27.8h, v0.h[0]
+sqrdmulh	v28.8h, v28.8h, v0.h[0]
+sqrdmulh	v29.8h, v29.8h, v0.h[0]
+sqrdmulh	v30.8h, v30.8h, v0.h[0]
+sqrdmulh	v31.8h, v31.8h, v0.h[0]
 bl	inv_dct_8h_x16_neon
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
-trn1.8h	v4, v24, v25
-trn2.8h	v5, v24, v25
-trn1.8h	v25, v26, v27
-trn2.8h	v27, v26, v27
-trn1.8h	v24, v28, v29
-trn2.8h	v29, v28, v29
-trn1.8h	v26, v30, v31
-trn2.8h	v31, v30, v31
-trn1.4s	v28, v24, v26
-trn2.4s	v26, v24, v26
-trn1.4s	v30, v29, v31
-trn2.4s	v31, v29, v31
-trn1.4s	v29, v5, v27
-trn2.4s	v5, v5, v27
-trn1.4s	v27, v4, v25
-trn2.4s	v4, v4, v25
-trn1.2d	v24, v27, v28
-trn2.2d	v28, v27, v28
-trn1.2d	v25, v29, v30
-trn2.2d	v29, v29, v30
-trn2.2d	v30, v4, v26
-trn1.2d	v26, v4, v26
-trn1.2d	v27, v5, v31
-trn2.2d	v31, v5, v31
-st1.8h	{ v16 }, [x6], #16
-st1.8h	{ v24 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v17 }, [x6], #16
-st1.8h	{ v25 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v18 }, [x6], #16
-st1.8h	{ v26 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v19 }, [x6], #16
-st1.8h	{ v27 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v20 }, [x6], #16
-st1.8h	{ v28 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v21 }, [x6], #16
-st1.8h	{ v29 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v22 }, [x6], #16
-st1.8h	{ v30 }, [x6], #16
-add	x6, x6, #32
-st1.8h	{ v23 }, [x6], #16
-st1.8h	{ v31 }, [x6], #16
-add	x6, x6, #32
-sub	x6, x6, #512
-movi.8h	v7, #0
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v24 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v25 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v26 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v27 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v28 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v29 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v30 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v31 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-sqrdmulh.8h	v16, v16, v0[1]
-sqrdmulh.8h	v17, v17, v0[1]
-sqrdmulh.8h	v18, v18, v0[1]
-sqrdmulh.8h	v19, v19, v0[1]
-sqrdmulh.8h	v20, v20, v0[1]
-sqrdmulh.8h	v21, v21, v0[1]
-sqrdmulh.8h	v22, v22, v0[1]
-sqrdmulh.8h	v23, v23, v0[1]
-sqrdmulh.8h	v24, v24, v0[1]
-sqrdmulh.8h	v25, v25, v0[1]
-sqrdmulh.8h	v26, v26, v0[1]
-sqrdmulh.8h	v27, v27, v0[1]
-sqrdmulh.8h	v28, v28, v0[1]
-sqrdmulh.8h	v29, v29, v0[1]
-sqrdmulh.8h	v30, v30, v0[1]
-sqrdmulh.8h	v31, v31, v0[1]
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
+trn1	v4.8h, v24.8h, v25.8h
+trn2	v5.8h, v24.8h, v25.8h
+trn1	v25.8h, v26.8h, v27.8h
+trn2	v27.8h, v26.8h, v27.8h
+trn1	v24.8h, v28.8h, v29.8h
+trn2	v29.8h, v28.8h, v29.8h
+trn1	v26.8h, v30.8h, v31.8h
+trn2	v31.8h, v30.8h, v31.8h
+trn1	v28.4s, v24.4s, v26.4s
+trn2	v26.4s, v24.4s, v26.4s
+trn1	v30.4s, v29.4s, v31.4s
+trn2	v31.4s, v29.4s, v31.4s
+trn1	v29.4s, v5.4s, v27.4s
+trn2	v5.4s, v5.4s, v27.4s
+trn1	v27.4s, v4.4s, v25.4s
+trn2	v4.4s, v4.4s, v25.4s
+trn1	v24.2d, v27.2d, v28.2d
+trn2	v28.2d, v27.2d, v28.2d
+trn1	v25.2d, v29.2d, v30.2d
+trn2	v29.2d, v29.2d, v30.2d
+trn2	v30.2d, v4.2d, v26.2d
+trn1	v26.2d, v4.2d, v26.2d
+trn1	v27.2d, v5.2d, v31.2d
+trn2	v31.2d, v5.2d, v31.2d
+st1	{ v16.8h }, [x6], #16
+st1	{ v24.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v17.8h }, [x6], #16
+st1	{ v25.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v18.8h }, [x6], #16
+st1	{ v26.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v19.8h }, [x6], #16
+st1	{ v27.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v20.8h }, [x6], #16
+st1	{ v28.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v21.8h }, [x6], #16
+st1	{ v29.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v22.8h }, [x6], #16
+st1	{ v30.8h }, [x6], #16
+add	x6, x6, #0x20
+st1	{ v23.8h }, [x6], #16
+st1	{ v31.8h }, [x6], #16
+add	x6, x6, #0x20
+sub	x6, x6, #0x200
+movi	v7.8h, #0x0
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v24.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v25.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v26.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v27.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v28.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v29.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v30.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v31.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+sqrdmulh	v16.8h, v16.8h, v0.h[1]
+sqrdmulh	v17.8h, v17.8h, v0.h[1]
+sqrdmulh	v18.8h, v18.8h, v0.h[1]
+sqrdmulh	v19.8h, v19.8h, v0.h[1]
+sqrdmulh	v20.8h, v20.8h, v0.h[1]
+sqrdmulh	v21.8h, v21.8h, v0.h[1]
+sqrdmulh	v22.8h, v22.8h, v0.h[1]
+sqrdmulh	v23.8h, v23.8h, v0.h[1]
+sqrdmulh	v24.8h, v24.8h, v0.h[1]
+sqrdmulh	v25.8h, v25.8h, v0.h[1]
+sqrdmulh	v26.8h, v26.8h, v0.h[1]
+sqrdmulh	v27.8h, v27.8h, v0.h[1]
+sqrdmulh	v28.8h, v28.8h, v0.h[1]
+sqrdmulh	v29.8h, v29.8h, v0.h[1]
+sqrdmulh	v30.8h, v30.8h, v0.h[1]
+sqrdmulh	v31.8h, v31.8h, v0.h[1]
 bl	inv_dct32_odd_8h_x16_neon
-trn1.8h	v4, v31, v30
-trn2.8h	v5, v31, v30
-trn1.8h	v30, v29, v28
-trn2.8h	v28, v29, v28
-trn1.8h	v31, v27, v26
-trn2.8h	v26, v27, v26
-trn1.8h	v29, v25, v24
-trn2.8h	v24, v25, v24
-trn1.4s	v27, v31, v29
-trn2.4s	v29, v31, v29
-trn1.4s	v25, v26, v24
-trn2.4s	v24, v26, v24
-trn1.4s	v26, v5, v28
-trn2.4s	v5, v5, v28
-trn1.4s	v28, v4, v30
-trn2.4s	v4, v4, v30
-trn1.2d	v31, v28, v27
-trn2.2d	v27, v28, v27
-trn1.2d	v30, v26, v25
-trn2.2d	v26, v26, v25
-trn2.2d	v25, v4, v29
-trn1.2d	v29, v4, v29
-trn1.2d	v28, v5, v24
-trn2.2d	v24, v5, v24
-trn1.8h	v4, v23, v22
-trn2.8h	v5, v23, v22
-trn1.8h	v22, v21, v20
-trn2.8h	v20, v21, v20
-trn1.8h	v23, v19, v18
-trn2.8h	v18, v19, v18
-trn1.8h	v21, v17, v16
-trn2.8h	v16, v17, v16
-trn1.4s	v19, v23, v21
-trn2.4s	v21, v23, v21
-trn1.4s	v17, v18, v16
-trn2.4s	v16, v18, v16
-trn1.4s	v18, v5, v20
-trn2.4s	v5, v5, v20
-trn1.4s	v20, v4, v22
-trn2.4s	v4, v4, v22
-trn1.2d	v23, v20, v19
-trn2.2d	v19, v20, v19
-trn1.2d	v22, v18, v17
-trn2.2d	v18, v18, v17
-trn2.2d	v17, v4, v21
-trn1.2d	v21, v4, v21
-trn1.2d	v20, v5, v16
-trn2.2d	v16, v5, v16
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v31
-sqsub.8h	v6, v5, v23
-sqadd.8h	v4, v4, v31
-sqadd.8h	v5, v5, v23
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #1
-srshr.8h	v5, v5, #1
-srshr.8h	v6, v6, #1
-srshr.8h	v7, v7, #1
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v30
-sqsub.8h	v6, v5, v22
-sqadd.8h	v4, v4, v30
-sqadd.8h	v5, v5, v22
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #1
-srshr.8h	v5, v5, #1
-srshr.8h	v6, v6, #1
-srshr.8h	v7, v7, #1
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v29
-sqsub.8h	v6, v5, v21
-sqadd.8h	v4, v4, v29
-sqadd.8h	v5, v5, v21
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #1
-srshr.8h	v5, v5, #1
-srshr.8h	v6, v6, #1
-srshr.8h	v7, v7, #1
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v28
-sqsub.8h	v6, v5, v20
-sqadd.8h	v4, v4, v28
-sqadd.8h	v5, v5, v20
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #1
-srshr.8h	v5, v5, #1
-srshr.8h	v6, v6, #1
-srshr.8h	v7, v7, #1
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v27
-sqsub.8h	v6, v5, v19
-sqadd.8h	v4, v4, v27
-sqadd.8h	v5, v5, v19
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #1
-srshr.8h	v5, v5, #1
-srshr.8h	v6, v6, #1
-srshr.8h	v7, v7, #1
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v26
-sqsub.8h	v6, v5, v18
-sqadd.8h	v4, v4, v26
-sqadd.8h	v5, v5, v18
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #1
-srshr.8h	v5, v5, #1
-srshr.8h	v6, v6, #1
-srshr.8h	v7, v7, #1
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v25
-sqsub.8h	v6, v5, v17
-sqadd.8h	v4, v4, v25
-sqadd.8h	v5, v5, v17
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #1
-srshr.8h	v5, v5, #1
-srshr.8h	v6, v6, #1
-srshr.8h	v7, v7, #1
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
-ld1.8h	{ v4, v5 }, [x6]
-sqsub.8h	v7, v4, v24
-sqsub.8h	v6, v5, v16
-sqadd.8h	v4, v4, v24
-sqadd.8h	v5, v5, v16
-rev64.8h	v6, v6
-rev64.8h	v7, v7
-srshr.8h	v4, v4, #1
-srshr.8h	v5, v5, #1
-srshr.8h	v6, v6, #1
-srshr.8h	v7, v7, #1
-ext.16b	v6, v6, v6, #8
-st1.8h	{ v4, v5 }, [x6], #32
-ext.16b	v7, v7, v7, #8
-st1.8h	{ v6, v7 }, [x6], #32
+trn1	v4.8h, v31.8h, v30.8h
+trn2	v5.8h, v31.8h, v30.8h
+trn1	v30.8h, v29.8h, v28.8h
+trn2	v28.8h, v29.8h, v28.8h
+trn1	v31.8h, v27.8h, v26.8h
+trn2	v26.8h, v27.8h, v26.8h
+trn1	v29.8h, v25.8h, v24.8h
+trn2	v24.8h, v25.8h, v24.8h
+trn1	v27.4s, v31.4s, v29.4s
+trn2	v29.4s, v31.4s, v29.4s
+trn1	v25.4s, v26.4s, v24.4s
+trn2	v24.4s, v26.4s, v24.4s
+trn1	v26.4s, v5.4s, v28.4s
+trn2	v5.4s, v5.4s, v28.4s
+trn1	v28.4s, v4.4s, v30.4s
+trn2	v4.4s, v4.4s, v30.4s
+trn1	v31.2d, v28.2d, v27.2d
+trn2	v27.2d, v28.2d, v27.2d
+trn1	v30.2d, v26.2d, v25.2d
+trn2	v26.2d, v26.2d, v25.2d
+trn2	v25.2d, v4.2d, v29.2d
+trn1	v29.2d, v4.2d, v29.2d
+trn1	v28.2d, v5.2d, v24.2d
+trn2	v24.2d, v5.2d, v24.2d
+trn1	v4.8h, v23.8h, v22.8h
+trn2	v5.8h, v23.8h, v22.8h
+trn1	v22.8h, v21.8h, v20.8h
+trn2	v20.8h, v21.8h, v20.8h
+trn1	v23.8h, v19.8h, v18.8h
+trn2	v18.8h, v19.8h, v18.8h
+trn1	v21.8h, v17.8h, v16.8h
+trn2	v16.8h, v17.8h, v16.8h
+trn1	v19.4s, v23.4s, v21.4s
+trn2	v21.4s, v23.4s, v21.4s
+trn1	v17.4s, v18.4s, v16.4s
+trn2	v16.4s, v18.4s, v16.4s
+trn1	v18.4s, v5.4s, v20.4s
+trn2	v5.4s, v5.4s, v20.4s
+trn1	v20.4s, v4.4s, v22.4s
+trn2	v4.4s, v4.4s, v22.4s
+trn1	v23.2d, v20.2d, v19.2d
+trn2	v19.2d, v20.2d, v19.2d
+trn1	v22.2d, v18.2d, v17.2d
+trn2	v18.2d, v18.2d, v17.2d
+trn2	v17.2d, v4.2d, v21.2d
+trn1	v21.2d, v4.2d, v21.2d
+trn1	v20.2d, v5.2d, v16.2d
+trn2	v16.2d, v5.2d, v16.2d
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v31.8h
+sqsub	v6.8h, v5.8h, v23.8h
+sqadd	v4.8h, v4.8h, v31.8h
+sqadd	v5.8h, v5.8h, v23.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x1
+srshr	v5.8h, v5.8h, #0x1
+srshr	v6.8h, v6.8h, #0x1
+srshr	v7.8h, v7.8h, #0x1
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v30.8h
+sqsub	v6.8h, v5.8h, v22.8h
+sqadd	v4.8h, v4.8h, v30.8h
+sqadd	v5.8h, v5.8h, v22.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x1
+srshr	v5.8h, v5.8h, #0x1
+srshr	v6.8h, v6.8h, #0x1
+srshr	v7.8h, v7.8h, #0x1
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v29.8h
+sqsub	v6.8h, v5.8h, v21.8h
+sqadd	v4.8h, v4.8h, v29.8h
+sqadd	v5.8h, v5.8h, v21.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x1
+srshr	v5.8h, v5.8h, #0x1
+srshr	v6.8h, v6.8h, #0x1
+srshr	v7.8h, v7.8h, #0x1
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v28.8h
+sqsub	v6.8h, v5.8h, v20.8h
+sqadd	v4.8h, v4.8h, v28.8h
+sqadd	v5.8h, v5.8h, v20.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x1
+srshr	v5.8h, v5.8h, #0x1
+srshr	v6.8h, v6.8h, #0x1
+srshr	v7.8h, v7.8h, #0x1
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v27.8h
+sqsub	v6.8h, v5.8h, v19.8h
+sqadd	v4.8h, v4.8h, v27.8h
+sqadd	v5.8h, v5.8h, v19.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x1
+srshr	v5.8h, v5.8h, #0x1
+srshr	v6.8h, v6.8h, #0x1
+srshr	v7.8h, v7.8h, #0x1
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v26.8h
+sqsub	v6.8h, v5.8h, v18.8h
+sqadd	v4.8h, v4.8h, v26.8h
+sqadd	v5.8h, v5.8h, v18.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x1
+srshr	v5.8h, v5.8h, #0x1
+srshr	v6.8h, v6.8h, #0x1
+srshr	v7.8h, v7.8h, #0x1
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v25.8h
+sqsub	v6.8h, v5.8h, v17.8h
+sqadd	v4.8h, v4.8h, v25.8h
+sqadd	v5.8h, v5.8h, v17.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x1
+srshr	v5.8h, v5.8h, #0x1
+srshr	v6.8h, v6.8h, #0x1
+srshr	v7.8h, v7.8h, #0x1
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
+ld1	{ v4.8h, v5.8h }, [x6]
+sqsub	v7.8h, v4.8h, v24.8h
+sqsub	v6.8h, v5.8h, v16.8h
+sqadd	v4.8h, v4.8h, v24.8h
+sqadd	v5.8h, v5.8h, v16.8h
+rev64	v6.8h, v6.8h
+rev64	v7.8h, v7.8h
+srshr	v4.8h, v4.8h, #0x1
+srshr	v5.8h, v5.8h, #0x1
+srshr	v6.8h, v6.8h, #0x1
+srshr	v7.8h, v7.8h, #0x1
+ext	v6.16b, v6.16b, v6.16b, #0x8
+st1	{ v4.8h, v5.8h }, [x6], #32
+ext	v7.16b, v7.16b, v7.16b, #0x8
+st1	{ v6.8h, v7.8h }, [x6], #32
 ret	x14
-_inv_txfm_add_vert_dct_8x32_neon:
+inv_txfm_add_vert_dct_8x32_neon:
 mov	x14, x30
 lsl	x8, x8, #1
-ld1.8h	{ v16 }, [x7], x8
-ld1.8h	{ v17 }, [x7], x8
-ld1.8h	{ v18 }, [x7], x8
-ld1.8h	{ v19 }, [x7], x8
-ld1.8h	{ v20 }, [x7], x8
-ld1.8h	{ v21 }, [x7], x8
-ld1.8h	{ v22 }, [x7], x8
-ld1.8h	{ v23 }, [x7], x8
-ld1.8h	{ v24 }, [x7], x8
-ld1.8h	{ v25 }, [x7], x8
-ld1.8h	{ v26 }, [x7], x8
-ld1.8h	{ v27 }, [x7], x8
-ld1.8h	{ v28 }, [x7], x8
-ld1.8h	{ v29 }, [x7], x8
-ld1.8h	{ v30 }, [x7], x8
-ld1.8h	{ v31 }, [x7], x8
+ld1	{ v16.8h }, [x7], x8
+ld1	{ v17.8h }, [x7], x8
+ld1	{ v18.8h }, [x7], x8
+ld1	{ v19.8h }, [x7], x8
+ld1	{ v20.8h }, [x7], x8
+ld1	{ v21.8h }, [x7], x8
+ld1	{ v22.8h }, [x7], x8
+ld1	{ v23.8h }, [x7], x8
+ld1	{ v24.8h }, [x7], x8
+ld1	{ v25.8h }, [x7], x8
+ld1	{ v26.8h }, [x7], x8
+ld1	{ v27.8h }, [x7], x8
+ld1	{ v28.8h }, [x7], x8
+ld1	{ v29.8h }, [x7], x8
+ld1	{ v30.8h }, [x7], x8
+ld1	{ v31.8h }, [x7], x8
 sub	x7, x7, x8, lsl #4
 bl	inv_dct_8h_x16_neon
-st1.8h	{ v16 }, [x7], x8
-st1.8h	{ v17 }, [x7], x8
-st1.8h	{ v18 }, [x7], x8
-st1.8h	{ v19 }, [x7], x8
-st1.8h	{ v20 }, [x7], x8
-st1.8h	{ v21 }, [x7], x8
-st1.8h	{ v22 }, [x7], x8
-st1.8h	{ v23 }, [x7], x8
-st1.8h	{ v24 }, [x7], x8
-st1.8h	{ v25 }, [x7], x8
-st1.8h	{ v26 }, [x7], x8
-st1.8h	{ v27 }, [x7], x8
-st1.8h	{ v28 }, [x7], x8
-st1.8h	{ v29 }, [x7], x8
-st1.8h	{ v30 }, [x7], x8
-st1.8h	{ v31 }, [x7], x8
+st1	{ v16.8h }, [x7], x8
+st1	{ v17.8h }, [x7], x8
+st1	{ v18.8h }, [x7], x8
+st1	{ v19.8h }, [x7], x8
+st1	{ v20.8h }, [x7], x8
+st1	{ v21.8h }, [x7], x8
+st1	{ v22.8h }, [x7], x8
+st1	{ v23.8h }, [x7], x8
+st1	{ v24.8h }, [x7], x8
+st1	{ v25.8h }, [x7], x8
+st1	{ v26.8h }, [x7], x8
+st1	{ v27.8h }, [x7], x8
+st1	{ v28.8h }, [x7], x8
+st1	{ v29.8h }, [x7], x8
+st1	{ v30.8h }, [x7], x8
+st1	{ v31.8h }, [x7], x8
 sub	x7, x7, x8, lsl #4
 add	x7, x7, x8, lsr #1
-ld1.8h	{ v16 }, [x7], x8
-ld1.8h	{ v17 }, [x7], x8
-ld1.8h	{ v18 }, [x7], x8
-ld1.8h	{ v19 }, [x7], x8
-ld1.8h	{ v20 }, [x7], x8
-ld1.8h	{ v21 }, [x7], x8
-ld1.8h	{ v22 }, [x7], x8
-ld1.8h	{ v23 }, [x7], x8
-ld1.8h	{ v24 }, [x7], x8
-ld1.8h	{ v25 }, [x7], x8
-ld1.8h	{ v26 }, [x7], x8
-ld1.8h	{ v27 }, [x7], x8
-ld1.8h	{ v28 }, [x7], x8
-ld1.8h	{ v29 }, [x7], x8
-ld1.8h	{ v30 }, [x7], x8
-ld1.8h	{ v31 }, [x7], x8
+ld1	{ v16.8h }, [x7], x8
+ld1	{ v17.8h }, [x7], x8
+ld1	{ v18.8h }, [x7], x8
+ld1	{ v19.8h }, [x7], x8
+ld1	{ v20.8h }, [x7], x8
+ld1	{ v21.8h }, [x7], x8
+ld1	{ v22.8h }, [x7], x8
+ld1	{ v23.8h }, [x7], x8
+ld1	{ v24.8h }, [x7], x8
+ld1	{ v25.8h }, [x7], x8
+ld1	{ v26.8h }, [x7], x8
+ld1	{ v27.8h }, [x7], x8
+ld1	{ v28.8h }, [x7], x8
+ld1	{ v29.8h }, [x7], x8
+ld1	{ v30.8h }, [x7], x8
+ld1	{ v31.8h }, [x7], x8
 sub	x7, x7, x8, lsl #4
 sub	x7, x7, x8, lsr #1
 bl	inv_dct32_odd_8h_x16_neon
 neg	x9, x8
 mov	x10, x6
-ld1.8h	{ v5 }, [x7], x8
-ld1.8b	{ v2 }, [x10], x1
-ld1.8h	{ v6 }, [x7], x8
-ld1.8b	{ v3 }, [x10], x1
-sqadd.8h	v5, v5, v31
-ld1.8h	{ v7 }, [x7], x8
-ld1.8b	{ v4 }, [x10], x1
-srshr.8h	v5, v5, #4
-sqadd.8h	v6, v6, v30
-uaddw.8h	v5, v5, v2
-srshr.8h	v6, v6, #4
-sqadd.8h	v7, v7, v29
-sqxtun.8b	v2, v5
-ld1.8h	{ v5 }, [x7], x8
-uaddw.8h	v6, v6, v3
-srshr.8h	v7, v7, #4
-sqadd.8h	v5, v5, v28
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v2 }, [x10], x1
-sqxtun.8b	v3, v6
-uaddw.8h	v7, v7, v4
-srshr.8h	v5, v5, #4
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v4, v7
-uaddw.8h	v5, v5, v2
-st1.8b	{ v4 }, [x6], x1
-sqxtun.8b	v2, v5
-st1.8b	{ v2 }, [x6], x1
-ld1.8h	{ v5 }, [x7], x8
-ld1.8b	{ v2 }, [x10], x1
-ld1.8h	{ v6 }, [x7], x8
-ld1.8b	{ v3 }, [x10], x1
-sqadd.8h	v5, v5, v27
-ld1.8h	{ v7 }, [x7], x8
-ld1.8b	{ v4 }, [x10], x1
-srshr.8h	v5, v5, #4
-sqadd.8h	v6, v6, v26
-uaddw.8h	v5, v5, v2
-srshr.8h	v6, v6, #4
-sqadd.8h	v7, v7, v25
-sqxtun.8b	v2, v5
-ld1.8h	{ v5 }, [x7], x8
-uaddw.8h	v6, v6, v3
-srshr.8h	v7, v7, #4
-sqadd.8h	v5, v5, v24
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v2 }, [x10], x1
-sqxtun.8b	v3, v6
-uaddw.8h	v7, v7, v4
-srshr.8h	v5, v5, #4
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v4, v7
-uaddw.8h	v5, v5, v2
-st1.8b	{ v4 }, [x6], x1
-sqxtun.8b	v2, v5
-st1.8b	{ v2 }, [x6], x1
-ld1.8h	{ v5 }, [x7], x8
-ld1.8b	{ v2 }, [x10], x1
-ld1.8h	{ v6 }, [x7], x8
-ld1.8b	{ v3 }, [x10], x1
-sqadd.8h	v5, v5, v23
-ld1.8h	{ v7 }, [x7], x8
-ld1.8b	{ v4 }, [x10], x1
-srshr.8h	v5, v5, #4
-sqadd.8h	v6, v6, v22
-uaddw.8h	v5, v5, v2
-srshr.8h	v6, v6, #4
-sqadd.8h	v7, v7, v21
-sqxtun.8b	v2, v5
-ld1.8h	{ v5 }, [x7], x8
-uaddw.8h	v6, v6, v3
-srshr.8h	v7, v7, #4
-sqadd.8h	v5, v5, v20
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v2 }, [x10], x1
-sqxtun.8b	v3, v6
-uaddw.8h	v7, v7, v4
-srshr.8h	v5, v5, #4
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v4, v7
-uaddw.8h	v5, v5, v2
-st1.8b	{ v4 }, [x6], x1
-sqxtun.8b	v2, v5
-st1.8b	{ v2 }, [x6], x1
-ld1.8h	{ v5 }, [x7], x8
-ld1.8b	{ v2 }, [x10], x1
-ld1.8h	{ v6 }, [x7], x8
-ld1.8b	{ v3 }, [x10], x1
-sqadd.8h	v5, v5, v19
-ld1.8h	{ v7 }, [x7], x8
-ld1.8b	{ v4 }, [x10], x1
-srshr.8h	v5, v5, #4
-sqadd.8h	v6, v6, v18
-uaddw.8h	v5, v5, v2
-srshr.8h	v6, v6, #4
-sqadd.8h	v7, v7, v17
-sqxtun.8b	v2, v5
-ld1.8h	{ v5 }, [x7], x8
-uaddw.8h	v6, v6, v3
-srshr.8h	v7, v7, #4
-sqadd.8h	v5, v5, v16
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v2 }, [x10], x1
-sqxtun.8b	v3, v6
-uaddw.8h	v7, v7, v4
-srshr.8h	v5, v5, #4
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v4, v7
-uaddw.8h	v5, v5, v2
-st1.8b	{ v4 }, [x6], x1
-sqxtun.8b	v2, v5
-st1.8b	{ v2 }, [x6], x1
+ld1	{ v5.8h }, [x7], x8
+ld1	{ v2.8b }, [x10], x1
+ld1	{ v6.8h }, [x7], x8
+ld1	{ v3.8b }, [x10], x1
+sqadd	v5.8h, v5.8h, v31.8h
+ld1	{ v7.8h }, [x7], x8
+ld1	{ v4.8b }, [x10], x1
+srshr	v5.8h, v5.8h, #0x4
+sqadd	v6.8h, v6.8h, v30.8h
+uaddw	v5.8h, v5.8h, v2.8b
+srshr	v6.8h, v6.8h, #0x4
+sqadd	v7.8h, v7.8h, v29.8h
+sqxtun	v2.8b, v5.8h
+ld1	{ v5.8h }, [x7], x8
+uaddw	v6.8h, v6.8h, v3.8b
+srshr	v7.8h, v7.8h, #0x4
+sqadd	v5.8h, v5.8h, v28.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v2.8b }, [x10], x1
+sqxtun	v3.8b, v6.8h
+uaddw	v7.8h, v7.8h, v4.8b
+srshr	v5.8h, v5.8h, #0x4
+st1	{ v3.8b }, [x6], x1
+sqxtun	v4.8b, v7.8h
+uaddw	v5.8h, v5.8h, v2.8b
+st1	{ v4.8b }, [x6], x1
+sqxtun	v2.8b, v5.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v5.8h }, [x7], x8
+ld1	{ v2.8b }, [x10], x1
+ld1	{ v6.8h }, [x7], x8
+ld1	{ v3.8b }, [x10], x1
+sqadd	v5.8h, v5.8h, v27.8h
+ld1	{ v7.8h }, [x7], x8
+ld1	{ v4.8b }, [x10], x1
+srshr	v5.8h, v5.8h, #0x4
+sqadd	v6.8h, v6.8h, v26.8h
+uaddw	v5.8h, v5.8h, v2.8b
+srshr	v6.8h, v6.8h, #0x4
+sqadd	v7.8h, v7.8h, v25.8h
+sqxtun	v2.8b, v5.8h
+ld1	{ v5.8h }, [x7], x8
+uaddw	v6.8h, v6.8h, v3.8b
+srshr	v7.8h, v7.8h, #0x4
+sqadd	v5.8h, v5.8h, v24.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v2.8b }, [x10], x1
+sqxtun	v3.8b, v6.8h
+uaddw	v7.8h, v7.8h, v4.8b
+srshr	v5.8h, v5.8h, #0x4
+st1	{ v3.8b }, [x6], x1
+sqxtun	v4.8b, v7.8h
+uaddw	v5.8h, v5.8h, v2.8b
+st1	{ v4.8b }, [x6], x1
+sqxtun	v2.8b, v5.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v5.8h }, [x7], x8
+ld1	{ v2.8b }, [x10], x1
+ld1	{ v6.8h }, [x7], x8
+ld1	{ v3.8b }, [x10], x1
+sqadd	v5.8h, v5.8h, v23.8h
+ld1	{ v7.8h }, [x7], x8
+ld1	{ v4.8b }, [x10], x1
+srshr	v5.8h, v5.8h, #0x4
+sqadd	v6.8h, v6.8h, v22.8h
+uaddw	v5.8h, v5.8h, v2.8b
+srshr	v6.8h, v6.8h, #0x4
+sqadd	v7.8h, v7.8h, v21.8h
+sqxtun	v2.8b, v5.8h
+ld1	{ v5.8h }, [x7], x8
+uaddw	v6.8h, v6.8h, v3.8b
+srshr	v7.8h, v7.8h, #0x4
+sqadd	v5.8h, v5.8h, v20.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v2.8b }, [x10], x1
+sqxtun	v3.8b, v6.8h
+uaddw	v7.8h, v7.8h, v4.8b
+srshr	v5.8h, v5.8h, #0x4
+st1	{ v3.8b }, [x6], x1
+sqxtun	v4.8b, v7.8h
+uaddw	v5.8h, v5.8h, v2.8b
+st1	{ v4.8b }, [x6], x1
+sqxtun	v2.8b, v5.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v5.8h }, [x7], x8
+ld1	{ v2.8b }, [x10], x1
+ld1	{ v6.8h }, [x7], x8
+ld1	{ v3.8b }, [x10], x1
+sqadd	v5.8h, v5.8h, v19.8h
+ld1	{ v7.8h }, [x7], x8
+ld1	{ v4.8b }, [x10], x1
+srshr	v5.8h, v5.8h, #0x4
+sqadd	v6.8h, v6.8h, v18.8h
+uaddw	v5.8h, v5.8h, v2.8b
+srshr	v6.8h, v6.8h, #0x4
+sqadd	v7.8h, v7.8h, v17.8h
+sqxtun	v2.8b, v5.8h
+ld1	{ v5.8h }, [x7], x8
+uaddw	v6.8h, v6.8h, v3.8b
+srshr	v7.8h, v7.8h, #0x4
+sqadd	v5.8h, v5.8h, v16.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v2.8b }, [x10], x1
+sqxtun	v3.8b, v6.8h
+uaddw	v7.8h, v7.8h, v4.8b
+srshr	v5.8h, v5.8h, #0x4
+st1	{ v3.8b }, [x6], x1
+sqxtun	v4.8b, v7.8h
+uaddw	v5.8h, v5.8h, v2.8b
+st1	{ v4.8b }, [x6], x1
+sqxtun	v2.8b, v5.8h
+st1	{ v2.8b }, [x6], x1
 sub	x7, x7, x8
-ld1.8h	{ v5 }, [x7], x9
-ld1.8b	{ v2 }, [x10], x1
-ld1.8h	{ v6 }, [x7], x9
-ld1.8b	{ v3 }, [x10], x1
-sqsub.8h	v5, v5, v16
-ld1.8h	{ v7 }, [x7], x9
-ld1.8b	{ v4 }, [x10], x1
-srshr.8h	v5, v5, #4
-sqsub.8h	v6, v6, v17
-uaddw.8h	v5, v5, v2
-srshr.8h	v6, v6, #4
-sqsub.8h	v7, v7, v18
-sqxtun.8b	v2, v5
-ld1.8h	{ v5 }, [x7], x9
-uaddw.8h	v6, v6, v3
-srshr.8h	v7, v7, #4
-sqsub.8h	v5, v5, v19
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v2 }, [x10], x1
-sqxtun.8b	v3, v6
-uaddw.8h	v7, v7, v4
-srshr.8h	v5, v5, #4
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v4, v7
-uaddw.8h	v5, v5, v2
-st1.8b	{ v4 }, [x6], x1
-sqxtun.8b	v2, v5
-st1.8b	{ v2 }, [x6], x1
-ld1.8h	{ v5 }, [x7], x9
-ld1.8b	{ v2 }, [x10], x1
-ld1.8h	{ v6 }, [x7], x9
-ld1.8b	{ v3 }, [x10], x1
-sqsub.8h	v5, v5, v20
-ld1.8h	{ v7 }, [x7], x9
-ld1.8b	{ v4 }, [x10], x1
-srshr.8h	v5, v5, #4
-sqsub.8h	v6, v6, v21
-uaddw.8h	v5, v5, v2
-srshr.8h	v6, v6, #4
-sqsub.8h	v7, v7, v22
-sqxtun.8b	v2, v5
-ld1.8h	{ v5 }, [x7], x9
-uaddw.8h	v6, v6, v3
-srshr.8h	v7, v7, #4
-sqsub.8h	v5, v5, v23
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v2 }, [x10], x1
-sqxtun.8b	v3, v6
-uaddw.8h	v7, v7, v4
-srshr.8h	v5, v5, #4
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v4, v7
-uaddw.8h	v5, v5, v2
-st1.8b	{ v4 }, [x6], x1
-sqxtun.8b	v2, v5
-st1.8b	{ v2 }, [x6], x1
-ld1.8h	{ v5 }, [x7], x9
-ld1.8b	{ v2 }, [x10], x1
-ld1.8h	{ v6 }, [x7], x9
-ld1.8b	{ v3 }, [x10], x1
-sqsub.8h	v5, v5, v24
-ld1.8h	{ v7 }, [x7], x9
-ld1.8b	{ v4 }, [x10], x1
-srshr.8h	v5, v5, #4
-sqsub.8h	v6, v6, v25
-uaddw.8h	v5, v5, v2
-srshr.8h	v6, v6, #4
-sqsub.8h	v7, v7, v26
-sqxtun.8b	v2, v5
-ld1.8h	{ v5 }, [x7], x9
-uaddw.8h	v6, v6, v3
-srshr.8h	v7, v7, #4
-sqsub.8h	v5, v5, v27
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v2 }, [x10], x1
-sqxtun.8b	v3, v6
-uaddw.8h	v7, v7, v4
-srshr.8h	v5, v5, #4
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v4, v7
-uaddw.8h	v5, v5, v2
-st1.8b	{ v4 }, [x6], x1
-sqxtun.8b	v2, v5
-st1.8b	{ v2 }, [x6], x1
-ld1.8h	{ v5 }, [x7], x9
-ld1.8b	{ v2 }, [x10], x1
-ld1.8h	{ v6 }, [x7], x9
-ld1.8b	{ v3 }, [x10], x1
-sqsub.8h	v5, v5, v28
-ld1.8h	{ v7 }, [x7], x9
-ld1.8b	{ v4 }, [x10], x1
-srshr.8h	v5, v5, #4
-sqsub.8h	v6, v6, v29
-uaddw.8h	v5, v5, v2
-srshr.8h	v6, v6, #4
-sqsub.8h	v7, v7, v30
-sqxtun.8b	v2, v5
-ld1.8h	{ v5 }, [x7], x9
-uaddw.8h	v6, v6, v3
-srshr.8h	v7, v7, #4
-sqsub.8h	v5, v5, v31
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v2 }, [x10], x1
-sqxtun.8b	v3, v6
-uaddw.8h	v7, v7, v4
-srshr.8h	v5, v5, #4
-st1.8b	{ v3 }, [x6], x1
-sqxtun.8b	v4, v7
-uaddw.8h	v5, v5, v2
-st1.8b	{ v4 }, [x6], x1
-sqxtun.8b	v2, v5
-st1.8b	{ v2 }, [x6], x1
+ld1	{ v5.8h }, [x7], x9
+ld1	{ v2.8b }, [x10], x1
+ld1	{ v6.8h }, [x7], x9
+ld1	{ v3.8b }, [x10], x1
+sqsub	v5.8h, v5.8h, v16.8h
+ld1	{ v7.8h }, [x7], x9
+ld1	{ v4.8b }, [x10], x1
+srshr	v5.8h, v5.8h, #0x4
+sqsub	v6.8h, v6.8h, v17.8h
+uaddw	v5.8h, v5.8h, v2.8b
+srshr	v6.8h, v6.8h, #0x4
+sqsub	v7.8h, v7.8h, v18.8h
+sqxtun	v2.8b, v5.8h
+ld1	{ v5.8h }, [x7], x9
+uaddw	v6.8h, v6.8h, v3.8b
+srshr	v7.8h, v7.8h, #0x4
+sqsub	v5.8h, v5.8h, v19.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v2.8b }, [x10], x1
+sqxtun	v3.8b, v6.8h
+uaddw	v7.8h, v7.8h, v4.8b
+srshr	v5.8h, v5.8h, #0x4
+st1	{ v3.8b }, [x6], x1
+sqxtun	v4.8b, v7.8h
+uaddw	v5.8h, v5.8h, v2.8b
+st1	{ v4.8b }, [x6], x1
+sqxtun	v2.8b, v5.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v5.8h }, [x7], x9
+ld1	{ v2.8b }, [x10], x1
+ld1	{ v6.8h }, [x7], x9
+ld1	{ v3.8b }, [x10], x1
+sqsub	v5.8h, v5.8h, v20.8h
+ld1	{ v7.8h }, [x7], x9
+ld1	{ v4.8b }, [x10], x1
+srshr	v5.8h, v5.8h, #0x4
+sqsub	v6.8h, v6.8h, v21.8h
+uaddw	v5.8h, v5.8h, v2.8b
+srshr	v6.8h, v6.8h, #0x4
+sqsub	v7.8h, v7.8h, v22.8h
+sqxtun	v2.8b, v5.8h
+ld1	{ v5.8h }, [x7], x9
+uaddw	v6.8h, v6.8h, v3.8b
+srshr	v7.8h, v7.8h, #0x4
+sqsub	v5.8h, v5.8h, v23.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v2.8b }, [x10], x1
+sqxtun	v3.8b, v6.8h
+uaddw	v7.8h, v7.8h, v4.8b
+srshr	v5.8h, v5.8h, #0x4
+st1	{ v3.8b }, [x6], x1
+sqxtun	v4.8b, v7.8h
+uaddw	v5.8h, v5.8h, v2.8b
+st1	{ v4.8b }, [x6], x1
+sqxtun	v2.8b, v5.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v5.8h }, [x7], x9
+ld1	{ v2.8b }, [x10], x1
+ld1	{ v6.8h }, [x7], x9
+ld1	{ v3.8b }, [x10], x1
+sqsub	v5.8h, v5.8h, v24.8h
+ld1	{ v7.8h }, [x7], x9
+ld1	{ v4.8b }, [x10], x1
+srshr	v5.8h, v5.8h, #0x4
+sqsub	v6.8h, v6.8h, v25.8h
+uaddw	v5.8h, v5.8h, v2.8b
+srshr	v6.8h, v6.8h, #0x4
+sqsub	v7.8h, v7.8h, v26.8h
+sqxtun	v2.8b, v5.8h
+ld1	{ v5.8h }, [x7], x9
+uaddw	v6.8h, v6.8h, v3.8b
+srshr	v7.8h, v7.8h, #0x4
+sqsub	v5.8h, v5.8h, v27.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v2.8b }, [x10], x1
+sqxtun	v3.8b, v6.8h
+uaddw	v7.8h, v7.8h, v4.8b
+srshr	v5.8h, v5.8h, #0x4
+st1	{ v3.8b }, [x6], x1
+sqxtun	v4.8b, v7.8h
+uaddw	v5.8h, v5.8h, v2.8b
+st1	{ v4.8b }, [x6], x1
+sqxtun	v2.8b, v5.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v5.8h }, [x7], x9
+ld1	{ v2.8b }, [x10], x1
+ld1	{ v6.8h }, [x7], x9
+ld1	{ v3.8b }, [x10], x1
+sqsub	v5.8h, v5.8h, v28.8h
+ld1	{ v7.8h }, [x7], x9
+ld1	{ v4.8b }, [x10], x1
+srshr	v5.8h, v5.8h, #0x4
+sqsub	v6.8h, v6.8h, v29.8h
+uaddw	v5.8h, v5.8h, v2.8b
+srshr	v6.8h, v6.8h, #0x4
+sqsub	v7.8h, v7.8h, v30.8h
+sqxtun	v2.8b, v5.8h
+ld1	{ v5.8h }, [x7], x9
+uaddw	v6.8h, v6.8h, v3.8b
+srshr	v7.8h, v7.8h, #0x4
+sqsub	v5.8h, v5.8h, v31.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v2.8b }, [x10], x1
+sqxtun	v3.8b, v6.8h
+uaddw	v7.8h, v7.8h, v4.8b
+srshr	v5.8h, v5.8h, #0x4
+st1	{ v3.8b }, [x6], x1
+sqxtun	v4.8b, v7.8h
+uaddw	v5.8h, v5.8h, v2.8b
+st1	{ v4.8b }, [x6], x1
+sqxtun	v2.8b, v5.8h
+st1	{ v2.8b }, [x6], x1
 ret	x14
-_inv_txfm_add_identity_identity_32x32_8bpc_neon:
-movi.8h	v0, #0
-adrp	x13, inv_txfm_add_identity_identity_32x32_8bpc_neon
-add	x13, x13, #0
-mov	x8, #64
-mov	w9, #0
-adrp	x12, inv_txfm_add_identity_identity_32x32_8bpc_neon
-add	x12, x12, #0
-add	w9, w9, #8
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
+inv_txfm_add_identity_identity_32x32_8bpc_neon:
+movi	v0.8h, #0x0
+adrp	x13, eob_32x32
+add	x13, x13, :lo12:eob_32x32
+mov	x8, #0x40
+L_5b58:
+mov	w9, #0x0
+adrp	x12, eob_32x32
+add	x12, x12, :lo12:eob_32x32
+L_5b64:
+add	w9, w9, #0x8
+ld1	{ v16.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v17.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v18.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v19.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v20.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v21.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v22.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v23.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
 mov	x7, x0
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #2
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #2
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #2
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #2
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #2
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #2
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #2
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #2
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x0], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x0], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x0], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-st1.8b	{ v3 }, [x0], x1
-ldrh	w11, [x12], #2
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x2
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x2
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x2
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x2
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x2
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x2
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x2
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x2
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x0], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x0], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x0], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+st1	{ v3.8b }, [x0], x1
+ldrh	w11, [x12], #0x2
 sub	x0, x0, x1, lsl #3
-add	x0, x0, #8
+add	x0, x0, #0x8
 cmp	w3, w11
-b.ge	inv_txfm_add_identity_identity_32x32_8bpc_neon
-ldrh	w11, [x13], #2
+b.ge	L_5b64
+ldrh	w11, [x13], #0x2
 cmp	w3, w11
-b.lt	inv_txfm_add_identity_identity_32x32_8bpc_neon
+b.lt	L_5ce0
 sub	x0, x0, w9, uxtw
 add	x0, x0, x1, lsl #3
 msub	x2, x8, x9, x2
-add	x2, x2, #16
-b	inv_txfm_add_identity_identity_32x32_8bpc_neon
+add	x2, x2, #0x10
+b	L_5b58
+L_5ce0:
 ret
-_inv_txfm_add_identity_identity_16x32_8bpc_neon:
-mov	w16, #23168
-mov	w17, #27152
-dup.4h	v1, w16
-movi.8h	v0, #0
-mov.h	v1[1], w17
-adrp	x13, inv_txfm_add_identity_identity_16x32_8bpc_neon
-add	x13, x13, #0
-mov	x8, #64
-mov	w9, #0
-adrp	x12, inv_txfm_add_identity_identity_16x32_8bpc_neon
-add	x12, x12, #0
-add	w9, w9, #8
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-sqrdmulh.8h	v16, v16, v1[0]
-sqrdmulh.8h	v17, v17, v1[0]
-sqrdmulh.8h	v18, v18, v1[0]
-sqrdmulh.8h	v19, v19, v1[0]
-sqrdmulh.8h	v20, v20, v1[0]
-sqrdmulh.8h	v21, v21, v1[0]
-sqrdmulh.8h	v22, v22, v1[0]
-sqrdmulh.8h	v23, v23, v1[0]
-sqrdmulh.8h	v2, v16, v1[1]
-srshr.8h	v2, v2, #1
-sqadd.8h	v16, v16, v2
-sqrdmulh.8h	v2, v17, v1[1]
-srshr.8h	v2, v2, #1
-sqadd.8h	v17, v17, v2
-sqrdmulh.8h	v2, v18, v1[1]
-srshr.8h	v2, v2, #1
-sqadd.8h	v18, v18, v2
-sqrdmulh.8h	v2, v19, v1[1]
-srshr.8h	v2, v2, #1
-sqadd.8h	v19, v19, v2
-sqrdmulh.8h	v2, v20, v1[1]
-srshr.8h	v2, v2, #1
-sqadd.8h	v20, v20, v2
-sqrdmulh.8h	v2, v21, v1[1]
-srshr.8h	v2, v2, #1
-sqadd.8h	v21, v21, v2
-sqrdmulh.8h	v2, v22, v1[1]
-srshr.8h	v2, v2, #1
-sqadd.8h	v22, v22, v2
-sqrdmulh.8h	v2, v23, v1[1]
-srshr.8h	v2, v2, #1
-sqadd.8h	v23, v23, v2
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
+inv_txfm_add_identity_identity_16x32_8bpc_neon:
+mov	w16, #0x5a80
+mov	w17, #0x6a10
+dup	v1.4h, w16
+movi	v0.8h, #0x0
+mov	v1.h[1], w17
+adrp	x13, eob_16x32
+add	x13, x13, :lo12:eob_16x32
+mov	x8, #0x40
+L_5d04:
+mov	w9, #0x0
+adrp	x12, eob_16x32_shortside
+add	x12, x12, :lo12:eob_16x32_shortside
+L_5d10:
+add	w9, w9, #0x8
+ld1	{ v16.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v17.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v18.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v19.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v20.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v21.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v22.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v23.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+sqrdmulh	v16.8h, v16.8h, v1.h[0]
+sqrdmulh	v17.8h, v17.8h, v1.h[0]
+sqrdmulh	v18.8h, v18.8h, v1.h[0]
+sqrdmulh	v19.8h, v19.8h, v1.h[0]
+sqrdmulh	v20.8h, v20.8h, v1.h[0]
+sqrdmulh	v21.8h, v21.8h, v1.h[0]
+sqrdmulh	v22.8h, v22.8h, v1.h[0]
+sqrdmulh	v23.8h, v23.8h, v1.h[0]
+sqrdmulh	v2.8h, v16.8h, v1.h[1]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v16.8h, v16.8h, v2.8h
+sqrdmulh	v2.8h, v17.8h, v1.h[1]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v17.8h, v17.8h, v2.8h
+sqrdmulh	v2.8h, v18.8h, v1.h[1]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v18.8h, v18.8h, v2.8h
+sqrdmulh	v2.8h, v19.8h, v1.h[1]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v19.8h, v19.8h, v2.8h
+sqrdmulh	v2.8h, v20.8h, v1.h[1]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v20.8h, v20.8h, v2.8h
+sqrdmulh	v2.8h, v21.8h, v1.h[1]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v21.8h, v21.8h, v2.8h
+sqrdmulh	v2.8h, v22.8h, v1.h[1]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v22.8h, v22.8h, v2.8h
+sqrdmulh	v2.8h, v23.8h, v1.h[1]
+srshr	v2.8h, v2.8h, #0x1
+sqadd	v23.8h, v23.8h, v2.8h
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
 mov	x7, x0
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #2
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #2
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #2
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #2
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #2
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #2
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #2
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #2
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x0], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x0], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x0], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-st1.8b	{ v3 }, [x0], x1
-ldrh	w11, [x12], #2
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x2
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x2
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x2
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x2
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x2
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x2
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x2
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x2
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x0], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x0], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x0], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+st1	{ v3.8b }, [x0], x1
+ldrh	w11, [x12], #0x2
 sub	x0, x0, x1, lsl #3
-add	x0, x0, #8
+add	x0, x0, #0x8
 cmp	w3, w11
-b.ge	inv_txfm_add_identity_identity_16x32_8bpc_neon
-ldrh	w11, [x13], #2
+b.ge	L_5d10
+ldrh	w11, [x13], #0x2
 cmp	w3, w11
-b.lt	inv_txfm_add_identity_identity_16x32_8bpc_neon
+b.lt	L_5f0c
 sub	x0, x0, w9, uxtw
 add	x0, x0, x1, lsl #3
 msub	x2, x8, x9, x2
-add	x2, x2, #16
-b	inv_txfm_add_identity_identity_16x32_8bpc_neon
+add	x2, x2, #0x10
+b	L_5d04
+L_5f0c:
 ret
-_inv_txfm_add_identity_identity_32x16_8bpc_neon:
-mov	w16, #23168
-mov	w17, #27152
-dup.4h	v1, w16
-movi.8h	v0, #0
-mov.h	v1[1], w17
-adrp	x13, inv_txfm_add_identity_identity_32x16_8bpc_neon
-add	x13, x13, #0
-mov	x8, #32
-mov	w9, #0
-adrp	x12, inv_txfm_add_identity_identity_32x16_8bpc_neon
-add	x12, x12, #0
-add	w9, w9, #8
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-sqrdmulh.8h	v16, v16, v1[0]
-sqrdmulh.8h	v17, v17, v1[0]
-sqrdmulh.8h	v18, v18, v1[0]
-sqrdmulh.8h	v19, v19, v1[0]
-sqrdmulh.8h	v20, v20, v1[0]
-sqrdmulh.8h	v21, v21, v1[0]
-sqrdmulh.8h	v22, v22, v1[0]
-sqrdmulh.8h	v23, v23, v1[0]
-sqshl.8h	v16, v16, #1
-sqshl.8h	v17, v17, #1
-sqshl.8h	v18, v18, #1
-sqshl.8h	v19, v19, #1
-sqshl.8h	v20, v20, #1
-sqshl.8h	v21, v21, #1
-sqshl.8h	v22, v22, #1
-sqshl.8h	v23, v23, #1
-sqrdmulh.8h	v2, v16, v1[1]
-sqadd.8h	v16, v16, v16
-sqadd.8h	v16, v16, v2
-sqrdmulh.8h	v2, v17, v1[1]
-sqadd.8h	v17, v17, v17
-sqadd.8h	v17, v17, v2
-sqrdmulh.8h	v2, v18, v1[1]
-sqadd.8h	v18, v18, v18
-sqadd.8h	v18, v18, v2
-sqrdmulh.8h	v2, v19, v1[1]
-sqadd.8h	v19, v19, v19
-sqadd.8h	v19, v19, v2
-sqrdmulh.8h	v2, v20, v1[1]
-sqadd.8h	v20, v20, v20
-sqadd.8h	v20, v20, v2
-sqrdmulh.8h	v2, v21, v1[1]
-sqadd.8h	v21, v21, v21
-sqadd.8h	v21, v21, v2
-sqrdmulh.8h	v2, v22, v1[1]
-sqadd.8h	v22, v22, v22
-sqadd.8h	v22, v22, v2
-sqrdmulh.8h	v2, v23, v1[1]
-sqadd.8h	v23, v23, v23
-sqadd.8h	v23, v23, v2
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
+inv_txfm_add_identity_identity_32x16_8bpc_neon:
+mov	w16, #0x5a80
+mov	w17, #0x6a10
+dup	v1.4h, w16
+movi	v0.8h, #0x0
+mov	v1.h[1], w17
+adrp	x13, eob_16x32_shortside
+add	x13, x13, :lo12:eob_16x32_shortside
+mov	x8, #0x20
+L_5f30:
+mov	w9, #0x0
+adrp	x12, eob_16x32
+add	x12, x12, :lo12:eob_16x32
+L_5f3c:
+add	w9, w9, #0x8
+ld1	{ v16.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v17.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v18.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v19.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v20.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v21.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v22.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v23.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+sqrdmulh	v16.8h, v16.8h, v1.h[0]
+sqrdmulh	v17.8h, v17.8h, v1.h[0]
+sqrdmulh	v18.8h, v18.8h, v1.h[0]
+sqrdmulh	v19.8h, v19.8h, v1.h[0]
+sqrdmulh	v20.8h, v20.8h, v1.h[0]
+sqrdmulh	v21.8h, v21.8h, v1.h[0]
+sqrdmulh	v22.8h, v22.8h, v1.h[0]
+sqrdmulh	v23.8h, v23.8h, v1.h[0]
+sqshl	v16.8h, v16.8h, #0x1
+sqshl	v17.8h, v17.8h, #0x1
+sqshl	v18.8h, v18.8h, #0x1
+sqshl	v19.8h, v19.8h, #0x1
+sqshl	v20.8h, v20.8h, #0x1
+sqshl	v21.8h, v21.8h, #0x1
+sqshl	v22.8h, v22.8h, #0x1
+sqshl	v23.8h, v23.8h, #0x1
+sqrdmulh	v2.8h, v16.8h, v1.h[1]
+sqadd	v16.8h, v16.8h, v16.8h
+sqadd	v16.8h, v16.8h, v2.8h
+sqrdmulh	v2.8h, v17.8h, v1.h[1]
+sqadd	v17.8h, v17.8h, v17.8h
+sqadd	v17.8h, v17.8h, v2.8h
+sqrdmulh	v2.8h, v18.8h, v1.h[1]
+sqadd	v18.8h, v18.8h, v18.8h
+sqadd	v18.8h, v18.8h, v2.8h
+sqrdmulh	v2.8h, v19.8h, v1.h[1]
+sqadd	v19.8h, v19.8h, v19.8h
+sqadd	v19.8h, v19.8h, v2.8h
+sqrdmulh	v2.8h, v20.8h, v1.h[1]
+sqadd	v20.8h, v20.8h, v20.8h
+sqadd	v20.8h, v20.8h, v2.8h
+sqrdmulh	v2.8h, v21.8h, v1.h[1]
+sqadd	v21.8h, v21.8h, v21.8h
+sqadd	v21.8h, v21.8h, v2.8h
+sqrdmulh	v2.8h, v22.8h, v1.h[1]
+sqadd	v22.8h, v22.8h, v22.8h
+sqadd	v22.8h, v22.8h, v2.8h
+sqrdmulh	v2.8h, v23.8h, v1.h[1]
+sqadd	v23.8h, v23.8h, v23.8h
+sqadd	v23.8h, v23.8h, v2.8h
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
 mov	x7, x0
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #4
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #4
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #4
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #4
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x0], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x0], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x0], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-st1.8b	{ v3 }, [x0], x1
-ldrh	w11, [x12], #2
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x4
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x4
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x4
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x4
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x0], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x0], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x0], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+st1	{ v3.8b }, [x0], x1
+ldrh	w11, [x12], #0x2
 sub	x0, x0, x1, lsl #3
-add	x0, x0, #8
+add	x0, x0, #0x8
 cmp	w3, w11
-b.ge	inv_txfm_add_identity_identity_32x16_8bpc_neon
-ldrh	w11, [x13], #2
+b.ge	L_5f3c
+ldrh	w11, [x13], #0x2
 cmp	w3, w11
-b.lt	inv_txfm_add_identity_identity_32x16_8bpc_neon
+b.lt	L_6158
 sub	x0, x0, w9, uxtw
 add	x0, x0, x1, lsl #3
 msub	x2, x8, x9, x2
-add	x2, x2, #16
-b	inv_txfm_add_identity_identity_32x16_8bpc_neon
+add	x2, x2, #0x10
+b	L_5f30
+L_6158:
 ret
-_inv_txfm_add_identity_identity_8x32_8bpc_neon:
-movi.8h	v0, #0
-adrp	x13, inv_txfm_add_identity_identity_8x32_8bpc_neon
-add	x13, x13, #0
-mov	w8, #64
-ldrh	w12, [x13], #2
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-srshr.8h	v16, v16, #1
-srshr.8h	v17, v17, #1
-srshr.8h	v18, v18, #1
-srshr.8h	v19, v19, #1
-srshr.8h	v20, v20, #1
-srshr.8h	v21, v21, #1
-srshr.8h	v22, v22, #1
-srshr.8h	v23, v23, #1
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
+inv_txfm_add_identity_identity_8x32_8bpc_neon:
+movi	v0.8h, #0x0
+adrp	x13, eob_8x32
+add	x13, x13, :lo12:eob_8x32
+mov	w8, #0x40
+L_616c:
+ldrh	w12, [x13], #0x2
+ld1	{ v16.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v17.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v18.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v19.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v20.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v21.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v22.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v23.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+srshr	v16.8h, v16.8h, #0x1
+srshr	v17.8h, v17.8h, #0x1
+srshr	v18.8h, v18.8h, #0x1
+srshr	v19.8h, v19.8h, #0x1
+srshr	v20.8h, v20.8h, #0x1
+srshr	v21.8h, v21.8h, #0x1
+srshr	v22.8h, v22.8h, #0x1
+srshr	v23.8h, v23.8h, #0x1
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
 cmp	w3, w12
 mov	x7, x0
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #2
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #2
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #2
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #2
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #2
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #2
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #2
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #2
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x0], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x0], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x0], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-st1.8b	{ v3 }, [x0], x1
-b.lt	inv_txfm_add_identity_identity_8x32_8bpc_neon
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x2
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x2
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x2
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x2
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x2
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x2
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x2
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x2
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x0], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x0], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x0], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+st1	{ v3.8b }, [x0], x1
+b.lt	L_62e8
 sub	x2, x2, x8, lsl #3
-add	x2, x2, #16
-b	inv_txfm_add_identity_identity_8x32_8bpc_neon
+add	x2, x2, #0x10
+b	L_616c
+L_62e8:
 ret
-_inv_txfm_add_identity_identity_32x8_8bpc_neon:
-movi.8h	v0, #0
-adrp	x13, inv_txfm_add_identity_identity_32x8_8bpc_neon
-add	x13, x13, #0
-mov	w8, #16
-ldrh	w12, [x13], #2
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v0 }, [x2], x8
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
+inv_txfm_add_identity_identity_32x8_8bpc_neon:
+movi	v0.8h, #0x0
+adrp	x13, eob_8x32
+add	x13, x13, :lo12:eob_8x32
+mov	w8, #0x10
+L_62fc:
+ldrh	w12, [x13], #0x2
+ld1	{ v16.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v17.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v18.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v19.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v20.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v21.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v22.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+ld1	{ v23.8h }, [x2]
+st1	{ v0.8h }, [x2], x8
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
 cmp	w3, w12
 mov	x7, x0
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #3
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #3
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #3
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #3
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #3
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x0], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #3
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x0], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #3
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x0], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #3
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x0], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x0], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x0], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x0], x1
-st1.8b	{ v3 }, [x0], x1
-b.lt	inv_txfm_add_identity_identity_32x8_8bpc_neon
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x3
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x3
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x3
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x3
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x3
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x0], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x3
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x0], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x3
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x0], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x3
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x0], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x0], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x0], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x0], x1
+st1	{ v3.8b }, [x0], x1
+b.lt	L_6458
 sub	x0, x0, x1, lsl #3
-add	x0, x0, #8
-b	inv_txfm_add_identity_identity_32x8_8bpc_neon
+add	x0, x0, #0x8
+b	L_62fc
+L_6458:
 ret
-_inv_txfm_add_dct_dct_32x32_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_32x32_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_32x32_8bpc_neon:
+cbnz	w3, L_6488
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #2
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #32
+srshr	v16.8h, v16.8h, #0x2
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x20
 b	idct_dc_w32_neon
+L_6488:
 mov	x15, x30
-sub	sp, sp, #2048
-adrp	x13, inv_txfm_add_dct_dct_32x32_8bpc_neon
-add	x13, x13, #0
-ldrh	w12, [x13], #2
+sub	sp, sp, #0x800
+adrp	x13, eob_32x32
+add	x13, x13, :lo12:eob_32x32
+ldrh	w12, [x13], #0x2
 mov	x6, sp
-add	x7, x2, #0
-mov	x8, #64
+add	x7, x2, #0x0
+mov	x8, #0x40
 bl	inv_txfm_horz_dct_32x8_neon
-add	x6, sp, #512
-mov	w8, #24
+add	x6, sp, #0x200
+mov	w8, #0x18
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_32x32_8bpc_neon
-ldrh	w12, [x13], #2
-add	x7, x2, #16
-mov	x8, #64
+b.lt	L_650c
+ldrh	w12, [x13], #0x2
+add	x7, x2, #0x10
+mov	x8, #0x40
 bl	inv_txfm_horz_dct_32x8_neon
-add	x6, sp, #1024
-mov	w8, #16
+add	x6, sp, #0x400
+mov	w8, #0x10
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_32x32_8bpc_neon
-ldrh	w12, [x13], #2
-add	x7, x2, #32
-mov	x8, #64
+b.lt	L_650c
+ldrh	w12, [x13], #0x2
+add	x7, x2, #0x20
+mov	x8, #0x40
 bl	inv_txfm_horz_dct_32x8_neon
-add	x6, sp, #1536
-mov	w8, #8
+add	x6, sp, #0x600
+mov	w8, #0x8
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_32x32_8bpc_neon
-add	x7, x2, #48
-mov	x8, #64
+b.lt	L_650c
+add	x7, x2, #0x30
+mov	x8, #0x40
 bl	inv_txfm_horz_dct_32x8_neon
-b	inv_txfm_add_dct_dct_32x32_8bpc_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-subs	w8, w8, #4
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_32x32_8bpc_neon
-add	x6, x0, #0
+b	L_6534
+L_650c:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+L_651c:
+subs	w8, w8, #0x4
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+b.gt	L_651c
+L_6534:
+add	x6, x0, #0x0
 mov	x7, sp
-mov	x8, #64
+mov	x8, #0x40
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #8
-add	x7, sp, #16
-mov	x8, #64
+add	x6, x0, #0x8
+add	x7, sp, #0x10
+mov	x8, #0x40
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #16
-add	x7, sp, #32
-mov	x8, #64
+add	x6, x0, #0x10
+add	x7, sp, #0x20
+mov	x8, #0x40
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #24
-add	x7, sp, #48
-mov	x8, #64
+add	x6, x0, #0x18
+add	x7, sp, #0x30
+mov	x8, #0x40
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	sp, sp, #2048
+add	sp, sp, #0x800
 ret	x15
-_inv_txfm_add_dct_dct_16x32_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_16x32_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_16x32_8bpc_neon:
+cbnz	w3, L_65ac
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #32
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x20
 b	idct_dc_w16_neon
+L_65ac:
 mov	x15, x30
-sub	sp, sp, #1024
-adrp	x13, inv_txfm_add_dct_dct_16x32_8bpc_neon
-add	x13, x13, #0
-ldrh	w12, [x13], #2
-adr	x4, #-20344
+sub	sp, sp, #0x400
+adrp	x13, eob_16x32
+add	x13, x13, :lo12:eob_16x32
+ldrh	w12, [x13], #0x2
+adr	x4, inv_dct_8h_x16_neon
 mov	x6, sp
-add	x7, x2, #0
-mov	x8, #64
+add	x7, x2, #0x0
+mov	x8, #0x40
 bl	inv_txfm_horz_scale_16x8_neon
-add	x6, sp, #256
-add	x7, x2, #16
-mov	w8, #24
+add	x6, sp, #0x100
+add	x7, x2, #0x10
+mov	w8, #0x18
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_16x32_8bpc_neon
-ldrh	w12, [x13], #2
-mov	x8, #64
+b.lt	L_6634
+ldrh	w12, [x13], #0x2
+mov	x8, #0x40
 bl	inv_txfm_horz_scale_16x8_neon
-add	x6, sp, #512
-add	x7, x2, #32
-mov	w8, #16
+add	x6, sp, #0x200
+add	x7, x2, #0x20
+mov	w8, #0x10
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_16x32_8bpc_neon
-ldrh	w12, [x13], #2
-mov	x8, #64
+b.lt	L_6634
+ldrh	w12, [x13], #0x2
+mov	x8, #0x40
 bl	inv_txfm_horz_scale_16x8_neon
-add	x6, sp, #768
-add	x7, x2, #48
-mov	w8, #8
+add	x6, sp, #0x300
+add	x7, x2, #0x30
+mov	w8, #0x8
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_16x32_8bpc_neon
-mov	x8, #64
+b.lt	L_6634
+mov	x8, #0x40
 bl	inv_txfm_horz_scale_16x8_neon
-b	inv_txfm_add_dct_dct_16x32_8bpc_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-subs	w8, w8, #8
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_16x32_8bpc_neon
-add	x6, x0, #0
+b	L_665c
+L_6634:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+L_6644:
+subs	w8, w8, #0x8
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+b.gt	L_6644
+L_665c:
+add	x6, x0, #0x0
 mov	x7, sp
-mov	x8, #32
+mov	x8, #0x20
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #8
-add	x7, sp, #16
-mov	x8, #32
+add	x6, x0, #0x8
+add	x7, sp, #0x10
+mov	x8, #0x20
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	sp, sp, #1024
+add	sp, sp, #0x400
 ret	x15
-_inv_txfm_add_dct_dct_32x16_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_32x16_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_32x16_8bpc_neon:
+cbnz	w3, L_66b4
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x10
 b	idct_dc_w32_neon
+L_66b4:
 mov	x15, x30
-sub	sp, sp, #1024
-adr	x5, #-20596
+sub	sp, sp, #0x400
+adr	x5, inv_dct_8h_x16_neon
 mov	x6, sp
-add	x7, x2, #0
-mov	x8, #32
+add	x7, x2, #0x0
+mov	x8, #0x20
 bl	inv_txfm_horz_scale_dct_32x8_neon
-add	x6, sp, #512
-add	x7, x2, #16
-mov	w8, #8
-cmp	w3, #36
-b.lt	inv_txfm_add_dct_dct_32x16_8bpc_neon
-mov	x8, #32
+add	x6, sp, #0x200
+add	x7, x2, #0x10
+mov	w8, #0x8
+cmp	w3, #0x24
+b.lt	L_66f0
+mov	x8, #0x20
 bl	inv_txfm_horz_scale_dct_32x8_neon
-b	inv_txfm_add_dct_dct_32x16_8bpc_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-subs	w8, w8, #4
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_32x16_8bpc_neon
-mov	x8, #64
-add	x6, x0, #0
+b	L_6718
+L_66f0:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+L_6700:
+subs	w8, w8, #0x4
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+b.gt	L_6700
+L_6718:
+mov	x8, #0x40
+add	x6, x0, #0x0
 mov	x7, sp
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #8
-add	x7, sp, #16
+add	x6, x0, #0x8
+add	x7, sp, #0x10
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #16
-add	x7, sp, #32
+add	x6, x0, #0x10
+add	x7, sp, #0x20
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #24
-add	x7, sp, #48
+add	x6, x0, #0x18
+add	x7, sp, #0x30
 bl	inv_txfm_add_vert_8x16_neon
-add	sp, sp, #1024
+add	sp, sp, #0x400
 ret	x15
-_inv_txfm_add_dct_dct_8x32_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_8x32_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_8x32_8bpc_neon:
+cbnz	w3, L_6780
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #2
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #32
+srshr	v16.8h, v16.8h, #0x2
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x20
 b	idct_dc_w8_neon
+L_6780:
 mov	x15, x30
-sub	sp, sp, #512
-adrp	x13, inv_txfm_add_dct_dct_8x32_8bpc_neon
-add	x13, x13, #0
-movi.8h	v28, #0
-mov	x8, #64
-mov	w9, #32
+sub	sp, sp, #0x200
+adrp	x13, eob_8x32
+add	x13, x13, :lo12:eob_8x32
+movi	v28.8h, #0x0
+mov	x8, #0x40
+mov	w9, #0x20
 mov	x6, sp
-ld1.8h	{ v16 }, [x2]
-st1.8h	{ v28 }, [x2], x8
-ld1.8h	{ v17 }, [x2]
-st1.8h	{ v28 }, [x2], x8
-ld1.8h	{ v18 }, [x2]
-st1.8h	{ v28 }, [x2], x8
-ld1.8h	{ v19 }, [x2]
-st1.8h	{ v28 }, [x2], x8
-ld1.8h	{ v20 }, [x2]
-st1.8h	{ v28 }, [x2], x8
-ld1.8h	{ v21 }, [x2]
-st1.8h	{ v28 }, [x2], x8
-ld1.8h	{ v22 }, [x2]
-st1.8h	{ v28 }, [x2], x8
-ld1.8h	{ v23 }, [x2]
-st1.8h	{ v28 }, [x2], x8
-ldrh	w12, [x13], #2
+L_67a0:
+ld1	{ v16.8h }, [x2]
+st1	{ v28.8h }, [x2], x8
+ld1	{ v17.8h }, [x2]
+st1	{ v28.8h }, [x2], x8
+ld1	{ v18.8h }, [x2]
+st1	{ v28.8h }, [x2], x8
+ld1	{ v19.8h }, [x2]
+st1	{ v28.8h }, [x2], x8
+ld1	{ v20.8h }, [x2]
+st1	{ v28.8h }, [x2], x8
+ld1	{ v21.8h }, [x2]
+st1	{ v28.8h }, [x2], x8
+ld1	{ v22.8h }, [x2]
+st1	{ v28.8h }, [x2], x8
+ld1	{ v23.8h }, [x2]
+st1	{ v28.8h }, [x2], x8
+ldrh	w12, [x13], #0x2
 sub	x2, x2, x8, lsl #3
-sub	w9, w9, #8
-add	x2, x2, #16
+sub	w9, w9, #0x8
+add	x2, x2, #0x10
 bl	inv_dct_8h_x8_neon
-srshr.8h	v16, v16, #2
-srshr.8h	v17, v17, #2
-srshr.8h	v18, v18, #2
-srshr.8h	v19, v19, #2
-srshr.8h	v20, v20, #2
-srshr.8h	v21, v21, #2
-srshr.8h	v22, v22, #2
-srshr.8h	v23, v23, #2
-trn1.8h	v24, v16, v17
-trn2.8h	v25, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v25, v19
-trn2.4s	v25, v25, v19
-trn1.4s	v19, v24, v17
-trn2.4s	v24, v24, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v24, v18
-trn1.2d	v18, v24, v18
-trn1.2d	v19, v25, v23
-trn2.2d	v23, v25, v23
-st1.8h	{ v16, v17, v18, v19 }, [x6], #64
+srshr	v16.8h, v16.8h, #0x2
+srshr	v17.8h, v17.8h, #0x2
+srshr	v18.8h, v18.8h, #0x2
+srshr	v19.8h, v19.8h, #0x2
+srshr	v20.8h, v20.8h, #0x2
+srshr	v21.8h, v21.8h, #0x2
+srshr	v22.8h, v22.8h, #0x2
+srshr	v23.8h, v23.8h, #0x2
+trn1	v24.8h, v16.8h, v17.8h
+trn2	v25.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v25.4s, v19.4s
+trn2	v25.4s, v25.4s, v19.4s
+trn1	v19.4s, v24.4s, v17.4s
+trn2	v24.4s, v24.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v24.2d, v18.2d
+trn1	v18.2d, v24.2d, v18.2d
+trn1	v19.2d, v25.2d, v23.2d
+trn2	v23.2d, v25.2d, v23.2d
+st1	{ v16.8h, v17.8h, v18.8h, v19.8h }, [x6], #64
 cmp	w3, w12
-st1.8h	{ v20, v21, v22, v23 }, [x6], #64
-b.ge	inv_txfm_add_dct_dct_8x32_8bpc_neon
-cbz	w9, inv_txfm_add_dct_dct_8x32_8bpc_neon
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
-subs	w9, w9, #8
-st1.8h	{ v28, v29, v30, v31 }, [x6], #64
-st1.8h	{ v28, v29, v30, v31 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_8x32_8bpc_neon
+st1	{ v20.8h, v21.8h, v22.8h, v23.8h }, [x6], #64
+b.ge	L_67a0
+cbz	w9, L_68a4
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+L_6894:
+subs	w9, w9, #0x8
+st1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x6], #64
+st1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x6], #64
+b.gt	L_6894
+L_68a4:
 mov	x6, x0
 mov	x7, sp
-mov	x8, #16
+mov	x8, #0x10
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	sp, sp, #512
+add	sp, sp, #0x200
 ret	x15
-_inv_txfm_add_dct_dct_32x8_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_32x8_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_32x8_8bpc_neon:
+cbnz	w3, L_68e8
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #2
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #8
+srshr	v16.8h, v16.8h, #0x2
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x8
 b	idct_dc_w32_neon
+L_68e8:
 mov	x15, x30
-sub	sp, sp, #512
+sub	sp, sp, #0x200
 mov	x6, sp
 mov	x7, x2
-mov	x8, #16
+mov	x8, #0x10
 bl	inv_txfm_horz_dct_32x8_neon
-mov	x8, #64
-mov	w9, #0
+mov	x8, #0x40
+mov	w9, #0x0
+L_6908:
 add	x6, x0, x9
 add	x7, sp, x9, lsl #1
-ld1.8h	{ v16 }, [x7], x8
-ld1.8h	{ v17 }, [x7], x8
-ld1.8h	{ v18 }, [x7], x8
-ld1.8h	{ v19 }, [x7], x8
-ld1.8h	{ v20 }, [x7], x8
-ld1.8h	{ v21 }, [x7], x8
-ld1.8h	{ v22 }, [x7], x8
-ld1.8h	{ v23 }, [x7], x8
-add	w9, w9, #8
+ld1	{ v16.8h }, [x7], x8
+ld1	{ v17.8h }, [x7], x8
+ld1	{ v18.8h }, [x7], x8
+ld1	{ v19.8h }, [x7], x8
+ld1	{ v20.8h }, [x7], x8
+ld1	{ v21.8h }, [x7], x8
+ld1	{ v22.8h }, [x7], x8
+ld1	{ v23.8h }, [x7], x8
+add	w9, w9, #0x8
 bl	inv_dct_8h_x8_neon
-cmp	w9, #32
+cmp	w9, #0x20
 mov	x7, x6
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v16, v16, #4
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v17, v17, #4
-ld1.8b	{ v4 }, [x7], x1
-srshr.8h	v18, v18, #4
-uaddw.8h	v16, v16, v2
-ld1.8b	{ v5 }, [x7], x1
-srshr.8h	v19, v19, #4
-uaddw.8h	v17, v17, v3
-sqxtun.8b	v2, v16
-ld1.8b	{ v6 }, [x7], x1
-srshr.8h	v20, v20, #4
-uaddw.8h	v18, v18, v4
-sqxtun.8b	v3, v17
-st1.8b	{ v2 }, [x6], x1
-ld1.8b	{ v7 }, [x7], x1
-srshr.8h	v21, v21, #4
-uaddw.8h	v19, v19, v5
-sqxtun.8b	v4, v18
-st1.8b	{ v3 }, [x6], x1
-ld1.8b	{ v2 }, [x7], x1
-srshr.8h	v22, v22, #4
-uaddw.8h	v20, v20, v6
-sqxtun.8b	v5, v19
-st1.8b	{ v4 }, [x6], x1
-ld1.8b	{ v3 }, [x7], x1
-srshr.8h	v23, v23, #4
-uaddw.8h	v21, v21, v7
-sqxtun.8b	v6, v20
-st1.8b	{ v5 }, [x6], x1
-uaddw.8h	v22, v22, v2
-sqxtun.8b	v7, v21
-st1.8b	{ v6 }, [x6], x1
-uaddw.8h	v23, v23, v3
-sqxtun.8b	v2, v22
-st1.8b	{ v7 }, [x6], x1
-sqxtun.8b	v3, v23
-st1.8b	{ v2 }, [x6], x1
-st1.8b	{ v3 }, [x6], x1
-b.lt	inv_txfm_add_dct_dct_32x8_8bpc_neon
-add	sp, sp, #512
+ld1	{ v2.8b }, [x7], x1
+srshr	v16.8h, v16.8h, #0x4
+ld1	{ v3.8b }, [x7], x1
+srshr	v17.8h, v17.8h, #0x4
+ld1	{ v4.8b }, [x7], x1
+srshr	v18.8h, v18.8h, #0x4
+uaddw	v16.8h, v16.8h, v2.8b
+ld1	{ v5.8b }, [x7], x1
+srshr	v19.8h, v19.8h, #0x4
+uaddw	v17.8h, v17.8h, v3.8b
+sqxtun	v2.8b, v16.8h
+ld1	{ v6.8b }, [x7], x1
+srshr	v20.8h, v20.8h, #0x4
+uaddw	v18.8h, v18.8h, v4.8b
+sqxtun	v3.8b, v17.8h
+st1	{ v2.8b }, [x6], x1
+ld1	{ v7.8b }, [x7], x1
+srshr	v21.8h, v21.8h, #0x4
+uaddw	v19.8h, v19.8h, v5.8b
+sqxtun	v4.8b, v18.8h
+st1	{ v3.8b }, [x6], x1
+ld1	{ v2.8b }, [x7], x1
+srshr	v22.8h, v22.8h, #0x4
+uaddw	v20.8h, v20.8h, v6.8b
+sqxtun	v5.8b, v19.8h
+st1	{ v4.8b }, [x6], x1
+ld1	{ v3.8b }, [x7], x1
+srshr	v23.8h, v23.8h, #0x4
+uaddw	v21.8h, v21.8h, v7.8b
+sqxtun	v6.8b, v20.8h
+st1	{ v5.8b }, [x6], x1
+uaddw	v22.8h, v22.8h, v2.8b
+sqxtun	v7.8b, v21.8h
+st1	{ v6.8b }, [x6], x1
+uaddw	v23.8h, v23.8h, v3.8b
+sqxtun	v2.8b, v22.8h
+st1	{ v7.8b }, [x6], x1
+sqxtun	v3.8b, v23.8h
+st1	{ v2.8b }, [x6], x1
+st1	{ v3.8b }, [x6], x1
+b.lt	L_6908
+add	sp, sp, #0x200
 ret	x15
-_inv_dct64_step1_neon:
-ld1.8h	{ v0, v1 }, [x17], #32
-sqrdmulh.8h	v23, v16, v0[1]
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v22, v17, v0[2]
-sqrdmulh.8h	v17, v17, v0[3]
-sqrdmulh.8h	v21, v18, v0[5]
-sqrdmulh.8h	v18, v18, v0[4]
-sqrdmulh.8h	v20, v19, v0[6]
-sqrdmulh.8h	v19, v19, v0[7]
-sqadd.8h	v24, v16, v17
-sqsub.8h	v25, v16, v17
-sqsub.8h	v26, v19, v18
-sqadd.8h	v27, v19, v18
-sqadd.8h	v28, v20, v21
-sqsub.8h	v29, v20, v21
-sqsub.8h	v30, v23, v22
-sqadd.8h	v31, v23, v22
-smull.4s	v2, v29, v1[0]
-smlal.4s	v2, v26, v1[1]
-smull2.4s	v3, v29, v1[0]
-smlal2.4s	v3, v26, v1[1]
-smull.4s	v4, v29, v1[1]
-smlsl.4s	v4, v26, v1[0]
-smull2.4s	v5, v29, v1[1]
-smlsl2.4s	v5, v26, v1[0]
-neg.4s	v2, v2
-neg.4s	v3, v3
-smull.4s	v6, v30, v1[1]
-smlsl.4s	v6, v25, v1[0]
-smull2.4s	v7, v30, v1[1]
-smlsl2.4s	v7, v25, v1[0]
-sqrshrn.4h	v26, v2, #12
-sqrshrn2.8h	v26, v3, #12
-smull.4s	v2, v30, v1[0]
-smlal.4s	v2, v25, v1[1]
-smull2.4s	v3, v30, v1[0]
-smlal2.4s	v3, v25, v1[1]
-sqrshrn.4h	v29, v4, #12
-sqrshrn2.8h	v29, v5, #12
-sqrshrn.4h	v25, v6, #12
-sqrshrn2.8h	v25, v7, #12
-sqrshrn.4h	v30, v2, #12
-sqrshrn2.8h	v30, v3, #12
-sqadd.8h	v16, v24, v27
-sqsub.8h	v19, v24, v27
-sqadd.8h	v17, v25, v26
-sqsub.8h	v18, v25, v26
-sqsub.8h	v20, v31, v28
-sqadd.8h	v23, v31, v28
-sqsub.8h	v21, v30, v29
-sqadd.8h	v22, v30, v29
-smull.4s	v2, v21, v1[2]
-smlal.4s	v2, v18, v1[3]
-smull2.4s	v3, v21, v1[2]
-smlal2.4s	v3, v18, v1[3]
-smull.4s	v4, v21, v1[3]
-smlsl.4s	v4, v18, v1[2]
-smull2.4s	v5, v21, v1[3]
-smlsl2.4s	v5, v18, v1[2]
-smull.4s	v6, v20, v1[2]
-smlal.4s	v6, v19, v1[3]
-smull2.4s	v7, v20, v1[2]
-smlal2.4s	v7, v19, v1[3]
-sqrshrn.4h	v21, v2, #12
-sqrshrn2.8h	v21, v3, #12
-sqrshrn.4h	v18, v4, #12
-sqrshrn2.8h	v18, v5, #12
-smull.4s	v2, v20, v1[3]
-smlsl.4s	v2, v19, v1[2]
-smull2.4s	v3, v20, v1[3]
-smlsl2.4s	v3, v19, v1[2]
-sqrshrn.4h	v20, v6, #12
-sqrshrn2.8h	v20, v7, #12
-sqrshrn.4h	v19, v2, #12
-sqrshrn2.8h	v19, v3, #12
-st1.8h	{ v16, v17, v18, v19 }, [x6], #64
-st1.8h	{ v20, v21, v22, v23 }, [x6], #64
+inv_dct64_step1_neon:
+ld1	{ v0.8h, v1.8h }, [x17], #32
+sqrdmulh	v23.8h, v16.8h, v0.h[1]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v22.8h, v17.8h, v0.h[2]
+sqrdmulh	v17.8h, v17.8h, v0.h[3]
+sqrdmulh	v21.8h, v18.8h, v0.h[5]
+sqrdmulh	v18.8h, v18.8h, v0.h[4]
+sqrdmulh	v20.8h, v19.8h, v0.h[6]
+sqrdmulh	v19.8h, v19.8h, v0.h[7]
+sqadd	v24.8h, v16.8h, v17.8h
+sqsub	v25.8h, v16.8h, v17.8h
+sqsub	v26.8h, v19.8h, v18.8h
+sqadd	v27.8h, v19.8h, v18.8h
+sqadd	v28.8h, v20.8h, v21.8h
+sqsub	v29.8h, v20.8h, v21.8h
+sqsub	v30.8h, v23.8h, v22.8h
+sqadd	v31.8h, v23.8h, v22.8h
+smull	v2.4s, v29.4h, v1.h[0]
+smlal	v2.4s, v26.4h, v1.h[1]
+smull2	v3.4s, v29.8h, v1.h[0]
+smlal2	v3.4s, v26.8h, v1.h[1]
+smull	v4.4s, v29.4h, v1.h[1]
+smlsl	v4.4s, v26.4h, v1.h[0]
+smull2	v5.4s, v29.8h, v1.h[1]
+smlsl2	v5.4s, v26.8h, v1.h[0]
+neg	v2.4s, v2.4s
+neg	v3.4s, v3.4s
+smull	v6.4s, v30.4h, v1.h[1]
+smlsl	v6.4s, v25.4h, v1.h[0]
+smull2	v7.4s, v30.8h, v1.h[1]
+smlsl2	v7.4s, v25.8h, v1.h[0]
+sqrshrn	v26.4h, v2.4s, #0xc
+sqrshrn2	v26.8h, v3.4s, #0xc
+smull	v2.4s, v30.4h, v1.h[0]
+smlal	v2.4s, v25.4h, v1.h[1]
+smull2	v3.4s, v30.8h, v1.h[0]
+smlal2	v3.4s, v25.8h, v1.h[1]
+sqrshrn	v29.4h, v4.4s, #0xc
+sqrshrn2	v29.8h, v5.4s, #0xc
+sqrshrn	v25.4h, v6.4s, #0xc
+sqrshrn2	v25.8h, v7.4s, #0xc
+sqrshrn	v30.4h, v2.4s, #0xc
+sqrshrn2	v30.8h, v3.4s, #0xc
+sqadd	v16.8h, v24.8h, v27.8h
+sqsub	v19.8h, v24.8h, v27.8h
+sqadd	v17.8h, v25.8h, v26.8h
+sqsub	v18.8h, v25.8h, v26.8h
+sqsub	v20.8h, v31.8h, v28.8h
+sqadd	v23.8h, v31.8h, v28.8h
+sqsub	v21.8h, v30.8h, v29.8h
+sqadd	v22.8h, v30.8h, v29.8h
+smull	v2.4s, v21.4h, v1.h[2]
+smlal	v2.4s, v18.4h, v1.h[3]
+smull2	v3.4s, v21.8h, v1.h[2]
+smlal2	v3.4s, v18.8h, v1.h[3]
+smull	v4.4s, v21.4h, v1.h[3]
+smlsl	v4.4s, v18.4h, v1.h[2]
+smull2	v5.4s, v21.8h, v1.h[3]
+smlsl2	v5.4s, v18.8h, v1.h[2]
+smull	v6.4s, v20.4h, v1.h[2]
+smlal	v6.4s, v19.4h, v1.h[3]
+smull2	v7.4s, v20.8h, v1.h[2]
+smlal2	v7.4s, v19.8h, v1.h[3]
+sqrshrn	v21.4h, v2.4s, #0xc
+sqrshrn2	v21.8h, v3.4s, #0xc
+sqrshrn	v18.4h, v4.4s, #0xc
+sqrshrn2	v18.8h, v5.4s, #0xc
+smull	v2.4s, v20.4h, v1.h[3]
+smlsl	v2.4s, v19.4h, v1.h[2]
+smull2	v3.4s, v20.8h, v1.h[3]
+smlsl2	v3.4s, v19.8h, v1.h[2]
+sqrshrn	v20.4h, v6.4s, #0xc
+sqrshrn2	v20.8h, v7.4s, #0xc
+sqrshrn	v19.4h, v2.4s, #0xc
+sqrshrn2	v19.8h, v3.4s, #0xc
+st1	{ v16.8h, v17.8h, v18.8h, v19.8h }, [x6], #64
+st1	{ v20.8h, v21.8h, v22.8h, v23.8h }, [x6], #64
 ret
-_inv_dct64_step2_neon:
-adrp	x16, inv_dct64_step2_neon
-add	x16, x16, #0
-ld1.4h	{ v0 }, [x16]
+inv_dct64_step2_neon:
+adrp	x16, idct_coeffs
+add	x16, x16, :lo12:idct_coeffs
+ld1	{ v0.4h }, [x16]
+L_6b30:
 ldr	q16, [x6]
-ldr	q17, [x9, #128]
+ldr	q17, [x9, #0x80]
 ldr	q18, [x9]
-ldr	q19, [x6, #128]
-ldr	q20, [x6, #256]
-ldr	q21, [x9, #384]
-ldr	q22, [x9, #256]
-ldr	q23, [x6, #384]
-sqadd.8h	v24, v16, v17
-sqsub.8h	v25, v16, v17
-sqadd.8h	v26, v18, v19
-sqsub.8h	v27, v18, v19
-sqsub.8h	v28, v21, v20
-sqadd.8h	v29, v21, v20
-sqadd.8h	v30, v23, v22
-sqsub.8h	v31, v23, v22
-smull.4s	v2, v27, v0[3]
-smlal.4s	v2, v25, v0[2]
-smull2.4s	v3, v27, v0[3]
-smlal2.4s	v3, v25, v0[2]
-smull.4s	v4, v27, v0[2]
-smlsl.4s	v4, v25, v0[3]
-smull2.4s	v5, v27, v0[2]
-smlsl2.4s	v5, v25, v0[3]
-smull.4s	v6, v31, v0[3]
-smlal.4s	v6, v28, v0[2]
-smull2.4s	v7, v31, v0[3]
-smlal2.4s	v7, v28, v0[2]
-sqrshrn.4h	v25, v2, #12
-sqrshrn2.8h	v25, v3, #12
-sqrshrn.4h	v27, v4, #12
-sqrshrn2.8h	v27, v5, #12
-neg.4s	v6, v6
-neg.4s	v7, v7
-smull.4s	v2, v31, v0[2]
-smlsl.4s	v2, v28, v0[3]
-smull2.4s	v3, v31, v0[2]
-smlsl2.4s	v3, v28, v0[3]
-sqrshrn.4h	v31, v6, #12
-sqrshrn2.8h	v31, v7, #12
-sqrshrn.4h	v28, v2, #12
-sqrshrn2.8h	v28, v3, #12
-sqadd.8h	v16, v24, v29
-sqsub.8h	v19, v24, v29
-sqadd.8h	v17, v27, v31
-sqsub.8h	v18, v27, v31
-sqsub.8h	v20, v26, v30
-sqadd.8h	v23, v26, v30
-sqsub.8h	v21, v25, v28
-sqadd.8h	v22, v25, v28
-smull.4s	v2, v21, v0[0]
-smlsl.4s	v2, v18, v0[0]
-smull2.4s	v3, v21, v0[0]
-smlsl2.4s	v3, v18, v0[0]
-smull.4s	v4, v21, v0[0]
-smlal.4s	v4, v18, v0[0]
-smull2.4s	v5, v21, v0[0]
-smlal2.4s	v5, v18, v0[0]
-smull.4s	v6, v20, v0[0]
-smlsl.4s	v6, v19, v0[0]
-smull2.4s	v7, v20, v0[0]
-smlsl2.4s	v7, v19, v0[0]
-sqrshrn.4h	v18, v2, #12
-sqrshrn2.8h	v18, v3, #12
-sqrshrn.4h	v21, v4, #12
-sqrshrn2.8h	v21, v5, #12
-smull.4s	v2, v20, v0[0]
-smlal.4s	v2, v19, v0[0]
-smull2.4s	v3, v20, v0[0]
-smlal2.4s	v3, v19, v0[0]
-sqrshrn.4h	v19, v6, #12
-sqrshrn2.8h	v19, v7, #12
-sqrshrn.4h	v20, v2, #12
-sqrshrn2.8h	v20, v3, #12
+ldr	q19, [x6, #0x80]
+ldr	q20, [x6, #0x100]
+ldr	q21, [x9, #0x180]
+ldr	q22, [x9, #0x100]
+ldr	q23, [x6, #0x180]
+sqadd	v24.8h, v16.8h, v17.8h
+sqsub	v25.8h, v16.8h, v17.8h
+sqadd	v26.8h, v18.8h, v19.8h
+sqsub	v27.8h, v18.8h, v19.8h
+sqsub	v28.8h, v21.8h, v20.8h
+sqadd	v29.8h, v21.8h, v20.8h
+sqadd	v30.8h, v23.8h, v22.8h
+sqsub	v31.8h, v23.8h, v22.8h
+smull	v2.4s, v27.4h, v0.h[3]
+smlal	v2.4s, v25.4h, v0.h[2]
+smull2	v3.4s, v27.8h, v0.h[3]
+smlal2	v3.4s, v25.8h, v0.h[2]
+smull	v4.4s, v27.4h, v0.h[2]
+smlsl	v4.4s, v25.4h, v0.h[3]
+smull2	v5.4s, v27.8h, v0.h[2]
+smlsl2	v5.4s, v25.8h, v0.h[3]
+smull	v6.4s, v31.4h, v0.h[3]
+smlal	v6.4s, v28.4h, v0.h[2]
+smull2	v7.4s, v31.8h, v0.h[3]
+smlal2	v7.4s, v28.8h, v0.h[2]
+sqrshrn	v25.4h, v2.4s, #0xc
+sqrshrn2	v25.8h, v3.4s, #0xc
+sqrshrn	v27.4h, v4.4s, #0xc
+sqrshrn2	v27.8h, v5.4s, #0xc
+neg	v6.4s, v6.4s
+neg	v7.4s, v7.4s
+smull	v2.4s, v31.4h, v0.h[2]
+smlsl	v2.4s, v28.4h, v0.h[3]
+smull2	v3.4s, v31.8h, v0.h[2]
+smlsl2	v3.4s, v28.8h, v0.h[3]
+sqrshrn	v31.4h, v6.4s, #0xc
+sqrshrn2	v31.8h, v7.4s, #0xc
+sqrshrn	v28.4h, v2.4s, #0xc
+sqrshrn2	v28.8h, v3.4s, #0xc
+sqadd	v16.8h, v24.8h, v29.8h
+sqsub	v19.8h, v24.8h, v29.8h
+sqadd	v17.8h, v27.8h, v31.8h
+sqsub	v18.8h, v27.8h, v31.8h
+sqsub	v20.8h, v26.8h, v30.8h
+sqadd	v23.8h, v26.8h, v30.8h
+sqsub	v21.8h, v25.8h, v28.8h
+sqadd	v22.8h, v25.8h, v28.8h
+smull	v2.4s, v21.4h, v0.h[0]
+smlsl	v2.4s, v18.4h, v0.h[0]
+smull2	v3.4s, v21.8h, v0.h[0]
+smlsl2	v3.4s, v18.8h, v0.h[0]
+smull	v4.4s, v21.4h, v0.h[0]
+smlal	v4.4s, v18.4h, v0.h[0]
+smull2	v5.4s, v21.8h, v0.h[0]
+smlal2	v5.4s, v18.8h, v0.h[0]
+smull	v6.4s, v20.4h, v0.h[0]
+smlsl	v6.4s, v19.4h, v0.h[0]
+smull2	v7.4s, v20.8h, v0.h[0]
+smlsl2	v7.4s, v19.8h, v0.h[0]
+sqrshrn	v18.4h, v2.4s, #0xc
+sqrshrn2	v18.8h, v3.4s, #0xc
+sqrshrn	v21.4h, v4.4s, #0xc
+sqrshrn2	v21.8h, v5.4s, #0xc
+smull	v2.4s, v20.4h, v0.h[0]
+smlal	v2.4s, v19.4h, v0.h[0]
+smull2	v3.4s, v20.8h, v0.h[0]
+smlal2	v3.4s, v19.8h, v0.h[0]
+sqrshrn	v19.4h, v6.4s, #0xc
+sqrshrn2	v19.8h, v7.4s, #0xc
+sqrshrn	v20.4h, v2.4s, #0xc
+sqrshrn2	v20.8h, v3.4s, #0xc
 str	q16, [x6]
 str	q17, [x9]
-str	q18, [x6, #128]
-str	q19, [x9, #128]
-str	q20, [x6, #256]
-str	q21, [x9, #256]
-str	q22, [x6, #384]
-str	q23, [x9, #384]
-add	x6, x6, #16
-sub	x9, x9, #16
+str	q18, [x6, #0x80]
+str	q19, [x9, #0x80]
+str	q20, [x6, #0x100]
+str	q21, [x9, #0x100]
+str	q22, [x6, #0x180]
+str	q23, [x9, #0x180]
+add	x6, x6, #0x10
+sub	x9, x9, #0x10
 cmp	x6, x9
-b.lt	inv_dct64_step2_neon
+b.lt	L_6b30
 ret
-_inv_txfm_dct_8h_x64_neon:
+inv_txfm_dct_8h_x64_neon:
 mov	x14, x30
 mov	x6, sp
 lsl	x8, x8, #2
-ld1.8h	{ v16 }, [x7], x8
-ld1.8h	{ v17 }, [x7], x8
-ld1.8h	{ v18 }, [x7], x8
-ld1.8h	{ v19 }, [x7], x8
-ld1.8h	{ v20 }, [x7], x8
-ld1.8h	{ v21 }, [x7], x8
-ld1.8h	{ v22 }, [x7], x8
-ld1.8h	{ v23 }, [x7], x8
-movi.8h	v24, #0
-movi.8h	v25, #0
-movi.8h	v26, #0
-movi.8h	v27, #0
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
+ld1	{ v16.8h }, [x7], x8
+ld1	{ v17.8h }, [x7], x8
+ld1	{ v18.8h }, [x7], x8
+ld1	{ v19.8h }, [x7], x8
+ld1	{ v20.8h }, [x7], x8
+ld1	{ v21.8h }, [x7], x8
+ld1	{ v22.8h }, [x7], x8
+ld1	{ v23.8h }, [x7], x8
+movi	v24.8h, #0x0
+movi	v25.8h, #0x0
+movi	v26.8h, #0x0
+movi	v27.8h, #0x0
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
 sub	x7, x7, x8, lsl #3
 add	x7, x7, x8, lsr #1
 bl	inv_dct_8h_x16_neon
-st1.8h	{ v16 }, [x6], #16
-st1.8h	{ v17 }, [x6], #16
-st1.8h	{ v18 }, [x6], #16
-st1.8h	{ v19 }, [x6], #16
-st1.8h	{ v20 }, [x6], #16
-st1.8h	{ v21 }, [x6], #16
-st1.8h	{ v22 }, [x6], #16
-st1.8h	{ v23 }, [x6], #16
-st1.8h	{ v24 }, [x6], #16
-st1.8h	{ v25 }, [x6], #16
-st1.8h	{ v26 }, [x6], #16
-st1.8h	{ v27 }, [x6], #16
-st1.8h	{ v28 }, [x6], #16
-st1.8h	{ v29 }, [x6], #16
-st1.8h	{ v30 }, [x6], #16
-st1.8h	{ v31 }, [x6], #16
-ld1.8h	{ v16 }, [x7], x8
-ld1.8h	{ v17 }, [x7], x8
-ld1.8h	{ v18 }, [x7], x8
-ld1.8h	{ v19 }, [x7], x8
-ld1.8h	{ v20 }, [x7], x8
-ld1.8h	{ v21 }, [x7], x8
-ld1.8h	{ v22 }, [x7], x8
-ld1.8h	{ v23 }, [x7], x8
-movi.8h	v24, #0
-movi.8h	v25, #0
-movi.8h	v26, #0
-movi.8h	v27, #0
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
+st1	{ v16.8h }, [x6], #16
+st1	{ v17.8h }, [x6], #16
+st1	{ v18.8h }, [x6], #16
+st1	{ v19.8h }, [x6], #16
+st1	{ v20.8h }, [x6], #16
+st1	{ v21.8h }, [x6], #16
+st1	{ v22.8h }, [x6], #16
+st1	{ v23.8h }, [x6], #16
+st1	{ v24.8h }, [x6], #16
+st1	{ v25.8h }, [x6], #16
+st1	{ v26.8h }, [x6], #16
+st1	{ v27.8h }, [x6], #16
+st1	{ v28.8h }, [x6], #16
+st1	{ v29.8h }, [x6], #16
+st1	{ v30.8h }, [x6], #16
+st1	{ v31.8h }, [x6], #16
+ld1	{ v16.8h }, [x7], x8
+ld1	{ v17.8h }, [x7], x8
+ld1	{ v18.8h }, [x7], x8
+ld1	{ v19.8h }, [x7], x8
+ld1	{ v20.8h }, [x7], x8
+ld1	{ v21.8h }, [x7], x8
+ld1	{ v22.8h }, [x7], x8
+ld1	{ v23.8h }, [x7], x8
+movi	v24.8h, #0x0
+movi	v25.8h, #0x0
+movi	v26.8h, #0x0
+movi	v27.8h, #0x0
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
 sub	x7, x7, x8, lsl #3
 lsr	x8, x8, #1
 sub	x7, x7, x8, lsr #1
 bl	inv_dct32_odd_8h_x16_neon
-add	x10, x6, #240
-sub	x6, x6, #256
-mov	x9, #-16
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v31
-sqsub.8h	v31, v2, v31
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v30
-sqsub.8h	v30, v3, v30
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v29
-sub	x6, x6, #64
-sqsub.8h	v29, v4, v29
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v31 }, [x10], x9
-sqadd.8h	v3, v5, v28
-sqsub.8h	v28, v5, v28
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v30 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v29 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v28 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v27
-sqsub.8h	v27, v2, v27
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v26
-sqsub.8h	v26, v3, v26
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v25
-sub	x6, x6, #64
-sqsub.8h	v25, v4, v25
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v27 }, [x10], x9
-sqadd.8h	v3, v5, v24
-sqsub.8h	v24, v5, v24
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v26 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v25 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v24 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v23
-sqsub.8h	v23, v2, v23
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v22
-sqsub.8h	v22, v3, v22
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v21
-sub	x6, x6, #64
-sqsub.8h	v21, v4, v21
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v23 }, [x10], x9
-sqadd.8h	v3, v5, v20
-sqsub.8h	v20, v5, v20
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v22 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v21 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v20 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v19
-sqsub.8h	v19, v2, v19
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v18
-sqsub.8h	v18, v3, v18
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v17
-sub	x6, x6, #64
-sqsub.8h	v17, v4, v17
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v19 }, [x10], x9
-sqadd.8h	v3, v5, v16
-sqsub.8h	v16, v5, v16
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v18 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v17 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v16 }, [x10], x9
-add	x6, x6, #256
-adrp	x17, inv_txfm_dct_8h_x64_neon
-add	x17, x17, #0
+add	x10, x6, #0xf0
+sub	x6, x6, #0x100
+mov	x9, #-0x10
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v31.8h
+sqsub	v31.8h, v2.8h, v31.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v30.8h
+sqsub	v30.8h, v3.8h, v30.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v29.8h
+sub	x6, x6, #0x40
+sqsub	v29.8h, v4.8h, v29.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v31.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v28.8h
+sqsub	v28.8h, v5.8h, v28.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v30.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v29.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v28.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v27.8h
+sqsub	v27.8h, v2.8h, v27.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v26.8h
+sqsub	v26.8h, v3.8h, v26.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v25.8h
+sub	x6, x6, #0x40
+sqsub	v25.8h, v4.8h, v25.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v27.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v24.8h
+sqsub	v24.8h, v5.8h, v24.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v26.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v25.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v24.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v23.8h
+sqsub	v23.8h, v2.8h, v23.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v22.8h
+sqsub	v22.8h, v3.8h, v22.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v21.8h
+sub	x6, x6, #0x40
+sqsub	v21.8h, v4.8h, v21.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v23.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v20.8h
+sqsub	v20.8h, v5.8h, v20.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v22.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v21.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v20.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v19.8h
+sqsub	v19.8h, v2.8h, v19.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v18.8h
+sqsub	v18.8h, v3.8h, v18.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v17.8h
+sub	x6, x6, #0x40
+sqsub	v17.8h, v4.8h, v17.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v19.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v16.8h
+sqsub	v16.8h, v5.8h, v16.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v18.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v17.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v16.8h }, [x10], x9
+add	x6, x6, #0x100
+adrp	x17, idct64_coeffs
+add	x17, x17, :lo12:idct64_coeffs
 add	x9, x7, x8, lsl #4
 add	x10, x7, x8, lsl #3
 sub	x9, x9, x8
 sub	x11, x10, x8
-ld1.8h	{ v16 }, [x7]
-ld1.8h	{ v17 }, [x9]
-ld1.8h	{ v18 }, [x10]
-ld1.8h	{ v19 }, [x11]
+ld1	{ v16.8h }, [x7]
+ld1	{ v17.8h }, [x9]
+ld1	{ v18.8h }, [x10]
+ld1	{ v19.8h }, [x11]
 bl	inv_dct64_step1_neon
 add	x7, x7, x8, lsl #2
 sub	x9, x9, x8, lsl #2
 sub	x10, x7, x8
 add	x11, x9, x8
-ld1.8h	{ v16 }, [x10]
-ld1.8h	{ v17 }, [x11]
-ld1.8h	{ v18 }, [x9]
-ld1.8h	{ v19 }, [x7]
+ld1	{ v16.8h }, [x10]
+ld1	{ v17.8h }, [x11]
+ld1	{ v18.8h }, [x9]
+ld1	{ v19.8h }, [x7]
 bl	inv_dct64_step1_neon
 sub	x10, x10, x8, lsl #1
 sub	x9, x9, x8, lsl #1
@@ -7330,463 +7389,206 @@ ldr	q17, [x11, x8]
 ldr	q18, [x9]
 ldr	q19, [x7, x8]
 bl	inv_dct64_step1_neon
-sub	x6, x6, #512
-add	x9, x6, #112
+sub	x6, x6, #0x200
+add	x9, x6, #0x70
 bl	inv_dct64_step2_neon
 ret	x14
-_inv_txfm_dct_clear_8h_x64_neon:
+inv_txfm_dct_clear_8h_x64_neon:
 mov	x14, x30
 mov	x6, sp
 lsl	x8, x8, #2
-movi.8h	v7, #0
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-movi.8h	v24, #0
-movi.8h	v25, #0
-movi.8h	v26, #0
-movi.8h	v27, #0
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
+movi	v7.8h, #0x0
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+movi	v24.8h, #0x0
+movi	v25.8h, #0x0
+movi	v26.8h, #0x0
+movi	v27.8h, #0x0
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
 sub	x7, x7, x8, lsl #3
 add	x7, x7, x8, lsr #1
 bl	inv_dct_8h_x16_neon
-st1.8h	{ v16 }, [x6], #16
-st1.8h	{ v17 }, [x6], #16
-st1.8h	{ v18 }, [x6], #16
-st1.8h	{ v19 }, [x6], #16
-st1.8h	{ v20 }, [x6], #16
-st1.8h	{ v21 }, [x6], #16
-st1.8h	{ v22 }, [x6], #16
-st1.8h	{ v23 }, [x6], #16
-st1.8h	{ v24 }, [x6], #16
-st1.8h	{ v25 }, [x6], #16
-st1.8h	{ v26 }, [x6], #16
-st1.8h	{ v27 }, [x6], #16
-st1.8h	{ v28 }, [x6], #16
-st1.8h	{ v29 }, [x6], #16
-st1.8h	{ v30 }, [x6], #16
-st1.8h	{ v31 }, [x6], #16
-movi.8h	v7, #0
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-movi.8h	v24, #0
-movi.8h	v25, #0
-movi.8h	v26, #0
-movi.8h	v27, #0
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
+st1	{ v16.8h }, [x6], #16
+st1	{ v17.8h }, [x6], #16
+st1	{ v18.8h }, [x6], #16
+st1	{ v19.8h }, [x6], #16
+st1	{ v20.8h }, [x6], #16
+st1	{ v21.8h }, [x6], #16
+st1	{ v22.8h }, [x6], #16
+st1	{ v23.8h }, [x6], #16
+st1	{ v24.8h }, [x6], #16
+st1	{ v25.8h }, [x6], #16
+st1	{ v26.8h }, [x6], #16
+st1	{ v27.8h }, [x6], #16
+st1	{ v28.8h }, [x6], #16
+st1	{ v29.8h }, [x6], #16
+st1	{ v30.8h }, [x6], #16
+st1	{ v31.8h }, [x6], #16
+movi	v7.8h, #0x0
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+movi	v24.8h, #0x0
+movi	v25.8h, #0x0
+movi	v26.8h, #0x0
+movi	v27.8h, #0x0
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
 sub	x7, x7, x8, lsl #3
 lsr	x8, x8, #1
 sub	x7, x7, x8, lsr #1
 bl	inv_dct32_odd_8h_x16_neon
-add	x10, x6, #240
-sub	x6, x6, #256
-mov	x9, #-16
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v31
-sqsub.8h	v31, v2, v31
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v30
-sqsub.8h	v30, v3, v30
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v29
-sub	x6, x6, #64
-sqsub.8h	v29, v4, v29
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v31 }, [x10], x9
-sqadd.8h	v3, v5, v28
-sqsub.8h	v28, v5, v28
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v30 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v29 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v28 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v27
-sqsub.8h	v27, v2, v27
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v26
-sqsub.8h	v26, v3, v26
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v25
-sub	x6, x6, #64
-sqsub.8h	v25, v4, v25
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v27 }, [x10], x9
-sqadd.8h	v3, v5, v24
-sqsub.8h	v24, v5, v24
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v26 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v25 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v24 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v23
-sqsub.8h	v23, v2, v23
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v22
-sqsub.8h	v22, v3, v22
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v21
-sub	x6, x6, #64
-sqsub.8h	v21, v4, v21
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v23 }, [x10], x9
-sqadd.8h	v3, v5, v20
-sqsub.8h	v20, v5, v20
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v22 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v21 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v20 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v19
-sqsub.8h	v19, v2, v19
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v18
-sqsub.8h	v18, v3, v18
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v17
-sub	x6, x6, #64
-sqsub.8h	v17, v4, v17
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v19 }, [x10], x9
-sqadd.8h	v3, v5, v16
-sqsub.8h	v16, v5, v16
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v18 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v17 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v16 }, [x10], x9
-add	x6, x6, #256
-adrp	x17, inv_txfm_dct_clear_8h_x64_neon
-add	x17, x17, #0
-movi.8h	v7, #0
+add	x10, x6, #0xf0
+sub	x6, x6, #0x100
+mov	x9, #-0x10
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v31.8h
+sqsub	v31.8h, v2.8h, v31.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v30.8h
+sqsub	v30.8h, v3.8h, v30.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v29.8h
+sub	x6, x6, #0x40
+sqsub	v29.8h, v4.8h, v29.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v31.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v28.8h
+sqsub	v28.8h, v5.8h, v28.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v30.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v29.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v28.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v27.8h
+sqsub	v27.8h, v2.8h, v27.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v26.8h
+sqsub	v26.8h, v3.8h, v26.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v25.8h
+sub	x6, x6, #0x40
+sqsub	v25.8h, v4.8h, v25.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v27.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v24.8h
+sqsub	v24.8h, v5.8h, v24.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v26.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v25.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v24.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v23.8h
+sqsub	v23.8h, v2.8h, v23.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v22.8h
+sqsub	v22.8h, v3.8h, v22.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v21.8h
+sub	x6, x6, #0x40
+sqsub	v21.8h, v4.8h, v21.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v23.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v20.8h
+sqsub	v20.8h, v5.8h, v20.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v22.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v21.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v20.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v19.8h
+sqsub	v19.8h, v2.8h, v19.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v18.8h
+sqsub	v18.8h, v3.8h, v18.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v17.8h
+sub	x6, x6, #0x40
+sqsub	v17.8h, v4.8h, v17.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v19.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v16.8h
+sqsub	v16.8h, v5.8h, v16.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v18.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v17.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v16.8h }, [x10], x9
+add	x6, x6, #0x100
+adrp	x17, idct64_coeffs
+add	x17, x17, :lo12:idct64_coeffs
+movi	v7.8h, #0x0
 add	x9, x7, x8, lsl #4
 add	x10, x7, x8, lsl #3
 sub	x9, x9, x8
 sub	x11, x10, x8
-ld1.8h	{ v16 }, [x7]
-ld1.8h	{ v17 }, [x9]
-ld1.8h	{ v18 }, [x10]
-ld1.8h	{ v19 }, [x11]
-st1.8h	{ v7 }, [x7]
-st1.8h	{ v7 }, [x9]
-st1.8h	{ v7 }, [x10]
-st1.8h	{ v7 }, [x11]
+ld1	{ v16.8h }, [x7]
+ld1	{ v17.8h }, [x9]
+ld1	{ v18.8h }, [x10]
+ld1	{ v19.8h }, [x11]
+st1	{ v7.8h }, [x7]
+st1	{ v7.8h }, [x9]
+st1	{ v7.8h }, [x10]
+st1	{ v7.8h }, [x11]
 bl	inv_dct64_step1_neon
-movi.8h	v7, #0
+movi	v7.8h, #0x0
 add	x7, x7, x8, lsl #2
 sub	x9, x9, x8, lsl #2
 sub	x10, x7, x8
 add	x11, x9, x8
-ld1.8h	{ v16 }, [x10]
-ld1.8h	{ v17 }, [x11]
-ld1.8h	{ v18 }, [x9]
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7]
-st1.8h	{ v7 }, [x9]
-st1.8h	{ v7 }, [x10]
-st1.8h	{ v7 }, [x11]
+ld1	{ v16.8h }, [x10]
+ld1	{ v17.8h }, [x11]
+ld1	{ v18.8h }, [x9]
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7]
+st1	{ v7.8h }, [x9]
+st1	{ v7.8h }, [x10]
+st1	{ v7.8h }, [x11]
 bl	inv_dct64_step1_neon
-movi.8h	v7, #0
-sub	x10, x10, x8, lsl #1
-sub	x9, x9, x8, lsl #1
-add	x7, x7, x8
-add	x11, x11, x8
-ldr	q16, [x10, x8]
-ldr	q17, [x11]
-ldr	q18, [x9, x8]
-ldr	q19, [x7]
-str	q7, [x10, x8]
-str	q7, [x11]
-str	q7, [x9, x8]
-str	q7, [x7]
-bl	inv_dct64_step1_neon
-movi.8h	v7, #0
-ldr	q16, [x10]
-ldr	q17, [x11, x8]
-ldr	q18, [x9]
-ldr	q19, [x7, x8]
-str	q7, [x10]
-str	q7, [x11, x8]
-str	q7, [x9]
-str	q7, [x7, x8]
-bl	inv_dct64_step1_neon
-sub	x6, x6, #512
-add	x9, x6, #112
-bl	inv_dct64_step2_neon
-ret	x14
-_inv_txfm_dct_clear_scale_8h_x64_neon:
-mov	x14, x30
-mov	x6, sp
-lsl	x8, x8, #2
-mov	w16, #23168
-dup.4h	v0, w16
-movi.8h	v7, #0
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-movi.8h	v24, #0
-movi.8h	v25, #0
-movi.8h	v26, #0
-movi.8h	v27, #0
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
-sub	x7, x7, x8, lsl #3
-add	x7, x7, x8, lsr #1
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
-bl	inv_dct_8h_x16_neon
-st1.8h	{ v16 }, [x6], #16
-st1.8h	{ v17 }, [x6], #16
-st1.8h	{ v18 }, [x6], #16
-st1.8h	{ v19 }, [x6], #16
-st1.8h	{ v20 }, [x6], #16
-st1.8h	{ v21 }, [x6], #16
-st1.8h	{ v22 }, [x6], #16
-st1.8h	{ v23 }, [x6], #16
-st1.8h	{ v24 }, [x6], #16
-st1.8h	{ v25 }, [x6], #16
-st1.8h	{ v26 }, [x6], #16
-st1.8h	{ v27 }, [x6], #16
-st1.8h	{ v28 }, [x6], #16
-st1.8h	{ v29 }, [x6], #16
-st1.8h	{ v30 }, [x6], #16
-st1.8h	{ v31 }, [x6], #16
-mov	w16, #23168
-dup.4h	v0, w16
-movi.8h	v7, #0
-ld1.8h	{ v16 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v17 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v18 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v20 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v21 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v22 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-ld1.8h	{ v23 }, [x7]
-st1.8h	{ v7 }, [x7], x8
-movi.8h	v24, #0
-movi.8h	v25, #0
-movi.8h	v26, #0
-movi.8h	v27, #0
-movi.8h	v28, #0
-movi.8h	v29, #0
-movi.8h	v30, #0
-movi.8h	v31, #0
-sub	x7, x7, x8, lsl #3
-lsr	x8, x8, #1
-sub	x7, x7, x8, lsr #1
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-sqrdmulh.8h	v20, v20, v0[0]
-sqrdmulh.8h	v21, v21, v0[0]
-sqrdmulh.8h	v22, v22, v0[0]
-sqrdmulh.8h	v23, v23, v0[0]
-bl	inv_dct32_odd_8h_x16_neon
-add	x10, x6, #240
-sub	x6, x6, #256
-mov	x9, #-16
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v31
-sqsub.8h	v31, v2, v31
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v30
-sqsub.8h	v30, v3, v30
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v29
-sub	x6, x6, #64
-sqsub.8h	v29, v4, v29
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v31 }, [x10], x9
-sqadd.8h	v3, v5, v28
-sqsub.8h	v28, v5, v28
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v30 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v29 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v28 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v27
-sqsub.8h	v27, v2, v27
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v26
-sqsub.8h	v26, v3, v26
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v25
-sub	x6, x6, #64
-sqsub.8h	v25, v4, v25
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v27 }, [x10], x9
-sqadd.8h	v3, v5, v24
-sqsub.8h	v24, v5, v24
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v26 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v25 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v24 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v23
-sqsub.8h	v23, v2, v23
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v22
-sqsub.8h	v22, v3, v22
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v21
-sub	x6, x6, #64
-sqsub.8h	v21, v4, v21
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v23 }, [x10], x9
-sqadd.8h	v3, v5, v20
-sqsub.8h	v20, v5, v20
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v22 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v21 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v20 }, [x10], x9
-ld1.8h	{ v2 }, [x6], #16
-ld1.8h	{ v3 }, [x6], #16
-sqadd.8h	v6, v2, v19
-sqsub.8h	v19, v2, v19
-ld1.8h	{ v4 }, [x6], #16
-sqadd.8h	v7, v3, v18
-sqsub.8h	v18, v3, v18
-ld1.8h	{ v5 }, [x6], #16
-sqadd.8h	v2, v4, v17
-sub	x6, x6, #64
-sqsub.8h	v17, v4, v17
-st1.8h	{ v6 }, [x6], #16
-st1.8h	{ v19 }, [x10], x9
-sqadd.8h	v3, v5, v16
-sqsub.8h	v16, v5, v16
-st1.8h	{ v7 }, [x6], #16
-st1.8h	{ v18 }, [x10], x9
-st1.8h	{ v2 }, [x6], #16
-st1.8h	{ v17 }, [x10], x9
-st1.8h	{ v3 }, [x6], #16
-st1.8h	{ v16 }, [x10], x9
-add	x6, x6, #256
-adrp	x17, inv_txfm_dct_clear_scale_8h_x64_neon
-add	x17, x17, #0
-mov	w16, #23168
-dup.4h	v0, w16
-movi.8h	v7, #0
-add	x9, x7, x8, lsl #4
-add	x10, x7, x8, lsl #3
-sub	x9, x9, x8
-sub	x11, x10, x8
-ld1.8h	{ v16 }, [x7]
-ld1.8h	{ v17 }, [x9]
-ld1.8h	{ v18 }, [x10]
-ld1.8h	{ v19 }, [x11]
-st1.8h	{ v7 }, [x7]
-st1.8h	{ v7 }, [x9]
-st1.8h	{ v7 }, [x10]
-st1.8h	{ v7 }, [x11]
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-bl	inv_dct64_step1_neon
-mov	w16, #23168
-dup.4h	v0, w16
-movi.8h	v7, #0
-add	x7, x7, x8, lsl #2
-sub	x9, x9, x8, lsl #2
-sub	x10, x7, x8
-add	x11, x9, x8
-ld1.8h	{ v16 }, [x10]
-ld1.8h	{ v17 }, [x11]
-ld1.8h	{ v18 }, [x9]
-ld1.8h	{ v19 }, [x7]
-st1.8h	{ v7 }, [x7]
-st1.8h	{ v7 }, [x9]
-st1.8h	{ v7 }, [x10]
-st1.8h	{ v7 }, [x11]
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
-bl	inv_dct64_step1_neon
-mov	w16, #23168
-dup.4h	v0, w16
-movi.8h	v7, #0
+movi	v7.8h, #0x0
 sub	x10, x10, x8, lsl #1
 sub	x9, x9, x8, lsl #1
 add	x7, x7, x8
@@ -7799,14 +7601,8 @@ str	q7, [x10, x8]
 str	q7, [x11]
 str	q7, [x9, x8]
 str	q7, [x7]
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
 bl	inv_dct64_step1_neon
-mov	w16, #23168
-dup.4h	v0, w16
-movi.8h	v7, #0
+movi	v7.8h, #0x0
 ldr	q16, [x10]
 ldr	q17, [x11, x8]
 ldr	q18, [x9]
@@ -7815,700 +7611,1025 @@ str	q7, [x10]
 str	q7, [x11, x8]
 str	q7, [x9]
 str	q7, [x7, x8]
-sqrdmulh.8h	v16, v16, v0[0]
-sqrdmulh.8h	v17, v17, v0[0]
-sqrdmulh.8h	v18, v18, v0[0]
-sqrdmulh.8h	v19, v19, v0[0]
 bl	inv_dct64_step1_neon
-sub	x6, x6, #512
-add	x9, x6, #112
+sub	x6, x6, #0x200
+add	x9, x6, #0x70
 bl	inv_dct64_step2_neon
 ret	x14
-_inv_txfm_horz_dct_64x8_neon:
+inv_txfm_dct_clear_scale_8h_x64_neon:
+mov	x14, x30
+mov	x6, sp
+lsl	x8, x8, #2
+mov	w16, #0x5a80
+dup	v0.4h, w16
+movi	v7.8h, #0x0
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+movi	v24.8h, #0x0
+movi	v25.8h, #0x0
+movi	v26.8h, #0x0
+movi	v27.8h, #0x0
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+sub	x7, x7, x8, lsl #3
+add	x7, x7, x8, lsr #1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
+bl	inv_dct_8h_x16_neon
+st1	{ v16.8h }, [x6], #16
+st1	{ v17.8h }, [x6], #16
+st1	{ v18.8h }, [x6], #16
+st1	{ v19.8h }, [x6], #16
+st1	{ v20.8h }, [x6], #16
+st1	{ v21.8h }, [x6], #16
+st1	{ v22.8h }, [x6], #16
+st1	{ v23.8h }, [x6], #16
+st1	{ v24.8h }, [x6], #16
+st1	{ v25.8h }, [x6], #16
+st1	{ v26.8h }, [x6], #16
+st1	{ v27.8h }, [x6], #16
+st1	{ v28.8h }, [x6], #16
+st1	{ v29.8h }, [x6], #16
+st1	{ v30.8h }, [x6], #16
+st1	{ v31.8h }, [x6], #16
+mov	w16, #0x5a80
+dup	v0.4h, w16
+movi	v7.8h, #0x0
+ld1	{ v16.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v17.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v18.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v20.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v21.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v22.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+ld1	{ v23.8h }, [x7]
+st1	{ v7.8h }, [x7], x8
+movi	v24.8h, #0x0
+movi	v25.8h, #0x0
+movi	v26.8h, #0x0
+movi	v27.8h, #0x0
+movi	v28.8h, #0x0
+movi	v29.8h, #0x0
+movi	v30.8h, #0x0
+movi	v31.8h, #0x0
+sub	x7, x7, x8, lsl #3
+lsr	x8, x8, #1
+sub	x7, x7, x8, lsr #1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+sqrdmulh	v20.8h, v20.8h, v0.h[0]
+sqrdmulh	v21.8h, v21.8h, v0.h[0]
+sqrdmulh	v22.8h, v22.8h, v0.h[0]
+sqrdmulh	v23.8h, v23.8h, v0.h[0]
+bl	inv_dct32_odd_8h_x16_neon
+add	x10, x6, #0xf0
+sub	x6, x6, #0x100
+mov	x9, #-0x10
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v31.8h
+sqsub	v31.8h, v2.8h, v31.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v30.8h
+sqsub	v30.8h, v3.8h, v30.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v29.8h
+sub	x6, x6, #0x40
+sqsub	v29.8h, v4.8h, v29.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v31.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v28.8h
+sqsub	v28.8h, v5.8h, v28.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v30.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v29.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v28.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v27.8h
+sqsub	v27.8h, v2.8h, v27.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v26.8h
+sqsub	v26.8h, v3.8h, v26.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v25.8h
+sub	x6, x6, #0x40
+sqsub	v25.8h, v4.8h, v25.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v27.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v24.8h
+sqsub	v24.8h, v5.8h, v24.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v26.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v25.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v24.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v23.8h
+sqsub	v23.8h, v2.8h, v23.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v22.8h
+sqsub	v22.8h, v3.8h, v22.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v21.8h
+sub	x6, x6, #0x40
+sqsub	v21.8h, v4.8h, v21.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v23.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v20.8h
+sqsub	v20.8h, v5.8h, v20.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v22.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v21.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v20.8h }, [x10], x9
+ld1	{ v2.8h }, [x6], #16
+ld1	{ v3.8h }, [x6], #16
+sqadd	v6.8h, v2.8h, v19.8h
+sqsub	v19.8h, v2.8h, v19.8h
+ld1	{ v4.8h }, [x6], #16
+sqadd	v7.8h, v3.8h, v18.8h
+sqsub	v18.8h, v3.8h, v18.8h
+ld1	{ v5.8h }, [x6], #16
+sqadd	v2.8h, v4.8h, v17.8h
+sub	x6, x6, #0x40
+sqsub	v17.8h, v4.8h, v17.8h
+st1	{ v6.8h }, [x6], #16
+st1	{ v19.8h }, [x10], x9
+sqadd	v3.8h, v5.8h, v16.8h
+sqsub	v16.8h, v5.8h, v16.8h
+st1	{ v7.8h }, [x6], #16
+st1	{ v18.8h }, [x10], x9
+st1	{ v2.8h }, [x6], #16
+st1	{ v17.8h }, [x10], x9
+st1	{ v3.8h }, [x6], #16
+st1	{ v16.8h }, [x10], x9
+add	x6, x6, #0x100
+adrp	x17, idct64_coeffs
+add	x17, x17, :lo12:idct64_coeffs
+mov	w16, #0x5a80
+dup	v0.4h, w16
+movi	v7.8h, #0x0
+add	x9, x7, x8, lsl #4
+add	x10, x7, x8, lsl #3
+sub	x9, x9, x8
+sub	x11, x10, x8
+ld1	{ v16.8h }, [x7]
+ld1	{ v17.8h }, [x9]
+ld1	{ v18.8h }, [x10]
+ld1	{ v19.8h }, [x11]
+st1	{ v7.8h }, [x7]
+st1	{ v7.8h }, [x9]
+st1	{ v7.8h }, [x10]
+st1	{ v7.8h }, [x11]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+bl	inv_dct64_step1_neon
+mov	w16, #0x5a80
+dup	v0.4h, w16
+movi	v7.8h, #0x0
+add	x7, x7, x8, lsl #2
+sub	x9, x9, x8, lsl #2
+sub	x10, x7, x8
+add	x11, x9, x8
+ld1	{ v16.8h }, [x10]
+ld1	{ v17.8h }, [x11]
+ld1	{ v18.8h }, [x9]
+ld1	{ v19.8h }, [x7]
+st1	{ v7.8h }, [x7]
+st1	{ v7.8h }, [x9]
+st1	{ v7.8h }, [x10]
+st1	{ v7.8h }, [x11]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+bl	inv_dct64_step1_neon
+mov	w16, #0x5a80
+dup	v0.4h, w16
+movi	v7.8h, #0x0
+sub	x10, x10, x8, lsl #1
+sub	x9, x9, x8, lsl #1
+add	x7, x7, x8
+add	x11, x11, x8
+ldr	q16, [x10, x8]
+ldr	q17, [x11]
+ldr	q18, [x9, x8]
+ldr	q19, [x7]
+str	q7, [x10, x8]
+str	q7, [x11]
+str	q7, [x9, x8]
+str	q7, [x7]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+bl	inv_dct64_step1_neon
+mov	w16, #0x5a80
+dup	v0.4h, w16
+movi	v7.8h, #0x0
+ldr	q16, [x10]
+ldr	q17, [x11, x8]
+ldr	q18, [x9]
+ldr	q19, [x7, x8]
+str	q7, [x10]
+str	q7, [x11, x8]
+str	q7, [x9]
+str	q7, [x7, x8]
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+sqrdmulh	v17.8h, v17.8h, v0.h[0]
+sqrdmulh	v18.8h, v18.8h, v0.h[0]
+sqrdmulh	v19.8h, v19.8h, v0.h[0]
+bl	inv_dct64_step1_neon
+sub	x6, x6, #0x200
+add	x9, x6, #0x70
+bl	inv_dct64_step2_neon
+ret	x14
+inv_txfm_horz_dct_64x8_neon:
 mov	x14, x30
 mov	x7, sp
-add	x8, sp, #960
-add	x9, x6, #112
-mov	x10, #128
-mov	x11, #-64
-dup.8h	v7, w12
-ld1.8h	{ v16, v17, v18, v19 }, [x7], #64
-ld1.8h	{ v28, v29, v30, v31 }, [x8], x11
-ld1.8h	{ v20, v21, v22, v23 }, [x7], #64
-ld1.8h	{ v24, v25, v26, v27 }, [x8], x11
-trn1.8h	v4, v16, v17
-trn2.8h	v5, v16, v17
-trn1.8h	v17, v18, v19
-trn2.8h	v19, v18, v19
-trn1.8h	v16, v20, v21
-trn2.8h	v21, v20, v21
-trn1.8h	v18, v22, v23
-trn2.8h	v23, v22, v23
-trn1.4s	v20, v16, v18
-trn2.4s	v18, v16, v18
-trn1.4s	v22, v21, v23
-trn2.4s	v23, v21, v23
-trn1.4s	v21, v5, v19
-trn2.4s	v5, v5, v19
-trn1.4s	v19, v4, v17
-trn2.4s	v4, v4, v17
-trn1.2d	v16, v19, v20
-trn2.2d	v20, v19, v20
-trn1.2d	v17, v21, v22
-trn2.2d	v21, v21, v22
-trn2.2d	v22, v4, v18
-trn1.2d	v18, v4, v18
-trn1.2d	v19, v5, v23
-trn2.2d	v23, v5, v23
-trn1.8h	v4, v31, v30
-trn2.8h	v5, v31, v30
-trn1.8h	v30, v29, v28
-trn2.8h	v28, v29, v28
-trn1.8h	v31, v27, v26
-trn2.8h	v26, v27, v26
-trn1.8h	v29, v25, v24
-trn2.8h	v24, v25, v24
-trn1.4s	v27, v31, v29
-trn2.4s	v29, v31, v29
-trn1.4s	v25, v26, v24
-trn2.4s	v24, v26, v24
-trn1.4s	v26, v5, v28
-trn2.4s	v5, v5, v28
-trn1.4s	v28, v4, v30
-trn2.4s	v4, v4, v30
-trn1.2d	v31, v28, v27
-trn2.2d	v27, v28, v27
-trn1.2d	v30, v26, v25
-trn2.2d	v26, v26, v25
-trn2.2d	v25, v4, v29
-trn1.2d	v29, v4, v29
-trn1.2d	v28, v5, v24
-trn2.2d	v24, v5, v24
-sqsub.8h	v1, v16, v31
-sqadd.8h	v0, v16, v31
-sqsub.8h	v3, v17, v30
-srshl.8h	v1, v1, v7
-sqadd.8h	v2, v17, v30
-srshl.8h	v0, v0, v7
-srshl.8h	v3, v3, v7
-rev64.8h	v1, v1
-srshl.8h	v2, v2, v7
-rev64.8h	v3, v3
-ext.16b	v1, v1, v1, #8
-st1.8h	{ v0 }, [x6], x10
-ext.16b	v3, v3, v3, #8
-st1.8h	{ v1 }, [x9], x10
-st1.8h	{ v2 }, [x6], x10
-st1.8h	{ v3 }, [x9], x10
-sqsub.8h	v1, v18, v29
-sqadd.8h	v0, v18, v29
-sqsub.8h	v3, v19, v28
-srshl.8h	v1, v1, v7
-sqadd.8h	v2, v19, v28
-srshl.8h	v0, v0, v7
-srshl.8h	v3, v3, v7
-rev64.8h	v1, v1
-srshl.8h	v2, v2, v7
-rev64.8h	v3, v3
-ext.16b	v1, v1, v1, #8
-st1.8h	{ v0 }, [x6], x10
-ext.16b	v3, v3, v3, #8
-st1.8h	{ v1 }, [x9], x10
-st1.8h	{ v2 }, [x6], x10
-st1.8h	{ v3 }, [x9], x10
-sqsub.8h	v1, v20, v27
-sqadd.8h	v0, v20, v27
-sqsub.8h	v3, v21, v26
-srshl.8h	v1, v1, v7
-sqadd.8h	v2, v21, v26
-srshl.8h	v0, v0, v7
-srshl.8h	v3, v3, v7
-rev64.8h	v1, v1
-srshl.8h	v2, v2, v7
-rev64.8h	v3, v3
-ext.16b	v1, v1, v1, #8
-st1.8h	{ v0 }, [x6], x10
-ext.16b	v3, v3, v3, #8
-st1.8h	{ v1 }, [x9], x10
-st1.8h	{ v2 }, [x6], x10
-st1.8h	{ v3 }, [x9], x10
-sqsub.8h	v1, v22, v25
-sqadd.8h	v0, v22, v25
-sqsub.8h	v3, v23, v24
-srshl.8h	v1, v1, v7
-sqadd.8h	v2, v23, v24
-srshl.8h	v0, v0, v7
-srshl.8h	v3, v3, v7
-rev64.8h	v1, v1
-srshl.8h	v2, v2, v7
-rev64.8h	v3, v3
-ext.16b	v1, v1, v1, #8
-st1.8h	{ v0 }, [x6], x10
-ext.16b	v3, v3, v3, #8
-st1.8h	{ v1 }, [x9], x10
-st1.8h	{ v2 }, [x6], x10
-st1.8h	{ v3 }, [x9], x10
+add	x8, sp, #0x3c0
+add	x9, x6, #0x70
+mov	x10, #0x80
+mov	x11, #-0x40
+dup	v7.8h, w12
+L_7728:
+ld1	{ v16.8h, v17.8h, v18.8h, v19.8h }, [x7], #64
+ld1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x8], x11
+ld1	{ v20.8h, v21.8h, v22.8h, v23.8h }, [x7], #64
+ld1	{ v24.8h, v25.8h, v26.8h, v27.8h }, [x8], x11
+trn1	v4.8h, v16.8h, v17.8h
+trn2	v5.8h, v16.8h, v17.8h
+trn1	v17.8h, v18.8h, v19.8h
+trn2	v19.8h, v18.8h, v19.8h
+trn1	v16.8h, v20.8h, v21.8h
+trn2	v21.8h, v20.8h, v21.8h
+trn1	v18.8h, v22.8h, v23.8h
+trn2	v23.8h, v22.8h, v23.8h
+trn1	v20.4s, v16.4s, v18.4s
+trn2	v18.4s, v16.4s, v18.4s
+trn1	v22.4s, v21.4s, v23.4s
+trn2	v23.4s, v21.4s, v23.4s
+trn1	v21.4s, v5.4s, v19.4s
+trn2	v5.4s, v5.4s, v19.4s
+trn1	v19.4s, v4.4s, v17.4s
+trn2	v4.4s, v4.4s, v17.4s
+trn1	v16.2d, v19.2d, v20.2d
+trn2	v20.2d, v19.2d, v20.2d
+trn1	v17.2d, v21.2d, v22.2d
+trn2	v21.2d, v21.2d, v22.2d
+trn2	v22.2d, v4.2d, v18.2d
+trn1	v18.2d, v4.2d, v18.2d
+trn1	v19.2d, v5.2d, v23.2d
+trn2	v23.2d, v5.2d, v23.2d
+trn1	v4.8h, v31.8h, v30.8h
+trn2	v5.8h, v31.8h, v30.8h
+trn1	v30.8h, v29.8h, v28.8h
+trn2	v28.8h, v29.8h, v28.8h
+trn1	v31.8h, v27.8h, v26.8h
+trn2	v26.8h, v27.8h, v26.8h
+trn1	v29.8h, v25.8h, v24.8h
+trn2	v24.8h, v25.8h, v24.8h
+trn1	v27.4s, v31.4s, v29.4s
+trn2	v29.4s, v31.4s, v29.4s
+trn1	v25.4s, v26.4s, v24.4s
+trn2	v24.4s, v26.4s, v24.4s
+trn1	v26.4s, v5.4s, v28.4s
+trn2	v5.4s, v5.4s, v28.4s
+trn1	v28.4s, v4.4s, v30.4s
+trn2	v4.4s, v4.4s, v30.4s
+trn1	v31.2d, v28.2d, v27.2d
+trn2	v27.2d, v28.2d, v27.2d
+trn1	v30.2d, v26.2d, v25.2d
+trn2	v26.2d, v26.2d, v25.2d
+trn2	v25.2d, v4.2d, v29.2d
+trn1	v29.2d, v4.2d, v29.2d
+trn1	v28.2d, v5.2d, v24.2d
+trn2	v24.2d, v5.2d, v24.2d
+sqsub	v1.8h, v16.8h, v31.8h
+sqadd	v0.8h, v16.8h, v31.8h
+sqsub	v3.8h, v17.8h, v30.8h
+srshl	v1.8h, v1.8h, v7.8h
+sqadd	v2.8h, v17.8h, v30.8h
+srshl	v0.8h, v0.8h, v7.8h
+srshl	v3.8h, v3.8h, v7.8h
+rev64	v1.8h, v1.8h
+srshl	v2.8h, v2.8h, v7.8h
+rev64	v3.8h, v3.8h
+ext	v1.16b, v1.16b, v1.16b, #0x8
+st1	{ v0.8h }, [x6], x10
+ext	v3.16b, v3.16b, v3.16b, #0x8
+st1	{ v1.8h }, [x9], x10
+st1	{ v2.8h }, [x6], x10
+st1	{ v3.8h }, [x9], x10
+sqsub	v1.8h, v18.8h, v29.8h
+sqadd	v0.8h, v18.8h, v29.8h
+sqsub	v3.8h, v19.8h, v28.8h
+srshl	v1.8h, v1.8h, v7.8h
+sqadd	v2.8h, v19.8h, v28.8h
+srshl	v0.8h, v0.8h, v7.8h
+srshl	v3.8h, v3.8h, v7.8h
+rev64	v1.8h, v1.8h
+srshl	v2.8h, v2.8h, v7.8h
+rev64	v3.8h, v3.8h
+ext	v1.16b, v1.16b, v1.16b, #0x8
+st1	{ v0.8h }, [x6], x10
+ext	v3.16b, v3.16b, v3.16b, #0x8
+st1	{ v1.8h }, [x9], x10
+st1	{ v2.8h }, [x6], x10
+st1	{ v3.8h }, [x9], x10
+sqsub	v1.8h, v20.8h, v27.8h
+sqadd	v0.8h, v20.8h, v27.8h
+sqsub	v3.8h, v21.8h, v26.8h
+srshl	v1.8h, v1.8h, v7.8h
+sqadd	v2.8h, v21.8h, v26.8h
+srshl	v0.8h, v0.8h, v7.8h
+srshl	v3.8h, v3.8h, v7.8h
+rev64	v1.8h, v1.8h
+srshl	v2.8h, v2.8h, v7.8h
+rev64	v3.8h, v3.8h
+ext	v1.16b, v1.16b, v1.16b, #0x8
+st1	{ v0.8h }, [x6], x10
+ext	v3.16b, v3.16b, v3.16b, #0x8
+st1	{ v1.8h }, [x9], x10
+st1	{ v2.8h }, [x6], x10
+st1	{ v3.8h }, [x9], x10
+sqsub	v1.8h, v22.8h, v25.8h
+sqadd	v0.8h, v22.8h, v25.8h
+sqsub	v3.8h, v23.8h, v24.8h
+srshl	v1.8h, v1.8h, v7.8h
+sqadd	v2.8h, v23.8h, v24.8h
+srshl	v0.8h, v0.8h, v7.8h
+srshl	v3.8h, v3.8h, v7.8h
+rev64	v1.8h, v1.8h
+srshl	v2.8h, v2.8h, v7.8h
+rev64	v3.8h, v3.8h
+ext	v1.16b, v1.16b, v1.16b, #0x8
+st1	{ v0.8h }, [x6], x10
+ext	v3.16b, v3.16b, v3.16b, #0x8
+st1	{ v1.8h }, [x9], x10
+st1	{ v2.8h }, [x6], x10
+st1	{ v3.8h }, [x9], x10
 sub	x6, x6, x10, lsl #3
 sub	x9, x9, x10, lsl #3
-add	x6, x6, #16
-sub	x9, x9, #16
+add	x6, x6, #0x10
+sub	x9, x9, #0x10
 cmp	x7, x8
-b.lt	inv_txfm_horz_dct_64x8_neon
+b.lt	L_7728
 ret	x14
-_inv_txfm_add_vert_dct_8x64_neon:
+inv_txfm_add_vert_dct_8x64_neon:
 mov	x14, x30
 lsl	x8, x8, #1
 mov	x7, sp
-add	x8, sp, #960
+add	x8, sp, #0x3c0
 add	x9, x6, x1, lsl #6
 sub	x9, x9, x1
 neg	x10, x1
-mov	x11, #-64
-ld1.8h	{ v16, v17, v18, v19 }, [x7], #64
-ld1.8h	{ v28, v29, v30, v31 }, [x8], x11
-ld1.8h	{ v20, v21, v22, v23 }, [x7], #64
-ld1.8h	{ v24, v25, v26, v27 }, [x8], x11
-ld1.8b	{ v0 }, [x6], x1
-ld1.8b	{ v1 }, [x9], x10
-sqadd.8h	v4, v16, v31
-ld1.8b	{ v2 }, [x6]
-sqsub.8h	v5, v16, v31
-ld1.8b	{ v3 }, [x9]
-sqadd.8h	v6, v17, v30
-sqsub.8h	v7, v17, v30
+mov	x11, #-0x40
+L_7934:
+ld1	{ v16.8h, v17.8h, v18.8h, v19.8h }, [x7], #64
+ld1	{ v28.8h, v29.8h, v30.8h, v31.8h }, [x8], x11
+ld1	{ v20.8h, v21.8h, v22.8h, v23.8h }, [x7], #64
+ld1	{ v24.8h, v25.8h, v26.8h, v27.8h }, [x8], x11
+ld1	{ v0.8b }, [x6], x1
+ld1	{ v1.8b }, [x9], x10
+sqadd	v4.8h, v16.8h, v31.8h
+ld1	{ v2.8b }, [x6]
+sqsub	v5.8h, v16.8h, v31.8h
+ld1	{ v3.8b }, [x9]
+sqadd	v6.8h, v17.8h, v30.8h
+sqsub	v7.8h, v17.8h, v30.8h
 sub	x6, x6, x1
 sub	x9, x9, x10
-srshr.8h	v4, v4, #4
-srshr.8h	v5, v5, #4
-srshr.8h	v6, v6, #4
-uaddw.8h	v4, v4, v0
-srshr.8h	v7, v7, #4
-uaddw.8h	v5, v5, v1
-uaddw.8h	v6, v6, v2
-sqxtun.8b	v0, v4
-uaddw.8h	v7, v7, v3
-sqxtun.8b	v1, v5
-st1.8b	{ v0 }, [x6], x1
-sqxtun.8b	v2, v6
-st1.8b	{ v1 }, [x9], x10
-sqxtun.8b	v3, v7
-st1.8b	{ v2 }, [x6], x1
-st1.8b	{ v3 }, [x9], x10
-ld1.8b	{ v0 }, [x6], x1
-ld1.8b	{ v1 }, [x9], x10
-sqadd.8h	v4, v18, v29
-ld1.8b	{ v2 }, [x6]
-sqsub.8h	v5, v18, v29
-ld1.8b	{ v3 }, [x9]
-sqadd.8h	v6, v19, v28
-sqsub.8h	v7, v19, v28
+srshr	v4.8h, v4.8h, #0x4
+srshr	v5.8h, v5.8h, #0x4
+srshr	v6.8h, v6.8h, #0x4
+uaddw	v4.8h, v4.8h, v0.8b
+srshr	v7.8h, v7.8h, #0x4
+uaddw	v5.8h, v5.8h, v1.8b
+uaddw	v6.8h, v6.8h, v2.8b
+sqxtun	v0.8b, v4.8h
+uaddw	v7.8h, v7.8h, v3.8b
+sqxtun	v1.8b, v5.8h
+st1	{ v0.8b }, [x6], x1
+sqxtun	v2.8b, v6.8h
+st1	{ v1.8b }, [x9], x10
+sqxtun	v3.8b, v7.8h
+st1	{ v2.8b }, [x6], x1
+st1	{ v3.8b }, [x9], x10
+ld1	{ v0.8b }, [x6], x1
+ld1	{ v1.8b }, [x9], x10
+sqadd	v4.8h, v18.8h, v29.8h
+ld1	{ v2.8b }, [x6]
+sqsub	v5.8h, v18.8h, v29.8h
+ld1	{ v3.8b }, [x9]
+sqadd	v6.8h, v19.8h, v28.8h
+sqsub	v7.8h, v19.8h, v28.8h
 sub	x6, x6, x1
 sub	x9, x9, x10
-srshr.8h	v4, v4, #4
-srshr.8h	v5, v5, #4
-srshr.8h	v6, v6, #4
-uaddw.8h	v4, v4, v0
-srshr.8h	v7, v7, #4
-uaddw.8h	v5, v5, v1
-uaddw.8h	v6, v6, v2
-sqxtun.8b	v0, v4
-uaddw.8h	v7, v7, v3
-sqxtun.8b	v1, v5
-st1.8b	{ v0 }, [x6], x1
-sqxtun.8b	v2, v6
-st1.8b	{ v1 }, [x9], x10
-sqxtun.8b	v3, v7
-st1.8b	{ v2 }, [x6], x1
-st1.8b	{ v3 }, [x9], x10
-ld1.8b	{ v0 }, [x6], x1
-ld1.8b	{ v1 }, [x9], x10
-sqadd.8h	v4, v20, v27
-ld1.8b	{ v2 }, [x6]
-sqsub.8h	v5, v20, v27
-ld1.8b	{ v3 }, [x9]
-sqadd.8h	v6, v21, v26
-sqsub.8h	v7, v21, v26
+srshr	v4.8h, v4.8h, #0x4
+srshr	v5.8h, v5.8h, #0x4
+srshr	v6.8h, v6.8h, #0x4
+uaddw	v4.8h, v4.8h, v0.8b
+srshr	v7.8h, v7.8h, #0x4
+uaddw	v5.8h, v5.8h, v1.8b
+uaddw	v6.8h, v6.8h, v2.8b
+sqxtun	v0.8b, v4.8h
+uaddw	v7.8h, v7.8h, v3.8b
+sqxtun	v1.8b, v5.8h
+st1	{ v0.8b }, [x6], x1
+sqxtun	v2.8b, v6.8h
+st1	{ v1.8b }, [x9], x10
+sqxtun	v3.8b, v7.8h
+st1	{ v2.8b }, [x6], x1
+st1	{ v3.8b }, [x9], x10
+ld1	{ v0.8b }, [x6], x1
+ld1	{ v1.8b }, [x9], x10
+sqadd	v4.8h, v20.8h, v27.8h
+ld1	{ v2.8b }, [x6]
+sqsub	v5.8h, v20.8h, v27.8h
+ld1	{ v3.8b }, [x9]
+sqadd	v6.8h, v21.8h, v26.8h
+sqsub	v7.8h, v21.8h, v26.8h
 sub	x6, x6, x1
 sub	x9, x9, x10
-srshr.8h	v4, v4, #4
-srshr.8h	v5, v5, #4
-srshr.8h	v6, v6, #4
-uaddw.8h	v4, v4, v0
-srshr.8h	v7, v7, #4
-uaddw.8h	v5, v5, v1
-uaddw.8h	v6, v6, v2
-sqxtun.8b	v0, v4
-uaddw.8h	v7, v7, v3
-sqxtun.8b	v1, v5
-st1.8b	{ v0 }, [x6], x1
-sqxtun.8b	v2, v6
-st1.8b	{ v1 }, [x9], x10
-sqxtun.8b	v3, v7
-st1.8b	{ v2 }, [x6], x1
-st1.8b	{ v3 }, [x9], x10
-ld1.8b	{ v0 }, [x6], x1
-ld1.8b	{ v1 }, [x9], x10
-sqadd.8h	v4, v22, v25
-ld1.8b	{ v2 }, [x6]
-sqsub.8h	v5, v22, v25
-ld1.8b	{ v3 }, [x9]
-sqadd.8h	v6, v23, v24
-sqsub.8h	v7, v23, v24
+srshr	v4.8h, v4.8h, #0x4
+srshr	v5.8h, v5.8h, #0x4
+srshr	v6.8h, v6.8h, #0x4
+uaddw	v4.8h, v4.8h, v0.8b
+srshr	v7.8h, v7.8h, #0x4
+uaddw	v5.8h, v5.8h, v1.8b
+uaddw	v6.8h, v6.8h, v2.8b
+sqxtun	v0.8b, v4.8h
+uaddw	v7.8h, v7.8h, v3.8b
+sqxtun	v1.8b, v5.8h
+st1	{ v0.8b }, [x6], x1
+sqxtun	v2.8b, v6.8h
+st1	{ v1.8b }, [x9], x10
+sqxtun	v3.8b, v7.8h
+st1	{ v2.8b }, [x6], x1
+st1	{ v3.8b }, [x9], x10
+ld1	{ v0.8b }, [x6], x1
+ld1	{ v1.8b }, [x9], x10
+sqadd	v4.8h, v22.8h, v25.8h
+ld1	{ v2.8b }, [x6]
+sqsub	v5.8h, v22.8h, v25.8h
+ld1	{ v3.8b }, [x9]
+sqadd	v6.8h, v23.8h, v24.8h
+sqsub	v7.8h, v23.8h, v24.8h
 sub	x6, x6, x1
 sub	x9, x9, x10
-srshr.8h	v4, v4, #4
-srshr.8h	v5, v5, #4
-srshr.8h	v6, v6, #4
-uaddw.8h	v4, v4, v0
-srshr.8h	v7, v7, #4
-uaddw.8h	v5, v5, v1
-uaddw.8h	v6, v6, v2
-sqxtun.8b	v0, v4
-uaddw.8h	v7, v7, v3
-sqxtun.8b	v1, v5
-st1.8b	{ v0 }, [x6], x1
-sqxtun.8b	v2, v6
-st1.8b	{ v1 }, [x9], x10
-sqxtun.8b	v3, v7
-st1.8b	{ v2 }, [x6], x1
-st1.8b	{ v3 }, [x9], x10
+srshr	v4.8h, v4.8h, #0x4
+srshr	v5.8h, v5.8h, #0x4
+srshr	v6.8h, v6.8h, #0x4
+uaddw	v4.8h, v4.8h, v0.8b
+srshr	v7.8h, v7.8h, #0x4
+uaddw	v5.8h, v5.8h, v1.8b
+uaddw	v6.8h, v6.8h, v2.8b
+sqxtun	v0.8b, v4.8h
+uaddw	v7.8h, v7.8h, v3.8b
+sqxtun	v1.8b, v5.8h
+st1	{ v0.8b }, [x6], x1
+sqxtun	v2.8b, v6.8h
+st1	{ v1.8b }, [x9], x10
+sqxtun	v3.8b, v7.8h
+st1	{ v2.8b }, [x6], x1
+st1	{ v3.8b }, [x9], x10
 cmp	x7, x8
-b.lt	inv_txfm_add_vert_dct_8x64_neon
+b.lt	L_7934
 ret	x14
-_inv_txfm_add_dct_dct_64x64_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_64x64_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_64x64_8bpc_neon:
+cbnz	w3, L_7b1c
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #2
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #64
+srshr	v16.8h, v16.8h, #0x2
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x40
 b	idct_dc_w64_neon
+L_7b1c:
 mov	x15, x30
-sub	sp, sp, #1, lsl #12     ; =4096
-sub	sp, sp, #1024
-add	x5, sp, #1024
-adrp	x13, inv_txfm_add_dct_dct_64x64_8bpc_neon
-add	x13, x13, #0
-add	x6, x5, #0
-add	x7, x2, #0
-mov	x8, #64
-mov	x12, #-2
+sub	sp, sp, #0x1, lsl #12
+sub	sp, sp, #0x400
+add	x5, sp, #0x400
+adrp	x13, eob_32x32
+add	x13, x13, :lo12:eob_32x32
+add	x6, x5, #0x0
+add	x7, x2, #0x0
+mov	x8, #0x40
+mov	x12, #-0x2
 bl	inv_txfm_dct_clear_8h_x64_neon
-add	x6, x5, #0
+add	x6, x5, #0x0
 bl	inv_txfm_horz_dct_64x8_neon
-ldrh	w12, [x13], #2
-add	x6, x5, #1024
-mov	w8, #24
+ldrh	w12, [x13], #0x2
+add	x6, x5, #0x400
+mov	w8, #0x18
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_64x64_8bpc_neon
-add	x7, x2, #16
-mov	x8, #64
-mov	x12, #-2
+b.lt	L_7bd8
+add	x7, x2, #0x10
+mov	x8, #0x40
+mov	x12, #-0x2
 bl	inv_txfm_dct_clear_8h_x64_neon
-add	x6, x5, #1024
+add	x6, x5, #0x400
 bl	inv_txfm_horz_dct_64x8_neon
-ldrh	w12, [x13], #2
-add	x6, x5, #2048
-mov	w8, #16
+ldrh	w12, [x13], #0x2
+add	x6, x5, #0x800
+mov	w8, #0x10
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_64x64_8bpc_neon
-add	x7, x2, #32
-mov	x8, #64
-mov	x12, #-2
+b.lt	L_7bd8
+add	x7, x2, #0x20
+mov	x8, #0x40
+mov	x12, #-0x2
 bl	inv_txfm_dct_clear_8h_x64_neon
-add	x6, x5, #2048
+add	x6, x5, #0x800
 bl	inv_txfm_horz_dct_64x8_neon
-ldrh	w12, [x13], #2
-add	x6, x5, #3072
-mov	w8, #8
+ldrh	w12, [x13], #0x2
+add	x6, x5, #0xc00
+mov	w8, #0x8
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_64x64_8bpc_neon
-add	x7, x2, #48
-mov	x8, #64
-mov	x12, #-2
+b.lt	L_7bd8
+add	x7, x2, #0x30
+mov	x8, #0x40
+mov	x12, #-0x2
 bl	inv_txfm_dct_clear_8h_x64_neon
-add	x6, x5, #3072
+add	x6, x5, #0xc00
 bl	inv_txfm_horz_dct_64x8_neon
-b	inv_txfm_add_dct_dct_64x64_8bpc_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-subs	w8, w8, #2
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_64x64_8bpc_neon
-add	x7, x5, #0
-mov	x8, #128
+b	L_7c00
+L_7bd8:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+L_7be8:
+subs	w8, w8, #0x2
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+b.gt	L_7be8
+L_7c00:
+add	x7, x5, #0x0
+mov	x8, #0x80
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #0
+add	x6, x0, #0x0
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #16
-mov	x8, #128
+add	x7, x5, #0x10
+mov	x8, #0x80
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #8
+add	x6, x0, #0x8
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #32
-mov	x8, #128
+add	x7, x5, #0x20
+mov	x8, #0x80
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #16
+add	x6, x0, #0x10
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #48
-mov	x8, #128
+add	x7, x5, #0x30
+mov	x8, #0x80
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #24
+add	x6, x0, #0x18
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #64
-mov	x8, #128
+add	x7, x5, #0x40
+mov	x8, #0x80
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #32
+add	x6, x0, #0x20
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #80
-mov	x8, #128
+add	x7, x5, #0x50
+mov	x8, #0x80
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #40
+add	x6, x0, #0x28
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #96
-mov	x8, #128
+add	x7, x5, #0x60
+mov	x8, #0x80
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #48
+add	x6, x0, #0x30
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #112
-mov	x8, #128
+add	x7, x5, #0x70
+mov	x8, #0x80
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #56
+add	x6, x0, #0x38
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	sp, x5, #1, lsl #12     ; =4096
+add	sp, x5, #0x1, lsl #12
 ret	x15
-_inv_txfm_add_dct_dct_64x32_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_64x32_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_64x32_8bpc_neon:
+cbnz	w3, L_7cd8
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #32
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x20
 b	idct_dc_w64_neon
+L_7cd8:
 mov	x15, x30
-sub	sp, sp, #1, lsl #12     ; =4096
-sub	sp, sp, #1024
-add	x5, sp, #1024
-adrp	x13, inv_txfm_add_dct_dct_64x32_8bpc_neon
-add	x13, x13, #0
-add	x6, x5, #0
-add	x7, x2, #0
-mov	x8, #64
-mov	x12, #-1
+sub	sp, sp, #0x1, lsl #12
+sub	sp, sp, #0x400
+add	x5, sp, #0x400
+adrp	x13, eob_32x32
+add	x13, x13, :lo12:eob_32x32
+add	x6, x5, #0x0
+add	x7, x2, #0x0
+mov	x8, #0x40
+mov	x12, #-0x1
 bl	inv_txfm_dct_clear_scale_8h_x64_neon
-add	x6, x5, #0
+add	x6, x5, #0x0
 bl	inv_txfm_horz_dct_64x8_neon
-ldrh	w12, [x13], #2
-add	x6, x5, #1024
-mov	w8, #24
+ldrh	w12, [x13], #0x2
+add	x6, x5, #0x400
+mov	w8, #0x18
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_64x32_8bpc_neon
-add	x7, x2, #16
-mov	x8, #64
-mov	x12, #-1
+b.lt	L_7d94
+add	x7, x2, #0x10
+mov	x8, #0x40
+mov	x12, #-0x1
 bl	inv_txfm_dct_clear_scale_8h_x64_neon
-add	x6, x5, #1024
+add	x6, x5, #0x400
 bl	inv_txfm_horz_dct_64x8_neon
-ldrh	w12, [x13], #2
-add	x6, x5, #2048
-mov	w8, #16
+ldrh	w12, [x13], #0x2
+add	x6, x5, #0x800
+mov	w8, #0x10
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_64x32_8bpc_neon
-add	x7, x2, #32
-mov	x8, #64
-mov	x12, #-1
+b.lt	L_7d94
+add	x7, x2, #0x20
+mov	x8, #0x40
+mov	x12, #-0x1
 bl	inv_txfm_dct_clear_scale_8h_x64_neon
-add	x6, x5, #2048
+add	x6, x5, #0x800
 bl	inv_txfm_horz_dct_64x8_neon
-ldrh	w12, [x13], #2
-add	x6, x5, #3072
-mov	w8, #8
+ldrh	w12, [x13], #0x2
+add	x6, x5, #0xc00
+mov	w8, #0x8
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_64x32_8bpc_neon
-add	x7, x2, #48
-mov	x8, #64
-mov	x12, #-1
+b.lt	L_7d94
+add	x7, x2, #0x30
+mov	x8, #0x40
+mov	x12, #-0x1
 bl	inv_txfm_dct_clear_scale_8h_x64_neon
-add	x6, x5, #3072
+add	x6, x5, #0xc00
 bl	inv_txfm_horz_dct_64x8_neon
-b	inv_txfm_add_dct_dct_64x32_8bpc_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-subs	w8, w8, #2
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_64x32_8bpc_neon
-add	x6, x0, #0
-add	x7, x5, #0
-mov	x8, #128
+b	L_7dbc
+L_7d94:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+L_7da4:
+subs	w8, w8, #0x2
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+b.gt	L_7da4
+L_7dbc:
+add	x6, x0, #0x0
+add	x7, x5, #0x0
+mov	x8, #0x80
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #8
-add	x7, x5, #16
-mov	x8, #128
+add	x6, x0, #0x8
+add	x7, x5, #0x10
+mov	x8, #0x80
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #16
-add	x7, x5, #32
-mov	x8, #128
+add	x6, x0, #0x10
+add	x7, x5, #0x20
+mov	x8, #0x80
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #24
-add	x7, x5, #48
-mov	x8, #128
+add	x6, x0, #0x18
+add	x7, x5, #0x30
+mov	x8, #0x80
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #32
-add	x7, x5, #64
-mov	x8, #128
+add	x6, x0, #0x20
+add	x7, x5, #0x40
+mov	x8, #0x80
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #40
-add	x7, x5, #80
-mov	x8, #128
+add	x6, x0, #0x28
+add	x7, x5, #0x50
+mov	x8, #0x80
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #48
-add	x7, x5, #96
-mov	x8, #128
+add	x6, x0, #0x30
+add	x7, x5, #0x60
+mov	x8, #0x80
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	x6, x0, #56
-add	x7, x5, #112
-mov	x8, #128
+add	x6, x0, #0x38
+add	x7, x5, #0x70
+mov	x8, #0x80
 bl	inv_txfm_add_vert_dct_8x32_neon
-add	sp, x5, #1, lsl #12     ; =4096
+add	sp, x5, #0x1, lsl #12
 ret	x15
-_inv_txfm_add_dct_dct_32x64_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_32x64_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_32x64_8bpc_neon:
+cbnz	w3, L_7e74
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #1
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #64
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x1
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x40
 b	idct_dc_w32_neon
+L_7e74:
 mov	x15, x30
-sub	sp, sp, #3072
-add	x5, sp, #1024
-adrp	x13, inv_txfm_add_dct_dct_32x64_8bpc_neon
-add	x13, x13, #0
-ldrh	w12, [x13], #2
-add	x6, x5, #0
-add	x7, x2, #0
-mov	x8, #64
+sub	sp, sp, #0xc00
+add	x5, sp, #0x400
+adrp	x13, eob_32x32
+add	x13, x13, :lo12:eob_32x32
+ldrh	w12, [x13], #0x2
+add	x6, x5, #0x0
+add	x7, x2, #0x0
+mov	x8, #0x40
 bl	inv_txfm_horz_scale_dct_32x8_neon
-add	x6, x5, #512
-mov	w8, #24
+add	x6, x5, #0x200
+mov	w8, #0x18
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_32x64_8bpc_neon
-ldrh	w12, [x13], #2
-add	x7, x2, #16
-mov	x8, #64
+b.lt	L_7efc
+ldrh	w12, [x13], #0x2
+add	x7, x2, #0x10
+mov	x8, #0x40
 bl	inv_txfm_horz_scale_dct_32x8_neon
-add	x6, x5, #1024
-mov	w8, #16
+add	x6, x5, #0x400
+mov	w8, #0x10
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_32x64_8bpc_neon
-ldrh	w12, [x13], #2
-add	x7, x2, #32
-mov	x8, #64
+b.lt	L_7efc
+ldrh	w12, [x13], #0x2
+add	x7, x2, #0x20
+mov	x8, #0x40
 bl	inv_txfm_horz_scale_dct_32x8_neon
-add	x6, x5, #1536
-mov	w8, #8
+add	x6, x5, #0x600
+mov	w8, #0x8
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_32x64_8bpc_neon
-add	x7, x2, #48
-mov	x8, #64
+b.lt	L_7efc
+add	x7, x2, #0x30
+mov	x8, #0x40
 bl	inv_txfm_horz_scale_dct_32x8_neon
-b	inv_txfm_add_dct_dct_32x64_8bpc_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-subs	w8, w8, #4
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_32x64_8bpc_neon
-add	x7, x5, #0
-mov	x8, #64
+b	L_7f24
+L_7efc:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+L_7f0c:
+subs	w8, w8, #0x4
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+b.gt	L_7f0c
+L_7f24:
+add	x7, x5, #0x0
+mov	x8, #0x40
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #0
+add	x6, x0, #0x0
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #16
-mov	x8, #64
+add	x7, x5, #0x10
+mov	x8, #0x40
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #8
+add	x6, x0, #0x8
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #32
-mov	x8, #64
+add	x7, x5, #0x20
+mov	x8, #0x40
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #16
+add	x6, x0, #0x10
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #48
-mov	x8, #64
+add	x7, x5, #0x30
+mov	x8, #0x40
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #24
+add	x6, x0, #0x18
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	sp, x5, #2048
+add	sp, x5, #0x800
 ret	x15
-_inv_txfm_add_dct_dct_64x16_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_64x16_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_64x16_8bpc_neon:
+cbnz	w3, L_7fa8
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #2
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #16
+srshr	v16.8h, v16.8h, #0x2
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x10
 b	idct_dc_w64_neon
+L_7fa8:
 mov	x15, x30
-sub	sp, sp, #3072
-add	x4, sp, #1024
-adrp	x13, inv_txfm_add_dct_dct_64x16_8bpc_neon
-add	x13, x13, #0
-add	x6, x4, #0
-add	x7, x2, #0
-mov	x8, #32
-mov	x12, #-2
+sub	sp, sp, #0xc00
+add	x4, sp, #0x400
+adrp	x13, eob_16x32
+add	x13, x13, :lo12:eob_16x32
+add	x6, x4, #0x0
+add	x7, x2, #0x0
+mov	x8, #0x20
+mov	x12, #-0x2
 bl	inv_txfm_dct_clear_8h_x64_neon
-add	x6, x4, #0
+add	x6, x4, #0x0
 bl	inv_txfm_horz_dct_64x8_neon
-ldrh	w12, [x13], #2
-add	x6, x4, #1024
-mov	w8, #8
+ldrh	w12, [x13], #0x2
+add	x6, x4, #0x400
+mov	w8, #0x8
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_64x16_8bpc_neon
-add	x7, x2, #16
-mov	x8, #32
-mov	x12, #-2
+b.lt	L_8008
+add	x7, x2, #0x10
+mov	x8, #0x20
+mov	x12, #-0x2
 bl	inv_txfm_dct_clear_8h_x64_neon
-add	x6, x4, #1024
+add	x6, x4, #0x400
 bl	inv_txfm_horz_dct_64x8_neon
-b	inv_txfm_add_dct_dct_64x16_8bpc_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-subs	w8, w8, #2
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_64x16_8bpc_neon
-adr	x5, #-27112
-mov	x8, #128
-add	x6, x0, #0
-add	x7, x4, #0
+b	L_8030
+L_8008:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+L_8018:
+subs	w8, w8, #0x2
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+b.gt	L_8018
+L_8030:
+adr	x5, inv_dct_8h_x16_neon
+mov	x8, #0x80
+add	x6, x0, #0x0
+add	x7, x4, #0x0
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #8
-add	x7, x4, #16
+add	x6, x0, #0x8
+add	x7, x4, #0x10
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #16
-add	x7, x4, #32
+add	x6, x0, #0x10
+add	x7, x4, #0x20
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #24
-add	x7, x4, #48
+add	x6, x0, #0x18
+add	x7, x4, #0x30
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #32
-add	x7, x4, #64
+add	x6, x0, #0x20
+add	x7, x4, #0x40
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #40
-add	x7, x4, #80
+add	x6, x0, #0x28
+add	x7, x4, #0x50
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #48
-add	x7, x4, #96
+add	x6, x0, #0x30
+add	x7, x4, #0x60
 bl	inv_txfm_add_vert_8x16_neon
-add	x6, x0, #56
-add	x7, x4, #112
+add	x6, x0, #0x38
+add	x7, x4, #0x70
 bl	inv_txfm_add_vert_8x16_neon
-add	sp, x4, #2048
+add	sp, x4, #0x800
 ret	x15
-_inv_txfm_add_dct_dct_16x64_8bpc_neon:
-cbnz	w3, inv_txfm_add_dct_dct_16x64_8bpc_neon
-mov	w16, #23168
-ld1r.8h	{ v16 }, [x2]
-dup.4h	v0, w16
-sqrdmulh.8h	v16, v16, v0[0]
+inv_txfm_add_dct_dct_16x64_8bpc_neon:
+cbnz	w3, L_80cc
+mov	w16, #0x5a80
+ld1r	{ v16.8h }, [x2]
+dup	v0.4h, w16
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
 strh	wzr, [x2]
-srshr.8h	v16, v16, #2
-sqrdmulh.8h	v16, v16, v0[0]
-srshr.8h	v16, v16, #4
-mov	w4, #64
+srshr	v16.8h, v16.8h, #0x2
+sqrdmulh	v16.8h, v16.8h, v0.h[0]
+srshr	v16.8h, v16.8h, #0x4
+mov	w4, #0x40
 b	idct_dc_w16_neon
+L_80cc:
 mov	x15, x30
-sub	sp, sp, #2048
-add	x5, sp, #1024
-adrp	x13, inv_txfm_add_dct_dct_16x64_8bpc_neon
-add	x13, x13, #0
-ldrh	w12, [x13], #2
-adr	x4, #-27292
-add	x6, x5, #0
-add	x7, x2, #0
-mov	x8, #64
+sub	sp, sp, #0x800
+add	x5, sp, #0x400
+adrp	x13, eob_16x32
+add	x13, x13, :lo12:eob_16x32
+ldrh	w12, [x13], #0x2
+adr	x4, inv_dct_8h_x16_neon
+add	x6, x5, #0x0
+add	x7, x2, #0x0
+mov	x8, #0x40
 bl	inv_txfm_horz_16x8_neon
-add	x6, x5, #256
-mov	w8, #24
+add	x6, x5, #0x100
+mov	w8, #0x18
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_16x64_8bpc_neon
-ldrh	w12, [x13], #2
-add	x7, x2, #16
-mov	x8, #64
+b.lt	L_8158
+ldrh	w12, [x13], #0x2
+add	x7, x2, #0x10
+mov	x8, #0x40
 bl	inv_txfm_horz_16x8_neon
-add	x6, x5, #512
-mov	w8, #16
+add	x6, x5, #0x200
+mov	w8, #0x10
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_16x64_8bpc_neon
-ldrh	w12, [x13], #2
-add	x7, x2, #32
-mov	x8, #64
+b.lt	L_8158
+ldrh	w12, [x13], #0x2
+add	x7, x2, #0x20
+mov	x8, #0x40
 bl	inv_txfm_horz_16x8_neon
-add	x6, x5, #768
-mov	w8, #8
+add	x6, x5, #0x300
+mov	w8, #0x8
 cmp	w3, w12
-b.lt	inv_txfm_add_dct_dct_16x64_8bpc_neon
-add	x7, x2, #48
-mov	x8, #64
+b.lt	L_8158
+add	x7, x2, #0x30
+mov	x8, #0x40
 bl	inv_txfm_horz_16x8_neon
-b	inv_txfm_add_dct_dct_16x64_8bpc_neon
-movi.8h	v4, #0
-movi.8h	v5, #0
-movi.8h	v6, #0
-movi.8h	v7, #0
-subs	w8, w8, #8
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-st1.8h	{ v4, v5, v6, v7 }, [x6], #64
-b.gt	inv_txfm_add_dct_dct_16x64_8bpc_neon
-add	x7, x5, #0
-mov	x8, #32
+b	L_8180
+L_8158:
+movi	v4.8h, #0x0
+movi	v5.8h, #0x0
+movi	v6.8h, #0x0
+movi	v7.8h, #0x0
+L_8168:
+subs	w8, w8, #0x8
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+st1	{ v4.8h, v5.8h, v6.8h, v7.8h }, [x6], #64
+b.gt	L_8168
+L_8180:
+add	x7, x5, #0x0
+mov	x8, #0x20
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #0
+add	x6, x0, #0x0
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	x7, x5, #16
-mov	x8, #32
+add	x7, x5, #0x10
+mov	x8, #0x20
 bl	inv_txfm_dct_8h_x64_neon
-add	x6, x0, #8
+add	x6, x0, #0x8
 bl	inv_txfm_add_vert_dct_8x64_neon
-add	sp, x5, #1024
+add	sp, x5, #0x400
 ret	x15
+	.section .rodata
+idct_coeffs:
+	.size idct_coeffs, 64
+	.byte 80,11,128,90,31,6,200,14,31,3,177,15,78,13,228,8
+	.byte 145,1,236,15,94,12,38,10,139,7,28,14,80,15,165,4
+	.byte 201,0,251,15,219,11,191,10,215,6,119,14,17,15,100,5
+	.byte 227,3,133,15,185,13,58,8,136,9,218,12,212,15,89,2
+idct64_coeffs:
+	.size idct64_coeffs, 128
+	.byte 40,3,248,127,184,92,192,167,224,51,8,117,112,119,240,209
+	.byte 236,15,145,1,177,15,31,3,0,0,0,0,0,0,0,0
+	.byte 32,126,32,234,184,73,168,104,40,108,136,187,8,28,224,124
+	.byte 162,243,218,245,225,252,79,240,0,0,0,0,0,0,0,0
+	.byte 168,15,8,127,232,100,64,177,24,63,96,111,96,123,224,221
+	.byte 28,14,139,7,228,8,78,13,0,0,0,0,0,0,0,0
+	.byte 168,127,152,246,152,83,240,96,88,114,112,198,40,40,136,121
+	.byte 176,240,91,251,178,242,28,247,0,0,0,0,0,0,0,0
+iadst4_coeffs:
+	.size iadst4_coeffs, 12
+	.byte 41,5,219,14,178,9,16,13,16,13,0,0,0,0,0,0
+iadst8_coeffs:
+	.size iadst8_coeffs, 32
+	.byte 236,15,145,1,28,14,139,7,38,10,94,12,165,4,80,15
+	.byte 80,11,0,0,31,6,200,14,0,0,0,0,0,0,0,0
+iadst16_coeffs:
+	.size iadst16_coeffs, 32
+	.byte 251,15,201,0,133,15,227,3,119,14,215,6,218,12,136,9
+	.byte 191,10,219,11,58,8,185,13,100,5,17,15,89,2,212,15
+eob_32x32:
+	.size eob_32x32, 8
+	.byte 36,0,136,0,44,1,0,4
+eob_16x32:
+	.size eob_16x32, 8
+	.byte 36,0,151,0,23,1,0,2
+eob_16x32_shortside:
+	.size eob_16x32_shortside, 4
+	.byte 36,0,0,2
+eob_8x32:
+	.size eob_8x32, 8
+	.byte 43,0,107,0,171,0,0,1

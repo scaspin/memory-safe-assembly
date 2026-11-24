@@ -1,0 +1,6 @@
+primitive,vale_procedures,vale_spec_lines,vale_code_and_proof_lines,vale_fstar_lemma_lines,bums_functions,bums_clauses,bums_tokens,bums_playgrounds
+aes / aes-gcm,150,3881,6744,8032,48,341,3989,bignum; corecrypto; crypto
+sha-256,44,704,1555,2080,4,16,200,corecrypto; crypto
+poly1305,9,172,491,1730,2,14,188,crypto
+curve25519,55,1222,2727,1184,25,69,1122,bignum; corecrypto; graviola
+bignum,4,64,229,360,64,224,3130,bignum; crypto; graviola

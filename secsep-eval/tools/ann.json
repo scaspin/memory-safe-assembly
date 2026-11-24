@@ -1,0 +1,378 @@
+{
+ "secsep": {
+  "salsa20_words": {
+   "clauses": 2,
+   "tokens": 22,
+   "default": false,
+   "file": "bench_salsa20.c"
+  },
+  "salsa20_block": {
+   "clauses": 2,
+   "tokens": 22,
+   "default": false,
+   "file": "bench_salsa20.c"
+  },
+  "salsa20": {
+   "clauses": 4,
+   "tokens": 40,
+   "default": false,
+   "file": "bench_salsa20.c"
+  },
+  "main": {
+   "clauses": 0,
+   "tokens": 2,
+   "default": true,
+   "file": "bench_ed25519_sign.c"
+  },
+  "benchmark": {
+   "clauses": 0,
+   "tokens": 2,
+   "default": true,
+   "file": "bench_poly1305.c"
+  },
+  "chacha_core": {
+   "clauses": 2,
+   "tokens": 15,
+   "default": false,
+   "file": "chacha.c"
+  },
+  "CRYPTO_chacha_20": {
+   "clauses": 10,
+   "tokens": 86,
+   "default": false,
+   "file": "chacha.c"
+  },
+  "poly1305_aligned_state": {
+   "clauses": 2,
+   "tokens": 16,
+   "default": false,
+   "file": "poly1305.c"
+  },
+  "poly1305_donna_mul": {
+   "clauses": 19,
+   "tokens": 249,
+   "default": false,
+   "file": "poly1305.c"
+  },
+  "poly1305_update": {
+   "clauses": 23,
+   "tokens": 288,
+   "default": false,
+   "file": "poly1305.c"
+  },
+  "CRYPTO_poly1305_init": {
+   "clauses": 3,
+   "tokens": 27,
+   "default": false,
+   "file": "poly1305.c"
+  },
+  "CRYPTO_poly1305_update": {
+   "clauses": 21,
+   "tokens": 274,
+   "default": false,
+   "file": "poly1305.c"
+  },
+  "CRYPTO_poly1305_finish": {
+   "clauses": 18,
+   "tokens": 246,
+   "default": false,
+   "file": "poly1305.c"
+  },
+  "fe_frombytes_strict": {
+   "clauses": 1,
+   "tokens": 12,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "fe_tobytes": {
+   "clauses": 1,
+   "tokens": 14,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "fe_add": {
+   "clauses": 2,
+   "tokens": 28,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "fe_sub": {
+   "clauses": 2,
+   "tokens": 28,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "fe_mul_impl": {
+   "clauses": 7,
+   "tokens": 54,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "fe_sq_tl": {
+   "clauses": 1,
+   "tokens": 14,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "fe_sq_tt": {
+   "clauses": 1,
+   "tokens": 14,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "fe_loose_invert": {
+   "clauses": 1,
+   "tokens": 14,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "fe_isnonzero": {
+   "clauses": 1,
+   "tokens": 14,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "x25519_ge_frombytes_vartime": {
+   "clauses": 2,
+   "tokens": 15,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "ge_p2_dbl": {
+   "clauses": 3,
+   "tokens": 48,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "ge_madd": {
+   "clauses": 7,
+   "tokens": 112,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "ge_msub": {
+   "clauses": 7,
+   "tokens": 112,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "x25519_ge_add": {
+   "clauses": 8,
+   "tokens": 128,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "x25519_ge_sub": {
+   "clauses": 8,
+   "tokens": 128,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "table_select": {
+   "clauses": 1,
+   "tokens": 10,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "x25519_ge_scalarmult_base": {
+   "clauses": 2,
+   "tokens": 15,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "x25519_sc_reduce": {
+   "clauses": 1,
+   "tokens": 12,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "ED25519_sign": {
+   "clauses": 5,
+   "tokens": 43,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "X25519": {
+   "clauses": 5,
+   "tokens": 36,
+   "default": false,
+   "file": "curve25519.c"
+  },
+  "SHA512": {
+   "clauses": 3,
+   "tokens": 28,
+   "default": false,
+   "file": "sha512.c"
+  },
+  "SHA512_Update": {
+   "clauses": 16,
+   "tokens": 148,
+   "default": false,
+   "file": "sha512.c"
+  },
+  "sha512_final_impl": {
+   "clauses": 1,
+   "tokens": 10,
+   "default": false,
+   "file": "sha512.c"
+  },
+  "sha512_block_data_order_nohw": {
+   "clauses": 4,
+   "tokens": 44,
+   "default": false,
+   "file": "sha512.c"
+  },
+  "sha512_block_data_order": {
+   "clauses": 4,
+   "tokens": 44,
+   "default": false,
+   "file": "sha512.c"
+  }
+ },
+ "bums": {
+  "salsa20_words": {
+   "clauses": 2,
+   "constraints": 0,
+   "tokens": 34,
+   "file": "salsa20.S"
+  },
+  "salsa20": {
+   "clauses": 4,
+   "constraints": 0,
+   "tokens": 44,
+   "file": "salsa20.S"
+  },
+  "chacha_core": {
+   "clauses": 2,
+   "constraints": 0,
+   "tokens": 34,
+   "file": "chacha20.S"
+  },
+  "CRYPTO_chacha_20": {
+   "clauses": 7,
+   "constraints": 1,
+   "tokens": 86,
+   "file": "chacha20.S"
+  },
+  "CRYPTO_poly1305_init": {
+   "clauses": 2,
+   "constraints": 0,
+   "tokens": 50,
+   "file": "poly1305.S"
+  },
+  "CRYPTO_poly1305_update": {
+   "clauses": 4,
+   "constraints": 1,
+   "tokens": 62,
+   "file": "poly1305.S"
+  },
+  "CRYPTO_poly1305_finish": {
+   "clauses": 3,
+   "constraints": 1,
+   "tokens": 59,
+   "file": "poly1305.S"
+  },
+  "poly1305_donna_mul": {
+   "clauses": 1,
+   "constraints": 0,
+   "tokens": 35,
+   "file": "poly1305.S"
+  },
+  "poly1305_update": {
+   "clauses": 3,
+   "constraints": 0,
+   "tokens": 54,
+   "file": "poly1305.S"
+  },
+  "sha512_block_data_order": {
+   "clauses": 4,
+   "constraints": 1,
+   "tokens": 50,
+   "file": "sha512.S"
+  },
+  "SHA512": {
+   "clauses": 3,
+   "constraints": 0,
+   "tokens": 40,
+   "file": "sha512.S"
+  },
+  "fe_mul_impl": {
+   "clauses": 3,
+   "constraints": 0,
+   "tokens": 49,
+   "file": "x25519.S"
+  },
+  "fe_tobytes": {
+   "clauses": 2,
+   "constraints": 0,
+   "tokens": 34,
+   "file": "x25519.S"
+  },
+  "fe_loose_invert": {
+   "clauses": 2,
+   "constraints": 0,
+   "tokens": 34,
+   "file": "x25519.S"
+  },
+  "X25519": {
+   "clauses": 3,
+   "constraints": 0,
+   "tokens": 51,
+   "file": "x25519.S"
+  },
+  "ge_madd": {
+   "clauses": 3,
+   "constraints": 0,
+   "tokens": 49,
+   "file": "ed25519_sign.S"
+  },
+  "ge_p2_dbl": {
+   "clauses": 2,
+   "constraints": 0,
+   "tokens": 34,
+   "file": "ed25519_sign.S"
+  },
+  "table_select": {
+   "clauses": 5,
+   "constraints": 2,
+   "tokens": 41,
+   "file": "ed25519_sign.S"
+  },
+  "x25519_ge_scalarmult_base": {
+   "clauses": 2,
+   "constraints": 0,
+   "tokens": 34,
+   "file": "ed25519_sign.S"
+  },
+  "x25519_sc_reduce": {
+   "clauses": 1,
+   "constraints": 0,
+   "tokens": 19,
+   "file": "ed25519_sign.S"
+  },
+  "ED25519_sign": {
+   "clauses": 4,
+   "constraints": 0,
+   "tokens": 55,
+   "file": "ed25519_sign.S"
+  },
+  "md5_block_asm_data_order": {
+   "clauses": 4,
+   "constraints": 1,
+   "tokens": 50,
+   "file": "md5.S"
+  },
+  "md5_mutant_extra_block": {
+   "clauses": 4,
+   "constraints": 1,
+   "tokens": 50,
+   "file": "md5m1.S"
+  },
+  "md5_mutant_no_zero_check": {
+   "clauses": 4,
+   "constraints": 1,
+   "tokens": 50,
+   "file": "md5m2.S"
+  }
+ }
+}

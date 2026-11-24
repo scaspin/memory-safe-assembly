@@ -1,0 +1,5 @@
+variant,fault,octal_main_calls_with,octal_verdict,octal_note,bums_verdict,bums_note
+"md5 (BoringSSL md5-x86_64, unmodified)",none,num = 4,accepted (type-checks),,verified,contract data.len() == num * 64
+m1: one extra block,reads block num+1,num = 4,rejected (inference exception),ArchTypeError: slot annotation is None,rejected,read of 4 bytes at data + 64 not provably within region
+m2: num == 0 guard removed,reads 64 bytes when num = 0,num = 4,ACCEPTED (type-checks),"silently inferred precondition num >= 1, checked only against main",rejected,read of 4 bytes at data + 0 not provably within region of length 0
+m3: m2 with main passing num = 0,reads 64 bytes when num = 0,num = 0,rejected at the call site,FuncInterfaceError at main's call,n/a (same function as m2),

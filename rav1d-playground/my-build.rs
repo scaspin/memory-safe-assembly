@@ -54,7 +54,6 @@ impl Define {
         Self::new(name, value as u8)
     }
 }
-// taken from rav1d https://github.com/memorysafety/rav1d/blob/main/build.rs
 fn generate_config_file() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
@@ -62,7 +61,6 @@ fn generate_config_file() {
     let vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap();
     let features = env::var("CARGO_CFG_TARGET_FEATURE").unwrap();
 
-    // Nothing to do on unknown architectures
     let Ok(arch) = arch.parse::<Arch>() else {
         return;
     };
@@ -76,7 +74,7 @@ fn generate_config_file() {
     };
 
     define(Define::bool("CONFIG_ASM", true));
-    define(Define::bool("CONFIG_LOG", true)); // TODO(kkysen) should be configurable
+    define(Define::bool("CONFIG_LOG", true));
 
     if vendor == "apple" || (os == "windows" && matches!(arch, Arch::X86(ArchX86::X86_32))) {
         define(Define::bool("PREFIX", true));
@@ -98,11 +96,6 @@ fn generate_config_file() {
         define(Define::bool("ARCH_AARCH64", arch == ArchArm::Arm64));
 
         if arch == ArchArm::Arm64 {
-            // define(Define::bool(
-            //     "HAVE_DOTPROD",
-            //     cfg!(feature = "asm_arm64_dotprod"),
-            // ));
-            // define(Define::bool("HAVE_I8MM", cfg!(feature = "asm_arm64_i8mm")));
         }
     }
 
@@ -118,9 +111,6 @@ fn generate_config_file() {
     if matches!(arch, Arch::X86(..)) {
         define(Define::bool("PIC", true));
 
-        // Convert SSE asm into (128-bit) AVX when compiler flags are set to use AVX instructions.
-        // Note that this checks compile-time CPU features, not runtime features,
-        // but that does seem to be what `dav1d` does, too.
         define(Define::bool("FORCE_VEX_ENCODING", features.contains("avx")));
     }
 
@@ -147,16 +137,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut build = cc::Build::new();
 
-    // let mut os = match env::var("CARGO_CFG_TARGET_OS")?.as_str() {
-    //     "windows" => "win",
-    //     "linux" => "linux",
-    //     "ios" => "ios",
-    //     "macos" => "mac",
-    //     s => panic!("Unsupported operating system {}", s),
-    // };
-
-    // let arch = env::var("CARGO_CFG_TARGET_ARCH")?;
-
     for entry in std::fs::read_dir("generated-asm/src/arm/64")? {
         match entry {
             Ok(entry) => {
@@ -167,9 +147,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 processed_path.push(entry.file_name());
                 File::create(processed_path.clone())?.write_all(
                     &cc::Build::new()
-                        // TODO(alevy): remove this define once we can
-                        // parse the OPENSSL_armcap_P extern variable
-                        // in the SHA256 and other assembly
                         .define("__KERNEL__", "1")
                         .include("include")
                         .file(entry.path())

@@ -1,0 +1,6 @@
+ge_madd	src/lib.rs	verified	0.2	
+ge_p2_dbl	src/lib.rs	verified	0.1	
+table_select	src/lib.rs	verified	0.1	
+x25519_ge_scalarmult_base	src/lib.rs	verified	23.6	
+x25519_sc_reduce	src/lib.rs	verified	0.1	
+ED25519_sign	src/lib.rs	verified	954.9	

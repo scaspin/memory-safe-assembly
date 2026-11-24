@@ -1,9 +1,21 @@
 [workspace]
 members = [
   "bums_macros",
+  "bums_annotations",
+  "bums-check",
   "memsafe-checker",
   "crypto-playground",
-  "rav1d-playground"
+  "bignum-playground",
+  "rav1d-playground",
+  "corecrypto-playground",
+  "graviola-playground",
+  "candle-playground",
+  "ffmpeg-playground",
+  "openblas-playground",
+  "compression-playground",
+  "blake3-secp256k1-playground",
+  "secsep-playground",
+  "openssl-playground"
 ]
 exclude = ["scrape-asm"]
 resolver = "2"

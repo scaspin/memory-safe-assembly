@@ -1,0 +1,126 @@
+other sweeps finished Wed Nov 11 16:27:19 EST 2026
+    Finished `release` profile [optimized] target(s) in 0.12s
+=== run 1 crypto Wed Nov 11 16:27:19 EST 2026
+bums-check: running the build script of crypto-playground (cargo check with BUMS_SKIP=1)
+   Compiling crypto-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/crypto-playground)
+    Finished `release` profile [optimized] target(s) in 6.80s
+bums-check: 82 functions: 82 verified (2 skipped); 57s wall, 91s of checking
+=== run 1 crypto slow Wed Nov 11 16:28:16 EST 2026
+bums-check: running the build script of crypto-playground (cargo check with BUMS_SKIP=1)
+   Compiling crypto-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/crypto-playground)
+    Finished `release` profile [optimized] target(s) in 6.39s
+bums-check: 2 functions: 2 verified (0 skipped); 1290s wall, 1425s of checking
+=== run 1 crypto-x86 Wed Nov 11 16:49:47 EST 2026
+bums-check: running the build script of crypto-playground (cargo check with BUMS_SKIP=1)
+   Compiling crypto-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/crypto-playground)
+    Finished `release` profile [optimized] target(s) in 5.75s
+bums-check: 38 functions: 38 verified (0 skipped); 15s wall, 14s of checking
+=== run 1 bignum Wed Nov 11 16:50:02 EST 2026
+bums-check: running the build script of bignum-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.03s
+bums-check: 69 functions: 69 verified (4 skipped); 310s wall, 413s of checking
+=== run 1 bignum slow Wed Nov 11 16:55:12 EST 2026
+bums-check: running the build script of bignum-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.09s
+bums-check: 4 functions: 4 verified (0 skipped); 517s wall, 978s of checking
+=== run 1 openblas Wed Nov 11 17:03:49 EST 2026
+bums-check: running the build script of openblas-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.08s
+bums-check: 18 functions: 18 verified (0 skipped); 35s wall, 60s of checking
+=== run 1 openblas-x86 Wed Nov 11 17:04:23 EST 2026
+bums-check: running the build script of openblas-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.02s
+bums-check: 6 functions: 6 verified (2 skipped); 165s wall, 319s of checking
+=== run 1 openblas-x86 slow Wed Nov 11 17:07:09 EST 2026
+bums-check: running the build script of openblas-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.02s
+bums-check: 2 functions: 2 verified (0 skipped); 386s wall, 430s of checking
+=== run 1 candle Wed Nov 11 17:13:34 EST 2026
+bums-check: running the build script of candle-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.03s
+bums-check: 15 functions: 15 verified (0 skipped); 15s wall, 17s of checking
+=== run 1 rav1d Wed Nov 11 17:13:49 EST 2026
+bums-check: running the build script of rav1d-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.05s
+bums-check: 543 functions: 467 verified, 13 FAIL, 61 TIMEOUT, 2 MEMCAP (7 skipped); 12007s wall, 23948s of checking
+=== run 1 rav1d slow Wed Nov 11 20:33:56 EST 2026
+bums-check: running the build script of rav1d-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.10s
+bums-check: 7 functions: 6 verified, 1 TIMEOUT (0 skipped); 3089s wall, 5743s of checking
+=== run 1 rav1d-x86 Wed Nov 11 21:25:26 EST 2026
+bums-check: running the build script of rav1d-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.24s
+bums-check: 1 functions: 1 verified (1 skipped); 90s wall, 90s of checking
+=== run 1 rav1d-x86 slow Wed Nov 11 21:26:56 EST 2026
+bums-check: running the build script of rav1d-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.23s
+bums-check: 1 functions: 1 verified (0 skipped); 136s wall, 136s of checking
+=== run 1 ffmpeg Wed Nov 11 21:29:13 EST 2026
+bums-check: running the build script of ffmpeg-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.09s
+bums-check: 1377 functions: 1258 verified, 31 FAIL, 88 TIMEOUT (14 skipped); 18843s wall, 37416s of checking
+=== run 1 ffmpeg slow Thu Nov 12 02:43:16 EST 2026
+bums-check: running the build script of ffmpeg-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.09s
+bums-check: 14 functions: 14 verified (0 skipped); 3079s wall, 5910s of checking
+=== run 1 compression Thu Nov 12 03:34:35 EST 2026
+bums-check: running the build script of compression-playground (cargo check with BUMS_SKIP=1)
+    Checking compression-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/compression-playground)
+error: could not compile `compression-playground` (lib) due to 184 previous errors; 1 warning emitted
+bums-check: 67 functions: 40 verified, 11 FAIL, 9 TIMEOUT, 7 ERROR (0 skipped); 1577s wall, 3000s of checking
+=== run 1 compression-x86 Thu Nov 12 04:00:52 EST 2026
+bums-check: running the build script of compression-playground (cargo check with BUMS_SKIP=1)
+    Checking compression-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/compression-playground)
+error: could not compile `compression-playground` (lib) due to 67 previous errors
+bums-check: 184 functions: 141 verified, 20 FAIL, 23 TIMEOUT (0 skipped); 4349s wall, 8459s of checking
+=== sizes corecrypto Thu Nov 12 05:13:22 EST 2026
+bums-check: running the build script of corecrypto-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.09s
+=== sizes graviola Thu Nov 12 05:13:22 EST 2026
+bums-check: running the build script of graviola-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.02s
+=== sizes crypto Thu Nov 12 05:13:22 EST 2026
+bums-check: running the build script of crypto-playground (cargo check with BUMS_SKIP=1)
+   Compiling crypto-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/crypto-playground)
+    Finished `release` profile [optimized] target(s) in 6.91s
+=== sizes crypto-x86 Thu Nov 12 05:13:30 EST 2026
+bums-check: running the build script of crypto-playground (cargo check with BUMS_SKIP=1)
+   Compiling crypto-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/crypto-playground)
+    Finished `release` profile [optimized] target(s) in 3.96s
+=== sizes bignum Thu Nov 12 05:13:34 EST 2026
+bums-check: running the build script of bignum-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.03s
+=== sizes openblas Thu Nov 12 05:13:34 EST 2026
+bums-check: running the build script of openblas-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.02s
+=== sizes openblas-x86 Thu Nov 12 05:13:34 EST 2026
+bums-check: running the build script of openblas-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.02s
+=== sizes candle Thu Nov 12 05:13:35 EST 2026
+bums-check: running the build script of candle-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.02s
+=== sizes rav1d Thu Nov 12 05:13:35 EST 2026
+bums-check: running the build script of rav1d-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.04s
+=== sizes rav1d-x86 Thu Nov 12 05:13:48 EST 2026
+bums-check: running the build script of rav1d-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.03s
+=== sizes ffmpeg Thu Nov 12 05:13:48 EST 2026
+bums-check: running the build script of ffmpeg-playground (cargo check with BUMS_SKIP=1)
+    Finished `release` profile [optimized] target(s) in 0.02s
+=== sizes compression Thu Nov 12 05:14:22 EST 2026
+bums-check: running the build script of compression-playground (cargo check with BUMS_SKIP=1)
+    Checking compression-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/compression-playground)
+error: could not compile `compression-playground` (lib) due to 184 previous errors; 1 warning emitted
+=== sizes compression-x86 Thu Nov 12 05:14:23 EST 2026
+bums-check: running the build script of compression-playground (cargo check with BUMS_SKIP=1)
+    Checking compression-playground v0.1.0 (/Users/shai/Documents/Princeton/memory-safe-assembly/.claude/worktrees/row-strides/compression-playground)
+error: could not compile `compression-playground` (lib) due to 67 previous errors
+2267 verified functions plotted from evaluation/results-rework-5f5018a4/run1; 0 verified rows without a parsed annotation
+median time 0.28 s, median clauses 11, median tokens 100
+  Cryptography   n=  302  loops   234  clauses median  3.0  time median    0.05 s
+  Media codecs   n= 1743  loops  1612  clauses median   15  time median    0.31 s
+  Compression    n=  181  loops   175  clauses median    8  time median    0.42 s
+  Numeric / ML   n=   41  loops    40  clauses median    7  time median    0.47 s
+evaluation/results-rework-5f5018a4/annotation-vs-time.pdf
+SWEEP-DONE

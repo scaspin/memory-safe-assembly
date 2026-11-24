@@ -1,0 +1,43 @@
+benchmark,function,variant,status,seconds,first_message
+salsa20,salsa20_words,raw,FAIL,0.1,line 1 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+salsa20,salsa20,raw,FAIL,0.1,line 234 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+salsa20,salsa20_words,folded,verified,0.1,
+salsa20,salsa20,folded,verified,1.6,
+sha512,sha512_block_data_order,raw,FAIL,0.1,line 4389 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+sha512,SHA512,raw,FAIL,0.1,line 3705 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+sha512,sha512_block_data_order,folded,verified,1.3,
+sha512,SHA512,folded,verified,12.4,
+chacha20,chacha_core,raw,verified,0.1,
+chacha20,CRYPTO_chacha_20,raw,FAIL,0.1,line 156 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+chacha20,chacha_core,folded,verified,0.1,
+chacha20,CRYPTO_chacha_20,folded,verified,58.2,
+x25519,fe_mul_impl,raw,FAIL,0.1,line 22502 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+x25519,fe_tobytes,raw,FAIL,0.1,line 6122 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+x25519,fe_loose_invert,raw,FAIL,0.1,line 18825 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+x25519,X25519,raw,FAIL,0.1,line 17626 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+x25519,fe_mul_impl,folded,verified,0.1,
+x25519,fe_tobytes,folded,verified,0.1,
+x25519,fe_loose_invert,folded,verified,3.2,
+x25519,X25519,folded,verified,122.5,
+poly1305,CRYPTO_poly1305_init,raw,FAIL,0.1,line 10 (movl): write of 4 bytes at state_as_mut_ptr - 8388608 not provably within region of length 96
+poly1305,CRYPTO_poly1305_update,raw,FAIL,0.1,line 37 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+poly1305,CRYPTO_poly1305_finish,raw,FAIL,0.1,line 357 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+poly1305,poly1305_donna_mul,raw,FAIL,0.1,line 989 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+poly1305,poly1305_update,raw,FAIL,0.1,line 192 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+poly1305,CRYPTO_poly1305_init,folded,verified,0.1,
+poly1305,CRYPTO_poly1305_update,folded,FAIL,1410.5,line 202: branch depth exceeded 32
+poly1305,CRYPTO_poly1305_finish,folded,verified,5.8,
+poly1305,poly1305_donna_mul,folded,verified,0.1,
+poly1305,poly1305_update,folded,FAIL,170.8,line 202: branch depth exceeded 32
+ed25519_sign,ge_madd,raw,FAIL,0.1,line 10824 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+ed25519_sign,ge_p2_dbl,raw,FAIL,0.1,line 12276 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+ed25519_sign,table_select,raw,FAIL,0.1,line 11693 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+ed25519_sign,x25519_ge_scalarmult_base,raw,FAIL,0.1,line 11029 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+ed25519_sign,x25519_sc_reduce,raw,FAIL,0.1,line 13539 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+ed25519_sign,ED25519_sign,raw,FAIL,0.1,line 14219 (mov): write of 8 bytes at sp - 8388616 not provably within the stack frame (entry rsp + 8)
+ed25519_sign,ge_madd,folded,verified,0.2,
+ed25519_sign,ge_p2_dbl,folded,verified,0.1,
+ed25519_sign,table_select,folded,verified,0.1,
+ed25519_sign,x25519_ge_scalarmult_base,folded,verified,23.6,
+ed25519_sign,x25519_sc_reduce,folded,verified,0.1,
+ed25519_sign,ED25519_sign,folded,verified,954.9,

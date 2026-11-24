@@ -1,0 +1,37 @@
+[INFO] <MainProcess> - Working on 1 benchmark(s)...
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Preprocess) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Preprocess) time elapsed: [34m0.23 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Preprocess) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Single Type Infer) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Single Type Infer) time elapsed: [34m125.72 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Single Type Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Valid Region Infer) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Valid Region Infer) time elapsed: [34m47.32 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Valid Region Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Taint Type Infer) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Taint Type Infer) time elapsed: [34m17.25 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Taint Type Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Change Infer) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Change Infer) time elapsed: [34m0.6 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Change Infer) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Type Checker) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Type Checker) time elapsed: [34m73.41 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Type Checker) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) time elapsed: [34m0.48 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (push/pop TF disabled) (call untaint preservation TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [35mInstalling ../benchmark/analysis/chacha20/chacha20.tf3.s[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) time elapsed: [34m0.13 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (call untaint preservation TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [35mInstalling ../benchmark/analysis/chacha20/chacha20.tf2.s[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (push/pop TF disabled) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (push/pop TF disabled) time elapsed: [34m0.11 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) (push/pop TF disabled) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [35mInstalling ../benchmark/analysis/chacha20/chacha20.tf1.s[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) started
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) time elapsed: [34m0.1 seconds[39m
+[INFO] <SpawnPoolWorker-3> - [chacha20] (Transformation) (delta: 0x800000) result: [32msuccess[39m
+[INFO] <SpawnPoolWorker-3> - [35mInstalling ../benchmark/analysis/chacha20/chacha20.tf.s[39m
+[INFO] <SpawnPoolWorker-3> - Successfully processed chacha20
+[INFO] <MainProcess> - All benchmark(s) completed successfully

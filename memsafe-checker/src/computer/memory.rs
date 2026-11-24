@@ -1,30 +1,288 @@
 use crate::computer::*;
+use z3::ast::Ast;
 
-impl<'ctx> ARMCORTEXA<'_> {
-    /*
-     * t: register name to load into
-     * address: register with address as value
-     */
-    pub fn load(&mut self, t: Operand, address: RegisterValue) -> Result<(), MemorySafetyError> {
+pub(crate) enum TableLoad {
+    NotATable,
+    Concrete(RegisterValue),
+    Split(Vec<AbstractComparison>),
+}
+
+fn address_base(address: &RegisterValue) -> Result<AbstractExpression, MemorySafetyError> {
+    address.base.clone().ok_or_else(|| {
+        MemorySafetyError::new(
+            "Cannot prove access safe: address is an unknown value, \
+             derived from an instruction the engine does not model",
+        )
+    })
+}
+
+fn untranslatable(base: &AbstractExpression, ty: RegionType, width: i64) -> MemorySafetyError {
+    MemorySafetyError::new(&format!(
+        "{ty} of {width} bytes at {base} uses an operation the engine does not model"
+    ))
+}
+
+fn content_symbol(region: &str, offset: i64, width: i64, epoch: usize) -> RegisterValue {
+    let name = if epoch == 0 {
+        format!("{region}[{offset}:{width}]")
+    } else {
+        format!("{region}[{offset}:{width}]#{epoch}")
+    };
+    let value = AbstractExpression::Abstract(name);
+    RegisterValue {
+        kind: RegisterKind::RegisterBase,
+        base: Some(if width < 8 {
+            confined_load(value, width)
+        } else {
+            value
+        }),
+        offset: 0,
+    }
+}
+
+fn region_base(
+    address: &RegisterValue,
+    ty: RegionType,
+    width: i64,
+) -> Result<AbstractExpression, MemorySafetyError> {
+    address.base.clone().ok_or_else(|| {
+        MemorySafetyError::new(&format!(
+            "{ty} of {width} bytes through an address with no known region ({})",
+            address.offset
+        ))
+    })
+}
+
+fn unproved_reason(path: SatResult) -> Option<&'static str> {
+    match path {
+        SatResult::Sat => None,
+        SatResult::Unsat => Some("path has no model"),
+        SatResult::Unknown => Some("solver did not decide the path"),
+    }
+}
+
+fn extends(facts: &[ast::Bool], prefix: &[ast::Bool]) -> bool {
+    facts.len() >= prefix.len() && facts.iter().zip(prefix).all(|(fact, known)| fact == known)
+}
+
+fn solver_holding(facts: &[ast::Bool]) -> Solver {
+    let solver = Solver::new();
+    for fact in facts {
+        solver.assert(fact);
+    }
+    solver
+}
+
+impl ARMCORTEXA {
+    fn defer_path_check(
+        &self,
+        selects: Vec<ast::Bool>,
+        access: String,
+    ) -> Result<(), MemorySafetyError> {
+        let facts = self.solver.get_assertions();
+        if !extends(&facts, &self.pending_path_checks.borrow().trail) {
+            self.settle_path_checks()?;
+        }
+        let mut pending = self.pending_path_checks.borrow_mut();
+        let known_facts = facts.len();
+        pending.trail = facts;
+        pending.accesses.push(PendingAccess {
+            known_facts,
+            selects,
+            line: self.current_line,
+            access,
+        });
+        Ok(())
+    }
+
+    pub fn settle_path_checks(&self) -> Result<(), MemorySafetyError> {
+        let pending = self.pending_path_checks.take();
+        if pending.accesses.is_empty() {
+            return Ok(());
+        }
+        let mut every_select: Vec<ast::Bool> = Vec::new();
+        for select in pending.accesses.iter().flat_map(|a| a.selects.iter()) {
+            if !every_select.contains(select) {
+                every_select.push(select.clone());
+            }
+        }
+        let whole_path = if extends(&self.solver.get_assertions(), &pending.trail) {
+            check(&self.solver, &every_select)
+        } else {
+            check(&solver_holding(&pending.trail), &every_select)
+        };
+        log::info!(
+            "settled {} deferred path checks over {} facts: {whole_path:?}",
+            pending.accesses.len(),
+            pending.trail.len()
+        );
+        if whole_path == SatResult::Sat {
+            return Ok(());
+        }
+        for access in &pending.accesses {
+            let prefix = solver_holding(&pending.trail[..access.known_facts]);
+            if let Some(why) = unproved_reason(check(&prefix, &access.selects)) {
+                return Err(MemorySafetyError::new(&format!(
+                    "line {}: {} unprovable: {why}",
+                    access.line, access.access
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn forget_spills_overlapping(&mut self, region: &str, offset: i64, width: i64) {
+        self.register_spills
+            .retain(|(spilled_region, spilled_at), (spilled_width, _)| {
+                spilled_region != region
+                    || *spilled_at >= offset + width
+                    || offset >= *spilled_at + *spilled_width
+            });
+    }
+
+    fn reads_back_a_spill(
+        &self,
+        region: &str,
+        offset: i64,
+        width: i64,
+        value: &RegisterValue,
+    ) -> bool {
+        self.register_spills
+            .get(&(region.to_string(), offset))
+            .is_some_and(|(spilled_width, spilled)| *spilled_width == width && spilled == value)
+    }
+
+    fn settled_stack_address(&self, address: RegisterValue) -> RegisterValue {
+        let stack = AbstractExpression::Abstract("sp".to_string());
+        let Some(base) = &address.base else {
+            return address;
+        };
+        if matches!(base, AbstractExpression::Abstract(_))
+            || self
+                .region_of(base)
+                .is_none_or(|(region, ..)| region != "sp")
+        {
+            return address;
+        }
+        let displacement = generate_expression("-", base.clone(), stack.clone());
+        let Some(term) = expression_to_ast(displacement) else {
+            return address;
+        };
+        if self.solver.check_timed(&[]) != SatResult::Sat {
+            return address;
+        }
+        let Some(value) = self
+            .solver
+            .get_model()
+            .and_then(|model| model.eval(&term, true))
+            .and_then(|value| value.as_i64())
+        else {
+            return address;
+        };
+        if self
+            .solver
+            .check_timed(&[term.eq(ast::Int::from_i64(value)).not()])
+            != SatResult::Unsat
+        {
+            return address;
+        }
+        log::info!("{base} is sp {value:+} on this path");
+        RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(stack),
+            value + address.offset,
+        )
+    }
+
+    pub fn load(
+        &mut self,
+        t: Operand,
+        address: RegisterValue,
+        width: i64,
+    ) -> Result<(), MemorySafetyError> {
+        self.indexed_read = None;
         let res = self.mem_safe_access(
-            address.base.clone().expect("Need a name for region"),
+            region_base(&address, RegionType::READ, width)?,
             address.offset,
             RegionType::READ,
+            width,
         );
-
         if res.is_ok() {
-            if let Some(AbstractExpression::Abstract(base)) = address.base {
+            self.indexed_read = self.indexed_read_at(&address, width);
+        }
+        let address = match &address.base {
+            Some(base) if self.recall_slot(base, address.offset, width).is_none() => {
+                self.settled_stack_address(address)
+            }
+            _ => address,
+        };
+
+        if res.is_ok()
+            && let Some(base) = address.base.clone()
+            && self.holds_many(&base)
+        {
+            self.pristine_read = None;
+            let value = self.unknown_load(width);
+            self.set_register(&t, value.kind, value.base, value.offset);
+            self.mark_loaded(&t);
+            self.rw_queue.push(MemoryAccess {
+                kind: RegionType::READ,
+                base,
+                offset: address.offset,
+            });
+            return Ok(());
+        }
+        if res.is_ok() {
+            if let Some(AbstractExpression::Abstract(base)) = address.base.clone() {
                 let (region_name, offset) = self.get_memory_pointer(base.clone(), address.offset);
                 let region = self
                     .memory
                     .get(&region_name)
-                    .expect(format!("Need memory region to load from {:?}", region_name).as_str());
-                match region.get(offset) {
+                    .unwrap_or_else(|| panic!("Need memory region to load from {:?}", region_name));
+                let pristine = region.epoch == 0;
+                let mut restores_a_spill = false;
+                let value = match region.read(offset, width) {
+                    _ if self.writable_rows(&region_name) => {
+                        self.pristine_read = None;
+                        Some(self.unknown_load(width))
+                    }
+                    Some(v) => {
+                        for cell in region.overlapping(offset, width) {
+                            self.note_element_read(&region_name, cell);
+                        }
+                        self.pristine_read = None;
+                        restores_a_spill = self.reads_back_a_spill(&region_name, offset, width, &v);
+                        Some(v)
+                    }
+                    None if region.overwritten(offset, width) => {
+                        self.pristine_read = self
+                            .element_read(&region_name, &address, width)
+                            .then(|| region_name.clone());
+                        self.pristine_read_byte = self.element_byte(&region_name, &address, width);
+                        Some(self.unknown_load(width))
+                    }
+                    None => {
+                        let unwritten = content_symbol(&region_name, offset, width, region.epoch);
+                        self.pristine_read = self
+                            .element_read(&region_name, &address, width)
+                            .then(|| region_name.clone());
+                        self.pristine_read_byte = self.element_byte(&region_name, &address, width);
+                        Some(
+                            self.element_pointer(&region_name, &address, width)
+                                .filter(|_| pristine)
+                                .unwrap_or(unwritten),
+                        )
+                    }
+                };
+                match value.map(|v| self.distinct_row(v)) {
                     Some(v) => {
                         self.set_register(&t, v.kind.clone(), v.base.clone(), v.offset);
+                        if !restores_a_spill {
+                            self.mark_loaded(&t);
+                        }
                         self.rw_queue.push(MemoryAccess {
                             kind: RegionType::READ,
-                            base: base.clone(),
+                            base: AbstractExpression::Abstract(base.clone()),
                             offset: address.offset,
                         });
                         log::info!(
@@ -32,30 +290,535 @@ impl<'ctx> ARMCORTEXA<'_> {
                             base.clone(),
                             address.offset.clone()
                         );
-                        return Ok(());
+                        Ok(())
                     }
-                    None => {
-                        log::error!("No element at this address in region {:?}", region);
-                        return Err(MemorySafetyError::new(
-                            "Cannot read element at this address from region",
-                        ));
-                    }
+                    None => Err(MemorySafetyError::new(&format!(
+                        "read of never-written memory at {}",
+                        format_address(&AbstractExpression::Abstract(base), address.offset)
+                    ))),
                 }
             } else {
                 log::info!(
                     "Loading from an abstract but safe region of memory {:?}",
                     address
                 );
+                let base = address.base.clone().expect("Need base");
+                let pristine = self
+                    .region_of(&base)
+                    .map(|(region, ..)| region)
+                    .filter(|region| self.memory.get(region).is_some_and(|r| r.pristine()));
+                let rows = self
+                    .region_of(&base)
+                    .is_some_and(|(region, ..)| self.writable_rows(&region));
+                let recalled = match &pristine {
+                    _ if rows => None,
+                    Some(region) => self.element_pointer(region, &address, width),
+                    None => self.recall_slot(&base, address.offset, width),
+                };
+                let ranged = recalled.is_none() && !rows;
+                let value = recalled.unwrap_or_else(|| self.unknown_load(width));
+                let value = self.distinct_row(value);
+                self.pristine_read = self
+                    .region_of(&base)
+                    .map(|(region, ..)| region)
+                    .filter(|region| ranged && self.element_read(region, &address, width));
+                if let Some(region) = self.pristine_read.clone() {
+                    self.pristine_read_byte = self.element_byte(&region, &address, width);
+                }
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
-                    base: address.base.expect("Need base").to_string(),
+                    base,
                     offset: address.offset,
                 });
-                self.set_register(&t, RegisterKind::Number, None, 0);
+                self.set_register(&t, value.kind, value.base, value.offset);
+                self.mark_loaded(&t);
                 Ok(())
             }
         } else {
-            return res;
+            res
+        }
+    }
+
+    fn indexed_read_at(&self, address: &RegisterValue, width: i64) -> Option<IndexedRead> {
+        let base = address.base.as_ref()?;
+        let (region, symbol, label_offset) = self.region_of(base)?;
+        if self.memory.get(&region)?.indexed_facts().is_empty() {
+            return None;
+        }
+        let offset = generate_expression(
+            "+",
+            generate_expression("-", base.clone(), AbstractExpression::Abstract(symbol)),
+            AbstractExpression::Immediate(address.offset + label_offset),
+        );
+        Some(IndexedRead {
+            region,
+            offset,
+            width,
+        })
+    }
+
+    pub(crate) fn apply_indexed_facts(&mut self, dst: &Operand, width: i64, signed: bool) {
+        let Some(read) = self.indexed_read.take() else {
+            return;
+        };
+        if read.width != width {
+            return;
+        }
+        let Some(facts) = self
+            .memory
+            .get(&read.region)
+            .map(|region| region.indexed_facts().to_vec())
+        else {
+            return;
+        };
+        if facts.iter().all(|fact| fact.width != width) {
+            return;
+        }
+        if self.get_register(dst).kind == RegisterKind::Number {
+            let unknown = self.fresh_symbol("indexed_read");
+            self.set_register(
+                dst,
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(unknown)),
+                0,
+            );
+            self.mark_loaded(dst);
+        }
+        let Some(loaded) = expression_to_ast(instruction_aux::full_value(&self.get_register(dst)))
+        else {
+            return;
+        };
+        let word_destination = matches!(dst, Operand::Register(RePrefix::W, _));
+        self.bind_indexed_facts(&read, &loaded, &|fact, element| {
+            let bits = AbstractExpression::Immediate(8 * width);
+            let extended = match (width < 8, fact.signed == signed) {
+                (true, false) => {
+                    generate_expression(if signed { "sext" } else { "zext" }, element, bits)
+                }
+                _ => element,
+            };
+            if word_destination && (signed || fact.signed) {
+                generate_expression("zext", extended, AbstractExpression::Immediate(32))
+            } else {
+                extended
+            }
+        });
+    }
+
+    pub(crate) fn bind_indexed_facts(
+        &mut self,
+        read: &IndexedRead,
+        loaded: &ast::Int,
+        view: &dyn Fn(&IndexedFact, AbstractExpression) -> AbstractExpression,
+    ) {
+        let Some(facts) = self
+            .memory
+            .get(&read.region)
+            .map(|region| region.indexed_facts().to_vec())
+        else {
+            return;
+        };
+        let Some(offset) = expression_to_ast(read.offset.clone()) else {
+            return;
+        };
+        for fact in facts {
+            if fact.width != read.width {
+                continue;
+            }
+            let Some(covered) = fact.covers(&offset) else {
+                continue;
+            };
+            if refuted_for_indexed_fact(&self.solver, &covered) {
+                continue;
+            }
+            let name = self.fresh_symbol("indexed");
+            let element = AbstractExpression::Abstract(name.clone());
+            let (Some(holds), Some(viewed)) = (
+                comparison_to_ast(AbstractComparison::new(
+                    &fact.op,
+                    element.clone(),
+                    fact.bound.clone(),
+                )),
+                expression_to_ast(view(&fact, element)),
+            ) else {
+                continue;
+            };
+            self.note_indexed_read(&read.region, &fact);
+            let value = ast::Int::new_const(name.clone());
+            let mut described = vec![holds, loaded.eq(&viewed)];
+            if let Some((least, most)) = fact.value_range() {
+                described.push(value.ge(ast::Int::from_i64(least)));
+                described.push(value.le(ast::Int::from_i64(most)));
+            }
+            let described = ast::Bool::and(&described);
+            if refuted_for_indexed_fact(&self.solver, &covered.not()) {
+                self.solver.assert(&described);
+            } else {
+                self.solver.assert(covered.implies(&described));
+            }
+            log::info!(
+                "{} may be read at {}: element {name}",
+                fact.label,
+                read.offset
+            );
+        }
+    }
+
+    pub(crate) fn peek(
+        &mut self,
+        address: &RegisterValue,
+        offset: i64,
+        width: i64,
+    ) -> Option<(AbstractExpression, Option<IndexedRead>)> {
+        let base = address.base.clone()?;
+        if !(1..=8).contains(&width) || self.holds_many(&base) {
+            return None;
+        }
+        let at = RegisterValue {
+            offset: address.offset + offset,
+            ..address.clone()
+        };
+        let read = self.indexed_read_at(&at, width);
+        let value = match &base {
+            AbstractExpression::Abstract(name) => {
+                let (region_name, within) = self.get_memory_pointer(name.clone(), at.offset);
+                let region = self.memory.get(&region_name)?;
+                match region.read(within, width) {
+                    Some(stored) if stored.kind != RegisterKind::Number => {
+                        self.as_unsigned(instruction_aux::full_value(&stored), width)
+                    }
+                    Some(_) => return None,
+                    None if region.overwritten(within, width) => return None,
+                    None => {
+                        let unwritten = content_symbol(&region_name, within, width, region.epoch);
+                        self.as_unsigned(instruction_aux::full_value(&unwritten), width)
+                    }
+                }
+            }
+            _ => self.constant_table_entry(&base, at.offset, width)?,
+        };
+        Some((value, read))
+    }
+
+    fn as_unsigned(&self, value: AbstractExpression, width: i64) -> AbstractExpression {
+        if width < 8 && self.provably_between(&value, 0, (1i64 << (8 * width)) - 1) {
+            return value;
+        }
+        generate_expression("zext", value, AbstractExpression::Immediate(8 * width))
+    }
+
+    fn constant_table_entry(
+        &mut self,
+        base: &AbstractExpression,
+        offset: i64,
+        width: i64,
+    ) -> Option<AbstractExpression> {
+        const MAX_ENTRIES: usize = 32;
+        let (section, symbol, label_offset) = self.region_of(base)?;
+        let region = self.memory.get(&section)?;
+        if region.content.is_empty() || region.kind != RegionType::READ || !region.pristine() {
+            return None;
+        }
+        let shift = offset + label_offset;
+        let from_symbol =
+            generate_expression("-", base.clone(), AbstractExpression::Abstract(symbol));
+        let within = generate_expression(
+            "+",
+            from_symbol.clone(),
+            AbstractExpression::Immediate(shift),
+        );
+        let within = expression_to_ast(within)?;
+        let cached = match &self.table_offsets_this_instruction {
+            Some((cached_section, cached_base, offsets))
+                if *cached_section == section && *cached_base == from_symbol =>
+            {
+                Some(offsets.clone())
+            }
+            _ => None,
+        };
+        let from_symbol_offsets = match cached {
+            Some(offsets) => offsets,
+            None => {
+                let at_symbol = expression_to_ast(from_symbol.clone())?;
+                let assumptions = self.select_assumptions(base);
+                self.solver.push();
+                let offsets = self.table_offsets(&at_symbol, &assumptions, MAX_ENTRIES);
+                self.solver.pop(1);
+                self.table_offsets_this_instruction =
+                    Some((section.clone(), from_symbol, offsets.clone()));
+                offsets
+            }
+        };
+        let found: Vec<i64> = from_symbol_offsets?
+            .into_iter()
+            .map(|at| at.checked_add(shift))
+            .collect::<Option<Vec<i64>>>()?;
+        let region = self.memory.get(&section)?;
+        let mut cases = Vec::new();
+        for at in &found {
+            let entry = region.read(*at, width)?;
+            if entry.kind != RegisterKind::Immediate || entry.base.is_some() {
+                return None;
+            }
+            let bits = 8 * width as u32;
+            let unsigned = if bits == 64 {
+                return None;
+            } else {
+                (entry.offset as u64) & ((1u64 << bits) - 1)
+            };
+            cases.push((*at, unsigned as i64));
+        }
+        let name = self.fresh_symbol("table_entry");
+        let entry = ast::Int::new_const(name.clone());
+        for (at, value) in cases {
+            self.bound_fresh(
+                within
+                    .eq(ast::Int::from_i64(at))
+                    .implies(entry.eq(ast::Int::from_i64(value))),
+            );
+        }
+        Some(AbstractExpression::Abstract(name))
+    }
+
+    fn table_offsets(
+        &self,
+        within: &ast::Int,
+        assumptions: &[ast::Bool],
+        most: usize,
+    ) -> Option<Vec<i64>> {
+        let mut found: Vec<i64> = Vec::new();
+        loop {
+            let mut excluded: Vec<ast::Bool> = found
+                .iter()
+                .map(|v| within.eq(ast::Int::from_i64(*v)).not())
+                .collect();
+            excluded.extend(assumptions.iter().cloned());
+            match check(&self.solver, &excluded) {
+                SatResult::Unsat => return Some(found),
+                SatResult::Unknown => return None,
+                SatResult::Sat => {
+                    let value = self.solver.get_model()?.eval(within, true)?.as_i64()?;
+                    if found.contains(&value) || found.len() >= most {
+                        return None;
+                    }
+                    found.push(value);
+                }
+            }
+        }
+    }
+
+    fn wrote_into_many(
+        &mut self,
+        region: &Option<AbstractExpression>,
+        offset: i64,
+        width: i64,
+    ) -> bool {
+        let Some(base) = region.clone().filter(|base| self.holds_many(base)) else {
+            return false;
+        };
+        if let Some((name, symbol, label_offset)) = self.region_of(&base) {
+            let within = expression_to_ast(generate_expression(
+                "+",
+                generate_expression("-", base.clone(), AbstractExpression::Abstract(symbol)),
+                AbstractExpression::Immediate(offset + label_offset),
+            ));
+            let kept = self.indexed_facts_apart(&name, within, width);
+            if let Some(region) = self.memory.get_mut(&name) {
+                region.keep_indexed_facts(kept);
+            }
+            if !self.element_ranges_of(&name).is_empty() {
+                self.retire_element_ranges(&name);
+            }
+        }
+        self.rw_queue.push(MemoryAccess {
+            kind: RegionType::WRITE,
+            base,
+            offset,
+        });
+        true
+    }
+
+    fn distinct_row(&mut self, value: RegisterValue) -> RegisterValue {
+        let Some(AbstractExpression::Abstract(rows)) = &value.base else {
+            return value;
+        };
+        if !self.pointer_elements.values().any(|target| target == rows) {
+            return value;
+        }
+        let row = self.fresh_symbol(&format!("{rows}@row"));
+        if let Some(length) = self
+            .memory
+            .get(rows)
+            .and_then(|region| expression_to_ast(region.get_length()))
+        {
+            let start = ast::Int::new_const(row.clone());
+            self.bound_fresh(start.ge(ast::Int::from_i64(0)));
+            self.bound_fresh(ast::Int::add(&[&start, &length]).le(ast::Int::from_u64(u64::MAX)));
+        }
+        self.memory_labels.insert(row.clone(), (rows.clone(), 0));
+        RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(AbstractExpression::Abstract(row)),
+            value.offset,
+        )
+    }
+
+    fn element_pointer(
+        &self,
+        region: &str,
+        address: &RegisterValue,
+        width: i64,
+    ) -> Option<RegisterValue> {
+        let target = self.pointer_elements.get(region)?;
+        (width == 8 && self.aligned_within(region, address, width)).then(|| {
+            RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(target.clone())),
+                0,
+            )
+        })
+    }
+
+    fn aligned_within(&self, region: &str, address: &RegisterValue, width: i64) -> bool {
+        let within = generate_expression(
+            "-",
+            instruction_aux::full_value(address),
+            AbstractExpression::Abstract(region.to_string()),
+        );
+        comparison_to_ast(AbstractComparison::new(
+            "!=",
+            generate_expression("%", within, AbstractExpression::Immediate(width)),
+            AbstractExpression::Immediate(0),
+        ))
+        .is_some_and(|misaligned| self.solver.check_timed(&[misaligned]) == SatResult::Unsat)
+    }
+
+    fn element_byte(&self, region: &str, address: &RegisterValue, width: i64) -> i64 {
+        let Some(element) = self
+            .element_ranges
+            .get(region)
+            .and_then(|ranges| ranges.iter().map(|r| r.width).max())
+        else {
+            return 0;
+        };
+        let within = generate_expression(
+            "-",
+            instruction_aux::full_value(address),
+            AbstractExpression::Abstract(region.to_string()),
+        );
+        (0..element)
+            .step_by(width.max(1) as usize)
+            .find(|byte| {
+                comparison_to_ast(AbstractComparison::new(
+                    "!=",
+                    generate_expression(
+                        "%",
+                        within.clone(),
+                        AbstractExpression::Immediate(element),
+                    ),
+                    AbstractExpression::Immediate(*byte),
+                ))
+                .is_some_and(|elsewhere| {
+                    self.solver.check_assumptions(&[elsewhere]) == SatResult::Unsat
+                })
+            })
+            .unwrap_or(-1)
+    }
+
+    fn element_read(&self, region: &str, address: &RegisterValue, width: i64) -> bool {
+        self.element_ranges.contains_key(region) && self.aligned_within(region, address, width)
+    }
+
+    pub(crate) fn bound_loaded_element(&mut self, dst: &Operand, width: i64, signed: bool) {
+        let Some(region) = self.pristine_read.take() else {
+            return;
+        };
+        let Some(ranges) = self.element_ranges.get(&region).cloned() else {
+            return;
+        };
+        let value = self.get_register(dst);
+        if value.kind != RegisterKind::RegisterBase {
+            return;
+        }
+        let whole = instruction_aux::full_value(&value);
+        let byte = self.pristine_read_byte;
+        let facts: Vec<AbstractComparison> = ranges
+            .iter()
+            .filter(|range| range.width >= width && byte >= 0)
+            .filter_map(|range| range.field_fact_within(&whole, byte, width))
+            .collect();
+        for fact in facts {
+            if let Some(asserted) = comparison_to_ast(fact) {
+                self.bound_fresh(asserted);
+            }
+        }
+        let ranges: Vec<ElementRange> = ranges.into_iter().filter(|r| r.width == width).collect();
+        let ranges: Vec<ElementRange> = ranges.into_iter().filter(|r| r.field.is_none()).collect();
+        let sign_agrees = width == 8
+            || ranges
+                .iter()
+                .any(|r| r.signed != signed && self.range_excludes_sign_bit(r));
+        let mut bounded = instruction_aux::full_value(&value);
+        for range in ranges.iter().filter(|r| sign_agrees || r.signed == signed) {
+            let one = AbstractExpression::Immediate(1);
+            bounded = match range.op.as_str() {
+                "<" => generate_expression(
+                    "atmost",
+                    bounded,
+                    generate_expression("-", range.bound.clone(), one),
+                ),
+                "<=" => generate_expression("atmost", bounded, range.bound.clone()),
+                ">" => generate_expression(
+                    "atleast",
+                    bounded,
+                    generate_expression("+", range.bound.clone(), one),
+                ),
+                ">=" => generate_expression("atleast", bounded, range.bound.clone()),
+                "==" => range.bound.clone(),
+                _ => bounded,
+            };
+        }
+        self.set_register(dst, RegisterKind::RegisterBase, Some(bounded), 0);
+        self.mark_loaded(dst);
+    }
+
+    fn range_excludes_sign_bit(&self, range: &ElementRange) -> bool {
+        let sign_bit = AbstractExpression::Immediate(1 << (8 * range.width - 1));
+        let zero = AbstractExpression::Immediate(0);
+        let bound = range.bound.clone();
+        let needed = match (range.signed, range.op.as_str()) {
+            (true, ">=" | ">") => vec![AbstractComparison::new(">=", bound, zero)],
+            (false, "<") => vec![AbstractComparison::new("<=", bound, sign_bit)],
+            (false, "<=") => vec![AbstractComparison::new("<", bound, sign_bit)],
+            (_, "==") => vec![
+                AbstractComparison::new(">=", bound.clone(), zero),
+                AbstractComparison::new("<", bound, sign_bit),
+            ],
+            _ => return false,
+        };
+        needed
+            .into_iter()
+            .all(|fact| match comparison_to_ast(fact) {
+                Some(c) => self.solver.check_timed(&[c.not()]) == SatResult::Unsat,
+                None => false,
+            })
+    }
+
+    fn unknown_load(&mut self, width: i64) -> RegisterValue {
+        if width >= 8 {
+            return RegisterValue::new(RegisterKind::Number, None, 0);
+        }
+        let name = self.fresh_symbol("loaded");
+        RegisterValue::new(
+            RegisterKind::RegisterBase,
+            Some(confined_load(AbstractExpression::Abstract(name), width)),
+            0,
+        )
+    }
+
+    pub(crate) fn mark_loaded(&mut self, register: &Operand) {
+        if let Operand::Register(RePrefix::X | RePrefix::W, n) = register {
+            self.loaded[*n] = true;
         }
     }
 
@@ -63,26 +826,40 @@ impl<'ctx> ARMCORTEXA<'_> {
         &mut self,
         t: Operand,
         address: RegisterValue,
+        width: i64,
     ) -> Result<(), MemorySafetyError> {
         let res = self.mem_safe_access(
-            address.base.clone().expect("Need a name for region"),
+            region_base(&address, RegionType::READ, width)?,
             address.offset,
             RegionType::READ,
+            width,
         );
 
+        if res.is_ok()
+            && let Some(base) = address.base.clone()
+            && self.holds_many(&base)
+        {
+            self.rw_queue.push(MemoryAccess {
+                kind: RegionType::READ,
+                base,
+                offset: address.offset,
+            });
+            self.set_register(&t, RegisterKind::Number, None, 0);
+            return Ok(());
+        }
         if res.is_ok() {
             if let Some(AbstractExpression::Abstract(base)) = address.base {
                 let (region_name, offset) = self.get_memory_pointer(base.clone(), address.offset);
                 let region = self
                     .memory
                     .get(&region_name)
-                    .expect(format!("Need memory region to load from {:?}", region_name).as_str());
+                    .unwrap_or_else(|| panic!("Need memory region to load from {:?}", region_name));
                 match region.get(offset) {
                     Some(v) => {
                         self.set_register(&t, v.kind.clone(), v.base, v.offset);
                         self.rw_queue.push(MemoryAccess {
                             kind: RegionType::READ,
-                            base: base.clone(),
+                            base: AbstractExpression::Abstract(base.clone()),
                             offset: address.offset,
                         });
                         log::info!(
@@ -90,14 +867,12 @@ impl<'ctx> ARMCORTEXA<'_> {
                             base.clone(),
                             address.offset.clone()
                         );
-                        return Ok(());
+                        Ok(())
                     }
-                    None => {
-                        log::error!("No element at this address in region {:?}", region);
-                        return Err(MemorySafetyError::new(
-                            "Cannot read element at this address from region",
-                        ));
-                    }
+                    None => Err(MemorySafetyError::new(&format!(
+                        "read of never-written memory at {}",
+                        format_address(&AbstractExpression::Abstract(base), address.offset)
+                    ))),
                 }
             } else {
                 log::info!(
@@ -106,40 +881,54 @@ impl<'ctx> ARMCORTEXA<'_> {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::READ,
-                    base: address.base.expect("Need base").to_string(),
+                    base: address.base.expect("Need base"),
                     offset: address.offset,
                 });
                 self.set_register(&t, RegisterKind::Number, None, 0);
                 Ok(())
             }
         } else {
-            return res;
+            res
         }
     }
 
-    /*
-     * t: register to be stored
-     * address: where to store it
-     */
     pub fn store(
         &mut self,
         register: Operand,
         address: RegisterValue,
+        width: i64,
     ) -> Result<(), MemorySafetyError> {
+        let address = self.settled_stack_address(address);
         let region = address.base.clone();
         let res = self.mem_safe_access(
-            region.clone().expect("Need region base"),
+            region_base(&address, RegionType::WRITE, width)?,
             address.offset,
             RegionType::WRITE,
+            width,
         );
+        if res.is_ok() && self.wrote_into_many(&region, address.offset, width) {
+            return Ok(());
+        }
 
         if res.is_ok() {
+            if let Some(base) = &region {
+                self.forget_slots_overlapping(base, address.offset, width);
+            }
             if let Some(AbstractExpression::Abstract(base)) = region.clone() {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
-                let register = &self.get_register(&register);
-                let region = self.memory.get_mut(&region).expect("No region");
-                region.insert(offset.clone(), register.clone());
+                let spills_a_computed_register = width <= 8
+                    && matches!(
+                        &register,
+                        Operand::Register(RePrefix::X | RePrefix::W, n) if !self.loaded[*n]
+                    );
+                let register = self.get_register(&register);
+                self.forget_spills_overlapping(&region, offset, width);
+                if spills_a_computed_register {
+                    self.register_spills
+                        .insert((region.clone(), offset), (width, register.clone()));
+                }
+                self.store_cell(&MemoryCell { region, offset }, register, width);
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -148,24 +937,37 @@ impl<'ctx> ARMCORTEXA<'_> {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base,
+                    base: AbstractExpression::Abstract(base),
                     offset: address.offset,
                 });
-                return Ok(());
+                Ok(())
             } else {
                 log::info!(
                     "Storing from an abstract but safe region of memory {:?}",
                     address
                 );
+                let base = address.base.expect("Need base");
+                let value = self.get_register(&register);
+                self.forget_where_written(&base, address.offset, width, Some(&value));
+                if width <= 8 {
+                    self.remember_slot(base.clone(), address.offset, value, width);
+                }
+                if self
+                    .region_of(&base)
+                    .is_some_and(|(region, _, _)| region == "sp")
+                {
+                    self.blind_stack_writes
+                        .push((base.clone(), address.offset, width));
+                }
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base: address.base.expect("Need base").to_string(),
+                    base,
                     offset: address.offset,
                 });
                 Ok(())
             }
         } else {
-            return res;
+            res
         }
     }
 
@@ -173,21 +975,29 @@ impl<'ctx> ARMCORTEXA<'_> {
         &mut self,
         register: Operand,
         address: RegisterValue,
+        width: i64,
     ) -> Result<(), MemorySafetyError> {
         let region = address.base.clone();
         let res = self.mem_safe_access(
-            region.clone().expect("Need region base"),
+            region_base(&address, RegionType::WRITE, width)?,
             address.offset,
             RegionType::WRITE,
+            width,
         );
+        if res.is_ok() && self.wrote_into_many(&region, address.offset, width) {
+            return Ok(());
+        }
 
         if res.is_ok() {
+            if let Some(base) = &region {
+                self.forget_slots_overlapping(base, address.offset, width);
+            }
             if let Some(AbstractExpression::Abstract(base)) = region.clone() {
                 let (region, offset) = self.get_memory_pointer(base.clone(), address.offset);
 
                 let register = self.get_register(&register);
-                let region = self.memory.get_mut(&region).expect("No region");
-                region.insert(offset.clone(), register.clone());
+                self.forget_spills_overlapping(&region, offset, width);
+                self.store_cell(&MemoryCell { region, offset }, register, width);
 
                 log::info!(
                     "Store to address {:?} + {}",
@@ -196,176 +1006,644 @@ impl<'ctx> ARMCORTEXA<'_> {
                 );
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base,
+                    base: AbstractExpression::Abstract(base),
                     offset: address.offset,
                 });
-                return Ok(());
+                Ok(())
             } else {
                 log::info!(
                     "Storing from an abstract but safe region of memory {:?}",
                     address
                 );
+                let base = address.base.expect("Need base");
+                self.forget_where_written(&base, address.offset, width, None);
+                if self
+                    .region_of(&base)
+                    .is_some_and(|(region, _, _)| region == "sp")
+                {
+                    self.blind_stack_writes
+                        .push((base.clone(), address.offset, width));
+                }
                 self.rw_queue.push(MemoryAccess {
                     kind: RegionType::WRITE,
-                    base: address.base.expect("Need base").to_string(),
+                    base,
                     offset: address.offset,
                 });
                 Ok(())
             }
         } else {
-            return res;
+            res
         }
     }
 
-    fn get_memory_pointer(&self, base: String, offset: i64) -> (String, i64) {
-        if let Some(_) = self.memory.get(&base) {
-            return (base, offset);
-        } else {
-            if let Some(address) = self.memory_labels.get(&base) {
-                return ("memory".to_string(), address + offset);
-            } else {
-                return ("memory".to_string(), offset);
+    pub fn access_span(
+        &mut self,
+        first: &RegisterValue,
+        last: &RegisterValue,
+        most_bytes: i64,
+        ty: RegionType,
+    ) -> Result<(), MemorySafetyError> {
+        let region_named = |address: &RegisterValue| {
+            address_base(address)
+                .ok()
+                .and_then(|base| self.region_of(&base))
+                .map(|(region, ..)| region)
+        };
+        if region_named(first).is_none() || region_named(first) != region_named(last) {
+            return Err(MemorySafetyError::new(&format!(
+                "{ty} from {} to {} does not stay in one region",
+                first.expression(),
+                last.expression()
+            )));
+        }
+        self.mem_safe_vector_access(first, 1, ty)?;
+        self.mem_safe_vector_access(last, 1, ty)?;
+        if ty == RegionType::READ {
+            return Ok(());
+        }
+        let region = first.base.clone();
+        if self.wrote_into_many(&region, first.offset, most_bytes) {
+            return Ok(());
+        }
+        let base = address_base(first)?;
+        self.forget_slots_overlapping(&base, first.offset, most_bytes);
+        if let AbstractExpression::Abstract(name) = &base {
+            let (region, offset) = self.get_memory_pointer(name.clone(), first.offset);
+            self.forget_spills_overlapping(&region, offset, most_bytes);
+        }
+        self.forget_where_written(&base, first.offset, most_bytes, None);
+        if self
+            .region_of(&base)
+            .is_some_and(|(region, _, _)| region == "sp")
+        {
+            self.blind_stack_writes
+                .push((base.clone(), first.offset, most_bytes));
+        }
+        self.rw_queue.push(MemoryAccess {
+            kind: RegionType::WRITE,
+            base,
+            offset: first.offset,
+        });
+        Ok(())
+    }
+
+    fn data_symbol_at(&self, section: &str, offset: i64) -> Option<(String, String, i64)> {
+        self.memory_labels
+            .iter()
+            .filter(|(_, (placed_in, start))| placed_in == section && *start <= offset)
+            .max_by_key(|(name, (_, start))| {
+                (*start, self.data_symbol_sizes.contains_key(*name), *name)
+            })
+            .map(|(name, (_, start))| (name.clone(), section.to_string(), *start))
+    }
+
+    pub(crate) fn table_load(&self, address: &RegisterValue, width: i64) -> TableLoad {
+        const MAX_ENTRIES: i64 = 64;
+        const MAX_CASES: usize = 16;
+        let Some(base) = &address.base else {
+            return TableLoad::NotATable;
+        };
+        if matches!(base, AbstractExpression::Abstract(_)) {
+            return TableLoad::NotATable;
+        }
+        let Some((symbol, section, start)) = base
+            .get_abstracts()
+            .into_iter()
+            .find_map(|section| self.data_symbol_at(&section, address.offset))
+        else {
+            return TableLoad::NotATable;
+        };
+        let Some(region) = self.memory.get(&section) else {
+            return TableLoad::NotATable;
+        };
+        let AbstractExpression::Immediate(section_length) = region.get_length() else {
+            return TableLoad::NotATable;
+        };
+        if region.content.is_empty() {
+            return TableLoad::NotATable;
+        }
+        let length = self
+            .data_symbol_sizes
+            .get(&symbol)
+            .copied()
+            .unwrap_or(section_length - start);
+        if width <= 0
+            || length / width > MAX_ENTRIES
+            || self
+                .mem_safe_access(base.clone(), address.offset, RegionType::READ, width)
+                .is_err()
+        {
+            return TableLoad::NotATable;
+        }
+
+        let index = generate_expression(
+            "+",
+            generate_expression(
+                "-",
+                base.clone(),
+                AbstractExpression::Abstract(section.clone()),
+            ),
+            AbstractExpression::Immediate(address.offset - start),
+        );
+        let Some(index_ast) = expression_to_ast(index.clone()) else {
+            return TableLoad::NotATable;
+        };
+        let misaligned = index_ast
+            .modulo(ast::Int::from_i64(width))
+            .eq(ast::Int::from_i64(0))
+            .not();
+        let outside = ast::Bool::or(&[
+            &index_ast.lt(ast::Int::from_i64(0)),
+            &index_ast.gt(ast::Int::from_i64(length - width)),
+        ]);
+        if self.solver.check_timed(&[misaligned]) != SatResult::Unsat
+            || self.solver.check_timed(&[outside]) != SatResult::Unsat
+        {
+            return TableLoad::NotATable;
+        }
+        let mut entries = Vec::new();
+        for entry in (0..=length - width).step_by(width as usize) {
+            let pinned = index_ast.eq(ast::Int::from_i64(entry));
+            if self.solver.check_timed(&[pinned]) != SatResult::Unsat {
+                if entries.len() == MAX_CASES {
+                    return TableLoad::NotATable;
+                }
+                entries.push(entry);
             }
         }
+        match entries.as_slice() {
+            [] => TableLoad::NotATable,
+            [entry] => TableLoad::Concrete(RegisterValue::new(
+                RegisterKind::RegisterBase,
+                Some(AbstractExpression::Abstract(section)),
+                start + entry,
+            )),
+            _ => TableLoad::Split(
+                entries
+                    .iter()
+                    .map(|entry| {
+                        AbstractComparison::new(
+                            "==",
+                            index.clone(),
+                            AbstractExpression::Immediate(*entry),
+                        )
+                    })
+                    .collect(),
+            ),
+        }
     }
 
-    // SAFETY CHECKS
+    pub(crate) fn model_symbols(&self) -> Vec<String> {
+        if self.solver.check_timed(&[]) != SatResult::Sat {
+            return Vec::new();
+        }
+        let Some(model) = self.solver.get_model() else {
+            return Vec::new();
+        };
+        model.iter().map(|decl| decl.name()).collect()
+    }
+
+    fn proved_row_by_row(
+        &self,
+        access: &ast::Int,
+        base: &ast::Int,
+        offset: i64,
+        width: i64,
+        length: &ast::Int,
+        selects: &[ast::Bool],
+    ) -> bool {
+        let access_term = ast::Dynamic::from_ast(access);
+        if !has_symbolic_product(&access_term) {
+            return false;
+        }
+        let length = spelled_through_definitions(length, &self.solver.get_assertions());
+        let mut row_strides = BTreeSet::new();
+        uninterpreted_constants(&access_term, &mut row_strides);
+        row_strides.remove(&base.decl().name());
+        let zero = ast::Int::from_i64(0);
+        for stride in row_strides {
+            let (Some(rows_in), Some(rows_of)) = (
+                split_by_factor(access, &stride),
+                split_by_factor(&length, &stride),
+            ) else {
+                continue;
+            };
+            let stride_value = ast::Int::new_const(stride.as_str());
+            let within_row = ast::Int::add(&[
+                &ast::Int::sub(&[&rows_in.rest, base]),
+                &ast::Int::from_i64(offset),
+            ]);
+            let row_end = ast::Int::add(&[&within_row, &ast::Int::from_i64(width)]);
+            let last_row = ast::Int::sub(&[&rows_of.per_factor, &ast::Int::from_i64(1)]);
+            let violations = [
+                stride_value.lt(&zero),
+                rows_in.per_factor.lt(&zero),
+                within_row.lt(&zero),
+                rows_in.per_factor.gt(&last_row),
+                row_end.gt(ast::Int::add(&[&stride_value, &rows_of.rest])),
+            ];
+            if all_refuted_incrementally_within(
+                &self.solver,
+                selects,
+                &violations,
+                ROW_BY_ROW_RESOURCE_LIMIT,
+            ) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn safe_for_every_stride(&self, l: &ast::Bool, u: &ast::Bool, symbols: &[String]) -> bool {
+        for symbol in symbols {
+            let Some(values) = self.finite_values(symbol, 8) else {
+                continue;
+            };
+            if values.is_empty() {
+                continue;
+            }
+            let var = ast::Int::new_const(symbol.to_string());
+            let settled = values.iter().all(|v| {
+                let pin = var.eq(ast::Int::from_i64(*v));
+                self.solver.check_timed(&[pin.clone(), l.clone()]) == SatResult::Unsat
+                    && self.solver.check_timed(&[pin, u.clone()]) == SatResult::Unsat
+            });
+            if settled {
+                log::info!("bounds settled by splitting {symbol} over {values:?}");
+                return true;
+            }
+        }
+        false
+    }
+
+    pub(super) fn aligned_offset(&self, e: &AbstractExpression) -> Option<(String, i64)> {
+        match e {
+            AbstractExpression::Abstract(name) if self.memory.contains_key(name) => {
+                Some((name.clone(), 0))
+            }
+            AbstractExpression::Expression(op, left, right) => {
+                let (name, base) = self.aligned_offset(left)?;
+                let AbstractExpression::Immediate(k) = **right else {
+                    return None;
+                };
+                match op.as_str() {
+                    "+" => Some((name, base + k)),
+                    "&" => {
+                        let align = self.memory.get(&name)?.alignment();
+                        let clears_only_low_bits = k | (align - 1) == -1;
+                        (align > 1 && clears_only_low_bits && (0..align).contains(&base))
+                            .then_some((name, base & k))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn aligned_parts(&self, e: &AbstractExpression) -> Option<(String, AbstractExpression)> {
+        match e {
+            AbstractExpression::Abstract(name) if self.memory.contains_key(name) => {
+                Some((name.clone(), AbstractExpression::Immediate(0)))
+            }
+            AbstractExpression::Expression(op, left, right) if op == "+" => {
+                let joined = |offset, term| match offset {
+                    AbstractExpression::Immediate(0) => term,
+                    offset => generate_expression("+", offset, term),
+                };
+                if let Some((name, offset)) = self.aligned_parts(left) {
+                    return Some((name, joined(offset, (**right).clone())));
+                }
+                let (name, offset) = self.aligned_parts(right)?;
+                Some((name, joined(offset, (**left).clone())))
+            }
+            AbstractExpression::Expression(op, left, right) => {
+                let (name, offset) = self.aligned_parts(left)?;
+                let AbstractExpression::Immediate(k) = **right else {
+                    return None;
+                };
+                let align = self.memory.get(&name)?.alignment();
+                let keeps_base = match op.as_str() {
+                    "&" => align > 1 && k | (align - 1) == -1,
+                    "^" => align > 1 && (0..align).contains(&k),
+                    _ => false,
+                };
+                keeps_base.then(|| {
+                    (
+                        name,
+                        generate_expression(op, offset, AbstractExpression::Immediate(k)),
+                    )
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn fits_a_word(&self, e: &AbstractExpression) -> bool {
+        fn worth_asking(e: &AbstractExpression, budget: &mut i32) -> bool {
+            *budget -= 1;
+            if *budget < 0 {
+                return false;
+            }
+            match e {
+                AbstractExpression::Immediate(_) | AbstractExpression::Abstract(_) => true,
+                AbstractExpression::Register(r) => match &r.base {
+                    Some(b) => worth_asking(b, budget),
+                    None => true,
+                },
+                AbstractExpression::Expression(op, a, b) => {
+                    matches!(op.as_str(), "+" | "-" | "*")
+                        && worth_asking(a, budget)
+                        && worth_asking(b, budget)
+                }
+                _ => false,
+            }
+        }
+
+        worth_asking(e, &mut 24) && self.fits_in_32(&Some(e.clone()), 0)
+    }
+
+    fn without_redundant_narrowing(&self, e: &AbstractExpression) -> AbstractExpression {
+        match e {
+            AbstractExpression::Expression(op, left, right) => {
+                let inner = self.without_redundant_narrowing(left);
+                if op == "%"
+                    && **right == AbstractExpression::Immediate(1i64 << 32)
+                    && self.fits_a_word(&inner)
+                {
+                    return inner;
+                }
+                generate_expression(op, inner, self.without_redundant_narrowing(right))
+            }
+            AbstractExpression::Register(r) => match &r.base {
+                Some(base) => AbstractExpression::Register(Box::new(RegisterValue {
+                    base: Some(self.without_redundant_narrowing(base)),
+                    ..(**r).clone()
+                })),
+                None => e.clone(),
+            },
+            other => other.clone(),
+        }
+    }
+
     fn mem_safe_access(
         &self,
         base_expr: AbstractExpression,
         mut offset: i64,
         ty: RegionType,
+        width: i64,
     ) -> Result<(), MemorySafetyError> {
-        let mut symbolic_base = false;
-        let (region, base, base_access) = match base_expr.clone() {
-            AbstractExpression::Abstract(regbase) => {
-                if let Some(region) = self.memory.get(&regbase.clone()) {
-                    (
-                        region,
-                        ast::Int::new_const(self.context, regbase.clone()),
-                        ast::Int::new_const(self.context, regbase),
-                    )
-                } else {
-                    if let Some(address) = self.memory_labels.get(&regbase.clone()) {
-                        offset = offset + address;
-                        (
-                            self.memory
-                                .get(&"memory".to_string())
-                                .expect("memory should exist"),
-                            ast::Int::new_const(self.context, regbase.clone()),
-                            ast::Int::new_const(self.context, regbase),
-                        )
-                    } else {
-                        todo!("memory regions in access check");
-                    }
-                }
+        let base_expr = self.without_redundant_narrowing(&base_expr);
+        let base_expr = match self.aligned_offset(&base_expr) {
+            Some((name, folded)) => {
+                offset += folded;
+                AbstractExpression::Abstract(name)
             }
-            _ => {
-                symbolic_base = true;
-                let abstracts = base_expr.get_abstracts();
-                let mut result: Option<(&MemorySafeRegion, z3::ast::Int<'_>, z3::ast::Int<'_>)> =
-                    None;
-                for r in self.memory.keys() {
-                    if abstracts.contains(r) {
-                        result = Some((
-                            self.memory.get(r).expect("Region not in memory 2"),
-                            expression_to_ast(
-                                self.context,
-                                AbstractExpression::Abstract(r.to_string()),
-                            )
-                            .expect("computer25"),
-                            expression_to_ast(self.context, base_expr.clone())
-                                .expect("computer251"),
-                        ));
-                        break;
-                    }
-                    for r in self.memory_labels.clone() {
-                        if abstracts.contains(&r.0) {
-                            if let Some(address) = self.memory_labels.get(&r.0.clone()) {
-                                offset = *address;
-                                result = Some((
-                                    self.memory.get("memory").expect("Region not in memory 2"),
-                                    expression_to_ast(
-                                        self.context,
-                                        AbstractExpression::Abstract(r.0.to_string()),
-                                    )
-                                    .expect("computer25"),
-                                    expression_to_ast(self.context, base_expr.clone())
-                                        .expect("computer251"),
-                                ));
-                                break;
-                            }
-                        }
-                    }
+            None => match self.aligned_parts(&base_expr) {
+                Some((name, within)) => {
+                    generate_expression("+", AbstractExpression::Abstract(name), within)
                 }
-                if let Some(res) = result {
-                    res
-                } else {
-                    return Err(MemorySafetyError::new(
-                        format!(
-                            "No matching region found for access {:?}, {:?}",
-                            base_expr, offset
-                        )
-                        .as_str(),
-                    ));
-                }
-            }
+                None => base_expr,
+            },
         };
+        let Some((region_name, symbol, label_offset)) = self.region_of(&base_expr) else {
+            return Err(MemorySafetyError::new(&format!(
+                "no region declared for {ty} at {}",
+                format_address(&base_expr, offset)
+            )));
+        };
+        offset += label_offset;
+        let region = &self.memory[&region_name];
+        let base = ast::Int::new_const(symbol);
+        let base_access = expression_to_ast(base_expr.clone())
+            .ok_or_else(|| untranslatable(&base_expr, ty, width))?;
 
         if ty == RegionType::WRITE && region.kind == RegionType::READ {
             return Err(MemorySafetyError::new(&format!(
-                "Access does not match region type {:#?} {:?} {:?}",
-                region.kind, ty, base_expr
+                "write at {base_expr} targets a {} region",
+                region.kind
             )));
         }
 
-        let mut abs_offset = ast::Int::from_i64(self.context, offset);
-        if base_expr.contains("sp") {
-            abs_offset = ast::Int::from_i64(self.context, offset.abs());
-        }
-        let access = ast::Int::add(self.context, &[&base_access, &abs_offset]);
+        let (l, u, extent, below_red_zone) = if region_name == "sp" {
+            let (low, high, shown) = match self.stack_bounds() {
+                Some((low, high)) => (ast::Int::from_i64(low), high, low.to_string()),
+                None => {
+                    let Some((low, shown)) = self
+                        .stack_displacement()
+                        .and_then(|d| Some((expression_to_ast(d.clone())?, d)))
+                    else {
+                        return Err(MemorySafetyError::new(&format!(
+                            "{ty} of {width} bytes at {} has no frame to measure: \
+                             the stack pointer is not the entry value plus an amount",
+                            format_address(&base_expr, offset)
+                        )));
+                    };
+                    let zero = ast::Int::from_i64(0);
+                    (
+                        low.lt(&zero).ite(&low, &zero),
+                        self.stack_arguments,
+                        format!("min({shown}, 0)"),
+                    )
+                }
+            };
+            let displacement = ast::Int::add(&[
+                &ast::Int::sub(&[&base_access, &base]),
+                &ast::Int::from_i64(offset),
+            ]);
+            let last_byte = ast::Int::add(&[&displacement, &ast::Int::from_i64(width - 1)]);
+            (
+                displacement.lt(&low),
+                last_byte.ge(ast::Int::from_i64(high)),
+                format!("stack frame [{shown}, {high})"),
+                (self.red_zone > 0).then(|| {
+                    displacement.lt(ast::Int::sub(&[&low, &ast::Int::from_i64(self.red_zone)]))
+                }),
+            )
+        } else {
+            let upperbound_value = expression_to_ast(region.get_length()).unwrap_or_else(|| {
+                panic!("no translation for region length {}", region.get_length())
+            });
+            let access = ast::Int::add(&[&base_access, &ast::Int::from_i64(offset)]);
+            let last_byte = ast::Int::add(&[&access, &ast::Int::from_i64(width - 1)]);
+            let up_access = ast::Int::add(&[&base, &upperbound_value]);
+            (
+                access.lt(&base),
+                last_byte.ge(&up_access),
+                format!("region of length {}", region.get_length()),
+                None,
+            )
+        };
 
-        // let width = ast::Int::from_i64(self.context, 2);    // how wide is memory access, two bytes
-        let lowerbound_value = ast::Int::from_i64(self.context, 0);
-        let low_access = ast::Int::add(self.context, &[&base, &lowerbound_value]);
-        let upperbound_value =
-            expression_to_ast(self.context, region.get_length()).expect("computer26");
-        let up_access = ast::Int::add(self.context, &[&base, &upperbound_value]);
-        let l = access.lt(&low_access);
-        let u = {
-            if offset == 0 && !symbolic_base {
-                access.ge(&up_access)
-            } else {
-                access.gt(&up_access)
-            }
+        let selects = self.select_assumptions(&base_expr);
+        if region_name != "sp"
+            && let Some(length) = expression_to_ast(region.get_length())
+            && self.proved_row_by_row(&base_access, &base, offset, width, &length, &selects)
+        {
+            self.defer_path_check(
+                selects,
+                format!(
+                    "{ty} of {width} bytes at {}",
+                    format_address(&base_expr, offset)
+                ),
+            )?;
+            log::info!(
+                "{ty} at {} proved in bounds row by row",
+                format_address(&base_expr, offset)
+            );
+            return Ok(());
+        }
+        let with = |extra: &ast::Bool| {
+            let mut all = selects.clone();
+            all.push(extra.clone());
+            all
         };
 
         match (
-            self.solver.check_assumptions(&[l.clone()]),
-            self.solver.check_assumptions(&[u.clone()]),
+            check(&self.solver, &with(&l)),
+            check(&self.solver, &with(&u)),
         ) {
             (SatResult::Unsat, SatResult::Unsat) => {
-                log::info!("Memory safe with solver's check!");
-                log::info!("Unsat core {:?}", self.solver.get_unsat_core());
-                return Ok(());
+                self.defer_path_check(
+                    selects,
+                    format!(
+                        "{ty} of {width} bytes at {}",
+                        format_address(&base_expr, offset)
+                    ),
+                )?;
+                log::info!(
+                    "{ty} at {} proved in bounds",
+                    format_address(&base_expr, offset)
+                );
+                Ok(())
             }
             (a, b) => {
-                log::info!("Load from address {:?} + {} unsafe", base_expr, offset);
+                if a == SatResult::Unknown || b == SatResult::Unknown {
+                    let mut symbols = base_expr.get_abstracts();
+                    symbols.append(&mut region.get_length().get_abstracts());
+                    symbols.append(&mut self.model_symbols());
+                    symbols.sort();
+                    symbols.dedup();
+                    if self.safe_for_every_stride(&l, &u, &symbols) {
+                        log::info!(
+                            "{ty} at {} proved in bounds",
+                            format_address(&base_expr, offset)
+                        );
+                        return Ok(());
+                    }
+                }
+                if b == SatResult::Unsat
+                    && let Some(below) = &below_red_zone
+                    && self.solver.check_timed(&with(below)) == SatResult::Unsat
+                    && self.solver.check_timed(&selects) == SatResult::Sat
+                {
+                    self.note_finding(&format!(
+                        "{ty} of {width} bytes at {} is below the stack pointer, in the \
+                         {}-byte red zone this analysis was told to allow",
+                        format_address(&base_expr, offset),
+                        self.red_zone
+                    ));
+                    return Ok(());
+                }
                 log::info!(
-                    "impossibility lower bound {:?}, impossibility upper bound {:?}, model: {:?}",
-                    a,
-                    b,
+                    "below-region is {a:?} and past-end is {b:?}, model: {:?}",
                     self.solver.get_model()
                 );
-                log::info!("Memory unsafe with solver's check!");
+                let holding = self
+                    .data_symbol_at(&region_name, offset)
+                    .map(|(symbol, ..)| format!(" holding {symbol}"))
+                    .unwrap_or_default();
+                Err(MemorySafetyError::new(&format!(
+                    "{ty} of {width} bytes at {} not provably within {extent}{holding}",
+                    format_address(&base_expr, offset),
+                )))
             }
         }
-        return Err(MemorySafetyError::new(
-            format!(
-                "Accessing address outside allowable memory regions {:?}, {:?}",
-                base_expr, offset
-            )
-            .as_str(),
+    }
+
+    pub fn mem_safe_vector_access(
+        &self,
+        address: &RegisterValue,
+        width: i64,
+        ty: RegionType,
+    ) -> Result<(), MemorySafetyError> {
+        self.mem_safe_access(address_base(address)?, address.offset, ty, width)
+    }
+}
+
+#[cfg(test)]
+mod narrowing_tests {
+    use super::*;
+
+    fn narrowed(inner: AbstractExpression) -> AbstractExpression {
+        generate_expression("%", inner, AbstractExpression::Immediate(1i64 << 32))
+    }
+
+    #[test]
+    fn a_narrowing_comes_off_only_where_the_path_bounds_it() {
+        let computer = ARMCORTEXA::new();
+        for (op, bound) in [(">=", 0), ("<=", 128)] {
+            let fact =
+                AbstractComparison::new(op, abstract_of("h"), AbstractExpression::Immediate(bound));
+            computer
+                .solver
+                .assert(comparison_to_ast(fact).expect("a literal bound translates"));
+        }
+        assert_eq!(
+            computer.without_redundant_narrowing(&narrowed(abstract_of("h"))),
+            abstract_of("h")
+        );
+        let product = generate_expression("*", abstract_of("stride"), narrowed(abstract_of("h")));
+        assert_eq!(
+            computer.without_redundant_narrowing(&product).to_string(),
+            "stride * h"
+        );
+        assert_eq!(
+            computer.without_redundant_narrowing(&narrowed(narrowed(abstract_of("h")))),
+            abstract_of("h")
+        );
+        let counter = narrowed(abstract_of("loop0_?"));
+        assert_eq!(computer.without_redundant_narrowing(&counter), counter);
+        let moving = narrowed(generate_expression(
+            "-",
+            abstract_of("h"),
+            abstract_of("loop0_?"),
         ));
+        assert_eq!(computer.without_redundant_narrowing(&moving), moving);
+    }
+
+    #[test]
+    fn a_narrowing_round_is_not_spent_on_a_term_that_cannot_be_bounded() {
+        let computer = ARMCORTEXA::new();
+        assert!(!computer.fits_a_word(&abstract_of("base[0:4]")));
+        assert!(!computer.fits_a_word(&generate_expression(
+            "lsr",
+            abstract_of("h"),
+            AbstractExpression::Immediate(4)
+        )));
+        assert!(!computer.fits_a_word(&abstract_of("h")));
+    }
+}
+
+#[cfg(test)]
+mod unproved_reason_tests {
+    use super::*;
+
+    #[test]
+    fn a_path_with_a_model_proves_the_access() {
+        assert_eq!(unproved_reason(SatResult::Sat), None);
+    }
+
+    #[test]
+    fn a_contradictory_path_proves_nothing() {
+        assert_eq!(unproved_reason(SatResult::Unsat), Some("path has no model"));
+    }
+
+    #[test]
+    fn an_undecided_path_is_reported_as_undecided() {
+        assert_eq!(
+            unproved_reason(SatResult::Unknown),
+            Some("solver did not decide the path")
+        );
     }
 }

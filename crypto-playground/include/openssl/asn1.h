@@ -1,59 +1,5 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.]
- */
+// Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef OPENSSL_HEADER_ASN1_H
 #define OPENSSL_HEADER_ASN1_H
@@ -275,8 +221,7 @@ int i2d_SAMPLE(const SAMPLE *in, uint8_t **outp);
 
 // CHECKED_I2D_OF casts a given pointer to i2d_of_void* and statically checks
 // that it was a pointer to |type|'s |i2d| function.
-#define CHECKED_I2D_OF(type, i2d) \
-    ((i2d_of_void*) (1 ? i2d : ((I2D_OF(type))0)))
+#define CHECKED_I2D_OF(type, i2d) ((i2d_of_void *)(1 ? i2d : ((I2D_OF(type))0)))
 
 // The following typedefs are sometimes used for pointers to functions like
 // |d2i_SAMPLE| and |i2d_SAMPLE|. Note, however, that these act on |void*|.
@@ -329,6 +274,10 @@ typedef const ASN1_ITEM ASN1_ITEM_EXP;
 // ASN1_VALUE_st (aka |ASN1_VALUE|) is an opaque type used as a placeholder for
 // the C type corresponding to an |ASN1_ITEM|.
 typedef struct ASN1_VALUE_st ASN1_VALUE;
+
+// ASN1_parse performs an ASN.1 dump of the contents pointed to by |pp| of length |len|,
+// and writes it to |bp|. Returns 1 on success, or 0 on failure.
+OPENSSL_EXPORT int ASN1_parse(BIO *bp, const unsigned char *pp, long len, int indent);
 
 // ASN1_item_new allocates a new value of the C type corresponding to |it|, or
 // NULL on error. On success, the caller must release the value with
@@ -391,6 +340,16 @@ OPENSSL_EXPORT ASN1_VALUE *ASN1_item_d2i(ASN1_VALUE **out,
 OPENSSL_EXPORT int ASN1_item_i2d(ASN1_VALUE *val, unsigned char **outp,
                                  const ASN1_ITEM *it);
 
+// ASN1_dup returns a newly-allocated copy of |x| by re-encoding with |i2d| and
+// |d2i|. |i2d| and |d2i| must be the corresponding type functions of |x|. NULL
+// is returned on error.
+//
+// WARNING: DO NOT USE. Casting the result of this function to the wrong type,
+// or passing a pointer of the wrong type into this function, are potentially
+// exploitable memory errors. Prefer directly calling |i2d| and |d2i| or other
+// type-specific functions.
+OPENSSL_EXPORT void *ASN1_dup(i2d_of_void *i2d, d2i_of_void *d2i, void *x);
+
 // ASN1_item_dup returns a newly-allocated copy of |x|, or NULL on error. |x|
 // must be an object of |it|'s C type.
 //
@@ -443,7 +402,7 @@ OPENSSL_EXPORT int ASN1_i2d_bio(i2d_of_void *i2d, BIO *out, void *in);
 // forces the user to use undefined C behavior and will cause failures when
 // running against undefined behavior sanitizers in clang.
 #define ASN1_i2d_bio_of(type, i2d, out, in) \
-    (ASN1_i2d_bio(CHECKED_I2D_OF(type, i2d), out, CHECKED_PTR_OF(type, in)))
+  (ASN1_i2d_bio(CHECKED_I2D_OF(type, i2d), out, CHECKED_PTR_OF(type, in)))
 
 // ASN1_item_unpack parses |oct|'s contents as |it|'s ASN.1 type. It returns a
 // newly-allocated instance of |it|'s C type on success, or NULL on error.
@@ -1438,8 +1397,8 @@ OPENSSL_EXPORT int ASN1_TIME_set_string(ASN1_TIME *s, const char *str);
 // ASN1_TIME conversion functions.
 //
 // |struct| |tm| represents a calendar date: year, month, day... it is not
-// necessarily a valid day, e.g. month 13. |time_t| is a typedef for the system's
-// type that represents the seconds since the UNIX epoch. Posix time is
+// necessarily a valid day, e.g. month 13. |time_t| is a typedef for the
+// system's type that represents the seconds since the UNIX epoch. Posix time is
 // a signed 64-bit integer which also represents the seconds since the UNIX
 // epoch.
 
@@ -1736,18 +1695,18 @@ OPENSSL_EXPORT int ASN1_STRING_print(BIO *out, const ASN1_STRING *str);
 
 // ASN1_STRFLGS_ESC_2253 causes characters to be escaped as in RFC 2253, section
 // 2.4.
-#define ASN1_STRFLGS_ESC_2253 1
+#define ASN1_STRFLGS_ESC_2253 1ul
 
 // ASN1_STRFLGS_ESC_CTRL causes all control characters to be escaped.
-#define ASN1_STRFLGS_ESC_CTRL 2
+#define ASN1_STRFLGS_ESC_CTRL 2ul
 
 // ASN1_STRFLGS_ESC_MSB causes all characters above 127 to be escaped.
-#define ASN1_STRFLGS_ESC_MSB 4
+#define ASN1_STRFLGS_ESC_MSB 4ul
 
 // ASN1_STRFLGS_ESC_QUOTE causes the string to be surrounded by quotes, rather
 // than using backslashes, when characters are escaped. Fewer characters will
 // require escapes in this case.
-#define ASN1_STRFLGS_ESC_QUOTE 8
+#define ASN1_STRFLGS_ESC_QUOTE 8ul
 
 // ASN1_STRFLGS_UTF8_CONVERT causes the string to be encoded as UTF-8, with each
 // byte in the UTF-8 encoding treated as an individual character for purposes of
@@ -1755,29 +1714,29 @@ OPENSSL_EXPORT int ASN1_STRING_print(BIO *out, const ASN1_STRING *str);
 // as a character, with wide characters escaped as "\Uxxxx" or "\Wxxxxxxxx".
 // Note this can be ambiguous if |ASN1_STRFLGS_ESC_*| are all unset. In that
 // case, backslashes are not escaped, but wide characters are.
-#define ASN1_STRFLGS_UTF8_CONVERT 0x10
+#define ASN1_STRFLGS_UTF8_CONVERT 0x10ul
 
 // ASN1_STRFLGS_IGNORE_TYPE causes the string type to be ignored. The
 // |ASN1_STRING| in-memory representation will be printed directly.
-#define ASN1_STRFLGS_IGNORE_TYPE 0x20
+#define ASN1_STRFLGS_IGNORE_TYPE 0x20ul
 
 // ASN1_STRFLGS_SHOW_TYPE causes the string type to be included in the output.
-#define ASN1_STRFLGS_SHOW_TYPE 0x40
+#define ASN1_STRFLGS_SHOW_TYPE 0x40ul
 
 // ASN1_STRFLGS_DUMP_ALL causes all strings to be printed as a hexdump, using
 // RFC 2253 hexstring notation, such as "#0123456789ABCDEF".
-#define ASN1_STRFLGS_DUMP_ALL 0x80
+#define ASN1_STRFLGS_DUMP_ALL 0x80ul
 
 // ASN1_STRFLGS_DUMP_UNKNOWN behaves like |ASN1_STRFLGS_DUMP_ALL| but only
 // applies to values of unknown type. If unset, unknown values will print
 // their contents as single-byte characters with escape sequences.
-#define ASN1_STRFLGS_DUMP_UNKNOWN 0x100
+#define ASN1_STRFLGS_DUMP_UNKNOWN 0x100ul
 
 // ASN1_STRFLGS_DUMP_DER causes hexdumped strings (as determined by
 // |ASN1_STRFLGS_DUMP_ALL| or |ASN1_STRFLGS_DUMP_UNKNOWN|) to print the entire
 // DER element as in RFC 2253, rather than only the contents of the
 // |ASN1_STRING|.
-#define ASN1_STRFLGS_DUMP_DER 0x200
+#define ASN1_STRFLGS_DUMP_DER 0x200ul
 
 // ASN1_STRFLGS_RFC2253 causes the string to be escaped as in RFC 2253,
 // additionally escaping control characters.
@@ -1801,6 +1760,17 @@ OPENSSL_EXPORT int ASN1_STRING_print_ex(BIO *out, const ASN1_STRING *str,
 // |FILE| rather than a |BIO|.
 OPENSSL_EXPORT int ASN1_STRING_print_ex_fp(FILE *fp, const ASN1_STRING *str,
                                            unsigned long flags);
+
+// a2i_ASN1_INTEGER reads a hexadecimal string from |bp| and converts it to an
+// INTEGER, writing the result to |bs|. |buf| is a caller-provided temporary
+// buffer of |size| bytes that the function uses for reading lines from |bp|.
+// It returns one on success and zero on error.
+//
+// The input should consist of hexadecimal digits, optionally with a leading
+// "00" (which is skipped). Lines can be continued with a trailing backslash
+// (\). The hexadecimal string must have an even number of digits.
+OPENSSL_EXPORT int a2i_ASN1_INTEGER(BIO *bp, ASN1_INTEGER *bs, char *buf,
+                                    int size);
 
 // i2a_ASN1_INTEGER writes a human-readable representation of |a| to |bp|. It
 // returns the number of bytes written on success, or a negative number on
@@ -1923,18 +1893,6 @@ OPENSSL_EXPORT int ASN1_object_size(int constructed, int length, int tag);
 
 // Deprecated functions.
 
-// ASN1_STRING_set_default_mask does nothing.
-OPENSSL_EXPORT void ASN1_STRING_set_default_mask(unsigned long mask);
-
-// ASN1_STRING_set_default_mask_asc returns one.
-OPENSSL_EXPORT int ASN1_STRING_set_default_mask_asc(const char *p);
-
-// ASN1_STRING_get_default_mask returns |B_ASN1_UTF8STRING|.
-OPENSSL_EXPORT unsigned long ASN1_STRING_get_default_mask(void);
-
-// ASN1_STRING_TABLE_cleanup does nothing.
-OPENSSL_EXPORT void ASN1_STRING_TABLE_cleanup(void);
-
 // M_ASN1_* are legacy aliases for various |ASN1_STRING| functions. Use the
 // functions themselves.
 #define M_ASN1_STRING_length(x) ASN1_STRING_length(x)
@@ -2052,6 +2010,25 @@ OPENSSL_EXPORT long ASN1_INTEGER_get(const ASN1_INTEGER *a);
 // WARNING: This function's return value cannot distinguish errors from -1.
 // Use |ASN1_ENUMERATED_get_uint64| and |ASN1_ENUMERATED_get_int64| instead.
 OPENSSL_EXPORT long ASN1_ENUMERATED_get(const ASN1_ENUMERATED *a);
+
+
+// General No-op Functions [Deprecated].
+
+// ASN1_STRING_set_default_mask does nothing.
+OPENSSL_EXPORT OPENSSL_DEPRECATED void ASN1_STRING_set_default_mask(
+    unsigned long mask);
+
+// ASN1_STRING_set_default_mask_asc returns one.
+OPENSSL_EXPORT OPENSSL_DEPRECATED int ASN1_STRING_set_default_mask_asc(
+    const char *p);
+
+// ASN1_STRING_get_default_mask returns |B_ASN1_UTF8STRING|. This is
+// the value AWS-LC uses by default and is not configurable.
+OPENSSL_EXPORT OPENSSL_DEPRECATED unsigned long ASN1_STRING_get_default_mask(
+    void);
+
+// ASN1_STRING_TABLE_cleanup does nothing.
+OPENSSL_EXPORT OPENSSL_DEPRECATED void ASN1_STRING_TABLE_cleanup(void);
 
 
 #if defined(__cplusplus)

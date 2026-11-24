@@ -1,73 +1,22 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.] */
+// Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com) All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 #ifndef OPENSSL_HEADER_CONF_H
 #define OPENSSL_HEADER_CONF_H
 
 #include <openssl/base.h>
 
-#include <openssl/stack.h>
 #include <openssl/lhash.h>
+#include <openssl/stack.h>
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
 
-// Config files look like:
+// Config files.
+//
+// This library handles OpenSSL's config files, which look like:
 //
 //   # Comment
 //
@@ -82,6 +31,7 @@ extern "C" {
 // untrusted input as a config file risks string injection and denial of service
 // vulnerabilities.
 
+
 struct conf_value_st {
   char *section;
   char *name;
@@ -91,6 +41,9 @@ struct conf_value_st {
 DEFINE_STACK_OF(CONF_VALUE)
 DECLARE_LHASH_OF(CONF_VALUE)
 
+struct conf_st {
+  LHASH_OF(CONF_VALUE) *data;
+};
 
 // NCONF_new returns a fresh, empty |CONF|, or NULL on error. The |method|
 // argument must be NULL.
@@ -124,33 +77,43 @@ OPENSSL_EXPORT const char *NCONF_get_string(const CONF *conf,
                                             const char *name);
 
 
-// Deprecated functions
+// General No-op Functions [Deprecated].
+//
+// AWS-LC has no support for loading config files to configure AWS-LC, so
+// the following functions have been deprecated as no-ops.
 
 // These defines do nothing but are provided to make old code easier to
 // compile.
 #define CONF_MFLAGS_DEFAULT_SECTION 0
 #define CONF_MFLAGS_IGNORE_MISSING_FILE 0
 
-// CONF_modules_load_file returns one. BoringSSL is defined to have no config
+// CONF_modules_load_file returns one. AWS-LC is defined to have no config
 // file options, thus loading from |filename| always succeeds by doing nothing.
-OPENSSL_EXPORT int CONF_modules_load_file(const char *filename,
-                                          const char *appname,
-                                          unsigned long flags);
+OPENSSL_EXPORT OPENSSL_DEPRECATED int CONF_modules_load_file(
+    const char *filename, const char *appname, unsigned long flags);
+
+// CONF_get1_default_config_file returns a fixed dummy string. AWS-LC is defined
+// to have no config file options.
+OPENSSL_EXPORT OPENSSL_DEPRECATED char *CONF_get1_default_config_file(void);
 
 // CONF_modules_free does nothing.
-OPENSSL_EXPORT void CONF_modules_free(void);
+OPENSSL_EXPORT OPENSSL_DEPRECATED void CONF_modules_free(void);
 
 // CONF_modules_unload does nothing.
-OPENSSL_EXPORT void CONF_modules_unload(int all);
+OPENSSL_EXPORT OPENSSL_DEPRECATED void CONF_modules_unload(int all);
 
 // CONF_modules_finish does nothing.
-OPENSSL_EXPORT void CONF_modules_finish(void);
+OPENSSL_EXPORT OPENSSL_DEPRECATED void CONF_modules_finish(void);
 
-// OPENSSL_config does nothing.
+// OPENSSL_config does nothing. This has been deprecated since OpenSSL 1.1.0.
+//
+// TODO (CryptoAlg-2398): Add |OPENSSL_DEPRECATED|. nginx defines -Werror and
+// depends on this.
 OPENSSL_EXPORT void OPENSSL_config(const char *config_name);
 
-// OPENSSL_no_config does nothing.
-OPENSSL_EXPORT void OPENSSL_no_config(void);
+// OPENSSL_no_config does nothing. This has been deprecated since OpenSSL
+// 1.1.0.
+OPENSSL_EXPORT OPENSSL_DEPRECATED void OPENSSL_no_config(void);
 
 
 #if defined(__cplusplus)
@@ -176,5 +139,6 @@ BSSL_NAMESPACE_END
 #define CONF_R_VARIABLE_HAS_NO_VALUE 105
 #define CONF_R_VARIABLE_EXPANSION_TOO_LONG 106
 #define CONF_R_VARIABLE_EXPANSION_NOT_SUPPORTED 107
+#define CONF_R_NO_CLOSE_QUOTE 108
 
 #endif  // OPENSSL_HEADER_THREAD_H

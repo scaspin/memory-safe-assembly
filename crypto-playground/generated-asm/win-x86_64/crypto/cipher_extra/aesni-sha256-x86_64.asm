@@ -6,6 +6,7 @@ default	rel
 %define XMMWORD
 %define YMMWORD
 %define ZMMWORD
+%define _CET_ENDBR
 
 %include "openssl/boringssl_prefix_symbols_nasm.inc"
 section	.text code align=64
@@ -45,6 +46,7 @@ $L$probe:
 
 
 
+section	.rdata rdata align=8
 ALIGN	64
 
 K256:
@@ -90,6 +92,8 @@ K256:
 	DB	54,52,44,32,67,82,89,80,84,79,71,65,77,83,32,98
 	DB	121,32,60,97,112,112,114,111,64,111,112,101,110,115,115,108
 	DB	46,111,114,103,62,0
+section	.text
+
 ALIGN	64
 
 ALIGN	64
@@ -4680,6 +4684,7 @@ $L$in_prologue:
 
 
 section	.pdata rdata align=4
+ALIGN	4
 	DD	$L$SEH_begin_aesni_cbc_sha256_enc_xop wrt ..imagebase
 	DD	$L$SEH_end_aesni_cbc_sha256_enc_xop wrt ..imagebase
 	DD	$L$SEH_info_aesni_cbc_sha256_enc_xop wrt ..imagebase
@@ -4693,21 +4698,24 @@ section	.pdata rdata align=4
 	DD	$L$SEH_begin_aesni_cbc_sha256_enc_shaext wrt ..imagebase
 	DD	$L$SEH_end_aesni_cbc_sha256_enc_shaext wrt ..imagebase
 	DD	$L$SEH_info_aesni_cbc_sha256_enc_shaext wrt ..imagebase
-section	.xdata rdata align=8
-ALIGN	8
+section	.xdata rdata align=4
+ALIGN	4
 $L$SEH_info_aesni_cbc_sha256_enc_xop:
 	DB	9,0,0,0
 	DD	se_handler wrt ..imagebase
 	DD	$L$prologue_xop wrt ..imagebase,$L$epilogue_xop wrt ..imagebase
 
+ALIGN	4
 $L$SEH_info_aesni_cbc_sha256_enc_avx:
 	DB	9,0,0,0
 	DD	se_handler wrt ..imagebase
 	DD	$L$prologue_avx wrt ..imagebase,$L$epilogue_avx wrt ..imagebase
+ALIGN	4
 $L$SEH_info_aesni_cbc_sha256_enc_avx2:
 	DB	9,0,0,0
 	DD	se_handler wrt ..imagebase
 	DD	$L$prologue_avx2 wrt ..imagebase,$L$epilogue_avx2 wrt ..imagebase
+ALIGN	4
 $L$SEH_info_aesni_cbc_sha256_enc_shaext:
 	DB	9,0,0,0
 	DD	se_handler wrt ..imagebase

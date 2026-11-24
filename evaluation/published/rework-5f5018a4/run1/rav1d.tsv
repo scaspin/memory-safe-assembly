@@ -1,0 +1,550 @@
+cdef_padding4_8bpc_neon	src/asm/cdef.rs	verified	2.956		218	5	964	2894	0.216	0.520	0.026	1.939	0.030	0.009	0.136
+cdef_filter4_8bpc_neon	src/asm/cdef.rs	verified	3.390		662	15	48347	68139	0.479	0.004	0.180	2.168	0.000	0.009	0.529
+cdef_padding8_8bpc_neon	src/asm/cdef.rs	verified	3.730		233	5	1000	2820	0.206	0.690	0.026	2.531	0.036	0.008	0.137
+cdef_find_dir_8bpc_neon	src/asm/cdef.rs	verified	0.110		370	0	370	109	0.003	0.000	0.000	0.090	0.000	0.008	0.001
+cdef_padding4_edged_8bpc_neon	src/asm/cdef.rs	verified	0.109		19	1	59	180	0.005	0.058	0.000	0.017	0.002	0.008	0.006
+cdef_padding8_edged_8bpc_neon	src/asm/cdef.rs	verified	0.104		32	1	78	250	0.006	0.044	0.000	0.023	0.002	0.008	0.006
+cdef_filter8_8bpc_neon	src/asm/cdef.rs	verified	6.008		563	15	94537	137609	0.836	0.009	0.205	3.585	0.000	0.008	1.278
+cdef_padding4_16bpc_neon	src/asm/cdef.rs	verified	2.715		161	4	753	2707	0.169	0.484	0.025	1.774	0.028	0.007	0.130
+cdef_filter4_16bpc_neon	src/asm/cdef.rs	verified	2.300		300	9	34058	48283	0.315	0.002	0.095	1.422	0.000	0.006	0.445
+cdef_padding8_16bpc_neon	src/asm/cdef.rs	verified	3.181		163	4	770	2563	0.209	0.470	0.025	2.231	0.028	0.006	0.131
+cdef_find_dir_16bpc_neon	src/asm/cdef.rs	verified	0.117		383	0	383	115	0.004	0.000	0.000	0.076	0.000	0.006	0.001
+cdef_filter8_16bpc_neon	src/asm/cdef.rs	verified	3.858		267	9	59332	87413	0.459	0.007	0.096	2.286	0.000	0.006	0.927
+generate_grain_y_8bpc_neon	src/asm/filmgrain.rs	TIMEOUT	300.009	killed after 300s											
+generate_grain_uv_422_8bpc_neon	src/asm/filmgrain.rs	TIMEOUT	300.042	killed after 300s											
+fgy_32x32_8bpc_neon	src/asm/filmgrain.rs	verified	3.513		350	5	5155	4157	0.182	0.843	0.018	2.228	0.088	0.019	0.111
+fguv_32x32_420_8bpc_neon	src/asm/filmgrain.rs	verified	6.089		460	5	8961	7344	0.428	2.003	0.080	2.851	0.176	0.020	0.440
+fguv_32x32_422_8bpc_neon	src/asm/filmgrain.rs	verified	8.216		463	9	10101	8136	0.355	3.214	0.087	3.779	0.213	0.020	0.506
+fguv_32x32_444_8bpc_neon	src/asm/filmgrain.rs	verified	13.345		686	9	17361	13100	0.659	3.518	0.090	8.177	0.293	0.020	0.528
+generate_grain_uv_444_8bpc_neon	src/asm/filmgrain.rs	TIMEOUT	300.025	killed after 300s											
+generate_grain_y_16bpc_neon	src/asm/filmgrain.rs	TIMEOUT	300.074	killed after 300s											
+generate_grain_uv_422_16bpc_neon	src/asm/filmgrain.rs	TIMEOUT	300.013	killed after 300s											
+fgy_32x32_16bpc_neon	src/asm/filmgrain.rs	verified	4.538		431	5	5553	5780	0.295	0.948	0.019	2.976	0.101	0.021	0.118
+fguv_32x32_420_16bpc_neon	src/asm/filmgrain.rs	verified	11.866		548	5	9712	13682	1.217	2.758	0.086	6.960	0.261	0.020	0.479
+fguv_32x32_422_16bpc_neon	src/asm/filmgrain.rs	verified	15.154		551	9	11026	15166	0.641	3.557	0.094	9.909	0.369	0.020	0.550
+generate_grain_uv_444_16bpc_neon	src/asm/filmgrain.rs	TIMEOUT	300.008	killed after 300s											
+ipred_dc_128_8bpc_neon	src/asm/ipred.rs	verified	4.416		49	5	149	776	0.572	1.439	0.012	1.901	0.373	0.024	0.037
+ipred_dc_8bpc_neon	src/asm/ipred.rs	verified	12.919		167	9	1308	4427	1.966	5.857	0.010	4.080	0.406	0.023	0.525
+ipred_dc_top_8bpc_neon	src/asm/ipred.rs	verified	4.556		77	5	177	794	0.562	1.328	0.012	2.119	0.365	0.023	0.045
+ipred_dc_left_8bpc_neon	src/asm/ipred.rs	verified	13.623		86	9	888	4045	1.929	6.623	0.010	4.285	0.397	0.023	0.345
+fguv_32x32_444_16bpc_neon	src/asm/filmgrain.rs	verified	38.040		806	9	18418	25822	1.190	4.486	0.096	31.193	0.454	0.020	0.578
+ipred_v_8bpc_neon	src/asm/ipred.rs	verified	4.542		50	5	150	794	0.580	1.386	0.012	2.102	0.344	0.023	0.046
+ipred_h_8bpc_neon	src/asm/ipred.rs	verified	5.208		63	5	201	890	0.564	1.863	0.012	2.261	0.411	0.023	0.035
+ipred_paeth_8bpc_neon	src/asm/ipred.rs	verified	18.266		150	4	11262	7732	5.137	6.756	0.030	4.450	0.562	0.023	1.195
+ipred_smooth_8bpc_neon	src/asm/ipred.rs	verified	19.930		155	4	14905	12510	6.179	3.427	0.025	7.679	0.286	0.023	2.273
+ipred_smooth_v_8bpc_neon	src/asm/ipred.rs	verified	15.624		114	4	7151	8426	4.059	5.544	0.030	4.306	0.661	0.023	0.979
+ipred_filter_8bpc_neon	src/asm/ipred.rs	verified	2.862		135	4	5396	9080	0.576	0.002	0.006	1.406	0.000	0.023	0.742
+ipred_smooth_h_8bpc_neon	src/asm/ipred.rs	verified	17.815		119	4	7156	7758	5.457	5.629	0.029	5.074	0.519	0.023	0.974
+ipred_cfl_128_8bpc_neon	src/asm/ipred.rs	verified	1.771		104	3	3639	5023	0.411	0.002	0.006	0.981	0.000	0.023	0.330
+ipred_cfl_top_8bpc_neon	src/asm/ipred.rs	verified	1.888		126	4	3661	5033	0.416	0.002	0.006	1.022	0.000	0.023	0.338
+ipred_cfl_8bpc_neon	src/asm/ipred.rs	verified	12.389		197	7	2840	3994	1.263	6.803	0.007	3.375	0.366	0.023	0.482
+ipred_cfl_left_8bpc_neon	src/asm/ipred.rs	verified	13.279		132	6	2589	3708	1.205	7.661	0.007	3.646	0.356	0.023	0.336
+ipred_cfl_ac_420_8bpc_neon	src/asm/ipred.rs	verified	44.131		258	13	8852	20541	0.616	5.840	0.095	30.372	4.711	0.022	2.391
+ipred_cfl_ac_422_8bpc_neon	src/asm/ipred.rs	verified	56.940		236	16	14815	29693	0.968	4.932	0.123	40.157	6.719	0.023	4.003
+pal_pred_8bpc_neon	src/asm/ipred.rs	verified	10.611		119	5	1811	3588	1.147	4.564	0.016	4.059	0.529	0.023	0.170
+ipred_cfl_ac_444_8bpc_neon	src/asm/ipred.rs	verified	76.128		253	16	13534	33951	0.901	6.826	0.110	55.008	9.526	0.023	3.703
+ipred_z1_fill2_8bpc_neon	src/asm/ipred.rs	verified	83.678		66	2	628	1289	0.114	52.188	0.005	19.644	11.637	0.023	0.030
+ipred_z1_fill1_8bpc_neon	src/asm/ipred.rs	TIMEOUT	300.047	killed after 300s											
+ipred_z3_fill2_8bpc_neon	src/asm/ipred.rs	verified	0.109		80	2	358	231	0.010	0.000	0.002	0.017	0.000	0.023	0.016
+ipred_z3_fill1_8bpc_neon	src/asm/ipred.rs	TIMEOUT	300.024	killed after 300s											
+ipred_z2_fill2_8bpc_neon	src/asm/ipred.rs	verified	45.558		159	4	365	402	1.386	2.358	0.009	39.219	2.424	0.023	0.038
+ipred_z2_fill3_8bpc_neon	src/asm/ipred.rs	verified	61.801		164	4	2023	1769	2.831	5.630	0.052	50.226	2.605	0.026	0.337
+ipred_z1_upsample_edge_8bpc_neon	src/asm/ipred.rs	verified	0.116		26	0	26	304	0.033	0.000	0.000	0.048	0.000	0.022	0.001
+ipred_z2_upsample_edge_8bpc_neon	src/asm/ipred.rs	verified	0.110		23	0	23	66	0.004	0.000	0.000	0.010	0.000	0.022	0.001
+ipred_z1_filter_edge_8bpc_neon	src/asm/ipred.rs	verified	6.862		121	5	788	4500	0.583	1.058	0.091	2.177	0.433	0.023	2.439
+ipred_reverse_8bpc_neon	src/asm/ipred.rs	verified	2.207		11	1	34	90	0.003	2.122	0.001	0.008	0.009	0.023	0.004
+ipred_pixel_set_8bpc_neon	src/asm/ipred.rs	verified	2.213		5	1	13	47	0.002	2.099	0.001	0.005	0.004	0.022	0.002
+ipred_dc_128_16bpc_neon	src/asm/ipred.rs	verified	4.221		59	5	171	1508	1.011	1.379	0.012	1.522	0.214	0.025	0.041
+ipred_dc_16bpc_neon	src/asm/ipred.rs	verified	14.314		187	9	1450	8809	3.082	5.088	0.010	5.155	0.332	0.023	0.529
+ipred_dc_top_16bpc_neon	src/asm/ipred.rs	verified	3.874		89	5	197	1526	0.749	1.275	0.012	1.392	0.307	0.023	0.046
+ipred_dc_left_16bpc_neon	src/asm/ipred.rs	verified	16.173		100	9	1006	8295	3.806	6.402	0.011	5.159	0.353	0.023	0.375
+ipred_v_16bpc_neon	src/asm/ipred.rs	verified	3.884		56	5	164	1526	0.734	1.309	0.012	1.423	0.316	0.023	0.046
+ipred_z2_fill1_8bpc_neon	src/asm/ipred.rs	TIMEOUT	300.025	killed after 300s											
+ipred_h_16bpc_neon	src/asm/ipred.rs	verified	4.787		79	5	249	1286	0.982	2.039	0.012	1.318	0.350	0.023	0.035
+ipred_smooth_16bpc_neon	src/asm/ipred.rs	verified	18.251		178	4	17866	23083	5.963	3.502	0.025	6.079	0.266	0.023	2.312
+ipred_smooth_v_16bpc_neon	src/asm/ipred.rs	verified	18.858		100	4	5709	17829	6.215	5.965	0.030	4.939	0.674	0.023	1.006
+ipred_smooth_h_16bpc_neon	src/asm/ipred.rs	verified	159.096		105	4	14912	40438	53.548	16.572	0.072	81.605	4.113	0.023	3.070
+ipred_filter_16bpc_neon	src/asm/ipred.rs	verified	7.082		326	10	14472	17647	2.218	0.004	0.034	3.568	0.000	0.023	1.214
+ipred_cfl_128_16bpc_neon	src/asm/ipred.rs	verified	1.784		132	3	5806	4861	0.376	0.002	0.006	0.934	0.000	0.023	0.369
+ipred_cfl_16bpc_neon	src/asm/ipred.rs	verified	13.042		231	7	4057	3920	1.215	7.512	0.008	3.296	0.434	0.023	0.503
+ipred_cfl_top_16bpc_neon	src/asm/ipred.rs	verified	1.748		156	4	5830	4877	0.376	0.002	0.006	0.933	0.000	0.023	0.378
+ipred_cfl_left_16bpc_neon	src/asm/ipred.rs	verified	15.559		162	6	3794	3598	1.535	9.307	0.008	3.685	0.576	0.023	0.360
+ipred_paeth_16bpc_neon	src/asm/ipred.rs	verified	247.076		106	3	14761	13171	72.400	29.986	0.096	119.671	21.245	0.023	3.633
+ipred_cfl_ac_420_16bpc_neon	src/asm/ipred.rs	verified	64.552		273	12	11043	20970	0.645	8.899	0.102	43.265	8.249	0.023	3.319
+ipred_cfl_ac_422_16bpc_neon	src/asm/ipred.rs	verified	71.320		262	15	19025	29843	1.005	7.533	0.125	46.569	10.438	0.023	5.549
+pal_pred_16bpc_neon	src/asm/ipred.rs	verified	8.661		191	5	2689	2692	1.345	3.920	0.014	2.547	0.548	0.023	0.190
+ipred_cfl_ac_444_16bpc_neon	src/asm/ipred.rs	verified	139.652		225	15	18626	33407	1.033	10.287	0.124	110.640	11.317	0.030	6.208
+ipred_z1_fill2_16bpc_neon	src/asm/ipred.rs	verified	26.364		76	2	720	1431	0.105	19.046	0.005	4.444	2.638	0.023	0.031
+ipred_z1_fill1_16bpc_neon	src/asm/ipred.rs	TIMEOUT	300.013	killed after 300s											
+ipred_z3_fill2_16bpc_neon	src/asm/ipred.rs	verified	7.775		148	7	823	2155	0.956	0.375	0.032	5.706	0.471	0.023	0.168
+ipred_z3_fill1_16bpc_neon	src/asm/ipred.rs	TIMEOUT	300.079	killed after 300s											
+ipred_z2_fill2_16bpc_neon	src/asm/ipred.rs	verified	14.747		209	4	505	503	2.220	2.794	0.009	6.836	2.730	0.024	0.040
+ipred_z2_fill3_16bpc_neon	src/asm/ipred.rs	verified	29.109		212	4	2870	1735	4.043	3.943	0.051	17.285	3.323	0.024	0.324
+ipred_z1_upsample_edge_16bpc_neon	src/asm/ipred.rs	verified	0.227		41	0	41	316	0.033	0.000	0.000	0.051	0.000	0.023	0.001
+ipred_z2_upsample_edge_16bpc_neon	src/asm/ipred.rs	verified	0.110		30	0	30	76	0.004	0.000	0.000	0.010	0.000	0.023	0.001
+ipred_z1_filter_edge_16bpc_neon	src/asm/ipred.rs	verified	6.531		136	5	877	4342	0.513	1.096	0.085	1.901	0.468	0.023	2.353
+ipred_reverse_16bpc_neon	src/asm/ipred.rs	verified	5.843		11	1	34	98	0.003	5.681	0.001	0.008	0.013	0.023	0.004
+ipred_pixel_set_16bpc_neon	src/asm/ipred.rs	verified	2.753		5	1	13	55	0.002	2.663	0.001	0.006	0.019	0.023	0.003
+inv_txfm_add_adst_adst_16x16_8bpc_neon	src/asm/itx.rs	verified	0.110		552	4	2491	745	0.018	0.000	0.000	0.030	0.000	0.023	0.005
+inv_txfm_add_adst_adst_16x4_8bpc_neon	src/asm/itx.rs	verified	0.117		340	3	380	117	0.004	0.000	0.000	0.006	0.000	0.021	0.001
+inv_txfm_add_adst_adst_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		630	3	750	165	0.006	0.000	0.000	0.008	0.000	0.021	0.001
+inv_txfm_add_adst_adst_4x16_8bpc_neon	src/asm/itx.rs	verified	0.113		360	3	716	235	0.008	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_adst_adst_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		58	2	80	34	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_adst_adst_4x8_8bpc_neon	src/asm/itx.rs	verified	0.100		176	3	176	63	0.002	0.000	0.000	0.003	0.000	0.020	0.001
+inv_txfm_add_adst_adst_8x16_8bpc_neon	src/asm/itx.rs	verified	0.117		644	3	1330	289	0.012	0.000	0.000	0.013	0.000	0.021	0.003
+inv_txfm_add_adst_adst_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		176	3	176	51	0.002	0.000	0.000	0.002	0.000	0.020	0.001
+inv_txfm_add_adst_adst_8x8_8bpc_neon	src/asm/itx.rs	verified	0.112		208	2	328	81	0.003	0.000	0.000	0.004	0.000	0.020	0.001
+inv_txfm_add_adst_dct_16x16_8bpc_neon	src/asm/itx.rs	verified	0.110		766	5	2135	737	0.017	0.000	0.000	0.030	0.000	0.021	0.005
+inv_txfm_add_adst_dct_16x4_8bpc_neon	src/asm/itx.rs	verified	0.110		332	3	364	117	0.003	0.000	0.000	0.005	0.000	0.020	0.001
+inv_txfm_add_adst_dct_16x8_8bpc_neon	src/asm/itx.rs	verified	0.117		591	3	672	161	0.007	0.000	0.000	0.013	0.000	0.021	0.001
+inv_txfm_add_adst_dct_4x16_8bpc_neon	src/asm/itx.rs	verified	0.110		312	3	620	231	0.008	0.000	0.000	0.011	0.000	0.021	0.003
+inv_txfm_add_adst_dct_4x4_8bpc_neon	src/asm/itx.rs	verified	0.117		78	3	78	34	0.001	0.000	0.000	0.002	0.000	0.020	0.001
+inv_txfm_add_adst_dct_4x8_8bpc_neon	src/asm/itx.rs	verified	0.105		155	3	155	61	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_adst_dct_8x16_8bpc_neon	src/asm/itx.rs	verified	0.110		555	3	1152	285	0.010	0.000	0.000	0.012	0.000	0.020	0.003
+inv_txfm_add_adst_dct_8x4_8bpc_neon	src/asm/itx.rs	verified	0.117		168	3	168	51	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_adst_dct_8x8_8bpc_neon	src/asm/itx.rs	verified	0.108		289	3	289	79	0.003	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_adst_flipadst_16x16_8bpc_neon	src/asm/itx.rs	verified	0.112		858	5	2503	745	0.020	0.000	0.000	0.037	0.000	0.021	0.006
+inv_txfm_add_adst_flipadst_16x4_8bpc_neon	src/asm/itx.rs	verified	0.110		341	3	382	117	0.004	0.000	0.000	0.006	0.000	0.020	0.001
+inv_txfm_add_adst_flipadst_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		630	3	750	165	0.006	0.000	0.000	0.008	0.000	0.021	0.001
+inv_txfm_add_adst_flipadst_4x16_8bpc_neon	src/asm/itx.rs	verified	0.117		363	3	722	235	0.008	0.000	0.000	0.011	0.000	0.021	0.003
+inv_txfm_add_adst_flipadst_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		80	3	80	34	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_adst_flipadst_4x8_8bpc_neon	src/asm/itx.rs	verified	0.117		176	3	176	63	0.002	0.000	0.000	0.003	0.000	0.020	0.001
+inv_txfm_add_adst_flipadst_8x16_8bpc_neon	src/asm/itx.rs	verified	0.110		647	3	1336	289	0.012	0.000	0.000	0.013	0.000	0.022	0.003
+inv_txfm_add_adst_flipadst_8x4_8bpc_neon	src/asm/itx.rs	verified	0.104		177	3	177	51	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_adst_flipadst_8x8_8bpc_neon	src/asm/itx.rs	verified	0.117		328	3	328	81	0.003	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_adst_identity_16x4_8bpc_neon	src/asm/itx.rs	verified	0.110		311	3	322	113	0.003	0.000	0.000	0.006	0.000	0.021	0.001
+inv_txfm_add_adst_identity_16x8_8bpc_neon	src/asm/itx.rs	verified	0.126		519	3	528	157	0.004	0.000	0.000	0.007	0.000	0.021	0.001
+inv_txfm_add_adst_identity_4x16_8bpc_neon	src/asm/itx.rs	verified	0.107		228	3	452	223	0.006	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_adst_identity_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		69	3	69	32	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_adst_identity_4x8_8bpc_neon	src/asm/itx.rs	verified	0.117		113	3	113	59	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_adst_identity_8x16_8bpc_neon	src/asm/itx.rs	verified	0.110		392	3	826	277	0.009	0.000	0.000	0.012	0.000	0.020	0.003
+inv_txfm_add_adst_identity_8x4_8bpc_neon	src/asm/itx.rs	verified	0.117		147	3	147	49	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_adst_identity_8x8_8bpc_neon	src/asm/itx.rs	verified	0.110		217	3	217	77	0.002	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_dct_adst_16x16_8bpc_neon	src/asm/itx.rs	verified	0.102		766	5	2313	741	0.018	0.000	0.000	0.031	0.000	0.021	0.005
+inv_txfm_add_dct_adst_16x4_8bpc_neon	src/asm/itx.rs	verified	0.116		292	3	332	115	0.003	0.000	0.000	0.006	0.000	0.021	0.001
+inv_txfm_add_dct_adst_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		541	3	661	163	0.005	0.000	0.000	0.007	0.000	0.021	0.001
+inv_txfm_add_dct_adst_4x16_8bpc_neon	src/asm/itx.rs	verified	0.108		352	3	692	235	0.007	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_dct_adst_4x4_8bpc_neon	src/asm/itx.rs	verified	0.105		78	3	78	34	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_dct_adst_4x8_8bpc_neon	src/asm/itx.rs	verified	0.110		168	3	168	63	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_dct_adst_8x16_8bpc_neon	src/asm/itx.rs	verified	0.117		605	3	1213	283	0.010	0.000	0.000	0.013	0.000	0.021	0.003
+inv_txfm_add_dct_adst_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		155	3	155	49	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_dct_adst_8x8_8bpc_neon	src/asm/itx.rs	verified	0.112		289	3	289	79	0.002	0.000	0.000	0.004	0.000	0.020	0.001
+inv_txfm_add_dct_dct_16x16_8bpc_neon	src/asm/itx.rs	verified	0.101		502	5	2077	811	0.020	0.000	0.001	0.036	0.000	0.021	0.008
+inv_txfm_add_dct_dct_16x32_8bpc_neon	src/asm/itx.rs	verified	0.335		1032	7	8171	3525	0.068	0.000	0.002	0.143	0.000	0.021	0.029
+inv_txfm_add_dct_dct_16x4_8bpc_neon	src/asm/itx.rs	verified	0.101		323	4	355	145	0.005	0.000	0.000	0.007	0.000	0.021	0.002
+inv_txfm_add_dct_dct_16x64_8bpc_neon	src/asm/itx.rs	verified	0.667		1201	12	16383	8021	0.120	0.001	0.002	0.350	0.000	0.021	0.102
+inv_txfm_add_dct_dct_16x8_8bpc_neon	src/asm/itx.rs	verified	0.101		542	4	650	205	0.007	0.000	0.000	0.009	0.000	0.021	0.003
+inv_txfm_add_dct_dct_32x16_8bpc_neon	src/asm/itx.rs	verified	0.227		1042	7	4502	1909	0.040	0.000	0.001	0.075	0.000	0.021	0.014
+inv_txfm_add_dct_dct_32x32_8bpc_neon	src/asm/itx.rs	verified	0.547		1213	6	16745	7885	0.130	0.001	0.002	0.311	0.000	0.021	0.055
+inv_txfm_add_dct_dct_32x64_8bpc_neon	src/asm/itx.rs	verified	1.224		1439	11	33395	17517	0.240	0.001	0.002	0.700	0.000	0.020	0.237
+inv_txfm_add_dct_dct_32x8_8bpc_neon	src/asm/itx.rs	verified	0.111		1013	6	1490	644	0.013	0.000	0.000	0.028	0.000	0.021	0.007
+inv_txfm_add_dct_dct_4x16_8bpc_neon	src/asm/itx.rs	verified	0.110		331	4	668	309	0.009	0.000	0.001	0.013	0.000	0.020	0.005
+inv_txfm_add_dct_dct_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		70	3	100	64	0.003	0.000	0.000	0.003	0.000	0.021	0.002
+inv_txfm_add_dct_dct_4x8_8bpc_neon	src/asm/itx.rs	verified	0.117		174	4	189	107	0.004	0.000	0.000	0.005	0.000	0.020	0.002
+inv_txfm_add_dct_dct_64x16_8bpc_neon	src/asm/itx.rs	verified	0.337		1232	12	9256	4795	0.070	0.000	0.001	0.182	0.000	0.020	0.039
+inv_txfm_add_dct_dct_64x32_8bpc_neon	src/asm/itx.rs	verified	1.321		1491	11	34448	18753	0.275	0.001	0.002	0.819	0.000	0.021	0.161
+inv_txfm_add_dct_dct_64x64_8bpc_neon	src/asm/itx.rs	verified	2.865		1472	13	67199	40321	0.498	0.002	0.002	1.598	0.000	0.021	0.693
+inv_txfm_add_dct_dct_8x16_8bpc_neon	src/asm/itx.rs	verified	0.110		548	4	1124	357	0.013	0.000	0.001	0.016	0.000	0.023	0.005
+inv_txfm_add_dct_dct_8x32_8bpc_neon	src/asm/itx.rs	verified	0.219		994	7	3997	1798	0.036	0.000	0.002	0.079	0.000	0.021	0.019
+inv_txfm_add_dct_dct_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		178	4	178	79	0.003	0.000	0.000	0.004	0.000	0.021	0.002
+inv_txfm_add_dct_dct_8x8_8bpc_neon	src/asm/itx.rs	verified	0.105		200	3	300	123	0.004	0.000	0.000	0.006	0.000	0.021	0.003
+inv_txfm_add_dct_flipadst_16x16_8bpc_neon	src/asm/itx.rs	verified	0.117		769	5	2325	741	0.017	0.000	0.000	0.033	0.000	0.021	0.005
+inv_txfm_add_dct_flipadst_16x4_8bpc_neon	src/asm/itx.rs	verified	0.105		293	3	334	115	0.003	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_dct_flipadst_16x8_8bpc_neon	src/asm/itx.rs	verified	0.111		541	3	661	163	0.006	0.000	0.000	0.007	0.000	0.021	0.001
+inv_txfm_add_dct_flipadst_4x16_8bpc_neon	src/asm/itx.rs	verified	0.110		355	3	698	235	0.008	0.000	0.000	0.011	0.000	0.021	0.003
+inv_txfm_add_dct_flipadst_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		78	3	78	34	0.001	0.000	0.000	0.002	0.000	0.020	0.001
+inv_txfm_add_dct_flipadst_4x8_8bpc_neon	src/asm/itx.rs	verified	0.117		168	3	168	63	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_dct_flipadst_8x16_8bpc_neon	src/asm/itx.rs	verified	0.105		608	3	1219	283	0.010	0.000	0.000	0.012	0.000	0.021	0.003
+inv_txfm_add_dct_flipadst_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		156	3	156	49	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_dct_flipadst_8x8_8bpc_neon	src/asm/itx.rs	verified	0.110		289	3	289	79	0.003	0.000	0.000	0.004	0.000	0.020	0.001
+inv_txfm_add_dct_identity_16x16_8bpc_neon	src/asm/itx.rs	verified	0.110		514	5	1305	717	0.012	0.000	0.000	0.031	0.000	0.020	0.005
+inv_txfm_add_dct_identity_16x4_8bpc_neon	src/asm/itx.rs	verified	0.117		263	3	274	111	0.002	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_dct_identity_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		430	3	439	155	0.004	0.000	0.000	0.007	0.000	0.020	0.001
+inv_txfm_add_dct_identity_4x16_8bpc_neon	src/asm/itx.rs	verified	0.117		220	3	428	223	0.005	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_dct_identity_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		67	3	67	32	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_dct_identity_4x8_8bpc_neon	src/asm/itx.rs	verified	0.110		105	3	105	59	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_dct_identity_8x16_8bpc_neon	src/asm/itx.rs	verified	0.117		353	3	709	271	0.008	0.000	0.000	0.013	0.000	0.021	0.003
+inv_txfm_add_dct_identity_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		126	3	126	47	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_dct_identity_8x8_8bpc_neon	src/asm/itx.rs	verified	0.112		178	3	178	75	0.002	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_flipadst_adst_16x16_8bpc_neon	src/asm/itx.rs	verified	0.108		858	5	2497	745	0.018	0.000	0.000	0.030	0.000	0.021	0.005
+inv_txfm_add_flipadst_adst_16x4_8bpc_neon	src/asm/itx.rs	verified	0.110		343	3	383	117	0.004	0.000	0.000	0.006	0.000	0.021	0.001
+inv_txfm_add_flipadst_adst_16x8_8bpc_neon	src/asm/itx.rs	verified	0.117		633	3	753	165	0.006	0.000	0.000	0.008	0.000	0.021	0.001
+inv_txfm_add_flipadst_adst_4x16_8bpc_neon	src/asm/itx.rs	verified	0.110		361	3	719	235	0.008	0.000	0.000	0.011	0.000	0.021	0.003
+inv_txfm_add_flipadst_adst_4x4_8bpc_neon	src/asm/itx.rs	verified	0.113		80	3	80	34	0.001	0.000	0.000	0.002	0.000	0.020	0.001
+inv_txfm_add_flipadst_adst_4x8_8bpc_neon	src/asm/itx.rs	verified	0.105		177	3	177	63	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_flipadst_adst_8x16_8bpc_neon	src/asm/itx.rs	verified	0.103		644	3	1330	289	0.011	0.000	0.000	0.013	0.000	0.021	0.003
+inv_txfm_add_flipadst_adst_8x4_8bpc_neon	src/asm/itx.rs	verified	0.117		176	3	176	51	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_flipadst_adst_8x8_8bpc_neon	src/asm/itx.rs	verified	0.110		328	3	328	81	0.003	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_flipadst_dct_16x16_8bpc_neon	src/asm/itx.rs	verified	0.107		769	5	2141	737	0.016	0.000	0.000	0.032	0.000	0.021	0.005
+inv_txfm_add_flipadst_dct_16x4_8bpc_neon	src/asm/itx.rs	verified	0.110		335	3	367	117	0.003	0.000	0.000	0.006	0.000	0.021	0.001
+inv_txfm_add_flipadst_dct_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		594	3	675	161	0.005	0.000	0.000	0.008	0.000	0.020	0.001
+inv_txfm_add_flipadst_dct_4x16_8bpc_neon	src/asm/itx.rs	verified	0.117		313	3	623	231	0.007	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_flipadst_dct_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		78	3	78	34	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_flipadst_dct_4x8_8bpc_neon	src/asm/itx.rs	verified	0.117		156	3	156	61	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_flipadst_dct_8x16_8bpc_neon	src/asm/itx.rs	verified	0.110		555	3	1152	285	0.010	0.000	0.000	0.011	0.000	0.021	0.003
+inv_txfm_add_flipadst_dct_8x4_8bpc_neon	src/asm/itx.rs	verified	0.109		168	3	168	51	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_flipadst_dct_8x8_8bpc_neon	src/asm/itx.rs	verified	0.117		289	3	289	79	0.003	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_flipadst_flipadst_16x16_8bpc_neon	src/asm/itx.rs	verified	0.102		555	4	2509	745	0.018	0.000	0.000	0.032	0.000	0.021	0.005
+inv_txfm_add_flipadst_flipadst_16x4_8bpc_neon	src/asm/itx.rs	verified	0.117		344	3	385	117	0.003	0.000	0.000	0.006	0.000	0.021	0.001
+inv_txfm_add_flipadst_flipadst_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		633	3	753	165	0.006	0.000	0.000	0.008	0.000	0.021	0.001
+inv_txfm_add_flipadst_flipadst_4x16_8bpc_neon	src/asm/itx.rs	verified	0.110		364	3	725	235	0.008	0.000	0.000	0.011	0.000	0.021	0.003
+inv_txfm_add_flipadst_flipadst_4x4_8bpc_neon	src/asm/itx.rs	verified	0.117		58	2	80	34	0.001	0.000	0.000	0.002	0.000	0.020	0.001
+inv_txfm_add_flipadst_flipadst_4x8_8bpc_neon	src/asm/itx.rs	verified	0.110		177	3	177	63	0.002	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_flipadst_flipadst_8x16_8bpc_neon	src/asm/itx.rs	verified	0.117		647	3	1336	289	0.011	0.000	0.000	0.013	0.000	0.021	0.003
+inv_txfm_add_flipadst_flipadst_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		177	3	177	51	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_flipadst_flipadst_8x8_8bpc_neon	src/asm/itx.rs	verified	0.100		208	2	328	81	0.003	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_flipadst_identity_16x4_8bpc_neon	src/asm/itx.rs	verified	0.117		314	3	325	113	0.003	0.000	0.000	0.006	0.000	0.020	0.001
+inv_txfm_add_flipadst_identity_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		522	3	531	157	0.004	0.000	0.000	0.006	0.000	0.020	0.001
+inv_txfm_add_flipadst_identity_4x16_8bpc_neon	src/asm/itx.rs	verified	0.117		229	3	455	223	0.006	0.000	0.000	0.010	0.000	0.020	0.003
+inv_txfm_add_flipadst_identity_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		69	3	69	32	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_flipadst_identity_4x8_8bpc_neon	src/asm/itx.rs	verified	0.110		114	3	114	59	0.002	0.000	0.000	0.003	0.000	0.020	0.001
+inv_txfm_add_flipadst_identity_8x16_8bpc_neon	src/asm/itx.rs	verified	0.111		392	3	826	277	0.009	0.000	0.000	0.013	0.000	0.021	0.003
+inv_txfm_add_flipadst_identity_8x4_8bpc_neon	src/asm/itx.rs	verified	0.103		147	3	147	49	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_flipadst_identity_8x8_8bpc_neon	src/asm/itx.rs	verified	0.117		217	3	217	77	0.002	0.000	0.000	0.003	0.000	0.020	0.001
+inv_txfm_add_identity_adst_16x4_8bpc_neon	src/asm/itx.rs	verified	0.110		190	2	230	111	0.002	0.000	0.000	0.005	0.000	0.021	0.001
+inv_txfm_add_identity_adst_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		360	2	480	159	0.005	0.000	0.000	0.007	0.000	0.021	0.001
+inv_txfm_add_identity_adst_4x16_8bpc_neon	src/asm/itx.rs	verified	0.117		330	2	612	229	0.007	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_identity_adst_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		69	3	69	32	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_identity_adst_4x8_8bpc_neon	src/asm/itx.rs	verified	0.117		147	3	147	61	0.002	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_identity_adst_8x16_8bpc_neon	src/asm/itx.rs	verified	0.110		506	2	944	277	0.009	0.000	0.000	0.013	0.000	0.021	0.003
+inv_txfm_add_identity_adst_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		113	3	113	47	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_identity_adst_8x8_8bpc_neon	src/asm/itx.rs	verified	0.117		199	2	199	77	0.002	0.000	0.000	0.004	0.000	0.021	0.001
+inv_txfm_add_identity_dct_16x16_8bpc_neon	src/asm/itx.rs	verified	0.110		496	4	1596	725	0.016	0.000	0.000	0.030	0.000	0.021	0.005
+inv_txfm_add_identity_dct_16x4_8bpc_neon	src/asm/itx.rs	verified	0.116		182	2	214	111	0.002	0.000	0.000	0.006	0.000	0.021	0.001
+inv_txfm_add_identity_dct_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		321	2	402	155	0.004	0.000	0.000	0.007	0.000	0.021	0.001
+inv_txfm_add_identity_dct_4x16_8bpc_neon	src/asm/itx.rs	verified	0.110		282	2	516	225	0.006	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_identity_dct_4x4_8bpc_neon	src/asm/itx.rs	verified	0.117		67	3	67	32	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_identity_dct_4x8_8bpc_neon	src/asm/itx.rs	verified	0.104		126	3	126	59	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_identity_dct_8x16_8bpc_neon	src/asm/itx.rs	verified	0.116		417	2	766	273	0.008	0.000	0.000	0.013	0.000	0.021	0.003
+inv_txfm_add_identity_dct_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		105	3	105	47	0.001	0.000	0.000	0.002	0.000	0.020	0.001
+inv_txfm_add_identity_dct_8x8_8bpc_neon	src/asm/itx.rs	verified	0.110		160	2	160	75	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_identity_flipadst_16x4_8bpc_neon	src/asm/itx.rs	verified	0.117		191	2	232	111	0.002	0.000	0.000	0.005	0.000	0.021	0.001
+inv_txfm_add_identity_flipadst_16x8_8bpc_neon	src/asm/itx.rs	verified	0.110		360	2	480	159	0.005	0.000	0.000	0.008	0.000	0.021	0.001
+inv_txfm_add_identity_flipadst_4x16_8bpc_neon	src/asm/itx.rs	verified	0.116		333	2	618	229	0.007	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_identity_flipadst_4x4_8bpc_neon	src/asm/itx.rs	verified	0.104		69	3	69	32	0.001	0.000	0.000	0.002	0.000	0.021	0.001
+inv_txfm_add_identity_flipadst_4x8_8bpc_neon	src/asm/itx.rs	verified	0.110		147	3	147	61	0.002	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_identity_flipadst_8x16_8bpc_neon	src/asm/itx.rs	verified	0.117		509	2	950	277	0.009	0.000	0.000	0.010	0.000	0.021	0.003
+inv_txfm_add_identity_flipadst_8x4_8bpc_neon	src/asm/itx.rs	verified	0.110		114	3	114	47	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_identity_flipadst_8x8_8bpc_neon	src/asm/itx.rs	verified	0.117		199	2	199	77	0.002	0.000	0.000	0.004	0.000	0.020	0.001
+inv_txfm_add_identity_identity_16x16_8bpc_neon	src/asm/itx.rs	verified	0.110		333	4	944	709	0.012	0.000	0.000	0.031	0.000	0.021	0.005
+inv_txfm_add_identity_identity_16x32_8bpc_neon	src/asm/itx.rs	verified	0.227		139	2	1006	1468	0.021	0.000	0.001	0.053	0.000	0.021	0.011
+inv_txfm_add_identity_identity_16x4_8bpc_neon	src/asm/itx.rs	verified	0.105		161	2	172	107	0.001	0.000	0.000	0.005	0.000	0.020	0.001
+inv_txfm_add_identity_identity_16x8_8bpc_neon	src/asm/itx.rs	verified	0.104		249	2	258	151	0.003	0.000	0.000	0.007	0.000	0.021	0.001
+inv_txfm_add_identity_identity_32x16_8bpc_neon	src/asm/itx.rs	verified	0.227		147	2	1711	2979	0.034	0.000	0.001	0.097	0.000	0.021	0.014
+inv_txfm_add_identity_identity_32x32_8bpc_neon	src/asm/itx.rs	verified	0.323		103	2	2177	6521	0.062	0.000	0.001	0.194	0.000	0.020	0.028
+inv_txfm_add_identity_identity_32x8_8bpc_neon	src/asm/itx.rs	verified	0.110		92	1	353	331	0.009	0.000	0.001	0.017	0.000	0.021	0.005
+inv_txfm_add_identity_identity_4x16_8bpc_neon	src/asm/itx.rs	verified	0.117		198	2	348	217	0.005	0.000	0.000	0.010	0.000	0.020	0.003
+inv_txfm_add_identity_identity_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		47	2	58	30	0.001	0.000	0.000	0.002	0.000	0.020	0.001
+inv_txfm_add_identity_identity_4x8_8bpc_neon	src/asm/itx.rs	verified	0.105		84	3	84	57	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_identity_identity_8x16_8bpc_neon	src/asm/itx.rs	verified	0.117		254	2	440	265	0.007	0.000	0.000	0.012	0.000	0.020	0.003
+inv_txfm_add_identity_identity_8x32_8bpc_neon	src/asm/itx.rs	verified	0.110		100	1	385	331	0.008	0.000	0.001	0.016	0.000	0.021	0.004
+inv_txfm_add_identity_identity_8x4_8bpc_neon	src/asm/itx.rs	verified	0.109		84	3	84	45	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_identity_identity_8x8_8bpc_neon	src/asm/itx.rs	verified	0.110		88	2	88	73	0.001	0.000	0.000	0.003	0.000	0.021	0.001
+inv_txfm_add_wht_wht_4x4_8bpc_neon	src/asm/itx.rs	verified	0.110		50	0	50	30	0.001	0.000	0.000	0.002	0.000	0.020	0.001
+inv_txfm_add_adst_adst_16x16_16bpc_neon	src/asm/itx.rs	verified	0.227		801	6	4713	1495	0.036	0.000	0.001	0.063	0.000	0.038	0.017
+inv_txfm_add_adst_adst_16x4_16bpc_neon	src/asm/itx.rs	verified	0.103		426	4	466	123	0.003	0.000	0.000	0.006	0.000	0.036	0.001
+inv_txfm_add_adst_adst_16x8_16bpc_neon	src/asm/itx.rs	verified	0.117		684	4	1765	475	0.014	0.000	0.000	0.020	0.000	0.036	0.003
+inv_txfm_add_adst_adst_4x16_16bpc_neon	src/asm/itx.rs	verified	0.110		396	3	1492	522	0.019	0.000	0.001	0.025	0.000	0.037	0.008
+inv_txfm_add_adst_adst_4x4_16bpc_neon	src/asm/itx.rs	verified	0.116		87	3	87	40	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_adst_adst_4x8_16bpc_neon	src/asm/itx.rs	verified	0.110		198	3	375	139	0.006	0.000	0.000	0.007	0.000	0.036	0.003
+inv_txfm_add_adst_adst_8x16_16bpc_neon	src/asm/itx.rs	verified	0.110		706	3	3062	762	0.022	0.000	0.001	0.034	0.000	0.036	0.008
+inv_txfm_add_adst_adst_8x4_16bpc_neon	src/asm/itx.rs	verified	0.117		216	3	216	59	0.002	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_adst_adst_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		350	3	751	199	0.006	0.000	0.000	0.009	0.000	0.036	0.003
+inv_txfm_add_adst_dct_16x16_16bpc_neon	src/asm/itx.rs	verified	0.227		712	6	4001	1479	0.032	0.000	0.001	0.063	0.000	0.037	0.017
+inv_txfm_add_adst_dct_16x4_16bpc_neon	src/asm/itx.rs	verified	0.110		418	4	450	123	0.003	0.000	0.000	0.006	0.000	0.037	0.001
+inv_txfm_add_adst_dct_16x8_16bpc_neon	src/asm/itx.rs	verified	0.117		645	4	1609	467	0.012	0.000	0.000	0.022	0.000	0.036	0.003
+inv_txfm_add_adst_dct_4x16_16bpc_neon	src/asm/itx.rs	verified	0.102		348	3	1300	514	0.017	0.000	0.001	0.025	0.000	0.036	0.008
+inv_txfm_add_adst_dct_4x4_16bpc_neon	src/asm/itx.rs	verified	0.110		85	3	85	40	0.001	0.000	0.000	0.003	0.000	0.036	0.002
+inv_txfm_add_adst_dct_4x8_16bpc_neon	src/asm/itx.rs	verified	0.117		177	3	333	135	0.005	0.000	0.000	0.006	0.000	0.037	0.003
+inv_txfm_add_adst_dct_8x16_16bpc_neon	src/asm/itx.rs	verified	0.110		617	3	2706	754	0.020	0.000	0.001	0.035	0.000	0.036	0.008
+inv_txfm_add_adst_dct_8x4_16bpc_neon	src/asm/itx.rs	verified	0.110		208	3	208	59	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_adst_dct_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		311	3	673	195	0.006	0.000	0.000	0.009	0.000	0.037	0.003
+inv_txfm_add_adst_flipadst_16x16_16bpc_neon	src/asm/itx.rs	verified	0.219		804	6	4737	1495	0.034	0.000	0.001	0.065	0.000	0.037	0.017
+inv_txfm_add_adst_flipadst_16x4_16bpc_neon	src/asm/itx.rs	verified	0.110		427	4	468	123	0.003	0.000	0.000	0.006	0.000	0.037	0.001
+inv_txfm_add_adst_flipadst_16x8_16bpc_neon	src/asm/itx.rs	verified	0.110		684	4	1765	475	0.013	0.000	0.000	0.021	0.000	0.036	0.003
+inv_txfm_add_adst_flipadst_4x16_16bpc_neon	src/asm/itx.rs	verified	0.117		399	3	1504	522	0.018	0.000	0.001	0.025	0.000	0.037	0.008
+inv_txfm_add_adst_flipadst_4x4_16bpc_neon	src/asm/itx.rs	verified	0.102		87	3	87	40	0.001	0.000	0.000	0.003	0.000	0.037	0.002
+inv_txfm_add_adst_flipadst_4x8_16bpc_neon	src/asm/itx.rs	verified	0.117		198	3	375	139	0.006	0.000	0.000	0.007	0.000	0.037	0.003
+inv_txfm_add_adst_flipadst_8x16_16bpc_neon	src/asm/itx.rs	verified	0.215		709	3	3074	762	0.022	0.000	0.001	0.034	0.000	0.037	0.009
+inv_txfm_add_adst_flipadst_8x4_16bpc_neon	src/asm/itx.rs	verified	0.112		217	3	217	59	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_adst_flipadst_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		350	3	751	199	0.007	0.000	0.000	0.009	0.000	0.036	0.003
+inv_txfm_add_adst_identity_16x4_16bpc_neon	src/asm/itx.rs	verified	0.110		397	4	408	119	0.003	0.000	0.000	0.005	0.000	0.036	0.001
+inv_txfm_add_adst_identity_16x8_16bpc_neon	src/asm/itx.rs	verified	0.117		573	4	1321	459	0.010	0.000	0.000	0.021	0.000	0.036	0.003
+inv_txfm_add_adst_identity_4x16_16bpc_neon	src/asm/itx.rs	verified	0.110		264	3	965	504	0.014	0.000	0.002	0.024	0.000	0.036	0.008
+inv_txfm_add_adst_identity_4x4_16bpc_neon	src/asm/itx.rs	verified	0.117		76	3	76	38	0.001	0.000	0.000	0.003	0.000	0.035	0.001
+inv_txfm_add_adst_identity_4x8_16bpc_neon	src/asm/itx.rs	verified	0.110		135	3	249	131	0.004	0.000	0.000	0.006	0.000	0.035	0.003
+inv_txfm_add_adst_identity_8x16_16bpc_neon	src/asm/itx.rs	verified	0.110		454	3	2055	744	0.017	0.000	0.002	0.035	0.000	0.037	0.008
+inv_txfm_add_adst_identity_8x4_16bpc_neon	src/asm/itx.rs	verified	0.117		187	3	187	57	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_adst_identity_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		239	3	529	191	0.005	0.000	0.000	0.009	0.000	0.037	0.003
+inv_txfm_add_dct_adst_16x16_16bpc_neon	src/asm/itx.rs	verified	0.220		739	6	4465	1487	0.034	0.000	0.001	0.064	0.000	0.036	0.017
+inv_txfm_add_dct_adst_16x4_16bpc_neon	src/asm/itx.rs	verified	0.110		364	4	404	121	0.003	0.000	0.000	0.006	0.000	0.036	0.001
+inv_txfm_add_dct_adst_16x8_16bpc_neon	src/asm/itx.rs	verified	0.117		622	4	1579	469	0.012	0.000	0.000	0.021	0.000	0.036	0.003
+inv_txfm_add_dct_adst_4x16_16bpc_neon	src/asm/itx.rs	verified	0.110		394	3	1472	522	0.018	0.000	0.001	0.025	0.000	0.036	0.008
+inv_txfm_add_dct_adst_4x4_16bpc_neon	src/asm/itx.rs	verified	0.110		85	3	85	40	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_dct_adst_4x8_16bpc_neon	src/asm/itx.rs	verified	0.117		196	3	369	139	0.006	0.000	0.000	0.007	0.000	0.037	0.003
+inv_txfm_add_dct_adst_8x16_16bpc_neon	src/asm/itx.rs	verified	0.110		675	3	2752	742	0.023	0.000	0.001	0.035	0.000	0.036	0.008
+inv_txfm_add_dct_adst_8x4_16bpc_neon	src/asm/itx.rs	verified	0.117		185	3	185	57	0.002	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_dct_adst_8x8_16bpc_neon	src/asm/itx.rs	verified	0.106		319	3	658	193	0.007	0.000	0.000	0.009	0.000	0.036	0.003
+inv_txfm_add_dct_dct_16x16_16bpc_neon	src/asm/itx.rs	verified	0.221		679	8	3887	1613	0.037	0.000	0.002	0.072	0.000	0.037	0.022
+inv_txfm_add_dct_dct_16x32_16bpc_neon	src/asm/itx.rs	verified	0.667		1217	8	15797	7029	0.132	0.001	0.004	0.299	0.000	0.036	0.082
+inv_txfm_add_dct_dct_16x4_16bpc_neon	src/asm/itx.rs	verified	0.108		385	6	432	167	0.005	0.000	0.000	0.008	0.000	0.036	0.003
+inv_txfm_add_dct_dct_16x64_16bpc_neon	src/asm/itx.rs	verified	1.325		1386	14	32077	16021	0.252	0.001	0.005	0.698	0.000	0.038	0.271
+inv_txfm_add_dct_dct_16x8_16bpc_neon	src/asm/itx.rs	verified	0.110		613	6	1498	539	0.014	0.000	0.001	0.025	0.000	0.036	0.006
+inv_txfm_add_dct_dct_32x16_16bpc_neon	src/asm/itx.rs	verified	0.336		1192	8	8550	3803	0.072	0.000	0.002	0.160	0.000	0.037	0.036
+inv_txfm_add_dct_dct_32x32_16bpc_neon	src/asm/itx.rs	verified	1.208		1676	9	32555	15735	0.261	0.001	0.005	0.647	0.000	0.037	0.147
+inv_txfm_add_dct_dct_32x64_16bpc_neon	src/asm/itx.rs	verified	2.641		1903	17	65598	35001	0.503	0.002	0.005	1.467	0.000	0.037	0.601
+inv_txfm_add_dct_dct_32x8_16bpc_neon	src/asm/itx.rs	verified	0.215		941	7	2741	1275	0.023	0.000	0.001	0.056	0.000	0.036	0.019
+inv_txfm_add_dct_dct_4x16_16bpc_neon	src/asm/itx.rs	verified	0.114		375	5	1354	592	0.021	0.000	0.002	0.027	0.000	0.036	0.011
+inv_txfm_add_dct_dct_4x4_16bpc_neon	src/asm/itx.rs	verified	0.110		100	4	111	72	0.003	0.000	0.000	0.004	0.000	0.036	0.002
+inv_txfm_add_dct_dct_4x8_16bpc_neon	src/asm/itx.rs	verified	0.110		205	5	372	181	0.007	0.000	0.001	0.009	0.000	0.036	0.004
+inv_txfm_add_dct_dct_64x16_16bpc_neon	src/asm/itx.rs	verified	0.666		1543	13	18501	9541	0.135	0.001	0.002	0.383	0.000	0.035	0.091
+inv_txfm_add_dct_dct_64x32_16bpc_neon	src/asm/itx.rs	verified	2.528		2120	14	68815	37409	0.528	0.002	0.005	1.495	0.000	0.036	0.405
+inv_txfm_add_dct_dct_64x64_16bpc_neon	src/asm/itx.rs	verified	6.160		2269	26	133966	80545	1.019	0.004	0.005	3.362	0.000	0.037	1.682
+inv_txfm_add_dct_dct_8x16_16bpc_neon	src/asm/itx.rs	verified	0.221		620	5	2487	812	0.027	0.000	0.002	0.037	0.000	0.038	0.011
+inv_txfm_add_dct_dct_8x32_16bpc_neon	src/asm/itx.rs	verified	0.330		968	8	7640	3198	0.071	0.001	0.005	0.141	0.000	0.040	0.051
+inv_txfm_add_dct_dct_8x4_16bpc_neon	src/asm/itx.rs	verified	0.117		211	4	211	87	0.003	0.000	0.000	0.004	0.000	0.037	0.002
+inv_txfm_add_dct_dct_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		313	5	632	235	0.008	0.000	0.001	0.011	0.000	0.037	0.004
+inv_txfm_add_dct_flipadst_16x16_16bpc_neon	src/asm/itx.rs	verified	0.226		742	6	4489	1487	0.034	0.000	0.001	0.066	0.000	0.036	0.017
+inv_txfm_add_dct_flipadst_16x4_16bpc_neon	src/asm/itx.rs	verified	0.110		365	4	406	121	0.003	0.000	0.000	0.006	0.000	0.037	0.001
+inv_txfm_add_dct_flipadst_16x8_16bpc_neon	src/asm/itx.rs	verified	0.115		622	4	1579	469	0.012	0.000	0.000	0.022	0.000	0.036	0.003
+inv_txfm_add_dct_flipadst_4x16_16bpc_neon	src/asm/itx.rs	verified	0.110		397	3	1484	522	0.018	0.000	0.001	0.025	0.000	0.036	0.008
+inv_txfm_add_dct_flipadst_4x4_16bpc_neon	src/asm/itx.rs	verified	0.110		85	3	85	40	0.001	0.000	0.000	0.003	0.000	0.036	0.002
+inv_txfm_add_dct_flipadst_4x8_16bpc_neon	src/asm/itx.rs	verified	0.117		196	3	369	139	0.006	0.000	0.000	0.006	0.000	0.036	0.003
+inv_txfm_add_dct_flipadst_8x16_16bpc_neon	src/asm/itx.rs	verified	0.110		678	3	2764	742	0.024	0.000	0.001	0.034	0.000	0.036	0.008
+inv_txfm_add_dct_flipadst_8x4_16bpc_neon	src/asm/itx.rs	verified	0.117		186	3	186	57	0.002	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_dct_flipadst_8x8_16bpc_neon	src/asm/itx.rs	verified	0.107		319	3	658	193	0.007	0.000	0.000	0.009	0.000	0.037	0.003
+inv_txfm_add_dct_identity_16x16_16bpc_neon	src/asm/itx.rs	verified	0.227		487	6	2449	1439	0.023	0.000	0.001	0.062	0.000	0.036	0.016
+inv_txfm_add_dct_identity_16x4_16bpc_neon	src/asm/itx.rs	verified	0.110		335	4	346	117	0.002	0.000	0.000	0.006	0.000	0.036	0.001
+inv_txfm_add_dct_identity_16x8_16bpc_neon	src/asm/itx.rs	verified	0.110		511	4	1135	453	0.009	0.000	0.000	0.016	0.000	0.036	0.003
+inv_txfm_add_dct_identity_4x16_16bpc_neon	src/asm/itx.rs	verified	0.116		262	3	945	504	0.014	0.000	0.002	0.024	0.000	0.037	0.008
+inv_txfm_add_dct_identity_4x4_16bpc_neon	src/asm/itx.rs	verified	0.108		74	3	74	38	0.001	0.000	0.000	0.003	0.000	0.037	0.002
+inv_txfm_add_dct_identity_4x8_16bpc_neon	src/asm/itx.rs	verified	0.111		133	3	243	131	0.004	0.000	0.000	0.007	0.000	0.037	0.003
+inv_txfm_add_dct_identity_8x16_16bpc_neon	src/asm/itx.rs	verified	0.104		423	3	1745	724	0.018	0.000	0.002	0.035	0.000	0.036	0.008
+inv_txfm_add_dct_identity_8x4_16bpc_neon	src/asm/itx.rs	verified	0.110		156	3	156	55	0.001	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_dct_identity_8x8_16bpc_neon	src/asm/itx.rs	verified	0.117		208	3	436	185	0.005	0.000	0.000	0.009	0.000	0.036	0.003
+inv_txfm_add_flipadst_adst_16x16_16bpc_neon	src/asm/itx.rs	verified	0.220		804	6	4725	1495	0.035	0.000	0.001	0.067	0.000	0.036	0.017
+inv_txfm_add_flipadst_adst_16x4_16bpc_neon	src/asm/itx.rs	verified	0.117		429	4	469	123	0.003	0.000	0.000	0.006	0.000	0.037	0.001
+inv_txfm_add_flipadst_adst_16x8_16bpc_neon	src/asm/itx.rs	verified	0.110		687	4	1774	475	0.013	0.000	0.000	0.021	0.000	0.036	0.003
+inv_txfm_add_flipadst_adst_4x16_16bpc_neon	src/asm/itx.rs	verified	0.111		396	3	1492	522	0.018	0.000	0.001	0.025	0.000	0.037	0.008
+inv_txfm_add_flipadst_adst_4x4_16bpc_neon	src/asm/itx.rs	verified	0.110		87	3	87	40	0.001	0.000	0.000	0.003	0.000	0.037	0.002
+inv_txfm_add_flipadst_adst_4x8_16bpc_neon	src/asm/itx.rs	verified	0.104		198	3	375	139	0.006	0.000	0.000	0.007	0.000	0.037	0.003
+inv_txfm_add_flipadst_adst_8x16_16bpc_neon	src/asm/itx.rs	verified	0.117		706	3	3062	762	0.022	0.000	0.001	0.036	0.000	0.037	0.009
+inv_txfm_add_flipadst_adst_8x4_16bpc_neon	src/asm/itx.rs	verified	0.105		216	3	216	59	0.002	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_flipadst_adst_8x8_16bpc_neon	src/asm/itx.rs	verified	0.117		350	3	751	199	0.007	0.000	0.000	0.009	0.000	0.036	0.003
+inv_txfm_add_flipadst_dct_16x16_16bpc_neon	src/asm/itx.rs	verified	0.220		715	6	4013	1479	0.030	0.000	0.001	0.065	0.000	0.037	0.017
+inv_txfm_add_flipadst_dct_16x4_16bpc_neon	src/asm/itx.rs	verified	0.117		421	4	453	123	0.003	0.000	0.000	0.006	0.000	0.037	0.001
+inv_txfm_add_flipadst_dct_16x8_16bpc_neon	src/asm/itx.rs	verified	0.110		648	4	1618	467	0.011	0.000	0.000	0.021	0.000	0.037	0.003
+inv_txfm_add_flipadst_dct_4x16_16bpc_neon	src/asm/itx.rs	verified	0.103		348	3	1300	514	0.017	0.000	0.001	0.025	0.000	0.036	0.008
+inv_txfm_add_flipadst_dct_4x4_16bpc_neon	src/asm/itx.rs	verified	0.117		85	3	85	40	0.001	0.000	0.000	0.003	0.000	0.037	0.002
+inv_txfm_add_flipadst_dct_4x8_16bpc_neon	src/asm/itx.rs	verified	0.110		177	3	333	135	0.005	0.000	0.000	0.006	0.000	0.036	0.003
+inv_txfm_add_flipadst_dct_8x16_16bpc_neon	src/asm/itx.rs	verified	0.117		617	3	2706	754	0.020	0.000	0.001	0.035	0.000	0.036	0.008
+inv_txfm_add_flipadst_dct_8x4_16bpc_neon	src/asm/itx.rs	verified	0.110		208	3	208	59	0.001	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_flipadst_dct_8x8_16bpc_neon	src/asm/itx.rs	verified	0.101		311	3	673	195	0.006	0.000	0.000	0.009	0.000	0.036	0.003
+inv_txfm_add_flipadst_flipadst_16x16_16bpc_neon	src/asm/itx.rs	verified	0.227		807	6	4749	1495	0.035	0.000	0.001	0.065	0.000	0.036	0.017
+inv_txfm_add_flipadst_flipadst_16x4_16bpc_neon	src/asm/itx.rs	verified	0.110		430	4	471	123	0.003	0.000	0.000	0.006	0.000	0.036	0.001
+inv_txfm_add_flipadst_flipadst_16x8_16bpc_neon	src/asm/itx.rs	verified	0.117		687	4	1774	475	0.013	0.000	0.000	0.022	0.000	0.037	0.003
+inv_txfm_add_flipadst_flipadst_4x16_16bpc_neon	src/asm/itx.rs	verified	0.103		399	3	1504	522	0.018	0.000	0.001	0.024	0.000	0.037	0.008
+inv_txfm_add_flipadst_flipadst_4x4_16bpc_neon	src/asm/itx.rs	verified	0.116		87	3	87	40	0.001	0.000	0.000	0.003	0.000	0.037	0.002
+inv_txfm_add_flipadst_flipadst_4x8_16bpc_neon	src/asm/itx.rs	verified	0.100		198	3	375	139	0.006	0.000	0.000	0.007	0.000	0.037	0.003
+inv_txfm_add_flipadst_flipadst_8x16_16bpc_neon	src/asm/itx.rs	verified	0.108		709	3	3074	762	0.021	0.000	0.001	0.035	0.000	0.036	0.008
+inv_txfm_add_flipadst_flipadst_8x4_16bpc_neon	src/asm/itx.rs	verified	0.117		217	3	217	59	0.002	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_flipadst_flipadst_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		350	3	751	199	0.006	0.000	0.000	0.009	0.000	0.036	0.003
+inv_txfm_add_flipadst_identity_16x4_16bpc_neon	src/asm/itx.rs	verified	0.114		400	4	411	119	0.003	0.000	0.000	0.006	0.000	0.036	0.001
+inv_txfm_add_flipadst_identity_16x8_16bpc_neon	src/asm/itx.rs	verified	0.110		576	4	1330	459	0.010	0.000	0.000	0.021	0.000	0.036	0.003
+inv_txfm_add_flipadst_identity_4x16_16bpc_neon	src/asm/itx.rs	verified	0.110		264	3	965	504	0.014	0.000	0.002	0.025	0.000	0.036	0.008
+inv_txfm_add_flipadst_identity_4x4_16bpc_neon	src/asm/itx.rs	verified	0.117		76	3	76	38	0.001	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_flipadst_identity_4x8_16bpc_neon	src/asm/itx.rs	verified	0.110		135	3	249	131	0.004	0.000	0.000	0.006	0.000	0.036	0.003
+inv_txfm_add_flipadst_identity_8x16_16bpc_neon	src/asm/itx.rs	verified	0.115		454	3	2055	744	0.017	0.000	0.002	0.035	0.000	0.036	0.008
+inv_txfm_add_flipadst_identity_8x4_16bpc_neon	src/asm/itx.rs	verified	0.108		187	3	187	57	0.001	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_flipadst_identity_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		239	3	529	191	0.005	0.000	0.000	0.009	0.000	0.036	0.003
+inv_txfm_add_identity_adst_16x4_16bpc_neon	src/asm/itx.rs	verified	0.117		211	4	251	111	0.002	0.000	0.000	0.006	0.000	0.037	0.001
+inv_txfm_add_identity_adst_16x8_16bpc_neon	src/asm/itx.rs	verified	0.110		469	4	1120	439	0.010	0.000	0.000	0.020	0.000	0.036	0.003
+inv_txfm_add_identity_adst_4x16_16bpc_neon	src/asm/itx.rs	verified	0.109		385	3	1382	502	0.016	0.000	0.001	0.024	0.000	0.036	0.008
+inv_txfm_add_identity_adst_4x4_16bpc_neon	src/asm/itx.rs	verified	0.104		76	3	76	38	0.001	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_identity_adst_4x8_16bpc_neon	src/asm/itx.rs	verified	0.107		187	3	342	133	0.005	0.000	0.000	0.006	0.000	0.036	0.003
+inv_txfm_add_identity_adst_8x16_16bpc_neon	src/asm/itx.rs	verified	0.117		615	3	2152	702	0.019	0.000	0.001	0.033	0.000	0.036	0.008
+inv_txfm_add_identity_adst_8x4_16bpc_neon	src/asm/itx.rs	verified	0.110		125	3	125	53	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_identity_adst_8x8_16bpc_neon	src/asm/itx.rs	verified	0.115		259	3	478	181	0.006	0.000	0.000	0.008	0.000	0.037	0.003
+inv_txfm_add_identity_dct_16x16_16bpc_neon	src/asm/itx.rs	verified	0.218		497	6	3141	1431	0.027	0.000	0.001	0.063	0.000	0.036	0.017
+inv_txfm_add_identity_dct_16x4_16bpc_neon	src/asm/itx.rs	verified	0.117		203	4	235	111	0.002	0.000	0.000	0.006	0.000	0.036	0.001
+inv_txfm_add_identity_dct_16x8_16bpc_neon	src/asm/itx.rs	verified	0.107		430	4	964	431	0.009	0.000	0.000	0.020	0.000	0.037	0.003
+inv_txfm_add_identity_dct_4x16_16bpc_neon	src/asm/itx.rs	verified	0.110		337	3	1190	494	0.015	0.000	0.001	0.023	0.000	0.036	0.008
+inv_txfm_add_identity_dct_4x4_16bpc_neon	src/asm/itx.rs	verified	0.117		74	3	74	38	0.001	0.000	0.000	0.003	0.000	0.037	0.001
+inv_txfm_add_identity_dct_4x8_16bpc_neon	src/asm/itx.rs	verified	0.110		166	3	300	129	0.004	0.000	0.000	0.006	0.000	0.036	0.003
+inv_txfm_add_identity_dct_8x16_16bpc_neon	src/asm/itx.rs	verified	0.108		526	3	1796	694	0.017	0.000	0.001	0.032	0.000	0.036	0.008
+inv_txfm_add_identity_dct_8x4_16bpc_neon	src/asm/itx.rs	verified	0.110		117	3	117	53	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_identity_dct_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		220	3	400	177	0.005	0.000	0.000	0.008	0.000	0.036	0.003
+inv_txfm_add_identity_flipadst_16x4_16bpc_neon	src/asm/itx.rs	verified	0.117		212	4	253	111	0.002	0.000	0.000	0.006	0.000	0.036	0.001
+inv_txfm_add_identity_flipadst_16x8_16bpc_neon	src/asm/itx.rs	verified	0.109		469	4	1120	439	0.010	0.000	0.000	0.020	0.000	0.036	0.003
+inv_txfm_add_identity_flipadst_4x16_16bpc_neon	src/asm/itx.rs	verified	0.117		388	3	1394	502	0.016	0.000	0.001	0.024	0.000	0.036	0.008
+inv_txfm_add_identity_flipadst_4x4_16bpc_neon	src/asm/itx.rs	verified	0.107		76	3	76	38	0.001	0.000	0.000	0.003	0.000	0.037	0.002
+inv_txfm_add_identity_flipadst_4x8_16bpc_neon	src/asm/itx.rs	verified	0.110		187	3	342	133	0.005	0.000	0.000	0.006	0.000	0.036	0.003
+inv_txfm_add_identity_flipadst_8x16_16bpc_neon	src/asm/itx.rs	verified	0.114		618	3	2164	702	0.019	0.000	0.001	0.033	0.000	0.037	0.008
+inv_txfm_add_identity_flipadst_8x4_16bpc_neon	src/asm/itx.rs	verified	0.110		126	3	126	53	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_identity_flipadst_8x8_16bpc_neon	src/asm/itx.rs	verified	0.117		259	3	478	181	0.006	0.000	0.000	0.008	0.000	0.036	0.003
+inv_txfm_add_identity_identity_16x16_16bpc_neon	src/asm/itx.rs	verified	0.208		334	6	1837	1399	0.021	0.000	0.001	0.059	0.000	0.036	0.016
+inv_txfm_add_identity_identity_16x32_16bpc_neon	src/asm/itx.rs	verified	0.225		189	2	1413	4028	0.030	0.000	0.001	0.111	0.000	0.036	0.013
+inv_txfm_add_identity_identity_16x4_16bpc_neon	src/asm/itx.rs	verified	0.104		182	4	193	107	0.002	0.000	0.000	0.005	0.000	0.036	0.001
+inv_txfm_add_identity_identity_16x8_16bpc_neon	src/asm/itx.rs	verified	0.117		358	4	676	423	0.007	0.000	0.000	0.019	0.000	0.036	0.003
+inv_txfm_add_identity_identity_32x16_16bpc_neon	src/asm/itx.rs	verified	0.444		205	2	2477	8963	0.057	0.000	0.001	0.238	0.000	0.037	0.017
+inv_txfm_add_identity_identity_32x32_16bpc_neon	src/asm/itx.rs	verified	0.768		121	2	2586	20729	0.117	0.000	0.001	0.531	0.000	0.037	0.034
+inv_txfm_add_identity_identity_32x8_16bpc_neon	src/asm/itx.rs	verified	0.113		110	1	422	459	0.012	0.000	0.001	0.022	0.000	0.036	0.006
+inv_txfm_add_identity_identity_4x16_16bpc_neon	src/asm/itx.rs	verified	0.110		253	3	854	478	0.011	0.000	0.001	0.023	0.000	0.036	0.008
+inv_txfm_add_identity_identity_4x4_16bpc_neon	src/asm/itx.rs	verified	0.110		65	3	65	36	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_identity_identity_4x8_16bpc_neon	src/asm/itx.rs	verified	0.116		124	3	216	125	0.004	0.000	0.000	0.006	0.000	0.036	0.003
+inv_txfm_add_identity_identity_8x16_16bpc_neon	src/asm/itx.rs	verified	0.110		363	3	1144	678	0.013	0.000	0.001	0.032	0.000	0.037	0.008
+inv_txfm_add_identity_identity_8x32_16bpc_neon	src/asm/itx.rs	verified	0.114		110	1	422	429	0.012	0.000	0.001	0.021	0.000	0.037	0.005
+inv_txfm_add_identity_identity_8x4_16bpc_neon	src/asm/itx.rs	verified	0.110		96	3	96	51	0.001	0.000	0.000	0.003	0.000	0.036	0.001
+inv_txfm_add_identity_identity_8x8_16bpc_neon	src/asm/itx.rs	verified	0.110		148	3	256	173	0.004	0.000	0.000	0.006	0.000	0.036	0.003
+inv_txfm_add_wht_wht_4x4_16bpc_neon	src/asm/itx.rs	verified	0.117		54	0	54	36	0.001	0.000	0.000	0.002	0.000	0.036	0.001
+ipred_z2_fill1_16bpc_neon	src/asm/ipred.rs	TIMEOUT	300.005	killed after 300s											
+lpf_v_sb_y_8bpc_neon	src/asm/loopfilter.rs	TIMEOUT	300.075	killed after 300s											
+lpf_v_sb_uv_8bpc_neon	src/asm/loopfilter.rs	TIMEOUT	300.100	killed after 300s											
+lpf_h_sb_y_8bpc_neon	src/asm/loopfilter.rs	TIMEOUT	300.073	killed after 300s											
+lpf_v_sb_y_16bpc_neon	src/asm/loopfilter.rs	TIMEOUT	300.084	killed after 300s											
+lpf_v_sb_uv_16bpc_neon	src/asm/loopfilter.rs	TIMEOUT	300.024	killed after 300s											
+lpf_h_sb_y_16bpc_neon	src/asm/loopfilter.rs	TIMEOUT	300.006	killed after 300s											
+wiener_filter5_8bpc_neon	src/asm/looprestoration.rs	MEMCAP	60.159	killed at 3.1 GB resident											
+sgr_box3_row_h_8bpc_neon	src/asm/looprestoration.rs	verified	4.660		54	2	1413	5032	0.596	0.767	0.040	2.293	0.214	0.007	0.686
+sgr_box5_row_h_8bpc_neon	src/asm/looprestoration.rs	verified	6.035		64	2	2012	5428	0.696	0.808	0.054	3.395	0.247	0.006	0.737
+sgr_box35_row_h_8bpc_neon	src/asm/looprestoration.rs	verified	6.146		66	2	2130	6124	0.715	0.860	0.056	3.389	0.318	0.006	0.763
+sgr_finish_filter1_2rows_8bpc_neon	src/asm/looprestoration.rs	verified	0.533		139	1	704	444	0.018	0.134	0.002	0.255	0.019	0.007	0.024
+sgr_finish_filter2_2rows_8bpc_neon	src/asm/looprestoration.rs	verified	0.315		85	1	410	348	0.013	0.091	0.003	0.115	0.024	0.007	0.020
+sgr_finish_weighted1_8bpc_neon	src/asm/looprestoration.rs	verified	0.105		88	1	232	138	0.006	0.032	0.001	0.029	0.004	0.007	0.010
+sgr_finish_weighted2_8bpc_neon	src/asm/looprestoration.rs	verified	0.319		95	1	482	311	0.025	0.100	0.002	0.115	0.012	0.007	0.019
+sgr_weighted2_8bpc_neon	src/asm/looprestoration.rs	verified	0.218		60	2	159	167	0.021	0.060	0.002	0.037	0.007	0.007	0.013
+wiener_filter7_16bpc_neon	src/asm/looprestoration.rs	MEMCAP	95.730	killed at 3.1 GB resident											
+wiener_filter7_8bpc_neon	src/asm/looprestoration.rs	TIMEOUT	300.063	killed after 300s											
+sgr_box3_row_h_16bpc_neon	src/asm/looprestoration.rs	verified	7.735		51	2	1310	8186	1.178	0.724	0.044	4.133	0.195	0.008	1.365
+sgr_box5_row_h_16bpc_neon	src/asm/looprestoration.rs	verified	10.164		59	2	1791	8918	1.352	0.852	0.059	6.107	0.261	0.007	1.466
+sgr_box35_row_h_16bpc_neon	src/asm/looprestoration.rs	verified	10.496		61	2	1909	9614	1.412	0.872	0.062	6.299	0.276	0.007	1.509
+sgr_finish_filter1_2rows_16bpc_neon	src/asm/looprestoration.rs	verified	0.428		137	1	692	444	0.018	0.110	0.003	0.157	0.018	0.008	0.025
+sgr_finish_filter2_2rows_16bpc_neon	src/asm/looprestoration.rs	verified	0.218		83	1	398	348	0.011	0.072	0.002	0.078	0.019	0.007	0.018
+sgr_finish_weighted1_16bpc_neon	src/asm/looprestoration.rs	verified	0.105		87	1	229	138	0.005	0.028	0.001	0.015	0.002	0.007	0.009
+sgr_finish_weighted2_16bpc_neon	src/asm/looprestoration.rs	verified	0.319		93	1	470	311	0.016	0.092	0.002	0.087	0.021	0.007	0.017
+sgr_weighted2_16bpc_neon	src/asm/looprestoration.rs	verified	0.218		58	2	151	169	0.007	0.047	0.002	0.031	0.008	0.007	0.013
+sgr_box3_vert_neon	src/asm/looprestoration.rs	verified	0.105		108	1	270	342	0.012	0.021	0.001	0.031	0.002	0.006	0.006
+sgr_box5_vert_neon	src/asm/looprestoration.rs	verified	0.111		92	1	212	267	0.013	0.034	0.001	0.026	0.003	0.004	0.008
+wiener_filter5_16bpc_neon	src/asm/looprestoration.rs	TIMEOUT	300.020	killed after 300s											
+put_8tap_regular_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.013	killed after 300s											
+put_8tap_regular_smooth_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.072	killed after 300s											
+put_8tap_regular_sharp_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.093	killed after 300s											
+put_8tap_smooth_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.007	killed after 300s											
+put_8tap_smooth_regular_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.038	killed after 300s											
+put_8tap_smooth_sharp_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.009	killed after 300s											
+put_8tap_sharp_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.095	killed after 300s											
+put_8tap_sharp_regular_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.045	killed after 300s											
+put_8tap_sharp_smooth_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.051	killed after 300s											
+put_bilin_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.084	killed after 300s											
+prep_8tap_regular_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.016	killed after 300s											
+prep_8tap_regular_smooth_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.012	killed after 300s											
+prep_8tap_regular_sharp_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.033	killed after 300s											
+prep_8tap_smooth_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.030	killed after 300s											
+prep_8tap_smooth_regular_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.041	killed after 300s											
+prep_8tap_smooth_sharp_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.062	killed after 300s											
+prep_8tap_sharp_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.066	killed after 300s											
+prep_8tap_sharp_regular_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.001	killed after 300s											
+prep_8tap_sharp_smooth_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.076	killed after 300s											
+avg_8bpc_neon	src/asm/mc.rs	verified	13.727		247	5	971	2212	1.511	2.624	0.009	8.576	0.764	0.047	0.118
+w_avg_8bpc_neon	src/asm/mc.rs	verified	11.549		370	5	1498	2214	1.275	1.640	0.009	7.718	0.654	0.056	0.117
+mask_8bpc_neon	src/asm/mc.rs	verified	12.434		488	5	2020	2478	1.587	1.868	0.009	7.840	0.861	0.045	0.150
+prep_bilin_8bpc_neon	src/asm/mc.rs	verified	214.311		371	18	50988	109909	14.616	33.938	0.157	135.011	16.312	0.049	14.189
+w_mask_444_8bpc_neon	src/asm/mc.rs	verified	76.696		129	4	3058	5896	4.852	21.343	0.022	38.066	11.994	0.047	0.335
+blend_8bpc_neon	src/asm/mc.rs	verified	1.592		99	4	2445	2808	0.245	0.002	0.007	0.910	0.000	0.046	0.295
+blend_v_8bpc_neon	src/asm/mc.rs	verified	1.910		121	5	2523	5499	0.285	0.002	0.008	1.123	0.000	0.046	0.356
+blend_h_8bpc_neon	src/asm/mc.rs	verified	20.555		127	6	5855	12076	3.523	6.879	0.054	8.702	0.522	0.045	0.801
+w_mask_420_8bpc_neon	src/asm/mc.rs	verified	206.312		134	4	3052	5392	9.376	56.934	0.024	125.646	13.913	0.049	0.329
+warp_affine_8x8_8bpc_neon	src/asm/mc.rs	verified	4.550		159	2	1433	743	0.053	0.000	0.000	4.352	0.000	0.047	0.038
+warp_affine_8x8t_8bpc_neon	src/asm/mc.rs	verified	4.134		159	2	1426	743	0.057	0.000	0.000	3.906	0.000	0.047	0.040
+put_neon	src/asm/mc.rs	verified	11.743		74	7	301	1163	1.361	4.571	0.017	4.652	0.992	0.046	0.083
+prep_neon	src/asm/mc.rs	verified	6.037		130	6	496	2443	0.039	0.791	0.006	4.277	0.801	0.045	0.052
+emu_edge_8bpc_neon	src/asm/mc.rs	TIMEOUT	300.089	killed after 300s											
+put_8tap_regular_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.030	killed after 300s											
+put_8tap_regular_smooth_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.067	killed after 300s											
+put_8tap_regular_sharp_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.080	killed after 300s											
+put_8tap_smooth_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.075	killed after 300s											
+put_8tap_smooth_regular_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.092	killed after 300s											
+put_8tap_smooth_sharp_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.104	killed after 300s											
+put_8tap_sharp_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.029	killed after 300s											
+put_8tap_sharp_regular_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.057	killed after 300s											
+put_8tap_sharp_smooth_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.042	killed after 300s											
+put_bilin_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.099	killed after 300s											
+prep_8tap_regular_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.082	killed after 300s											
+prep_8tap_regular_smooth_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.073	killed after 300s											
+prep_8tap_regular_sharp_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.075	killed after 300s											
+prep_8tap_smooth_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.018	killed after 300s											
+prep_8tap_smooth_regular_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.020	killed after 300s											
+prep_8tap_smooth_sharp_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.020	killed after 300s											
+prep_8tap_sharp_regular_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.065	killed after 300s											
+prep_8tap_sharp_smooth_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.029	killed after 300s											
+prep_bilin_16bpc_neon	src/asm/mc.rs	verified	210.304		446	18	79352	131317	15.936	38.033	0.150	126.628	15.808	0.048	13.651
+avg_16bpc_neon	src/asm/mc.rs	verified	8.368		249	6	992	2101	0.989	2.527	0.006	3.502	1.115	0.047	0.119
+w_avg_16bpc_neon	src/asm/mc.rs	verified	7.626		592	6	2433	2105	0.990	1.941	0.005	3.475	1.015	0.045	0.118
+mask_16bpc_neon	src/asm/mc.rs	verified	8.686		742	6	3071	2265	0.959	2.095	0.007	4.159	1.196	0.045	0.122
+w_mask_420_16bpc_neon	src/asm/mc.rs	verified	69.255		222	4	5550	5471	6.834	22.448	0.017	25.496	14.029	0.047	0.369
+w_mask_444_16bpc_neon	src/asm/mc.rs	verified	49.466		217	4	5556	5987	5.841	15.046	0.016	18.082	10.011	0.047	0.345
+blend_16bpc_neon	src/asm/mc.rs	verified	1.692		106	4	3448	4182	0.363	0.002	0.006	0.874	0.000	0.046	0.369
+blend_v_16bpc_neon	src/asm/mc.rs	verified	2.364		133	5	2508	5715	0.389	0.003	0.008	1.532	0.000	0.047	0.371
+blend_h_16bpc_neon	src/asm/mc.rs	verified	25.982		142	6	6323	26914	4.210	7.412	0.055	11.799	1.470	0.045	0.900
+w_mask_422_16bpc_neon	src/asm/mc.rs	verified	251.755		223	4	5689	5999	17.145	106.103	0.017	99.747	28.264	0.045	0.354
+warp_affine_8x8_16bpc_neon	src/asm/mc.rs	verified	6.817		196	2	1799	775	0.069	0.000	0.000	6.554	0.000	0.050	0.042
+warp_affine_8x8t_16bpc_neon	src/asm/mc.rs	verified	6.261		192	2	1781	777	0.066	0.000	0.000	6.013	0.000	0.048	0.040
+put_16bpc_neon	src/asm/mc.rs	verified	5.825		86	7	269	1354	0.628	2.965	0.008	1.537	0.562	0.046	0.057
+prep_16bpc_neon	src/asm/mc.rs	verified	6.397		142	6	648	2463	0.285	2.352	0.006	2.897	0.676	0.045	0.079
+put_8tap_regular_8bpc_neon_dotprod	src/asm/mc.rs	verified	91.542		746	27	10334	6927	7.727	21.862	0.122	51.898	9.057	0.051	0.750
+put_8tap_regular_smooth_8bpc_neon_dotprod	src/asm/mc.rs	verified	71.497		747	27	10335	6927	6.627	19.126	0.116	34.350	10.417	0.048	0.733
+emu_edge_16bpc_neon	src/asm/mc.rs	TIMEOUT	300.037	killed after 300s											
+put_8tap_regular_sharp_8bpc_neon_dotprod	src/asm/mc.rs	FAIL	65.541	line 1245 (ld1): read of 8 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 1 not provably within region of length src_len * 1; line 1136 (ldr): read of 16 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	768	41	9243	6488	7.261	18.233	0.100	30.202	8.946	0.049	0.652
+put_8tap_smooth_8bpc_neon_dotprod	src/asm/mc.rs	verified	70.105		747	27	10335	6927	6.754	21.576	0.116	31.804	9.018	0.049	0.726
+put_8tap_smooth_regular_8bpc_neon_dotprod	src/asm/mc.rs	verified	77.276		747	27	10335	6927	7.049	23.452	0.115	35.811	10.024	0.049	0.722
+put_8tap_smooth_sharp_8bpc_neon_dotprod	src/asm/mc.rs	FAIL	70.179	line 1245 (ld1): read of 8 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 1 not provably within region of length src_len * 1; line 1136 (ldr): read of 16 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	768	41	9243	6488	6.192	20.912	0.101	32.235	10.021	0.048	0.637
+put_8tap_sharp_8bpc_neon_dotprod	src/asm/mc.rs	FAIL	63.140	line 1245 (ld1): read of 8 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 1 not provably within region of length src_len * 1; line 1136 (ldr): read of 16 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	768	41	9243	6488	7.213	19.786	0.111	27.534	7.737	0.050	0.663
+put_8tap_sharp_regular_8bpc_neon_dotprod	src/asm/mc.rs	verified	71.689		747	27	10335	6927	7.920	20.169	0.120	34.252	8.340	0.048	0.747
+put_8tap_sharp_smooth_8bpc_neon_dotprod	src/asm/mc.rs	verified	83.183		747	27	10335	6927	8.003	24.139	0.122	38.931	11.084	0.051	0.761
+prep_8tap_regular_8bpc_neon_dotprod	src/asm/mc.rs	verified	73.141		657	23	9039	9584	5.240	16.356	0.075	38.035	12.627	0.049	0.710
+prep_8tap_regular_sharp_8bpc_neon_dotprod	src/asm/mc.rs	FAIL	54.157	line 357 (ldr): read of 16 bytes at src_as_ptr + src_stride * 12 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	672	30	8082	9185	2.358	9.616	0.062	31.386	9.991	0.048	0.599
+prep_8tap_regular_smooth_8bpc_neon_dotprod	src/asm/mc.rs	verified	65.294		658	23	9040	9584	7.057	11.032	0.072	33.446	12.854	0.053	0.674
+prep_8tap_smooth_8bpc_neon_dotprod	src/asm/mc.rs	verified	61.158		658	23	9040	9584	5.204	11.771	0.072	32.976	10.376	0.050	0.676
+prep_8tap_smooth_regular_8bpc_neon_dotprod	src/asm/mc.rs	verified	59.679		658	23	9040	9584	5.391	10.589	0.073	31.886	10.911	0.048	0.680
+prep_8tap_smooth_sharp_8bpc_neon_dotprod	src/asm/mc.rs	FAIL	52.457	line 357 (ldr): read of 16 bytes at src_as_ptr + src_stride * 12 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	672	30	8082	9185	3.600	10.184	0.062	27.992	9.950	0.048	0.599
+prep_8tap_sharp_8bpc_neon_dotprod	src/asm/mc.rs	FAIL	64.767	line 357 (ldr): read of 16 bytes at src_as_ptr + src_stride * 12 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	672	30	8082	9185	2.987	12.677	0.065	35.016	13.265	0.049	0.621
+prep_8tap_sharp_regular_8bpc_neon_dotprod	src/asm/mc.rs	verified	68.469		658	23	9040	9584	5.018	14.227	0.076	37.771	10.576	0.050	0.702
+prep_8tap_sharp_smooth_8bpc_neon_dotprod	src/asm/mc.rs	verified	70.531		658	23	9040	9584	5.337	13.517	0.079	37.820	12.942	0.057	0.698
+put_8tap_regular_8bpc_neon_i8mm	src/asm/mc.rs	verified	70.778		692	27	9245	6927	6.082	24.302	0.116	30.040	9.397	0.048	0.743
+put_8tap_regular_smooth_8bpc_neon_i8mm	src/asm/mc.rs	verified	80.180		693	27	9246	6927	6.967	26.999	0.115	34.618	10.626	0.049	0.726
+put_8tap_regular_sharp_8bpc_neon_i8mm	src/asm/mc.rs	FAIL	72.385	line 2930 (ld1): read of 8 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 1 not provably within region of length src_len * 1; line 2823 (ldr): read of 16 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	717	41	8365	6488	6.217	25.170	0.103	31.828	8.296	0.045	0.654
+put_8tap_smooth_8bpc_neon_i8mm	src/asm/mc.rs	verified	92.168		693	27	9246	6927	7.691	24.360	0.116	47.253	11.949	0.046	0.731
+put_8tap_smooth_regular_8bpc_neon_i8mm	src/asm/mc.rs	verified	68.936		693	27	9246	6927	6.293	19.907	0.118	33.931	7.831	0.048	0.733
+put_8tap_smooth_sharp_8bpc_neon_i8mm	src/asm/mc.rs	FAIL	83.225	line 2930 (ld1): read of 8 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 1 not provably within region of length src_len * 1; line 2823 (ldr): read of 16 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	717	41	8365	6488	7.243	22.946	0.106	43.990	8.106	0.055	0.722
+put_8tap_sharp_8bpc_neon_i8mm	src/asm/mc.rs	FAIL	70.700	line 2930 (ld1): read of 8 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 1 not provably within region of length src_len * 1; line 2823 (ldr): read of 16 bytes at src_as_ptr + src_stride * 10 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	727	41	8631	6488	6.782	21.951	0.105	30.403	9.972	0.047	1.345
+put_8tap_sharp_regular_8bpc_neon_i8mm	src/asm/mc.rs	verified	69.672		708	27	9684	6927	6.839	21.022	0.113	32.083	8.784	0.050	0.731
+put_8tap_sharp_smooth_8bpc_neon_i8mm	src/asm/mc.rs	verified	76.327		708	27	9684	6927	7.183	22.418	0.113	35.781	9.945	0.049	0.733
+prep_8tap_regular_smooth_8bpc_neon_i8mm	src/asm/mc.rs	verified	65.408		612	23	8055	9584	6.194	15.703	0.071	31.548	11.163	0.049	0.668
+prep_8tap_regular_8bpc_neon_i8mm	src/asm/mc.rs	verified	90.990		611	23	8054	9584	5.149	32.793	0.072	38.523	13.680	0.048	0.664
+prep_8tap_regular_sharp_8bpc_neon_i8mm	src/asm/mc.rs	FAIL	60.042	line 1929 (ldr): read of 16 bytes at src_as_ptr + src_stride * 12 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	629	30	7296	9185	2.769	13.916	0.061	30.024	12.596	0.049	0.593
+prep_8tap_smooth_8bpc_neon_i8mm	src/asm/mc.rs	verified	56.068		612	23	8055	9584	5.244	10.589	0.070	28.698	10.682	0.049	0.657
+prep_8tap_smooth_sharp_8bpc_neon_i8mm	src/asm/mc.rs	FAIL	54.315	line 1929 (ldr): read of 16 bytes at src_as_ptr + src_stride * 12 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	629	30	7296	9185	4.299	9.059	0.060	29.210	11.024	0.045	0.588
+prep_8tap_smooth_regular_8bpc_neon_i8mm	src/asm/mc.rs	verified	67.338		612	23	8055	9584	5.547	13.772	0.070	33.833	13.378	0.049	0.658
+prep_8tap_sharp_8bpc_neon_i8mm	src/asm/mc.rs	FAIL	56.679	line 1929 (ldr): read of 16 bytes at src_as_ptr + src_stride * 12 - (src_stride lsl 1) + 3 - 3 not provably within region of length src_len * 1	639	30	7604	9185	2.851	12.537	0.060	29.807	10.755	0.047	0.603
+prep_8tap_sharp_regular_8bpc_neon_i8mm	src/asm/mc.rs	verified	68.901		627	23	8528	9584	4.800	14.564	0.071	36.124	12.551	0.048	0.665
+msac_decode_symbol_adapt4_neon	src/asm/msac.rs	verified	6.658		97	3	198	249	0.043	0.000	0.010	6.271	0.000	0.005	0.175
+msac_decode_symbol_adapt8_neon	src/asm/msac.rs	verified	35.263		97	4	196	295	10.924	0.000	0.016	23.868	0.000	0.004	0.359
+msac_decode_bool_adapt_neon	src/asm/msac.rs	verified	2.743		75	4	165	251	0.032	0.000	0.007	2.406	0.000	0.005	0.262
+msac_decode_bool_neon	src/asm/msac.rs	verified	0.653		60	4	82	127	0.016	0.000	0.003	0.483	0.000	0.004	0.111
+msac_decode_bool_equi_neon	src/asm/msac.rs	verified	0.777		58	4	80	125	0.015	0.000	0.003	0.616	0.000	0.005	0.096
+prep_8tap_sharp_smooth_8bpc_neon_i8mm	src/asm/mc.rs	verified	71.030		627	23	8528	9584	7.041	14.345	0.069	34.261	14.500	0.048	0.666
+splat_mv_neon	src/asm/refmvs.rs	verified	0.762		35	1	214	975	0.029	0.081	0.008	0.415	0.037	0.005	0.098
+save_tmvs_neon	src/asm/refmvs.rs	FAIL	0.116	line 47 (ld1): read of 8 bytes at ref_sign_as_ptr + 0 not provably within region of length ref_sign_len * 1	4	0	4	7	0.000	0.000	0.000	0.001	0.000	0.004	0.001
+msac_decode_hi_tok_neon	src/asm/msac.rs	TIMEOUT	300.065	killed after 300s											
+ipred_reverse_8bpc_neon	src/main.rs	verified	0.118		11	1	11	10	0.000	0.000	0.000	0.001	0.000	0.024	0.001
+ipred_reverse_16bpc_neon	src/main.rs	verified	2.961		11	1	27	69	0.002	2.813	0.001	0.007	0.006	0.024	0.003
+ipred_z1_upsample_edge_8bpc_neon	src/main.rs	verified	0.118		25	0	25	304	0.035	0.000	0.000	0.054	0.000	0.005	0.001
+ipred_z2_upsample_edge_8bpc_neon	src/main.rs	verified	0.110		22	0	22	66	0.004	0.000	0.000	0.011	0.000	0.004	0.000
+load_tmvs_neon	src/asm/refmvs.rs	TIMEOUT	300.024	killed after 300s											
+generate_grain_uv_420_16bpc_neon	src/asm/filmgrain.rs	verified	370.840		910	34	168224	76974	91.336	0.080	0.001	171.232	0.000	0.020	108.058
+generate_grain_uv_420_8bpc_neon	src/asm/filmgrain.rs	verified	388.887		1299	31	153265	69363	94.420	0.080	0.001	209.314	0.000	0.021	84.996
+lpf_h_sb_uv_8bpc_neon	src/asm/loopfilter.rs	verified	960.583		383	5	110638	114743	98.630	322.566	2.896	353.254	166.927	0.015	16.187
+w_mask_422_8bpc_neon	src/asm/mc.rs	verified	456.114		135	4	3189	5908	25.712	170.144	0.016	229.373	30.372	0.049	0.337
+prep_8tap_sharp_16bpc_neon	src/asm/mc.rs	verified	427.112		1062	33	239276	113000	32.866	96.754	0.268	246.508	29.814	0.082	20.760
+msac_decode_symbol_adapt16_neon	src/asm/msac.rs	verified	439.614		107	4	209	528	13.781	0.000	0.038	424.634	0.000	0.013	1.134
+lpf_h_sb_uv_16bpc_neon	src/asm/loopfilter.rs	TIMEOUT	2700.002	killed after 2700s											

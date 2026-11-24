@@ -1,0 +1,8 @@
+dasum_k	src/lib.rs	172
+damax_k	src/lib.rs	256
+dmax_k	src/lib.rs	213
+idamax_k	src/lib.rs	709
+dnrm2_k	src/lib.rs	114
+zasum_k	src/lib.rs	167
+zaxpy_k	src/lib.rs	1275
+dscal_k	src/lib.rs	320

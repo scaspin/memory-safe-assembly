@@ -1,0 +1,13 @@
+[package]
+name = "cbc-tail"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aws-lc-rs = "=1.19.0"
+aws-lc-sys = "=0.47.0"
+libc = "0.2"
+
+[profile.release]
+debug = true
+[workspace]

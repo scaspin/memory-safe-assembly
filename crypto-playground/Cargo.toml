@@ -1,7 +1,7 @@
 [package]
 name = "crypto-playground"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 bums_macros = { path = "../bums_macros" }
@@ -11,7 +11,7 @@ zeroize = "1.8.1"
 
 [dev-dependencies]
 aws-lc-rs = "*"
-aws-lc-sys = "0.14.1"
+aws-lc-sys = "0.44.0"
 
 [build-dependencies]
 bums_macros = { path = "../bums_macros" }

@@ -6,6 +6,7 @@ default	rel
 %define XMMWORD
 %define YMMWORD
 %define ZMMWORD
+%define _CET_ENDBR
 
 %include "openssl/boringssl_prefix_symbols_nasm.inc"
 section	.text code align=64
@@ -350,6 +351,7 @@ ALIGN	32
 aesni_gcm_decrypt:
 
 $L$SEH_begin_aesni_gcm_decrypt_1:
+_CET_ENDBR
 	xor	rax,rax
 
 
@@ -610,6 +612,7 @@ ALIGN	32
 aesni_gcm_encrypt:
 
 $L$SEH_begin_aesni_gcm_encrypt_1:
+_CET_ENDBR
 %ifdef BORINGSSL_DISPATCH_TEST
 EXTERN	BORINGSSL_function_hit
 	mov	BYTE[((BORINGSSL_function_hit+2))],1
@@ -971,7 +974,7 @@ ALIGN	4
 	DD	$L$SEH_info_aesni_gcm_encrypt_0 wrt ..imagebase
 
 
-section	.xdata rdata align=8
+section	.xdata rdata align=4
 ALIGN	4
 $L$SEH_info_aesni_gcm_decrypt_0:
 	DB	1
@@ -1032,6 +1035,7 @@ $L$SEH_info_aesni_gcm_decrypt_0:
 	DB	$L$SEH_prolog_aesni_gcm_decrypt_2-$L$SEH_begin_aesni_gcm_decrypt_1
 	DB	80
 
+ALIGN	4
 $L$SEH_info_aesni_gcm_encrypt_0:
 	DB	1
 	DB	$L$SEH_prolog_aesni_gcm_encrypt_21-$L$SEH_begin_aesni_gcm_encrypt_1

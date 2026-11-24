@@ -1,0 +1,302 @@
+[
+ {
+  "id": "salsa20-A",
+  "bench": "salsa20",
+  "function": "salsa20_words",
+  "old": "\tmovl\t12(%rsi), %eax",
+  "new": "\tmovl\t64(%rsi), %eax",
+  "what": "read word 16 of a 16-word input",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "salsa20-B",
+  "bench": "salsa20",
+  "function": "salsa20",
+  "old": "\tcmpq\t%r15, %rbp\n\tje\t.LBB2_6",
+  "new": "\tcmpq\t%r15, %rbp\n\tja\t.LBB2_6",
+  "what": "byte loop runs to message[len]",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "sha512-A",
+  "bench": "sha512",
+  "function": "SHA512",
+  "old": "\tandl\t$127, %r13d",
+  "new": "\tandl\t$255, %r13d",
+  "what": "tail length mask 255 instead of 127",
+  "fault_class": "stack buffer overflow (past the frame)",
+  "safe": false
+ },
+ {
+  "id": "sha512-B",
+  "bench": "sha512",
+  "function": "SHA512",
+  "old": "\tshrq\t$7, %rdx",
+  "new": "\tshrq\t$6, %rdx",
+  "what": "block count doubled",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "chacha20-A",
+  "bench": "chacha20",
+  "function": "CRYPTO_chacha_20",
+  "old": "\tmovups\t16(%r15,%rcx), %xmm1",
+  "new": "\tmovups\t17(%r15,%rcx), %xmm1",
+  "what": "vector read one byte late",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "chacha20-B",
+  "bench": "chacha20",
+  "function": "CRYPTO_chacha_20",
+  "old": "\tcmovbq\t%r14, %r13",
+  "new": "\tmovq\t%r13, %r13",
+  "what": "every block 64 bytes (min removed)",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "poly1305-A",
+  "bench": "poly1305",
+  "function": "poly1305_update",
+  "old": "\tmovzbl\t1(%r15,%rcx), %edx",
+  "new": "\tmovzbl\t4(%r15,%rcx), %edx",
+  "what": "unrolled tail read at +4",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "poly1305-B",
+  "bench": "poly1305",
+  "function": "poly1305_update",
+  "old": "\tandq\t$3, %rsi",
+  "new": "\tandq\t$7, %rsi",
+  "what": "single-byte loop counts n&7",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "x25519-A",
+  "bench": "x25519",
+  "function": "X25519",
+  "old": "\tmovl\t28(%rdx), %r11d",
+  "new": "\tmovl\t29(%rdx), %r11d",
+  "what": "peer key read at +29 (4 bytes)",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "x25519-B",
+  "bench": "x25519",
+  "function": "fe_tobytes",
+  "old": "\tmovb\t%dl, 31(%rdi)",
+  "new": "\tmovb\t%dl, 32(%rdi)",
+  "what": "store s[32] of a 32-byte output",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "ed25519_sign-A",
+  "bench": "ed25519_sign",
+  "function": "x25519_sc_reduce",
+  "old": "\tmovl\t60(%rdi), %r12d",
+  "new": "\tmovl\t61(%rdi), %r12d",
+  "what": "read s[61..64] of a 64-byte input",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "ed25519_sign-B",
+  "bench": "ed25519_sign",
+  "function": "ED25519_sign",
+  "old": "\tja\t.LBB118_4\n# %bb.3:\n\tmovq\t%r12, %rsi\n\tmovq\t%r15, %rdx",
+  "new": "\tja\t.LBB118_4\n# %bb.3:\n\tmovq\t%r12, %rsi\n\tleaq\t1(%r15), %rdx",
+  "what": "message copy reads one byte past",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "salsa20-C",
+  "bench": "salsa20",
+  "function": "salsa20",
+  "old": "\tmovups\t16(%r14), %xmm0",
+  "new": "\tmovups\t17(%r14), %xmm0",
+  "what": "key read one byte past",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "salsa20-D",
+  "bench": "salsa20",
+  "function": "salsa20",
+  "old": "\tcmpq\t$64, %rdx",
+  "new": "\tcmpq\t$66, %rdx",
+  "what": "keystream loop overruns a stack buffer into the next local",
+  "fault_class": "stack local overflow (inside the frame)",
+  "safe": false
+ },
+ {
+  "id": "salsa20-S",
+  "bench": "salsa20",
+  "function": "salsa20",
+  "old": "\tmovl\t$1797285236, 60(%rsp)",
+  "new": "\tmovl\t$1797285237, 60(%rsp)",
+  "what": "control: wrong constant word",
+  "fault_class": "safe control",
+  "safe": true
+ },
+ {
+  "id": "sha512-C",
+  "bench": "sha512",
+  "function": "SHA512",
+  "old": "\tmovl\t$127, %edx",
+  "new": "\tmovl\t$135, %edx",
+  "what": "padding memset overruns the block buffer into the context fields on the stack",
+  "fault_class": "stack local overflow (inside the frame)",
+  "safe": false
+ },
+ {
+  "id": "sha512-D",
+  "bench": "sha512",
+  "function": "SHA512",
+  "old": "\tmovq\t%rsi, 24(%rcx)",
+  "new": "\tmovq\t%rsi, 32(%rcx)",
+  "what": "digest store writes out[64..72)",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "sha512-S",
+  "bench": "sha512",
+  "function": "SHA512",
+  "old": "\tmovabsq\t$7640891576956012808, %rax",
+  "new": "\tmovabsq\t$7640891576956012809, %rax",
+  "what": "control: wrong IV word",
+  "fault_class": "safe control",
+  "safe": true
+ },
+ {
+  "id": "chacha20-C",
+  "bench": "chacha20",
+  "function": "CRYPTO_chacha_20",
+  "old": "\tmovl\t8(%r8), %eax",
+  "new": "\tmovl\t9(%r8), %eax",
+  "what": "nonce read one byte past",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "chacha20-D",
+  "bench": "chacha20",
+  "function": "CRYPTO_chacha_20",
+  "old": "\tmovb\t%cl, 3(%r12,%rax)",
+  "new": "\tmovb\t%cl, 4(%r12,%rax)",
+  "what": "unrolled tail writes out[len]",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "chacha20-S",
+  "bench": "chacha20",
+  "function": "CRYPTO_chacha_20",
+  "old": "\tincl\t%ebx",
+  "new": "\taddl\t$2, %ebx",
+  "what": "control: block counter steps by two",
+  "fault_class": "safe control",
+  "safe": true
+ },
+ {
+  "id": "poly1305-C",
+  "bench": "poly1305",
+  "function": "CRYPTO_poly1305_finish",
+  "old": "\tmovl\t%eax, 12(%rbx)",
+  "new": "\tmovl\t%eax, 13(%rbx)",
+  "what": "tag store writes mac[16]",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "poly1305-D",
+  "bench": "poly1305",
+  "function": "CRYPTO_poly1305_update",
+  "old": "\tmovl\t$16, %eax\n\tsubq\t%rcx, %rax",
+  "new": "\tmovl\t$17, %eax\n\tsubq\t%rcx, %rax",
+  "what": "partial-block copy overruns buf[16] into the buf_used field",
+  "fault_class": "intra-object overflow (inside a struct)",
+  "safe": false
+ },
+ {
+  "id": "poly1305-E",
+  "bench": "poly1305",
+  "function": "CRYPTO_poly1305_init",
+  "old": "\tmovups\t16(%rsi), %xmm0",
+  "new": "\tmovups\t17(%rsi), %xmm0",
+  "what": "key read one byte past",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "poly1305-S",
+  "bench": "poly1305",
+  "function": "CRYPTO_poly1305_init",
+  "old": "\tandl\t$67108611, %ecx",
+  "new": "\tandl\t$67108615, %ecx",
+  "what": "control: wrong clamp mask",
+  "fault_class": "safe control",
+  "safe": true
+ },
+ {
+  "id": "x25519-C",
+  "bench": "x25519",
+  "function": "fe_mul_impl",
+  "old": "\tmovq\t32(%rdx), %rcx",
+  "new": "\tmovq\t40(%rdx), %rcx",
+  "what": "reads in2[5] of a 5-limb input",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "x25519-S",
+  "bench": "x25519",
+  "function": "fe_mul_impl",
+  "old": "\tmovabsq\t$2251799813685247, %rax",
+  "new": "\tmovabsq\t$2251799813685246, %rax",
+  "what": "control: wrong limb mask",
+  "fault_class": "safe control",
+  "safe": true
+ },
+ {
+  "id": "ed25519_sign-C",
+  "bench": "ed25519_sign",
+  "function": "table_select",
+  "old": "\tshlq\t$8, %rcx",
+  "new": "\tshlq\t$9, %rcx",
+  "what": "row stride doubled: reads past the k25519Precomp table",
+  "fault_class": "global table overflow",
+  "safe": false
+ },
+ {
+  "id": "ed25519_sign-D",
+  "bench": "ed25519_sign",
+  "function": "ge_madd",
+  "old": "\tmovq\t%rdx, 152(%rbx)",
+  "new": "\tmovq\t%rdx, 160(%rbx)",
+  "what": "stores r[20] of a 20-limb output",
+  "fault_class": "parameter buffer overflow",
+  "safe": false
+ },
+ {
+  "id": "ed25519_sign-S",
+  "bench": "ed25519_sign",
+  "function": "ge_madd",
+  "old": "\tmovabsq\t$4503599627370494, %r13",
+  "new": "\tmovabsq\t$4503599627370490, %r13",
+  "what": "control: wrong subtraction constant",
+  "fault_class": "safe control",
+  "safe": true
+ }
+]

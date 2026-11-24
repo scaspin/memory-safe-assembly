@@ -1,0 +1,22 @@
+benchmark,function,bums_clauses,bums_tokens,secsep_clauses,secsep_tokens,bums_status_baseline,bums_status_final,bums_wall_s,secsep_cpu_s,secsep_infer_cpu_s,secsep_check_cpu_s,secsep_smt_queries,engine_change_needed
+salsa20,salsa20_words,2,34,2,22,verified,verified,0.1,13.05,5.32,7.73,1875,
+salsa20,salsa20,4,44,4,40,verified,verified,1.6,10.07,3.82,6.24,1610,
+sha512,sha512_block_data_order,4,50,4,44,verified,verified,1.1,90.07,37.61,52.47,4444,
+sha512,SHA512,3,40,3,28,FAIL,verified,12.3,110.05,54.6,55.45,5490,memset/memcpy contracts with unsigned-length guard
+chacha20,chacha_core,2,34,2,15,verified,verified,0.1,1.01,0.34,0.67,495,
+chacha20,CRYPTO_chacha_20,7,86,10,86,FAIL,verified,56.0,200.18,139.58,60.6,10016,forced-exit discharge; down-counter floor bounds; multi-back-edge inside-body rule
+x25519,fe_mul_impl,3,49,7,54,verified,verified,0.1,8.49,1.74,6.76,589,
+x25519,fe_tobytes,2,34,1,14,verified,verified,0.1,18.21,1.67,16.54,680,
+x25519,fe_loose_invert,2,34,1,14,verified,verified,3.1,210.85,67.99,142.86,8901,
+x25519,X25519,3,51,5,36,FAIL,verified,125.0,512.13,158.33,353.8,6871,repeated helper calls counted per call site
+poly1305,CRYPTO_poly1305_init,2,50,3,27,verified,verified,0.1,1.5,0.06,1.43,253,
+poly1305,CRYPTO_poly1305_update,4,62,21,274,FAIL,verified,231.5,827.83,309.6,518.23,10199,unsigned struct fields >= 0; narrow stores keep uncovered constant bytes
+poly1305,CRYPTO_poly1305_finish,3,59,18,246,FAIL,verified,7.7,11.41,2.76,8.65,1044,symbolic 64-bit not (~x = -x-1)
+poly1305,poly1305_donna_mul,1,35,19,249,verified,verified,0.1,3.8,0.23,3.56,269,
+poly1305,poly1305_update,3,54,23,288,FAIL,verified,24.1,86.74,44.37,42.38,6590,symbolic 64-bit not (~x = -x-1)
+ed25519_sign,ge_madd,3,49,7,112,verified,verified,0.2,26.21,8.72,17.48,1783,
+ed25519_sign,ge_p2_dbl,2,34,3,48,verified,verified,0.1,15.27,1.85,13.42,996,
+ed25519_sign,table_select,5,41,1,10,FAIL,verified,0.1,91.76,54.66,37.1,5538,loader models .ascii/.asciz data (k25519Precomp table)
+ed25519_sign,x25519_ge_scalarmult_base,2,34,2,15,FAIL,verified,21.6,219.04,76.96,142.08,8825,loader models .ascii/.asciz data (k25519Precomp table)
+ed25519_sign,x25519_sc_reduce,1,19,1,12,verified,verified,0.1,9.03,3.64,5.4,1327,
+ed25519_sign,ED25519_sign,4,55,5,43,FAIL,verified,910.5,1778.31,910.35,867.96,34526,memset/memcpy contracts with unsigned-length guard

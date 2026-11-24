@@ -1,0 +1,2 @@
+dav1d_pal_idx_finish_ssse3	src/x86_64.rs	5
+dav1d_pal_idx_finish_avx2	src/x86_64.rs	6

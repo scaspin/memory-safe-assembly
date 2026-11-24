@@ -4,7 +4,7 @@
 // Modifications copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR ISC
 
-use crate::aes::tests::cipher::block::{Block, BLOCK_LEN};
+use crate::aes::tests::cipher::block::{BLOCK_LEN, Block};
 use aws_lc_sys::CRYPTO_chacha_20;
 use zeroize::Zeroize;
 

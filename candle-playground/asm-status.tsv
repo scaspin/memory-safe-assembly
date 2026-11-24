@@ -1,0 +1,16 @@
+function	arch	status	seconds	note
+candle_vec_add_f16	aarch64	verified	0.224	
+candle_vec_dot_f16	aarch64	verified	0.327	
+candle_f16_vec_reduce	aarch64	verified	0.106	
+candle_f16_vecops_vec_add	aarch64	verified	0.218	
+candle_f16_vec_dot	aarch64	verified	0.221	
+candle_q2k_vec_dot	aarch64	verified	0.103	
+candle_q4k_vec_dot	aarch64	verified	0.864	
+candle_q5k_vec_dot	aarch64	verified	0.627	
+candle_q6k_vec_dot	aarch64	verified	0.115	
+candle_q3k_vec_dot	aarch64	verified	2.025	
+candle_q8k_vec_dot	aarch64	verified	0.106	
+candle_q6k_vec_dot_4	aarch64	verified	0.321	
+candle_q4_0_vec_dot	aarch64	verified	0.100	
+candle_q8_0_vec_dot	aarch64	verified	0.117	
+candle_q4k_vec_dot_4	aarch64	verified	12.465	

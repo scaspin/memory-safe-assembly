@@ -1,0 +1,3 @@
+(executable
+ (name parse_probe)
+ (libraries core str type))

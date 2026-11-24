@@ -1,0 +1,22 @@
+benchmark,function,baseline,final,change
+salsa20,salsa20_words,verified,verified,
+salsa20,salsa20,verified,verified,
+sha512,sha512_block_data_order,verified,verified,
+sha512,SHA512,FAIL,verified,memset/memcpy contracts with unsigned-length guard
+chacha20,chacha_core,verified,verified,
+chacha20,CRYPTO_chacha_20,FAIL,verified,forced-exit discharge; down-counter floor bounds; multi-back-edge inside-body rule
+x25519,fe_mul_impl,verified,verified,
+x25519,fe_tobytes,verified,verified,
+x25519,fe_loose_invert,verified,verified,
+x25519,X25519,FAIL,verified,repeated helper calls counted per call site
+poly1305,CRYPTO_poly1305_init,verified,verified,
+poly1305,CRYPTO_poly1305_update,FAIL,verified,unsigned struct fields >= 0; narrow stores keep uncovered constant bytes
+poly1305,CRYPTO_poly1305_finish,FAIL,verified,symbolic 64-bit not (~x = -x-1)
+poly1305,poly1305_donna_mul,verified,verified,
+poly1305,poly1305_update,FAIL,verified,symbolic 64-bit not (~x = -x-1)
+ed25519_sign,ge_madd,verified,verified,
+ed25519_sign,ge_p2_dbl,verified,verified,
+ed25519_sign,table_select,FAIL,verified,loader models .ascii/.asciz data (k25519Precomp table)
+ed25519_sign,x25519_ge_scalarmult_base,FAIL,verified,loader models .ascii/.asciz data (k25519Precomp table)
+ed25519_sign,x25519_sc_reduce,verified,verified,
+ed25519_sign,ED25519_sign,FAIL,verified,memset/memcpy contracts with unsigned-length guard

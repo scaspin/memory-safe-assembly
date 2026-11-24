@@ -1,8 +1,6 @@
 use crate::utils::*;
 
-//const INT_MAX: usize = usize::MAX;
-//const BN_BITS2: usize = 64;
-const BN_MAX_WORDS: usize = 16; // FIX, should be: INT_MAX / (4 * BN_BITS2);
+const BN_MAX_WORDS: usize = 16;
 
 #[allow(non_camel_case_types)]
 pub type BIGNUM = BigNumSt;
@@ -78,10 +76,8 @@ fn bn_wexpand(bn: &mut BIGNUM, words: usize) -> Result<(), String> {
         return Err("expand on static".to_string());
     }
 
-    //let a = ms_calloc(words, core::mem::size_of::<BN_ULONG>());
     let a: &mut [u64; BN_MAX_WORDS] = &mut [0; BN_MAX_WORDS];
     ms_memcpy(a, &bn.d, core::mem::size_of::<BN_ULONG>() * bn.width);
-    //ms_free(bn.d);
 
     bn.d = *a;
     bn.dmax = words;
@@ -101,7 +97,6 @@ fn bn_uadd_consttime(r: &mut BIGNUM, a: &BIGNUM, b: &BIGNUM) -> Result<(), Strin
     let mut temp_a = a.clone();
     let mut temp_b = b.clone();
 
-    // swap order to short one is in a
     if a.width < b.width {
         temp_a = b.clone();
         temp_b = a.clone();
@@ -153,19 +148,9 @@ fn bn_usub_consttime(r: &mut BIGNUM, a: &BIGNUM, b: &BIGNUM) -> Result<(), Strin
     return Ok(());
 }
 
-// FIX TO INTEGERS
 fn bn_cmp_words_consttime(a: &[BN_ULONG], a_len: usize, b: &[BN_ULONG], b_len: usize) -> i64 {
-    //OPENSSL_STATIC_ASSERT(sizeof(BN_ULONG) <= sizeof(crypto_word_t),
-    //                    crypto_word_t_is_too_small)
-
     let mut ret = 0;
-    let min = {
-        if a_len < b_len {
-            a_len
-        } else {
-            b_len
-        }
-    };
+    let min = { if a_len < b_len { a_len } else { b_len } };
 
     for i in 0..min {
         let eq = constant_time_eq(a[i] as i64, b[i] as i64);
@@ -301,25 +286,28 @@ pub fn bn_sub(r: &mut BIGNUM, a: &BIGNUM, b: &BIGNUM) -> Result<(), String> {
     return Ok(());
 }
 
-#[bums_macros::check_mem_safe("bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len(), [output.len() == a.len(), output.len() == b.len()])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len(), [output.len() == a.len(), output.len() == b.len()]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("bn-x86_64.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len(), [output.len() == a.len(), output.len() == b.len()]))]
 fn bn_add_words(output: &mut [u64], a: &[u64], b: &[u64]) -> bool;
 
-#[bums_macros::check_mem_safe("bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len(), [output.len() == a.len(), output.len() == b.len()])]
+#[cfg_attr(target_arch = "aarch64", bums_macros::check_mem_safe("bn-armv8.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len(), [output.len() == a.len(), output.len() == b.len()]))]
+#[cfg_attr(target_arch = "x86_64", bums_macros::check_mem_safe("bn-x86_64.S", output.as_mut_ptr(), a.as_ptr(), b.as_ptr(), output.len(), [output.len() == a.len(), output.len() == b.len()]))]
 fn bn_sub_words(output: &mut [u64], a: &[u64], b: &[u64]) -> bool;
 
-// #[bums_macros::check_mem_safe("armv8-mont.S", rp.as_mut_ptr(), ap.as_ptr(),  bp.as_ptr(), np.as_ptr(), n0.as_ptr(), rp.len(), [rp.len() == ap.len(), rp.len() == bp.len(), rp.len() == np.len(), rp.len()==n0.len(), rp.len() >= 512])]
-// fn bn_mul_mont(rp: &mut [u64], ap: &[u64], bp: &[u64], np: &[u64], n0: &[u64]) -> bool;
+#[cfg(target_arch = "aarch64")]
+#[bums_macros::check_mem_safe("armv8-mont.S", rp.as_mut_ptr(), ap.as_ptr(), bp.as_ptr(), np.as_ptr(), n0.as_ptr(), rp.len(), [rp.len() == ap.len(), rp.len() == bp.len(), rp.len() == np.len(), rp.len() >= 2, rp.len() <= 1024])]
+fn bn_mul_mont(rp: &mut [u64], ap: &[u64], bp: &[u64], np: &[u64], n0: &[u64; 2]) -> bool;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use aws_lc_sys;
 
-    extern "C" {
-        #[link_name = "aws_lc_0_14_1_bn_add_words"]
+    unsafe extern "C" {
+        #[link_name = "aws_lc_0_44_0_bn_add_words"]
         fn aws_bn_add_words(output: *mut u8, a: *const u8, b: *const u8, len: usize);
 
-        #[link_name = "aws_lc_0_14_1_bn_sub_words"]
+        #[link_name = "aws_lc_0_44_0_bn_sub_words"]
         fn aws_bn_sub_words(output: *mut u8, a: *const u8, b: *const u8, len: usize);
     }
 

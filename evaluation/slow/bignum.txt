@@ -1,0 +1,4 @@
+p256_montjscalarmul
+p384_montjscalarmul
+curve25519_x25519_byte_alt
+p521_jscalarmul

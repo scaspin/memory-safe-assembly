@@ -3,9 +3,9 @@
 // Modifications copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR ISC
 
-use crate::aes::tests::cipher::block::{Block, BLOCK_LEN};
+use crate::aes::tests::cipher::block::{BLOCK_LEN, Block};
 use crate::aes::tests::cipher::fips::indicator_check;
-use aws_lc_sys::{AES_ecb_encrypt, AES_ENCRYPT, AES_KEY};
+use aws_lc_sys::{AES_ENCRYPT, AES_KEY, AES_ecb_encrypt};
 use core::mem::MaybeUninit;
 
 /// Length of an AES-128 key in bytes.
